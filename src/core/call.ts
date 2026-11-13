@@ -6,11 +6,17 @@
  */
 export type Surface = "mcp" | "code" | "http" | "cli";
 
+/**
+ * A parsed CLI flag: `true` when given bare, its value when given once, every
+ * value in order when repeated (so a rule can check each one).
+ */
+export type CliFlagValue = string | true | string[];
+
 export interface CliFields {
   command: string;
   verb?: string;
   subcommand?: string;
-  flags: Record<string, string | true>;
+  flags: Record<string, CliFlagValue>;
   argv: string[];
 }
 
