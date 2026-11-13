@@ -2,7 +2,7 @@ import type { PauseScope } from "../../core/call.ts";
 import { type CeremonyCallback, ceremonyButton } from "./ceremony.ts";
 import { formatPauseScope, plural } from "./format.ts";
 import { type Html, html } from "./html.ts";
-import { type FormTarget, notice, postForm, time } from "./layout.ts";
+import { type FormTarget, notice, postForm, scrollRegion, time } from "./layout.ts";
 
 export interface ActivePause {
   scope: PauseScope;
@@ -74,7 +74,9 @@ function activeList(active: readonly ActivePause[], onResume: CeremonyCallback):
   if (active.length === 0) {
     return html`<p>Nothing is paused. Every call goes through the rules as usual.</p>`;
   }
-  return html`<table class="data">
+  return scrollRegion(
+    "Active pauses",
+    html`<table class="data">
     <caption>
       ${plural(active.length, "active pause")}
     </caption>
@@ -107,7 +109,8 @@ function activeList(active: readonly ActivePause[], onResume: CeremonyCallback):
         </tr>`;
       })}
     </tbody>
-  </table>`;
+  </table>`,
+  );
 }
 
 function outcomeNotice(outcome: PauseOutcome): Html | "" {
@@ -183,7 +186,9 @@ export function pauseControl(props: PauseControlProps): Html {
       <h2 id="pause-new">Pause</h2>
       <p class="muted">One tap. No passkey is needed to stop calls.</p>
       ${canPauseAll ? html`<div class="actions">${pauseButton(props.pauseForm, "global", null, allPaused)}</div>` : ""}
-      <table class="data">
+      ${scrollRegion(
+        "Agents and accounts",
+        html`<table class="data">
         <caption>
           Agents and accounts
         </caption>
@@ -197,6 +202,7 @@ export function pauseControl(props: PauseControlProps): Html {
         <tbody>
           ${rows("agent", agents)} ${rows("account", accounts)}
         </tbody>
-      </table>
+      </table>`,
+      )}
     </section>`;
 }

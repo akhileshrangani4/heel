@@ -80,6 +80,14 @@ export function notice(tone: Tone, content: Child): Html {
   return html`<div class="notice" data-tone="${tone}" role="${role}">${content}</div>`;
 }
 
+/**
+ * Wraps a wide table so it scrolls on its own instead of pushing the page
+ * sideways on a phone. Focusable and named so keyboard users can scroll it.
+ */
+export function scrollRegion(label: string, content: Html): Html {
+  return html`<div class="table-scroll" role="region" aria-label="${label}" tabindex="0">${content}</div>`;
+}
+
 /** `<time>` with a machine-readable instant and a UTC label. */
 export function time(at: Date): Html {
   return html`<time datetime="${at.toISOString()}">${formatUtc(at)}</time>`;

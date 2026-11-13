@@ -1,7 +1,7 @@
 import type { RuleRef } from "../../core/call.ts";
 import { formatRule, plural } from "./format.ts";
 import { type Html, html } from "./html.ts";
-import { badge, type FormTarget, notice, type Tone, time } from "./layout.ts";
+import { badge, type FormTarget, notice, scrollRegion, type Tone, time } from "./layout.ts";
 
 /** One YAML or schema error, located to the character (spec: Loading, testing and reload). */
 export interface RuleFileError {
@@ -77,7 +77,9 @@ export interface RulesPageProps {
 const WOULD_TONE: Record<WouldDecision, Tone> = { allow: "ok", deny: "error", ask: "warn" };
 
 function errorTable(errors: readonly RuleFileError[]): Html {
-  return html`<table class="data">
+  return scrollRegion(
+    "Rule file errors",
+    html`<table class="data">
     <caption>
       ${plural(errors.length, "error")}
     </caption>
@@ -96,7 +98,8 @@ function errorTable(errors: readonly RuleFileError[]): Html {
           </tr>`,
       )}
     </tbody>
-  </table>`;
+  </table>`,
+  );
 }
 
 function validityPanel(validity: RulesValidity): Html {
@@ -131,7 +134,9 @@ function watchTable(entries: readonly WatchEntry[]): Html {
       <code>heel serve --watch</code>, to see what it would decide without enforcing it.
     </p>`;
   }
-  return html`<table class="data">
+  return scrollRegion(
+    "Watch log",
+    html`<table class="data">
     <caption>
       ${plural(entries.length, "record")}, newest first
     </caption>
@@ -161,7 +166,8 @@ function watchTable(entries: readonly WatchEntry[]): Html {
           </tr>`,
       )}
     </tbody>
-  </table>`;
+  </table>`,
+  );
 }
 
 function diffView(lines: readonly DiffLine[]): Html {
@@ -184,7 +190,9 @@ function testResults(tests: readonly RuleTestResult[]): Html {
       ? notice("ok", html`<p>All ${plural(tests.length, "case")} pass (exit 0).</p>`)
       : notice("error", html`<p>${failed} of ${plural(tests.length, "case")} fail (exit 1).</p>`);
   return html`${summary}
-    <table class="data">
+    ${scrollRegion(
+      "Draft test results",
+      html`<table class="data">
       <caption>
         <code>heel rules test</code> on the draft
       </caption>
@@ -207,7 +215,8 @@ function testResults(tests: readonly RuleTestResult[]): Html {
             </tr>`,
         )}
       </tbody>
-    </table>`;
+    </table>`,
+    )}`;
 }
 
 function draftingBox(drafting: DraftingState, props: RulesPageProps): Html {

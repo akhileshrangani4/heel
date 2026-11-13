@@ -3,7 +3,7 @@ import type { ApprovalOrigin, ApprovalStatus } from "../../store/schema.ts";
 import { approvalStatusBadge } from "./approval-request.ts";
 import { formatPauseScope, formatRelative, formatRule } from "./format.ts";
 import { type Html, html } from "./html.ts";
-import { notice, type PauseNotice, time } from "./layout.ts";
+import { notice, type PauseNotice, scrollRegion, time } from "./layout.ts";
 
 export interface PendingRow {
   id: string;
@@ -68,7 +68,9 @@ export function pendingList(props: PendingListProps): Html {
       <p>Nothing is waiting for you. New requests appear here and in your notifications.</p>`;
   }
   return html`${heading}
-    <table class="data">
+    ${scrollRegion(
+      "Approval requests",
+      html`<table class="data">
       <caption>
         ${rows.length === 1 ? "1 request" : `${rows.length} requests`}
       </caption>
@@ -103,5 +105,6 @@ export function pendingList(props: PendingListProps): Html {
             </tr>`,
         )}
       </tbody>
-    </table>`;
+    </table>`,
+    )}`;
 }

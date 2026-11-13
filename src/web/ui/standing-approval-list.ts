@@ -2,7 +2,15 @@ import type { RuleRef } from "../../core/call.ts";
 import type { StandingScope } from "../../store/schema.ts";
 import { formatRelative, formatRule } from "./format.ts";
 import { type Html, html } from "./html.ts";
-import { badge, type FormTarget, notice, postForm, type Tone, time } from "./layout.ts";
+import {
+  badge,
+  type FormTarget,
+  notice,
+  postForm,
+  scrollRegion,
+  type Tone,
+  time,
+} from "./layout.ts";
 
 /**
  * Where a standing approval stands. `lapsed` means its parent rule was edited
@@ -89,7 +97,9 @@ export function standingApprovalList(props: StandingApprovalListProps): Html {
       <p>No standing approvals. Approving a request as standing adds one here.</p>`;
   }
   return html`${heading}
-    <table class="data">
+    ${scrollRegion(
+      "Standing approvals",
+      html`<table class="data">
       <caption>
         ${rows.length === 1 ? "1 standing approval" : `${rows.length} standing approvals`}
       </caption>
@@ -135,5 +145,6 @@ export function standingApprovalList(props: StandingApprovalListProps): Html {
             </tr>`,
         )}
       </tbody>
-    </table>`;
+    </table>`,
+    )}`;
 }

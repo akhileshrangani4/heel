@@ -10,7 +10,7 @@ import {
   plural,
 } from "./format.ts";
 import { flag, type Html, html } from "./html.ts";
-import { badge, notice, type PauseNotice, type Tone, time } from "./layout.ts";
+import { badge, notice, type PauseNotice, scrollRegion, type Tone, time } from "./layout.ts";
 
 /** The rendered email view shown beside the raw arguments for `email.send`. */
 export interface EmailPreview {
@@ -102,7 +102,9 @@ function emailView(email: EmailPreview, headingId: string): Html {
   const attachments =
     email.attachments.length === 0
       ? html`<p class="muted">No attachments.</p>`
-      : html`<table class="data">
+      : scrollRegion(
+          "Attachments",
+          html`<table class="data">
           <caption>
             Attachments (not opened by heel)
           </caption>
@@ -123,7 +125,8 @@ function emailView(email: EmailPreview, headingId: string): Html {
                 </tr>`,
             )}
           </tbody>
-        </table>`;
+        </table>`,
+        );
   return html`<section class="card" aria-labelledby="${headingId}">
     <h2 id="${headingId}">Email</h2>
     <dl class="facts">

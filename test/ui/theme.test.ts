@@ -60,6 +60,12 @@ describe("theme", () => {
     );
   });
 
+  it("breaks table words only when a single token overflows, and never splits a button label", () => {
+    // `anywhere` let narrow columns split ordinary words ("Revo/ke", "Accoun/t").
+    expect(STYLESHEET).toMatch(/table\.data th,table\.data td\{[^}]*overflow-wrap:break-word/);
+    expect(STYLESHEET).toMatch(/\.btn\{[^}]*white-space:nowrap/);
+  });
+
   it("I-57: never clips or ellipsizes text", () => {
     expect(STYLESHEET).not.toMatch(/text-overflow|line-clamp/);
     expect(STYLESHEET).toMatch(/pre\.args,pre\.body\{[^}]*white-space:pre-wrap/);

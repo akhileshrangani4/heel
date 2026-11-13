@@ -94,11 +94,12 @@ dl.facts dt{color:var(--muted);font-weight:600}
 dl.facts dd{margin:0;overflow-wrap:anywhere}
 code,pre,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem}
 pre.args,pre.body{margin:0;padding:1rem;background:var(--surface);border:1px solid var(--border);border-radius:4px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}
+.table-scroll{overflow-x:auto;max-width:100%}
 table.data{width:100%;border-collapse:collapse;margin:.5rem 0}
 table.data caption{text-align:left;font-weight:600;padding:.25rem 0;color:var(--muted)}
-table.data th,table.data td{text-align:left;vertical-align:top;padding:.5rem .75rem;border-bottom:1px solid var(--border);overflow-wrap:anywhere}
+table.data th,table.data td{text-align:left;vertical-align:top;padding:.5rem .75rem;border-bottom:1px solid var(--border);overflow-wrap:break-word}
 table.data thead th{border-bottom-width:2px}
-.btn{font:inherit;font-weight:600;padding:.5rem 1rem;border-radius:6px;border:2px solid var(--accent);cursor:pointer;min-height:2.5rem}
+.btn{font:inherit;font-weight:600;white-space:nowrap;padding:.5rem 1rem;border-radius:6px;border:2px solid var(--accent);cursor:pointer;min-height:2.5rem}
 .btn-primary{background:var(--accent);color:var(--accent-text)}
 .btn-secondary{background:transparent;color:var(--accent)}
 .btn-danger{background:var(--danger);border-color:var(--danger);color:var(--danger-text)}

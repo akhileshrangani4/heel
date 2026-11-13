@@ -88,6 +88,19 @@ describe("UI preview harness", () => {
         if (story.state !== "error" && story.state !== "load-error") return;
         expect(doc.querySelector("main [role=alert]")).not.toBeNull();
       });
+
+      it("puts every data table in a named, focusable scroll region", () => {
+        // Wide tables scroll on their own on a phone instead of pushing the page sideways.
+        const tables = doc.querySelectorAll("table.data").length;
+        const wrapped = doc.querySelectorAll(
+          '.table-scroll[role="region"][tabindex="0"][aria-label] > table.data',
+        ).length;
+        expect(wrapped).toBe(tables);
+        const unnamed = [...doc.querySelectorAll(".table-scroll")].filter(
+          (region) => (region.getAttribute("aria-label") ?? "").trim() === "",
+        );
+        expect(unnamed).toHaveLength(0);
+      });
     },
   );
 
