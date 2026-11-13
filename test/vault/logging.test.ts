@@ -1,26 +1,14 @@
 import { randomBytes } from "node:crypto";
-import { Writable } from "node:stream";
 import { inspect } from "node:util";
 import { describe, expect, it } from "vitest";
-import { createLogger } from "../../src/log.ts";
 import { KEY_BYTES } from "../../src/vault/crypto.ts";
 import { Secret } from "../../src/vault/secret.ts";
 import { Vault, VaultError } from "../../src/vault/vault.ts";
+import { captureLogger } from "../helpers/log.ts";
 import { addAccount, testStore } from "../helpers/store.ts";
 
 const ACCESS = "ya29.a0-never-log-me-access";
 const REFRESH = "1//0g-never-log-me-refresh";
-
-function captureLogger() {
-  let output = "";
-  const sink = new Writable({
-    write(chunk: Buffer, _encoding, done) {
-      output += chunk.toString("utf8");
-      done();
-    },
-  });
-  return { logger: createLogger("trace", sink), output: () => output };
-}
 
 describe("credentials are never logged", () => {
   it("I-02: a Secret prints as a placeholder everywhere", () => {
