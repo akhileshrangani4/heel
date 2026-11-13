@@ -1,0 +1,114 @@
+name: ci
+
+on:
+  push:
+    branches: [main, "release/**"]
+  pull_request: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: lint, typecheck, test
+    runs-on: ubuntu-24.04
+    env:
+      # Tests that need a second Unix user (e.g. the admin socket refusing a
+      # non-owner) skip locally without sudo. In CI a skip is a failure.
+      HEEL_REQUIRE_PRIVILEGED_TESTS: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm test:invariants
+      - name: Drizzle migrations match the schema
+        run: pnpm db:drift
+      - name: Rules JSON Schema matches the Zod schema
+        run: pnpm schema:drift
+
+  looks-like:
+    # The looks_like release gate (spec D10 row): recall >= 0.99 per category
+    # and <= 5% false positives on held-out ordinary mail. The ~440 MB Enron
+    # archive is never committed. Its URL and SHA-256 are read from the
+    # committed manifest, it is cached by that hash, and the eval script
+    # verifies the hash again before reading it.
+    name: looks_like evaluation gate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Read the pinned Enron archive from the manifest
+        id: pin
+        run: |
+          node -e '
+            const a = require("./corpus/looks-like/manifest.json").ordinary.archive;
+            console.log(`url=${a.url}`);
+            console.log(`sha256=${a.sha256}`);
+          ' >> "$GITHUB_OUTPUT"
+      - name: Restore the Enron archive
+        id: enron
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .cache/looks-like/enron_mail_20150507.tar.gz
+          key: enron-${{ steps.pin.outputs.sha256 }}
+      - name: Download the Enron archive
+        if: steps.enron.outputs.cache-hit != 'true'
+        env:
+          URL: ${{ steps.pin.outputs.url }}
+          SHA256: ${{ steps.pin.outputs.sha256 }}
+        run: |
+          mkdir -p .cache/looks-like
+          curl --fail --location --retry 3 --retry-all-errors --silent --show-error \
+            --output .cache/looks-like/enron_mail_20150507.tar.gz "$URL"
+          echo "$SHA256  .cache/looks-like/enron_mail_20150507.tar.gz" | sha256sum --check
+      - name: Held-out recall and false-positive gate
+        run: pnpm eval:looks-like
+
+  linux-sandbox:
+    # Code mode (D6) and the CLI runner (D8) run under bubblewrap, which needs
+    # unprivileged user namespaces. Ubuntu 24.04 restricts them through
+    # AppArmor by default, so this job lifts that and runs the e2e suites
+    # against the real sandbox.
+    name: bubblewrap and user namespaces
+    runs-on: ubuntu-24.04
+    env:
+      # A sandbox the probe can't start, or a skipped run-as-another-user test, fails the job.
+      HEEL_REQUIRE_SANDBOX: "1"
+      HEEL_REQUIRE_PRIVILEGED_TESTS: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install bubblewrap
+        run: sudo apt-get update && sudo apt-get install -y bubblewrap
+      - name: Enable unprivileged user namespaces
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Smoke-test an isolated bubblewrap sandbox
+        run: |
+          bwrap --unshare-all --die-with-parent --new-session --clearenv \
+            --ro-bind /usr /usr \
+            --symlink usr/bin /bin --symlink usr/lib /lib --symlink usr/lib64 /lib64 \
+            --proc /proc --dev /dev --tmpfs /tmp \
+            /usr/bin/true
+      - name: Sandbox e2e (real bubblewrap)
+        run: bwrap --version && pnpm test:e2e

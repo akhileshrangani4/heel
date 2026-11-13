@@ -1,0 +1,106 @@
+{
+  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!**/*.md",
+      "!src/store/migrations/meta",
+      "!schema/heel-rules.schema.json",
+      "!src/lookslike/weights.json",
+      "!corpus/looks-like/manifest.json"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "complexity": {
+        "useLiteralKeys": "off"
+      },
+      "suspicious": {
+        "noExplicitAny": "error",
+        "noConsole": { "level": "error", "options": { "allow": ["error"] } }
+      },
+      "style": {
+        "noNonNullAssertion": "error",
+        "useImportType": "error",
+        "useNodejsImportProtocol": "error"
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["src/core/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "node:fs": "src/core is pure: no file I/O.",
+                  "node:fs/promises": "src/core is pure: no file I/O.",
+                  "node:net": "src/core is pure: no network I/O.",
+                  "node:http": "src/core is pure: no network I/O.",
+                  "node:https": "src/core is pure: no network I/O.",
+                  "node:http2": "src/core is pure: no network I/O.",
+                  "node:dgram": "src/core is pure: no network I/O.",
+                  "node:dns": "src/core is pure: no network I/O.",
+                  "node:tls": "src/core is pure: no network I/O.",
+                  "node:child_process": "src/core is pure: no processes.",
+                  "node:worker_threads": "src/core is pure: no threads.",
+                  "node:cluster": "src/core is pure: no processes.",
+                  "node:os": "src/core is pure: read host state at the edge.",
+                  "node:process": "src/core is pure: read host state at the edge.",
+                  "better-sqlite3": "src/core is pure: storage belongs in src/store.",
+                  "drizzle-orm": "src/core is pure: storage belongs in src/store.",
+                  "hono": "src/core is pure: HTTP belongs in src/gateway or src/web.",
+                  "@hono/node-server": "src/core is pure: HTTP belongs in src/gateway or src/web.",
+                  "pino": "src/core is pure: log at the edge, not in decisions."
+                },
+                "patterns": [
+                  {
+                    "group": [
+                      "drizzle-orm/*",
+                      "**/store",
+                      "**/store/**",
+                      "**/vault",
+                      "**/vault/**",
+                      "**/gateway/**",
+                      "**/admin/**",
+                      "**/web/**",
+                      "**/cli/**",
+                      "**/config/load*",
+                      "**/log",
+                      "**/log.ts"
+                    ],
+                    "message": "src/core is pure: it may not import modules that do I/O."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}
