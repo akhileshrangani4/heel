@@ -3,7 +3,10 @@ import type { AddressInfo } from "node:net";
 import { getRequestListener } from "@hono/node-server";
 import { createAdminHandler } from "./admin/handlers.ts";
 import { startAdminServer } from "./admin/server.ts";
+import { rulesPaths } from "./config/rules.ts";
+import { type ReloadOutcome, RulesHolder, watchRules } from "./config/rules-reload.ts";
 import { type HeelConfig, humanPlaneUrlProblem, type ListenAddress } from "./config/schema.ts";
+import { formatYamlIssue } from "./config/yaml.ts";
 import { createAgentApp } from "./gateway/app.ts";
 import type { Logger } from "./log.ts";
 import { type HeelDb, openStore } from "./store/db.ts";
@@ -20,6 +23,10 @@ export interface RunningHeel {
     human: PlaneState;
     admin: { state: "listening"; path: string };
   };
+  /** The rule set in force, swapped atomically on every valid edit. */
+  rules: RulesHolder;
+  /** `heel serve --watch`: owner-rule and default-deny outcomes are logged, then run (I-71). */
+  watch: boolean;
   /** Stops every listener, then closes the store. Safe to call more than once. */
   close(): Promise<void>;
 }
@@ -29,6 +36,10 @@ export interface StartOptions {
   env: Readonly<Record<string, string | undefined>>;
   log: Logger;
   version: string;
+  /** Global watch mode (`heel serve --watch`). */
+  watch?: boolean;
+  /** How long the rules watcher waits for an editor to finish writing. */
+  rulesDebounceMs?: number;
   now?: () => Date;
 }
 
@@ -97,6 +108,49 @@ function closeHttp(server: Server): Promise<void> {
   });
 }
 
+/** Logs a rules load: what loaded and its warnings, or why the edit was refused. */
+function logRulesOutcome(log: Logger, outcome: ReloadOutcome): void {
+  if (outcome.ok) {
+    const { files, warnings } = outcome.loaded;
+    log.info({ files: files.map((file) => file.file) }, "rules loaded");
+    for (const warning of warnings)
+      log.warn({ warning: formatYamlIssue(warning) }, "rules warning");
+    return;
+  }
+  const issues = outcome.error.issues.map(formatYamlIssue);
+  if (outcome.keptLastGood) {
+    log.error({ issues }, "rules invalid; the last valid set keeps deciding");
+  } else {
+    log.error({ issues }, "rules invalid; every call is denied until they are fixed");
+  }
+}
+
+/**
+ * Loads the rules and watches them for edits. Invalid rules at boot don't
+ * stop heel: every call is denied, and the human plane stays up so people
+ * can fix the file and pause agents (spec: Fail-closed behavior).
+ */
+function startRules(
+  options: Pick<StartOptions, "config" | "log" | "rulesDebounceMs">,
+  closers: Closer[],
+): RulesHolder {
+  const { config, log } = options;
+  const rules = new RulesHolder(rulesPaths(config.home));
+  logRulesOutcome(log, rules.reload());
+  try {
+    const watcher = watchRules(rules, {
+      onReload: (outcome) => logRulesOutcome(log, outcome),
+      onError: (err) =>
+        log.error({ err }, "rules watcher failed; edits may not load until heel restarts"),
+      ...(options.rulesDebounceMs === undefined ? {} : { debounceMs: options.rulesDebounceMs }),
+    });
+    closers.push(() => watcher.close());
+  } catch (err) {
+    log.error({ err, home: config.home }, "rules hot reload unavailable; restart heel after edits");
+  }
+  return rules;
+}
+
 /** Runs closers newest first; every one runs even when an earlier one throws. */
 async function runClosers(closers: Closer[]): Promise<void> {
   const errors: unknown[] = [];
@@ -131,6 +185,10 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
     const { orgId } = ensureInstall(store.db, now());
     // Single-user install: OIDC sign-in (D13) creates users instead.
     ensureLocalOwner(store.db, orgId, now());
+
+    const rules = startRules(options, closers);
+    const watch = options.watch ?? false;
+    if (watch) log.warn("watch mode: owner-rule and default-deny outcomes are logged, then run");
 
     const opening = openVault(store.db, options, now);
     const vault = opening.ok ? opening.vault : null;
@@ -169,6 +227,8 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
     let closing: Promise<void> | null = null;
     return {
       planes: { agent, human, admin: { state: "listening", path: admin.path } },
+      rules,
+      watch,
       close: () => {
         closing ??= runClosers(closers);
         return closing;
