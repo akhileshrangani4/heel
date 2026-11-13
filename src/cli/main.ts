@@ -3,7 +3,7 @@ import { dirname } from "node:path";
 import { parseArgs } from "node:util";
 import { z } from "zod";
 import { AdminClientError, adminCall } from "../admin/client.ts";
-import type { AdminRequest } from "../admin/protocol.ts";
+import { type AdminRequest, AUDIT_EXPORT_MAX_PAGE } from "../admin/protocol.ts";
 import { AdminSocketError } from "../admin/server.ts";
 import type { HeelConfig, ListenAddress } from "../config/schema.ts";
 import { createLogger } from "../log.ts";
@@ -35,6 +35,10 @@ export const USAGE = `usage:
   heel agent list
   heel connect <provider> --as <alias> [--owner <user>] [--credential-stdin]
   heel account list
+  heel audit export [--since <time>] [--until <time>] [--format jsonl]
+                                          write audit rows as JSON Lines to stdout;
+                                          <time> is ISO 8601, YYYY-MM-DD (UTC), or
+                                          a duration ago such as 90m, 24h, 7d
 ${RULES_USAGE}
 Every command takes --config <file>; the default is $HEEL_HOME/heel.yaml.
 `;
@@ -45,6 +49,38 @@ const ConnectedAccountResult = z.object({
   provider: z.string(),
   status: z.string(),
 });
+const AuditExportPageResult = z.object({
+  lines: z.array(z.string()),
+  throughId: z.int(),
+  nextAfterId: z.int(),
+  done: z.boolean(),
+});
+
+const DURATION_UNITS_MS = { m: 60_000, h: 3_600_000, d: 86_400_000 } as const;
+
+/**
+ * Pure: an `--since`/`--until` value as an ISO 8601 instant. Accepts a full
+ * timestamp with offset, a date (midnight UTC), or a duration before `now`
+ * (`90m`, `24h`, `7d`). Null when the text is none of these.
+ */
+export function parseExportTime(text: string, now: Date): string | null {
+  const duration = /^(\d{1,6})([mhd])$/.exec(text);
+  if (duration) {
+    const [, amount, unit] = duration;
+    const ms = Number(amount) * DURATION_UNITS_MS[unit as keyof typeof DURATION_UNITS_MS];
+    return new Date(now.getTime() - ms).toISOString();
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    const date = new Date(`${text}T00:00:00Z`);
+    return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== text
+      ? null
+      : date.toISOString();
+  }
+  if (z.iso.datetime({ offset: true }).safeParse(text).success) {
+    return new Date(text).toISOString();
+  }
+  return null;
+}
 
 /** Pure: the MCP URL an agent should be given, from the agent plane's listen address. */
 export function agentMcpUrl(listen: ListenAddress): string {
@@ -234,6 +270,59 @@ async function accountCommand(args: string[], io: CliIo): Promise<number> {
   return EXIT.ok;
 }
 
+/**
+ * `heel audit export`. Pages through one pinned snapshot of the log and
+ * streams each page to stdout, so memory stays bounded on a large log.
+ */
+async function auditCommand(args: string[], io: CliIo): Promise<number> {
+  const { values, positionals } = parseOrUsage(() =>
+    parseArgs({
+      args,
+      options: {
+        ...CONFIG_OPTION,
+        since: { type: "string" },
+        until: { type: "string" },
+        format: { type: "string", default: "jsonl" },
+      },
+      allowPositionals: true,
+      strict: true,
+    }),
+  );
+  if (onePositional(positionals, "audit subcommand") !== "export") {
+    throw new UsageError(`unknown audit subcommand "${positionals[0]}"`);
+  }
+  if (values.format !== "jsonl") throw new UsageError(`unsupported --format "${values.format}"`);
+  const now = new Date();
+  const window: { since?: string; until?: string } = {};
+  for (const flag of ["since", "until"] as const) {
+    const text = values[flag];
+    if (text === undefined) continue;
+    const instant = parseExportTime(text, now);
+    if (instant === null) throw new UsageError(`--${flag}: cannot read "${text}" as a time`);
+    window[flag] = instant;
+  }
+  const config = configFrom(io, values.config);
+  let afterId = 0;
+  let throughId: number | undefined;
+  for (;;) {
+    const page = AuditExportPageResult.parse(
+      await admin(config, {
+        method: "audit.export",
+        params: {
+          ...window,
+          afterId,
+          limit: AUDIT_EXPORT_MAX_PAGE,
+          ...(throughId === undefined ? {} : { throughId }),
+        },
+      }),
+    );
+    if (page.lines.length > 0) io.stdout.write(page.lines.join(""));
+    if (page.done) return EXIT.ok;
+    afterId = page.nextAfterId;
+    throughId = page.throughId;
+  }
+}
+
 async function dispatch(argv: string[], io: CliIo): Promise<number> {
   const [command, ...rest] = argv;
   switch (command) {
@@ -249,6 +338,8 @@ async function dispatch(argv: string[], io: CliIo): Promise<number> {
       return accountCommand(rest, io);
     case "rules":
       return rulesCommand(rest, io);
+    case "audit":
+      return auditCommand(rest, io);
     case "help":
     case "--help":
     case "-h":

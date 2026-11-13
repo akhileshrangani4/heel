@@ -356,3 +356,25 @@ export const auditLog = sqliteTable(
     ),
   ],
 );
+
+// ── audit delivery ──────────────────────────────────────────────────────────
+
+/**
+ * How far the SIEM sink has delivered (spec: Teams, "Audit"). One row per
+ * org and sink URL; it advances only after the sink acknowledged a batch,
+ * so a crash or outage re-sends rather than drops. Pointing heel at a new
+ * URL starts a new cursor at the beginning of the log.
+ */
+export const siemCursors = sqliteTable(
+  "siem_cursors",
+  {
+    orgId: text("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    sink: text("sink").notNull(),
+    /** The highest audit_log.id the sink acknowledged; 0 before the first batch. */
+    deliveredThroughId: integer("delivered_through_id").notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.orgId, t.sink] })],
+);

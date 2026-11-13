@@ -16,6 +16,9 @@ export const ADMIN_IDLE_TIMEOUT_MS = 10_000;
 
 const agentName = z.string().min(1).max(64);
 
+/** Most audit rows one `audit.export` page returns. */
+export const AUDIT_EXPORT_MAX_PAGE = 1_000;
+
 const StaticCredentialSchema = z.strictObject({
   type: z.literal("static"),
   value: z.string().min(1),
@@ -51,6 +54,25 @@ export const AdminRequestSchema = z.discriminatedUnion("method", [
     }),
   }),
   z.strictObject({ method: z.literal("account.list") }),
+  z.strictObject({
+    method: z.literal("audit.export"),
+    params: z
+      .strictObject({
+        /** Inclusive lower bound on the row's `at`. */
+        since: z.iso.datetime({ offset: true }).optional(),
+        /** Exclusive upper bound on the row's `at`. */
+        until: z.iso.datetime({ offset: true }).optional(),
+        /** Resume after this row id; 0 (the default) starts at the beginning. */
+        afterId: z.int().min(0).default(0),
+        /**
+         * The snapshot's last row id, from the first page's response. Omit it
+         * on the first page and heel pins the newest row id.
+         */
+        throughId: z.int().min(0).optional(),
+        limit: z.int().min(1).max(AUDIT_EXPORT_MAX_PAGE).default(AUDIT_EXPORT_MAX_PAGE),
+      })
+      .prefault({}),
+  }),
 ]);
 
 export type AdminRequest = z.output<typeof AdminRequestSchema>;
