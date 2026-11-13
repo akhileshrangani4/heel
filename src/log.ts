@@ -1,5 +1,4 @@
-import { type DestinationStream, type Logger, pino } from "pino";
-import type { LogLevel } from "./config/schema.ts";
+import { type DestinationStream, type LevelWithSilent, type Logger, pino } from "pino";
 
 export type { Logger } from "pino";
 
@@ -36,7 +35,7 @@ export function redactPaths(): string[] {
   });
 }
 
-export function createLogger(level: LogLevel, destination?: DestinationStream): Logger {
+export function createLogger(level: LevelWithSilent, destination?: DestinationStream): Logger {
   const options = {
     level,
     base: { service: "heel" },
