@@ -351,6 +351,9 @@ export const auditLog = sqliteTable(
         WHEN 'approved' THEN "approval_id" IS NOT NULL AND "approver_id" IS NOT NULL
         WHEN 'approval_denied' THEN "approval_id" IS NOT NULL AND "approver_id" IS NOT NULL
         WHEN 'executed' THEN "approval_id" IS NOT NULL
+        WHEN 'would_allow' THEN "rule" IS NOT NULL
+        WHEN 'would_deny' THEN "reason" IS NOT NULL
+        WHEN 'would_ask' THEN "rule" IS NOT NULL
         ELSE 0
       END`,
     ),

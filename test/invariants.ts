@@ -29,4 +29,11 @@ export const REQUIRED_INVARIANTS: Readonly<Record<string, string>> = {
   // D10a: looks_like detector (module level; D10b proves the hide path)
   "I-44":
     "When the looks_like classifier errors, times out, isn't loaded or is unsure, the verdict is `uncertain` (hidden), never `no_match`.",
+  // D3: decision pipeline and counts
+  "I-24": "A count sums items, not calls, and includes the current call.",
+  "I-25": "A `per: hour` count ignores the run id.",
+  "I-26": "A call with no run id never matches a `per: run` condition.",
+  "I-51":
+    "Re-sending the identical call joins its pending request: the hash is stable when keys are reordered.",
+  "I-52": "A call that differs in any argument, the account or the tool is a separate request.",
 };

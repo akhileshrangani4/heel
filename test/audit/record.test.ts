@@ -52,6 +52,9 @@ function oneOfEachKind(t: TestStore): AuditEvent[] {
     { kind: "approved", call, callHash, approvalId: "apr_1", approverId: t.ownerId },
     { kind: "approval_denied", call, callHash, approvalId: "apr_2", approverId: t.ownerId },
     { kind: "executed", call, callHash, approvalId: "apr_1", rule: RULE },
+    { kind: "would_allow", call, callHash, rule: RULE },
+    { kind: "would_deny", call, callHash, rule: null, reason: "no_rule_matched" },
+    { kind: "would_ask", call, callHash, rule: RULE },
   ];
 }
 
@@ -141,6 +144,9 @@ describe("audit log", () => {
       { kind: "approved", approval_id: "apr_1" },
       { kind: "approval_denied", approver_id: t.ownerId },
       { kind: "executed" },
+      { kind: "would_allow" },
+      { kind: "would_deny" },
+      { kind: "would_ask", reason: "rule" },
       { kind: "maybe", reason: "not a kind" },
       { kind: "paused", pause_scope: "planet" },
       { kind: "deny", reason: "no rule matched", args: "{not json" },

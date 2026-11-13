@@ -46,3 +46,19 @@ export function openStore(path: string): Store {
     throw error;
   }
 }
+
+const MAX_CAUSE_DEPTH = 5;
+
+/**
+ * Pure: SQLite's result code when an error, or one of its causes, came
+ * from the database itself (a read-only file, a full disk, a missing
+ * table), or null when it didn't.
+ */
+export function sqliteErrorCode(error: unknown): string | null {
+  let current: unknown = error;
+  for (let depth = 0; depth <= MAX_CAUSE_DEPTH && current instanceof Error; depth++) {
+    if (current instanceof Database.SqliteError) return current.code;
+    current = current.cause;
+  }
+  return null;
+}
