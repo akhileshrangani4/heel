@@ -26,5 +26,5 @@
     "skipLibCheck": true,
     "resolveJsonModule": true
   },
-  "include": ["src", "test", "scripts", "bin", "*.ts"]
+  "include": ["src", "test", "e2e", "scripts", "bin", "*.ts"]
 }
