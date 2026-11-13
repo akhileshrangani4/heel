@@ -1,5 +1,7 @@
 # leash
 
+**Control what your agent does, not just which tools it gets.**
+
 Open source, self-hosted access control for AI agents. leash sits between an agent and everything it touches (MCP servers, HTTP APIs, and CLIs) and checks every call against rules on the actual arguments: who an email goes to, which account it comes from, which repo, how many messages this run has deleted. It also hides what an agent shouldn't read, like mail from your partner or password reset codes. Approvals go to a signed-in person outside the agent's session, so the agent can't answer them itself, and one switch pauses any agent or all of them.
 
 [![leash in 38 seconds](assets/leash.gif)](assets/leash.mp4)
