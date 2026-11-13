@@ -26,4 +26,7 @@ export const REQUIRED_INVARIANTS: Readonly<Record<string, string>> = {
   "I-71":
     "Global watch lets owner-rule and default-deny outcomes run; it never relaxes org rules or fail-closed denies.",
   "I-72": "A `watch: true` rule never decides a call.",
+  // D10a: looks_like detector (module level; D10b proves the hide path)
+  "I-44":
+    "When the looks_like classifier errors, times out, isn't loaded or is unsure, the verdict is `uncertain` (hidden), never `no_match`.",
 };

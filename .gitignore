@@ -5,3 +5,5 @@ coverage/
 *.db-shm
 *.db-wal
 .heel/
+# Downloaded corpora (e.g. the Enron archive for pnpm eval:looks-like); never committed.
+.cache/
