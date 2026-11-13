@@ -64,6 +64,8 @@ describe("RulesPage", () => {
     });
     const lines = [...doc.querySelectorAll("ol.diff li")];
     expect(lines).toHaveLength(DRAFT_DIFF.length);
+    // Diff lines are pre-wrap: any template whitespace inside <li> would render as blank lines.
+    for (const line of lines) expect(line.textContent).not.toContain("\n");
     expect(lines.filter((l) => l.getAttribute("data-op") === "add")).toHaveLength(
       DRAFT_DIFF.filter((d) => d.op === "add").length,
     );

@@ -169,11 +169,10 @@ function diffView(lines: readonly DiffLine[]): Html {
   const word = { add: "added", remove: "removed", same: "unchanged" } as const;
   return html`<ol class="diff" aria-label="Proposed change">
     ${lines.map(
+      // No whitespace inside <li>: diff lines are white-space:pre-wrap, so
+      // template indentation would render as blank space around each line.
       (line) =>
-        html`<li data-op="${line.op}">
-          <span class="sign" aria-hidden="true">${sign[line.op]}</span
-          ><span class="visually-hidden">${word[line.op]}: </span>${line.text}
-        </li>`,
+        html`<li data-op="${line.op}"><span class="sign" aria-hidden="true">${sign[line.op]}</span><span class="visually-hidden">${word[line.op]}: </span>${line.text}</li>`,
     )}
   </ol>`;
 }

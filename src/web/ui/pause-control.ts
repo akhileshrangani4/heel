@@ -1,6 +1,6 @@
 import type { PauseScope } from "../../core/call.ts";
 import { type CeremonyCallback, ceremonyButton } from "./ceremony.ts";
-import { formatPauseScope } from "./format.ts";
+import { formatPauseScope, plural } from "./format.ts";
 import { type Html, html } from "./html.ts";
 import { type FormTarget, notice, postForm, time } from "./layout.ts";
 
@@ -76,7 +76,7 @@ function activeList(active: readonly ActivePause[], onResume: CeremonyCallback):
   }
   return html`<table class="data">
     <caption>
-      Paused now
+      ${plural(active.length, "active pause")}
     </caption>
     <thead>
       <tr>
