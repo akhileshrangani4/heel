@@ -6,6 +6,8 @@ import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import * as schema from "./schema.ts";
 
 export type HeelDb = BetterSQLite3Database<typeof schema>;
+/** The handle inside `db.transaction((tx) => …)`. */
+export type HeelTx = Parameters<Parameters<HeelDb["transaction"]>[0]>[0];
 
 export interface Store {
   db: HeelDb;
