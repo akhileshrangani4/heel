@@ -11,7 +11,9 @@
       "!**/node_modules",
       "!**/*.md",
       "!src/store/migrations/meta",
-      "!schema/heel-rules.schema.json"
+      "!schema/heel-rules.schema.json",
+      "!src/lookslike/weights.json",
+      "!corpus/looks-like/manifest.json"
     ]
   },
   "formatter": {
