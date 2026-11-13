@@ -83,10 +83,22 @@ jobs:
   linux-sandbox:
     # Code mode (D6) and the CLI runner (D8) run under bubblewrap, which needs
     # unprivileged user namespaces. Ubuntu 24.04 restricts them through
-    # AppArmor by default, so this job proves the runner can host those tests.
+    # AppArmor by default, so this job lifts that and runs the e2e suites
+    # against the real sandbox.
     name: bubblewrap and user namespaces
     runs-on: ubuntu-24.04
+    env:
+      # A sandbox the probe can't start, or a skipped run-as-another-user test, fails the job.
+      HEEL_REQUIRE_SANDBOX: "1"
+      HEEL_REQUIRE_PRIVILEGED_TESTS: "1"
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
       - name: Install bubblewrap
         run: sudo apt-get update && sudo apt-get install -y bubblewrap
       - name: Enable unprivileged user namespaces
@@ -98,3 +110,5 @@ jobs:
             --symlink usr/bin /bin --symlink usr/lib /lib --symlink usr/lib64 /lib64 \
             --proc /proc --dev /dev --tmpfs /tmp \
             /usr/bin/true
+      - name: Sandbox e2e (real bubblewrap)
+        run: bwrap --version && pnpm test:e2e

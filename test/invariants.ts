@@ -36,4 +36,9 @@ export const REQUIRED_INVARIANTS: Readonly<Record<string, string>> = {
   "I-51":
     "Re-sending the identical call joins its pending request: the hash is stable when keys are reordered.",
   "I-52": "A call that differs in any argument, the account or the tool is a separate request.",
+  // D8a: CLI sandbox core (D8b adds the `heel run` enforcement proofs)
+  "I-30": "No shell runs a command: `sh -c …` is matched as `sh`, never as its inner command.",
+  "I-31": "Every command form that prints a credential is classified as such, in any flag order.",
+  "I-32": "Flags are parsed before matching, in any position.",
+  "I-34": "The agent can't swap the binary or read the credential environment.",
 };

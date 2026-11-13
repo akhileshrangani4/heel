@@ -51,7 +51,9 @@ const CaseCall = z.strictObject({
       command: z.string().min(1),
       verb: z.string().min(1).optional(),
       subcommand: z.string().min(1).optional(),
-      flags: z.record(z.string(), z.union([z.string(), z.literal(true)])).default({}),
+      flags: z
+        .record(z.string(), z.union([z.string(), z.literal(true), z.array(z.string())]))
+        .default({}),
       argv: z.array(z.string()),
     })
     .optional(),
