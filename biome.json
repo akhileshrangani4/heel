@@ -31,6 +31,9 @@
   },
   "linter": {
     "enabled": true,
+    "domains": {
+      "playwright": "none"
+    },
     "rules": {
       "preset": "recommended",
       "complexity": {
@@ -38,7 +41,12 @@
       },
       "suspicious": {
         "noExplicitAny": "error",
-        "noConsole": { "level": "error", "options": { "allow": ["error"] } }
+        "noConsole": {
+          "level": "error",
+          "options": {
+            "allow": ["error"]
+          }
+        }
       },
       "style": {
         "noNonNullAssertion": "error",
@@ -99,6 +107,14 @@
               }
             }
           }
+        }
+      }
+    },
+    {
+      "includes": ["e2e/**/*.spec.ts"],
+      "linter": {
+        "domains": {
+          "playwright": "recommended"
         }
       }
     }
