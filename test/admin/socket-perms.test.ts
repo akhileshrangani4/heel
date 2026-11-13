@@ -97,10 +97,13 @@ function leaveStaleSocket(path: string): void {
   if (made.status !== 0) throw new Error(`could not create a stale socket: ${made.stderr}`);
 }
 
-/** Can this host run a command as `nobody`? CI must be able to; elsewhere the test is skipped. */
+/**
+ * Can this host run a command as `nobody`? Locally without sudo the test is
+ * skipped; CI sets HEEL_REQUIRE_PRIVILEGED_TESTS so a skip there is a failure.
+ */
 const canRunAsNobody =
   PYTHON !== null && spawnSync("sudo", ["-n", "-u", "nobody", "true"]).status === 0;
-const mustRunAsNobody = process.env["CI"] === "true";
+const mustRunAsNobody = process.env["HEEL_REQUIRE_PRIVILEGED_TESTS"] === "1";
 
 /** Connects to `path` as the `nobody` user; resolves with the outcome python reports. */
 function connectAsNobody(path: string): Promise<{ connected: boolean; error: string }> {
