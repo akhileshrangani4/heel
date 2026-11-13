@@ -1,4 +1,5 @@
 import { and, eq } from "drizzle-orm";
+import { exportAuditPage } from "../audit/export.ts";
 import {
   AgentError,
   type AgentErrorCode,
@@ -94,6 +95,18 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
     }
     case "account.list":
       return adminOk(listAccounts(db, orgId));
+    case "audit.export": {
+      const { since, until, afterId, throughId, limit } = request.params;
+      return adminOk(
+        exportAuditPage(db, orgId, {
+          afterId,
+          limit,
+          ...(since === undefined ? {} : { since: new Date(since) }),
+          ...(until === undefined ? {} : { until: new Date(until) }),
+          ...(throughId === undefined ? {} : { throughId }),
+        }),
+      );
+    }
   }
 }
 
