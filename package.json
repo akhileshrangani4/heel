@@ -23,7 +23,9 @@
     "db:drift": "node ./scripts/check-migration-drift.ts",
     "ui:preview": "node ./scripts/ui-preview.ts",
     "gen:schema": "node ./scripts/gen-rules-schema.ts",
-    "schema:drift": "node ./scripts/gen-rules-schema.ts --check"
+    "schema:drift": "node ./scripts/gen-rules-schema.ts --check",
+    "gen:looks-like": "node ./scripts/gen-looks-like.ts",
+    "eval:looks-like": "node ./scripts/eval-looks-like.ts"
   },
   "dependencies": {
     "@hono/node-server": "~2.1.8",
