@@ -40,6 +40,7 @@ heel serve
 
 - **heel holds every credential.** Each agent gets its own heel token and nothing else. That token is how heel tells agents apart, pauses one of them, and logs what each did.
 - **heel has to run where the agent can't reach it,** for example a separate server, container, or user. An agent that can read heel's files or the provider tokens can go around it.
+- **If heel is down, calls fail.** Every call is denied until heel is back, never let through.
 - **A token you also gave a client directly goes around heel.** That includes a built-in connector left connected next to heel, such as Claude's or ChatGPT's own Gmail connector.
 
 ### Every way an agent reaches a system
@@ -58,6 +59,8 @@ Rules are a file you can read, review, and test. They're checked in this order, 
 3. **Your rules,** from top to bottom.
 
 A call no rule matches is denied.
+
+To try rules before they're enforced, `heel serve --watch` lets every call through and logs what each rule would have done, so you can tune them on real traffic first. A single new rule can also run in watch mode while the rest are enforced, with `watch: true` on that rule.
 
 ```yaml
 rules:
@@ -199,3 +202,7 @@ What heel puts together:
 ## Where this comes from
 
 We run a narrower version of this in production at [Charming](https://charm.ing), where apps that agents build call people's Gmail, GitHub, and other connected accounts. Each app function declares the tools it uses, the account owner approves each function, and the approval lapses when the function's tools, output, or allowed callers change. A classifier screens every tool across 124 services and keeps out the ones that leave access behind after a revoke. heel takes that model out of one product and puts it in front of any agent.
+
+## License
+
+Apache 2.0. See [LICENSE](LICENSE).
