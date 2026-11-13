@@ -1,0 +1,609 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "rules": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Rule"
+      }
+    },
+    "hide": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/HideEntry"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "title": "heel rules file",
+  "description": "org-rules.yaml or rules/<user>.yaml. Org rules run first, then the agent owner's rules top to bottom; the first match wins and no match denies.",
+  "$defs": {
+    "Rule": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "Stable id shown in audit and on the approval page.",
+          "type": "string",
+          "minLength": 1
+        },
+        "match": {
+          "$ref": "#/$defs/Match"
+        },
+        "then": {
+          "type": "string",
+          "enum": [
+            "allow",
+            "deny",
+            "ask"
+          ]
+        },
+        "watch": {
+          "description": "Log what this rule would decide, then keep evaluating as if it hadn't matched.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "match",
+        "then"
+      ],
+      "additionalProperties": false
+    },
+    "Match": {
+      "type": "object",
+      "properties": {
+        "account": {
+          "$ref": "#/$defs/TextCondition"
+        },
+        "provider": {
+          "$ref": "#/$defs/TextCondition"
+        },
+        "agent": {
+          "$ref": "#/$defs/TextCondition"
+        },
+        "action": {
+          "$ref": "#/$defs/TextCondition"
+        },
+        "kind": {
+          "$ref": "#/$defs/KindCondition"
+        },
+        "recipients": {
+          "$ref": "#/$defs/RecipientsCondition"
+        },
+        "repo": {
+          "$ref": "#/$defs/TextCondition"
+        },
+        "checks": {
+          "type": "string",
+          "const": "passing",
+          "description": "State check: the PR's required checks pass on its current head."
+        },
+        "items": {
+          "$ref": "#/$defs/ItemsCondition"
+        },
+        "tool": {
+          "$ref": "#/$defs/TextCondition"
+        },
+        "method": {
+          "$ref": "#/$defs/TextCondition"
+        },
+        "path": {
+          "$ref": "#/$defs/TextCondition"
+        },
+        "command": {
+          "$ref": "#/$defs/TextCondition"
+        },
+        "verb": {
+          "$ref": "#/$defs/TextCondition"
+        },
+        "subcommand": {
+          "$ref": "#/$defs/TextCondition"
+        },
+        "argv": {
+          "$ref": "#/$defs/TextListCondition"
+        }
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/ValueCondition"
+      },
+      "description": "Every key must hold (AND). A key naming a field the call doesn't have doesn't match. `{}` matches every call.",
+      "propertyNames": {
+        "anyOf": [
+          {
+            "enum": [
+              "account",
+              "provider",
+              "agent",
+              "action",
+              "kind",
+              "recipients",
+              "repo",
+              "checks",
+              "items",
+              "tool",
+              "method",
+              "path",
+              "command",
+              "verb",
+              "subcommand",
+              "argv"
+            ]
+          },
+          {
+            "pattern": "^(args|body)\\.[^.]+(\\.[^.]+)*$"
+          },
+          {
+            "pattern": "^(query|flags)\\..+$"
+          }
+        ]
+      }
+    },
+    "TextCondition": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "equals": {
+              "type": "string"
+            },
+            "one_of": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "any_of": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "matches": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "KindCondition": {
+      "anyOf": [
+        {
+          "type": "string",
+          "enum": [
+            "read",
+            "write"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "equals": {
+              "type": "string",
+              "enum": [
+                "read",
+                "write"
+              ]
+            },
+            "one_of": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "read",
+                  "write"
+                ]
+              }
+            },
+            "any_of": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "read",
+                  "write"
+                ]
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "RecipientsCondition": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "equals": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            },
+            "one_of": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "any_of": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "matches": {
+              "type": "string"
+            },
+            "any_domain_in": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Domains; `*.example.com` also matches subdomains."
+            },
+            "all_domain_in": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Domains; `*.example.com` also matches subdomains."
+            },
+            "max": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "all_in_thread": {
+              "description": "State check: every recipient is already on a thread this account sent to.",
+              "type": "boolean",
+              "const": true
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ItemsCondition": {
+      "type": "object",
+      "properties": {
+        "over": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "per": {
+          "type": "string",
+          "enum": [
+            "run",
+            "hour"
+          ]
+        }
+      },
+      "required": [
+        "over"
+      ],
+      "additionalProperties": false,
+      "description": "Holds when the items counted (this call's alone, or per run or per sliding hour, including this call) exceed `over`."
+    },
+    "TextListCondition": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "equals": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            },
+            "one_of": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "any_of": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "matches": {
+              "type": "string"
+            },
+            "max": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ValueCondition": {
+      "anyOf": [
+        {
+          "type": [
+            "string",
+            "number",
+            "boolean"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "equals": {
+              "anyOf": [
+                {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean"
+                  ]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "string",
+                      "number",
+                      "boolean"
+                    ]
+                  }
+                }
+              ]
+            },
+            "one_of": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": [
+                  "string",
+                  "number",
+                  "boolean"
+                ]
+              }
+            },
+            "any_of": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": [
+                  "string",
+                  "number",
+                  "boolean"
+                ]
+              }
+            },
+            "matches": {
+              "type": "string"
+            },
+            "any_domain_in": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Domains; `*.example.com` also matches subdomains."
+            },
+            "all_domain_in": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Domains; `*.example.com` also matches subdomains."
+            },
+            "max": {
+              "type": "number"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "HideEntry": {
+      "type": "object",
+      "properties": {
+        "email": {
+          "$ref": "#/$defs/HideEmail"
+        }
+      },
+      "required": [
+        "email"
+      ],
+      "additionalProperties": false
+    },
+    "HideEmail": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "$ref": "#/$defs/AddressCondition"
+        },
+        "to": {
+          "description": "To, Cc and Bcc together.",
+          "$ref": "#/$defs/AddressListCondition"
+        },
+        "subject": {
+          "$ref": "#/$defs/TextCondition"
+        },
+        "labels": {
+          "$ref": "#/$defs/TextListCondition"
+        },
+        "looks_like": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "password_reset",
+                "login_code"
+              ]
+            },
+            {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "password_reset",
+                  "login_code"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "description": "Keys in one entry are ANDed; a message matching any entry is hidden."
+    },
+    "AddressCondition": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "equals": {
+              "type": "string"
+            },
+            "one_of": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "any_of": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "matches": {
+              "type": "string"
+            },
+            "any_domain_in": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Domains; `*.example.com` also matches subdomains."
+            },
+            "all_domain_in": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Domains; `*.example.com` also matches subdomains."
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "AddressListCondition": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "equals": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            },
+            "one_of": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "any_of": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "matches": {
+              "type": "string"
+            },
+            "any_domain_in": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Domains; `*.example.com` also matches subdomains."
+            },
+            "all_domain_in": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Domains; `*.example.com` also matches subdomains."
+            },
+            "max": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}
