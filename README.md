@@ -1,12 +1,12 @@
 # leash
 
-Open source, self-hosted access control for AI agents. leash sits between an agent and everything it touches (MCP servers, HTTP APIs, and CLIs) and checks every call against rules on the actual arguments: who an email goes to, which account it comes from, which repo, how many messages this run has deleted. Approvals go to a signed-in person outside the agent's session, so the agent can't answer them itself, and one switch pauses any agent or all of them.
+Open source, self-hosted access control for AI agents. leash sits between an agent and everything it touches (MCP servers, HTTP APIs, and CLIs) and checks every call against rules on the actual arguments: who an email goes to, which account it comes from, which repo, how many messages this run has deleted. It also hides what an agent shouldn't read, like mail from your partner or password reset codes. Approvals go to a signed-in person outside the agent's session, so the agent can't answer them itself, and one switch pauses any agent or all of them.
 
 [![leash in 38 seconds](assets/leash.gif)](assets/leash.mp4)
 
 ## The problem
 
-Agent permissions today mostly stop at the tool. You can allow `send_email`, ask before it, or block it. You can't say "send only to coworkers already in this thread" or "never email a client from my personal account", because OAuth scopes can't express it and most clients only see tool names.
+Agent permissions today mostly stop at the tool. You can allow `send_email`, ask before it, or block it. You can't say "send only to coworkers already in this thread" or "never email a client from my personal account" or "read my inbox, except password reset emails", because OAuth scopes can't express it and most clients only see tool names. The last one matters more than it sounds: an agent that can read your reset codes can sign in to your other accounts.
 
 The gateways that do read arguments still leave gaps:
 
@@ -108,7 +108,25 @@ rules:
   - `checks: passing` reads the pull request's status and passes the commit it checked to GitHub's merge call, so the merge fails if new commits landed in between.
   - State checks only exist for services leash knows.
 - **Counts** use `items` (messages, files, records) rather than calls, so one `batch_delete` of 1,000 messages counts as 1,000. A count includes the call being checked. The `per: run` period means the run id the agent sends with its calls. Because the agent picks that id, pair a run limit with a `per: hour` limit, which counts per agent and can't be reset. An agent that sends no run id is counted per hour only.
-- **You can describe a rule in words.** A model drafts the YAML for you to read and save. A model never sees a live call; every decision comes from the file and the data it names.
+- **You can describe a rule in words.** A model drafts the YAML for you to read and save. Apart from `looks_like` (below), a model never sees a live call; every decision comes from the file and the data it names.
+
+### Hiding what the agent reads
+
+Rules decide whether a call runs. `hide` decides what comes back from it. It applies to every allowed call on every account, so a read rule can stay a plain `allow`.
+
+```yaml
+hide:
+  # mail from family never reaches the agent
+  - email: { from: { any_of: [sarah@example.com] } }
+  # neither do password resets or login codes
+  - email: { looks_like: [password_reset, login_code] }
+```
+
+- **Hidden messages drop out of the results.** Searches, lists, and threads come back without them, with a placeholder that says how many were hidden, so the agent knows the list is incomplete without learning the sender or subject. Fetching a hidden message by id, or forwarding, replying to, or deleting it, is denied.
+- **`from`, `to`, `subject`, and `labels` are plain checks.** They work like the checks in rules.
+- **`looks_like` is the one place a model decides on a live call.** Patterns catch common reset links and codes, and a classifier running inside leash catches the rest. It sees each message before the agent does. When it's unsure, or can't run, the message is hidden. It can still miss one, which is why `looks_like` only ever hides and never allows.
+- **Hiding only works where leash knows the response shape.** That covers built-in definitions and APIs described with an OpenAPI file. For an MCP server or CLI leash doesn't know, it can allow or deny the call but can't remove items from what comes back.
+- **A hidden message can still show up quoted.** If someone replies and quotes the hidden one, that reply only gets hidden if it matches too.
 
 ### Approvals
 
@@ -166,6 +184,7 @@ Checking calls doesn't stop every prompt injection. When each call in an attack 
 What leash puts together:
 
 - rules on arguments with state checks and item counts
+- hiding results the agent shouldn't read
 - approvals tied to the exact call, that the agent can't answer
 - pause and resume
 - one rule file for MCP, HTTP, and CLI
