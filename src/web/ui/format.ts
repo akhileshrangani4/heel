@@ -58,6 +58,7 @@ export function formatRule(rule: RuleRef): string {
 /** What a pause covers, in words: `everything`, `agent inbox-bot`, … */
 export function formatPauseScope(scope: PauseScope, target: string | null): string {
   if (scope === "global" || target === null) return "everything";
+  if (scope === "owner") return `every agent ${target} owns`;
   return `${scope} ${target}`;
 }
 

@@ -144,6 +144,7 @@ export function pauseTarget(call: Call): PauseTarget {
   return {
     orgId: call.orgId,
     agentId: call.agentId,
+    ownerId: call.ownerId,
     account: call.account,
     provider: call.provider,
   };

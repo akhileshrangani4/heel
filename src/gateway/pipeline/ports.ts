@@ -127,12 +127,14 @@ export interface DefinitionRegistry {
 export interface PauseTarget {
   orgId: string;
   agentId: string;
+  /** The agent's owner: an `owner` pause covers every agent they own. */
+  ownerId: string;
   account: string;
   provider: string;
 }
 
 export interface PauseStore {
-  /** The scope of a pause covering this call (global, agent, account or provider), or null. */
+  /** The scope of a pause covering this call (global, owner, agent, account or provider), or null. */
   find(db: HeelQuery, target: PauseTarget): PauseScope | null;
 }
 
