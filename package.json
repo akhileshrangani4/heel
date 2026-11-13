@@ -21,7 +21,9 @@
     "test:invariants": "node ./scripts/check-invariants.ts",
     "db:generate": "drizzle-kit generate",
     "db:drift": "node ./scripts/check-migration-drift.ts",
-    "ui:preview": "node ./scripts/ui-preview.ts"
+    "ui:preview": "node ./scripts/ui-preview.ts",
+    "gen:schema": "node ./scripts/gen-rules-schema.ts",
+    "schema:drift": "node ./scripts/gen-rules-schema.ts --check"
   },
   "dependencies": {
     "@hono/node-server": "~2.1.8",
