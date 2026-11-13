@@ -1,0 +1,42 @@
+{
+  "name": "heel",
+  "version": "0.1.0",
+  "description": "A self-hosted gateway that holds every agent credential and decides each call with default-deny rules.",
+  "license": "Apache-2.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.18.0",
+  "engines": {
+    "node": ">=26.13.0"
+  },
+  "bin": {
+    "heel": "./bin/heel.js"
+  },
+  "scripts": {
+    "heel": "node ./bin/heel.js",
+    "lint": "biome ci .",
+    "format": "biome check --write .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:invariants": "node ./scripts/check-invariants.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:drift": "node ./scripts/check-migration-drift.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "~2.1.8",
+    "better-sqlite3": "~13.1.1",
+    "drizzle-orm": "~0.45.4",
+    "hono": "~4.13.18",
+    "pino": "~10.4.0",
+    "yaml": "~2.9.1",
+    "zod": "~4.6.7"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "~2.6.7",
+    "@types/better-sqlite3": "~9.6.0",
+    "@types/node": "~26.6.6",
+    "drizzle-kit": "~0.31.11",
+    "typescript": "~7.0.2",
+    "vitest": "~5.1.0"
+  }
+}

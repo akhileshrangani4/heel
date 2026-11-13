@@ -1,0 +1,16 @@
+/**
+ * The invariants (from the spec's requirements map, REQ I-xx) that must each
+ * have at least one passing test tagged with the id in its title, e.g.
+ * `it("I-03: rejects an unknown token", …)`. `pnpm test:invariants` fails
+ * when a listed id has no tagged test.
+ *
+ * Each deliverable adds the ids its acceptance criteria cite; never remove
+ * one, since a listed invariant stays a release requirement.
+ */
+export const REQUIRED_INVARIANTS: Readonly<Record<string, string>> = {
+  // D1: foundation
+  "I-02": "Credentials are encrypted at rest and never written to logs.",
+  "I-03": "A missing, unknown or revoked agent token is rejected before rules run.",
+  "I-04": "Counters, pending and standing approvals, and pause state survive a restart.",
+  "I-73": "Every decision kind writes a complete audit row.",
+};

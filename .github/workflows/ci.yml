@@ -1,0 +1,55 @@
+name: ci
+
+on:
+  push:
+    branches: [main, "release/**"]
+  pull_request: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: lint, typecheck, test
+    runs-on: ubuntu-24.04
+    env:
+      # Tests that need a second Unix user (e.g. the admin socket refusing a
+      # non-owner) skip locally without sudo. In CI a skip is a failure.
+      HEEL_REQUIRE_PRIVILEGED_TESTS: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm test:invariants
+      - name: Drizzle migrations match the schema
+        run: pnpm db:drift
+
+  linux-sandbox:
+    # Code mode (D6) and the CLI runner (D8) run under bubblewrap, which needs
+    # unprivileged user namespaces. Ubuntu 24.04 restricts them through
+    # AppArmor by default, so this job proves the runner can host those tests.
+    name: bubblewrap and user namespaces
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Install bubblewrap
+        run: sudo apt-get update && sudo apt-get install -y bubblewrap
+      - name: Enable unprivileged user namespaces
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - name: Smoke-test an isolated bubblewrap sandbox
+        run: |
+          bwrap --unshare-all --die-with-parent --new-session --clearenv \
+            --ro-bind /usr /usr \
+            --symlink usr/bin /bin --symlink usr/lib /lib --symlink usr/lib64 /lib64 \
+            --proc /proc --dev /dev --tmpfs /tmp \
+            /usr/bin/true
