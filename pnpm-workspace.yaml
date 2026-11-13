@@ -1,0 +1,7 @@
+# heel is one package (spec: Architecture, "Code layout"). This file holds
+# workspace-wide pnpm settings; split into packages only when something needs
+# to ship separately.
+packages:
+  - "."
+allowBuilds:
+  esbuild: true
