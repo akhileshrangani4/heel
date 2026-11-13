@@ -3,6 +3,7 @@ import type { AddressInfo } from "node:net";
 import { getRequestListener } from "@hono/node-server";
 import { createAdminHandler } from "./admin/handlers.ts";
 import { startAdminServer } from "./admin/server.ts";
+import { logAdminAlerts, SiemSink } from "./audit/siem.ts";
 import { rulesPaths } from "./config/rules.ts";
 import { type ReloadOutcome, RulesHolder, watchRules } from "./config/rules-reload.ts";
 import { type HeelConfig, humanPlaneUrlProblem, type ListenAddress } from "./config/schema.ts";
@@ -222,6 +223,23 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
       closers.push(() => closeHttp(server));
       agent = { state: "listening", url: boundUrl(server) };
       log.info({ url: agent.url }, "agent plane listening");
+    }
+
+    // The SIEM sink only reads the audit log on its own timer, so its state
+    // never reaches a decision (spec: Fail-closed behavior).
+    if (config.audit.siem) {
+      const siem = new SiemSink({
+        db: store.db,
+        orgId,
+        config: config.audit.siem,
+        env: options.env,
+        log,
+        alerts: logAdminAlerts(log),
+        now,
+      });
+      siem.start();
+      closers.push(() => siem.close());
+      log.info({ sink: config.audit.siem.url.href }, "SIEM sink started");
     }
 
     let closing: Promise<void> | null = null;

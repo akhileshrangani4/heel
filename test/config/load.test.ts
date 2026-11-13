@@ -134,3 +134,85 @@ describe("human plane public URL", () => {
     expect(humanPlaneUrlProblem(new URL("http://heel.example.com"))).toMatch(/https/);
   });
 });
+
+describe("oidc and audit sections", () => {
+  const load = () => loadConfig(resolveConfigSource({ HEEL_HOME: home }));
+
+  it("is single-user with no SIEM sink by default", () => {
+    const config = load();
+    expect(config.oidc).toBeNull();
+    expect(config.audit.siem).toBeNull();
+  });
+
+  it("resolves oidc: defaults, the callback URI and the secret file path", () => {
+    writeConfig(
+      [
+        "public_url: https://heel.example.com",
+        "oidc:",
+        "  issuer: https://idp.example.com/realms/acme",
+        "  client_id: heel",
+        "  client_secret_file: oidc-secret",
+        "  roles:",
+        "    admin: [heel-admins]",
+      ].join("\n"),
+    );
+    const oidc = load().oidc;
+    expect(oidc?.issuer.href).toBe("https://idp.example.com/realms/acme");
+    expect(oidc?.redirectUri.href).toBe("https://heel.example.com/auth/oidc/callback");
+    expect(oidc?.clientSecretFile).toBe(join(home, "oidc-secret"));
+    expect(oidc?.scopes).toEqual(["openid", "profile", "email"]);
+    expect(oidc?.groupsClaim).toBe("groups");
+    expect(oidc?.roles).toEqual({ admin: ["heel-admins"], member: [] });
+  });
+
+  it.each([
+    [
+      "an http issuer off loopback",
+      "  issuer: http://idp.example.com\n  client_id: heel\n  roles: { admin: [a] }",
+    ],
+    [
+      "no admin group",
+      "  issuer: https://idp.example.com\n  client_id: heel\n  roles: { admin: [] }",
+    ],
+    [
+      "scopes without openid",
+      "  issuer: https://idp.example.com\n  client_id: heel\n  scopes: [profile]\n  roles: { admin: [a] }",
+    ],
+    [
+      "an unknown key",
+      "  issuer: https://idp.example.com\n  client_id: heel\n  client_secret: inline\n  roles: { admin: [a] }",
+    ],
+  ])("rejects oidc: with %s", (_label, body) => {
+    writeConfig(`oidc:\n${body}\n`);
+    const issues = validationIssues(load);
+    expect(issues.length).toBeGreaterThan(0);
+    expect(issues[0]?.path).toMatch(/^oidc/);
+  });
+
+  it("resolves audit.siem: defaults and converts units", () => {
+    writeConfig(
+      [
+        "audit:",
+        "  siem:",
+        "    url: https://siem.example.com/ingest",
+        "    auth:",
+        "      token_file: siem-token",
+        "    backlog_alert:",
+        "      minutes: 2",
+      ].join("\n"),
+    );
+    expect(load().audit.siem).toEqual({
+      url: new URL("https://siem.example.com/ingest"),
+      auth: { header: "Authorization", scheme: "Bearer", tokenFile: join(home, "siem-token") },
+      batchSize: 500,
+      intervalMs: 5_000,
+      timeoutMs: 10_000,
+      backlogAlert: { rows: 10_000, ageMs: 120_000 },
+    });
+  });
+
+  it("rejects a plain-http SIEM endpoint off loopback", () => {
+    writeConfig("audit:\n  siem:\n    url: http://siem.example.com/ingest\n");
+    expect(validationIssues(load)[0]?.message).toMatch(/https/);
+  });
+});
