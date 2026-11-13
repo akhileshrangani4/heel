@@ -53,6 +53,11 @@ describe("theme", () => {
     // The status region sits at the top of <main>; on a long approval page the
     // decision buttons are far below it, so a non-empty message is pinned to the viewport.
     expect(STYLESHEET).toMatch(/#heel-ceremony-status:not\(:empty\)\{[^}]*position:fixed/);
+    // Long bindings (call hashes) wrap, and the page reserves room so the toast never covers the buttons.
+    expect(STYLESHEET).toMatch(/#heel-ceremony-status:not\(:empty\)\{[^}]*overflow-wrap:anywhere/);
+    expect(STYLESHEET).toMatch(
+      /body:has\(#heel-ceremony-status:not\(:empty\)\) main\{padding-bottom/,
+    );
   });
 
   it("I-57: never clips or ellipsizes text", () => {

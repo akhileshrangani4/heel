@@ -70,15 +70,25 @@ export function ceremonyButton(props: CeremonyButtonProps): Html {
 export const CEREMONY_SCRIPT = `
 (() => {
   const status = () => document.getElementById("heel-ceremony-status");
+  // Handlers may write the outcome later (after the passkey prompt). The message
+  // is pinned to the viewport bottom, so bring the button that started it to the
+  // middle of the screen, clear of the message.
+  let lastButton = null;
+  const region = status();
+  if (region) {
+    new MutationObserver(() => {
+      if (lastButton && region.textContent) lastButton.scrollIntoView({ block: "center" });
+    }).observe(region, { childList: true, characterData: true, subtree: true });
+  }
   document.addEventListener("click", (event) => {
     const target = event.target instanceof Element ? event.target : null;
     const button = target ? target.closest("button[data-heel-ceremony]") : null;
     if (!button || button.disabled) return;
+    lastButton = button;
     const registry = window.heelCeremony || {};
     const name = button.dataset.heelHandler;
     const handler = Object.hasOwn(registry, name) ? registry[name] : undefined;
     if (typeof handler !== "function") {
-      const region = status();
       if (region) region.textContent = "Passkey check isn't available on this page yet. Nothing was decided.";
       return;
     }

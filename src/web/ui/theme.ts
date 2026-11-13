@@ -120,7 +120,8 @@ textarea{width:100%;min-height:5rem}
 .visually-hidden{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 .signin{max-width:28rem;margin:3rem auto}
 [role="status"]:empty{display:none}
-#heel-ceremony-status:not(:empty){position:fixed;left:1rem;right:1rem;bottom:1rem;max-width:56rem;margin:0 auto;z-index:20;padding:.75rem 1rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-left:6px solid var(--info);border-radius:4px;box-shadow:0 4px 16px rgb(0 0 0 / .25)}
+#heel-ceremony-status:not(:empty){position:fixed;left:1rem;right:1rem;bottom:1rem;max-width:56rem;margin:0 auto;z-index:20;padding:.75rem 1rem;background:var(--surface);color:var(--text);border:1px solid var(--border);border-left:6px solid var(--info);border-radius:4px;box-shadow:0 4px 16px rgb(0 0 0 / .25);overflow-wrap:anywhere}
+body:has(#heel-ceremony-status:not(:empty)) main{padding-bottom:10rem}
 `;
 
 /** The full stylesheet for every human-plane page. */
