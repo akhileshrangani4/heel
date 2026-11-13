@@ -13,4 +13,8 @@ export const REQUIRED_INVARIANTS: Readonly<Record<string, string>> = {
   "I-03": "A missing, unknown or revoked agent token is rejected before rules run.",
   "I-04": "Counters, pending and standing approvals, and pause state survive a restart.",
   "I-73": "Every decision kind writes a complete audit row.",
+  // D4a: human-plane UI (the render side; D4 adds the server-side proofs)
+  "I-56":
+    "Deciding needs a passkey assertion bound to the call hash; no control decides without one.",
+  "I-57": "The approval page shows the full arguments, never truncated.",
 };
