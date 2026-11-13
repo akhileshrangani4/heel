@@ -5,10 +5,8 @@ import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { describe, expect, it, onTestFinished } from "vitest";
 import {
-  type AdminAlerts,
   isSiemBacklogged,
   SIEM_MAX_BACKOFF_MS,
-  type SiemAlert,
   SiemSink,
   siemBackoffMs,
 } from "../../src/audit/siem.ts";
@@ -16,6 +14,7 @@ import { loadConfig, resolveConfigSource } from "../../src/config/load.ts";
 import type { SiemConfig } from "../../src/config/schema.ts";
 import type { AuditEvent } from "../../src/core/audit.ts";
 import { createLogger } from "../../src/log.ts";
+import type { AdminAlert, AdminAlerts } from "../../src/notify/admin-alerts.ts";
 import { startHeel } from "../../src/serve.ts";
 import { advanceSiemCursor, appendAudit, readSiemCursor } from "../../src/store/audit.ts";
 import { openStore } from "../../src/store/db.ts";
@@ -136,8 +135,8 @@ function appendRows(t: Pick<TestStore, "db" | "orgId" | "ownerId">, count: numbe
   return ids;
 }
 
-function recordAlerts(): AdminAlerts & { alerts: SiemAlert[] } {
-  const alerts: SiemAlert[] = [];
+function recordAlerts(): AdminAlerts & { alerts: AdminAlert[] } {
+  const alerts: AdminAlert[] = [];
   return { alerts, raise: (alert) => alerts.push(alert) };
 }
 

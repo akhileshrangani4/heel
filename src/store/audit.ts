@@ -12,8 +12,25 @@ import { auditLog, siemCursors } from "./schema.ts";
  */
 export function appendAudit(db: HeelDb | HeelTx, event: AuditEvent, at: Date = new Date()): number {
   const record: AuditRecord = toAuditRecord(event, at);
-  const row = db.insert(auditLog).values(record).returning({ id: auditLog.id }).get();
+  const row = db
+    .insert(auditLog)
+    .values({ ...record, args: argsParam(record.args) })
+    .returning({ id: auditLog.id })
+    .get();
   return row.id;
+}
+
+/**
+ * Binds the arguments as their JSON text. Drizzle sends a top-level JS `null`
+ * as SQL NULL before a json column's encoder runs, and the NOT NULL `args`
+ * column would refuse it; but JSON `null` arguments are a real call that
+ * hashes apart from `{}`, so the row must record them. Reads parse the text
+ * back through the column's json mode, the same as an encoded value.
+ */
+function argsParam(args: unknown): SQL {
+  const text = JSON.stringify(args);
+  if (text === undefined) throw new TypeError("audit arguments have no JSON form");
+  return sql`${text}`;
 }
 
 /** The newest row id in an org's audit log, or 0 when it is empty. */

@@ -1,5 +1,6 @@
 import type { SiemConfig } from "../config/schema.ts";
 import type { Logger } from "../log.ts";
+import type { AdminAlert, AdminAlerts } from "../notify/admin-alerts.ts";
 import { advanceSiemCursor, auditBacklog, readAuditPage, readSiemCursor } from "../store/audit.ts";
 import type { HeelDb } from "../store/db.ts";
 import { loadSecret } from "../vault/secret-file.ts";
@@ -20,31 +21,7 @@ export const SIEM_TOKEN_ENV = "HEEL_SIEM_TOKEN";
 export const SIEM_MAX_BACKOFF_MS = 5 * 60_000;
 
 /** Admin alerts the sink raises (spec: Fail-closed behavior, "The SIEM sink is down"). */
-export type SiemAlert =
-  | {
-      kind: "siem_backlog";
-      sink: string;
-      pendingRows: number;
-      oldestPendingAgeMs: number;
-      /** Why the last delivery failed; null when the sink is up but slower than the log. */
-      lastError: string | null;
-    }
-  | { kind: "siem_backlog_cleared"; sink: string };
-
-/** Where admin alerts go. `heel serve` logs them until notification channels land. */
-export interface AdminAlerts {
-  raise(alert: SiemAlert): void;
-}
-
-/** Admin alerts as error-level log lines: the channel until D4's notifications exist. */
-export function logAdminAlerts(log: Logger): AdminAlerts {
-  return {
-    raise: (alert) => {
-      if (alert.kind === "siem_backlog") log.error({ alert }, "admin alert: SIEM sink is behind");
-      else log.info({ alert }, "admin alert cleared: SIEM sink caught up");
-    },
-  };
-}
+export type SiemAlert = Extract<AdminAlert, { kind: "siem_backlog" | "siem_backlog_cleared" }>;
 
 export type DeliveryOutcome =
   | { kind: "idle" }
