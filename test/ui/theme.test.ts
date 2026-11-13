@@ -49,6 +49,12 @@ describe("theme", () => {
     expect(STYLESHEET).toContain("@media (prefers-color-scheme: dark)");
   });
 
+  it("keeps the passkey ceremony message on screen wherever the page is scrolled", () => {
+    // The status region sits at the top of <main>; on a long approval page the
+    // decision buttons are far below it, so a non-empty message is pinned to the viewport.
+    expect(STYLESHEET).toMatch(/#heel-ceremony-status:not\(:empty\)\{[^}]*position:fixed/);
+  });
+
   it("I-57: never clips or ellipsizes text", () => {
     expect(STYLESHEET).not.toMatch(/text-overflow|line-clamp/);
     expect(STYLESHEET).toMatch(/pre\.args,pre\.body\{[^}]*white-space:pre-wrap/);
