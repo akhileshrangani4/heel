@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   blob,
+  check,
   index,
   integer,
   primaryKey,
@@ -8,7 +9,8 @@ import {
   text,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
-import type { PauseScope, RuleRef, Surface } from "../core/call.ts";
+import { AUDIT_KINDS } from "../core/audit.ts";
+import { PAUSE_SCOPES, type PauseScope, type RuleRef, type Surface } from "../core/call.ts";
 
 /**
  * heel's SQLite schema (spec: Architecture; Teams, "Data model"). Every row
@@ -271,9 +273,8 @@ export const standingApprovals = sqliteTable(
 // ── pause ───────────────────────────────────────────────────────────────────
 
 /**
- * Active pauses. A row means "paused"; resume deletes it, and the audit log
- * keeps the history. `target` is the agent id, account alias or provider,
- * and "" for the global scope.
+ * Active pauses. A row means "paused" and resume deletes it. `target` is the
+ * agent id, account alias or provider, and "" for the global scope.
  */
 export const pauses = sqliteTable(
   "pauses",
@@ -291,21 +292,17 @@ export const pauses = sqliteTable(
 
 // ── audit ───────────────────────────────────────────────────────────────────
 
-export const AUDIT_KINDS = [
-  "allow",
-  "deny",
-  "ask",
-  "paused",
-  "expired",
-  "approved",
-  "approval_denied",
-  "executed",
-] as const;
-export type AuditKind = (typeof AUDIT_KINDS)[number];
+/** SQL list literal for an `IN (…)` check, from a const list of plain identifiers. */
+function sqlList(values: readonly string[]) {
+  return sql.raw(values.map((value) => `'${value}'`).join(", "));
+}
 
 /**
  * The append-only decision log (I-73). The code has no update or delete path,
  * and triggers in the migrations abort any UPDATE or DELETE.
+ *
+ * The CHECK constraints mirror `AuditEvent` in core/audit.ts: each kind's row
+ * must carry the rule, approval or approver that makes it complete.
  */
 export const auditLog = sqliteTable(
   "audit_log",
@@ -337,5 +334,25 @@ export const auditLog = sqliteTable(
     index("audit_log_org_at").on(t.orgId, t.at),
     index("audit_log_agent_at").on(t.agentId, t.at),
     index("audit_log_approval").on(t.approvalId),
+    check("audit_log_kind", sql`"kind" IN (${sqlList(AUDIT_KINDS)})`),
+    check(
+      "audit_log_pause_scope",
+      sql`"pause_scope" IS NULL OR "pause_scope" IN (${sqlList(PAUSE_SCOPES)})`,
+    ),
+    check("audit_log_args_json", sql`json_valid("args")`),
+    check(
+      "audit_log_complete",
+      sql`CASE "kind"
+        WHEN 'allow' THEN "rule" IS NOT NULL
+        WHEN 'deny' THEN "reason" IS NOT NULL
+        WHEN 'ask' THEN "rule" IS NOT NULL AND "approval_id" IS NOT NULL
+        WHEN 'paused' THEN "pause_scope" IS NOT NULL
+        WHEN 'expired' THEN "approval_id" IS NOT NULL
+        WHEN 'approved' THEN "approval_id" IS NOT NULL AND "approver_id" IS NOT NULL
+        WHEN 'approval_denied' THEN "approval_id" IS NOT NULL AND "approver_id" IS NOT NULL
+        WHEN 'executed' THEN "approval_id" IS NOT NULL
+        ELSE 0
+      END`,
+    ),
   ],
 );
