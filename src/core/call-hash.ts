@@ -34,3 +34,19 @@ export function callHash(call: CallIdentity): string {
     args: argsOrNone(call.args),
   });
 }
+
+/**
+ * What an audit row records as a call's arguments when they have no
+ * canonical JSON form (a non-finite number, a bigint, a lone surrogate),
+ * so the row can't record them exactly.
+ */
+export const UNREPRESENTABLE_ARGS: Readonly<Record<string, true>> = Object.freeze({
+  "heel/unrepresentable": true,
+});
+
+/**
+ * The hash that audit row carries. It hashes a JSON string, and every real
+ * call hash hashes an object, so it equals no call's hash. Such a call is
+ * always denied, so this hash never keys an approval.
+ */
+export const UNREPRESENTABLE_CALL_HASH = canonicalHash("heel/unrepresentable-call");

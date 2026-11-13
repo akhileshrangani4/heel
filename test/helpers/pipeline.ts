@@ -13,6 +13,7 @@ import {
   createPipeline,
   type Pipeline,
   type PipelineTimeouts,
+  type RulesSource,
 } from "../../src/gateway/pipeline/pipeline.ts";
 import {
   type ApprovalRequest,
@@ -29,6 +30,7 @@ import {
   type PipelineStage,
   UpstreamError,
 } from "../../src/gateway/pipeline/ports.ts";
+import type { AdminAlert } from "../../src/notify/admin-alerts.ts";
 import { newId } from "../../src/store/ids.ts";
 import { LOCAL_OWNER_NAME } from "../../src/store/install.ts";
 import { accounts, agents, auditLog, countEvents } from "../../src/store/schema.ts";
@@ -70,13 +72,15 @@ export function compileRules(files: { org?: string; owner?: string }): RuleSet {
  * - `error`: answers with an error response;
  * - `drop`: the connection drops after the request went out;
  * - `hang`: never answers, ignoring the abort signal, so only heel's own
- *   deadline can end the wait.
+ *   deadline can end the wait;
+ * - `custom`: a real exchange, e.g. over a socket to a local server.
  */
 export type UpstreamBehavior =
   | { kind: "ok" }
   | { kind: "error"; status: number; body: unknown }
   | { kind: "drop" }
-  | { kind: "hang" };
+  | { kind: "hang" }
+  | { kind: "custom"; run: (call: Call, signal: AbortSignal) => Promise<unknown> };
 
 /** What the fake's state lookup does for a check. */
 export type LookupBehavior = "pass" | "fail" | "throw" | "hang" | "garbage";
@@ -151,14 +155,14 @@ export class FakeProvider {
         this.normalized.push(base);
         return this.normalizeHook?.(base, ctx) ?? Promise.resolve(fakeNormalize(base));
       },
-      execute: (call) => this.#execute(call),
+      execute: (call, signal) => this.#execute(call, signal),
     };
     if (this.hasStateChecks) definition.stateCheck = (check) => this.#lookup(check);
     if (this.hide !== null) definition.hide = this.hide;
     return definition;
   }
 
-  async #execute(call: Call): Promise<unknown> {
+  async #execute(call: Call, signal: AbortSignal): Promise<unknown> {
     this.executed.push(call);
     this.onExecute?.(call);
     const behavior = this.upstream;
@@ -171,6 +175,8 @@ export class FakeProvider {
         throw Object.assign(new Error("socket hang up"), { code: "ECONNRESET" });
       case "hang":
         return never();
+      case "custom":
+        return behavior.run(call, signal);
     }
   }
 
@@ -291,6 +297,11 @@ export interface HarnessOptions {
   timeouts?: Partial<PipelineTimeouts>;
   /** Start with no valid rule set, as after an invalid rules file at boot. */
   noRules?: boolean;
+  /**
+   * A real rules source (D2's `RulesHolder` over files) in place of the
+   * harness's own; `setRules` and `rules` then don't reach the pipeline.
+   */
+  rulesSource?: RulesSource;
 }
 
 export interface CallInput {
@@ -323,6 +334,8 @@ export interface PipelineHarness {
   stages: PipelineStage[];
   /** Approval ids the pipeline asked to notify about. */
   notified: string[];
+  /** Admin alerts the pipeline raised. */
+  alerts: AdminAlert[];
   /** Every log line written so far, as JSON lines. */
   logs(): string;
   pipeline: Pipeline;
@@ -374,12 +387,13 @@ export function pipelineHarness(options: HarnessOptions = {}): PipelineHarness {
   };
   const stages: PipelineStage[] = [];
   const notified: string[] = [];
+  const alerts: AdminAlert[] = [];
   const undefinedProviders = new Set<string>(["notion"]);
   const { logger, output } = captureLogger();
 
   const pipeline = createPipeline({
     db: t.db,
-    rules,
+    rules: options.rulesSource ?? rules,
     definitions: {
       forAccount: (account) =>
         undefinedProviders.has(account.provider) ? null : provider.definition(),
@@ -387,6 +401,7 @@ export function pipelineHarness(options: HarnessOptions = {}): PipelineHarness {
     pauses,
     approvals,
     log: logger,
+    alerts: { raise: (alert) => alerts.push(alert) },
     watch: options.watch ?? false,
     now: () => clock.now,
     ...(options.timeouts !== undefined && { timeouts: options.timeouts }),
@@ -404,6 +419,7 @@ export function pipelineHarness(options: HarnessOptions = {}): PipelineHarness {
     clock,
     stages,
     notified,
+    alerts,
     logs: output,
     pipeline,
     undefinedProviders,

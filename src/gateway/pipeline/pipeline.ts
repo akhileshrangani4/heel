@@ -1,7 +1,7 @@
 import type { Logger } from "pino";
 import type { AuditEvent } from "../../core/audit.ts";
 import type { Call } from "../../core/call.ts";
-import { callHash } from "../../core/call-hash.ts";
+import { callHash, UNREPRESENTABLE_ARGS, UNREPRESENTABLE_CALL_HASH } from "../../core/call-hash.ts";
 import { type CountEvent, storedFacts, sumMatching } from "../../core/counts.ts";
 import { isItemCount, SINGLE_ITEM } from "../../core/items.ts";
 import type { CompiledHideEntry, CompiledRule, StateCheck } from "../../core/rules/compile.ts";
@@ -16,9 +16,10 @@ import {
 } from "../../core/rules/evaluate.ts";
 import { factsOf, type RuleFacts } from "../../core/rules/facts.ts";
 import { parseRunId } from "../../core/run-id.ts";
+import type { AdminAlerts } from "../../notify/admin-alerts.ts";
 import { appendAudit } from "../../store/audit.ts";
 import { readCountWindow, reserveCount } from "../../store/counts.ts";
-import type { HeelDb, HeelTx } from "../../store/db.ts";
+import { type HeelDb, type HeelTx, sqliteErrorCode } from "../../store/db.ts";
 import { findAccount, userName } from "../../store/directory.ts";
 import { DeadlineExceededError, withDeadline } from "../../util/deadline.ts";
 import { errorShape } from "../../util/error-shape.ts";
@@ -87,6 +88,11 @@ export interface PipelineDeps {
   pauses: PauseStore;
   approvals: ApprovalStore;
   log: Logger;
+  /**
+   * Where a store failure that denied a call is raised (spec: Fail-closed,
+   * "SQLite read or write fails"). A throw is logged; the call stays denied.
+   */
+  alerts: AdminAlerts;
   /** `heel serve --watch` (I-71 as amended). */
   watch: boolean;
   now?: () => Date;
@@ -174,9 +180,23 @@ class StateNeeded extends Error {
 /** What the run knows so far, so a failure can still be audited. */
 interface Attempt {
   call: Call | null;
+  /** `call`'s hash; null when its arguments have no canonical form. */
   hash: string | null;
   /** Set once the request may have left heel. */
   executing: boolean;
+}
+
+/**
+ * Records the call the run now holds and returns its hash. The hash is
+ * cleared first, so a failure audits the call with its own hash or with
+ * none, never with the hash of the call before a rewrite.
+ */
+function track(attempt: Attempt, call: Call): string {
+  attempt.call = call;
+  attempt.hash = null;
+  const hash = callHash(call);
+  attempt.hash = hash;
+  return hash;
 }
 
 interface DecideInput {
@@ -230,14 +250,14 @@ class DecisionPipeline implements Pipeline {
       args: request.args,
       items: SINGLE_ITEM,
     };
-    attempt.call = call;
-    attempt.hash = callHash(call);
+    // The provider isn't part of the identity, so this hash holds until normalization rewrites.
+    const identityHash = track(attempt, call);
 
     this.#trace("account");
     const account = findAccount(db, agent.orgId, request.account);
     // Until accounts can be shared (D13b), only the owner's agents may use one.
     if (account === null || account.ownerId !== agent.ownerId) {
-      return this.#deny(call, attempt.hash, "account_unavailable");
+      return this.#deny(call, identityHash, "account_unavailable");
     }
     call = { ...call, provider: account.provider };
     attempt.call = call;
@@ -249,31 +269,29 @@ class DecisionPipeline implements Pipeline {
     if (scope !== null) {
       appendAudit(
         db,
-        { kind: "paused", call, callHash: attempt.hash, pauseScope: scope },
+        { kind: "paused", call, callHash: identityHash, pauseScope: scope },
         this.#now(),
       );
       return { status: "paused", scope };
     }
     if (account.status === "reconnect_required") {
-      return this.#deny(call, attempt.hash, "reconnect_required");
+      return this.#deny(call, identityHash, "reconnect_required");
     }
     const definition = this.#deps.definitions.forAccount(account);
-    if (definition === null) return this.#deny(call, attempt.hash, "provider_unavailable");
+    if (definition === null) return this.#deny(call, identityHash, "provider_unavailable");
     // One rule set decides the whole call, even if a reload lands mid-call.
     const set = this.#deps.rules.set;
-    if (set === null) return this.#deny(call, attempt.hash, "rules_unavailable");
+    if (set === null) return this.#deny(call, identityHash, "rules_unavailable");
     const hide = hideEntriesFor(set, account.ownerName);
 
     this.#trace("normalize");
     const normalized = await this.#normalize(definition, call, hide);
-    if (!normalized.ok) return this.#deny(call, attempt.hash, normalized.reason);
+    if (!normalized.ok) return this.#deny(call, identityHash, normalized.reason);
     const violations = normalizationViolations(call, normalized.call);
     if (violations.length > 0) throw new NormalizationContractError(violations);
     call = normalized.call;
-    attempt.call = call;
     // The approval key covers the arguments as they will run (I-52).
-    const hash = callHash(call);
-    attempt.hash = hash;
+    const hash = track(attempt, call);
 
     const decided = await this.#decideWithState(definition, {
       call,
@@ -581,26 +599,44 @@ class DecisionPipeline implements Pipeline {
       return { status: "upstream_outcome_unknown" };
     }
     log.error(context, "pipeline failed; the call is denied");
-    if (attempt.call === null || attempt.hash === null) {
-      log.error(context, "internal deny not audited: the call could not be hashed");
-    } else {
-      const event: AuditEvent = {
-        kind: "deny",
-        call: attempt.call,
-        callHash: attempt.hash,
-        rule: null,
-        reason: "internal",
-      };
-      try {
-        appendAudit(this.#deps.db, event, this.#now());
-      } catch (auditError) {
-        log.error(
-          { ...context, error: errorShape(auditError) },
-          "internal deny not audited: the store refused the row",
-        );
-      }
+    const alerted = this.#alertOnStoreFailure(error);
+    if (attempt.call === null) {
+      log.error(context, "internal deny not audited: the run failed before it held a call");
+      return { status: "denied", reason: "internal", rule: null };
+    }
+    const event: AuditEvent = {
+      kind: "deny",
+      ...(attempt.hash === null
+        ? {
+            call: { ...attempt.call, args: UNREPRESENTABLE_ARGS },
+            callHash: UNREPRESENTABLE_CALL_HASH,
+          }
+        : { call: attempt.call, callHash: attempt.hash }),
+      rule: null,
+      reason: "internal",
+    };
+    try {
+      appendAudit(this.#deps.db, event, this.#now());
+    } catch (auditError) {
+      log.error(
+        { ...context, error: errorShape(auditError) },
+        "internal deny not audited: the store refused the row",
+      );
+      if (!alerted) this.#alertOnStoreFailure(auditError);
     }
     return { status: "denied", reason: "internal", rule: null };
+  }
+
+  /** Raises `store_unavailable` when SQLite caused the failure; true if it did. */
+  #alertOnStoreFailure(error: unknown): boolean {
+    const code = sqliteErrorCode(error);
+    if (code === null) return false;
+    try {
+      this.#deps.alerts.raise({ kind: "store_unavailable", code });
+    } catch (alertError) {
+      this.#deps.log.error({ error: errorShape(alertError) }, "admin alert failed");
+    }
+    return true;
   }
 
   #trace(stage: PipelineStage): void {
