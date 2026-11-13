@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "42f4cd92-9f49-4ae6-a8cf-b2bb4e6a7332",
+  "id": "7ca97268-e7f3-4f55-a4a9-34bca4e111b6",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "accounts": {
@@ -687,7 +687,24 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
-      "checkConstraints": {}
+      "checkConstraints": {
+        "audit_log_kind": {
+          "name": "audit_log_kind",
+          "value": "\"kind\" IN ('allow', 'deny', 'ask', 'paused', 'expired', 'approved', 'approval_denied', 'executed')"
+        },
+        "audit_log_pause_scope": {
+          "name": "audit_log_pause_scope",
+          "value": "\"pause_scope\" IS NULL OR \"pause_scope\" IN ('global', 'agent', 'account', 'provider')"
+        },
+        "audit_log_args_json": {
+          "name": "audit_log_args_json",
+          "value": "json_valid(\"args\")"
+        },
+        "audit_log_complete": {
+          "name": "audit_log_complete",
+          "value": "CASE \"kind\"\n        WHEN 'allow' THEN \"rule\" IS NOT NULL\n        WHEN 'deny' THEN \"reason\" IS NOT NULL\n        WHEN 'ask' THEN \"rule\" IS NOT NULL AND \"approval_id\" IS NOT NULL\n        WHEN 'paused' THEN \"pause_scope\" IS NOT NULL\n        WHEN 'expired' THEN \"approval_id\" IS NOT NULL\n        WHEN 'approved' THEN \"approval_id\" IS NOT NULL AND \"approver_id\" IS NOT NULL\n        WHEN 'approval_denied' THEN \"approval_id\" IS NOT NULL AND \"approver_id\" IS NOT NULL\n        WHEN 'executed' THEN \"approval_id\" IS NOT NULL\n        ELSE 0\n      END"
+        }
+      }
     },
     "count_events": {
       "name": "count_events",

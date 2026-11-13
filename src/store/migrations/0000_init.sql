@@ -86,7 +86,21 @@ CREATE TABLE `audit_log` (
 	`approver_id` text,
 	`pause_scope` text,
 	`reason` text,
-	FOREIGN KEY (`org_id`) REFERENCES `orgs`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`org_id`) REFERENCES `orgs`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "audit_log_kind" CHECK("kind" IN ('allow', 'deny', 'ask', 'paused', 'expired', 'approved', 'approval_denied', 'executed')),
+	CONSTRAINT "audit_log_pause_scope" CHECK("pause_scope" IS NULL OR "pause_scope" IN ('global', 'agent', 'account', 'provider')),
+	CONSTRAINT "audit_log_args_json" CHECK(json_valid("args")),
+	CONSTRAINT "audit_log_complete" CHECK(CASE "kind"
+        WHEN 'allow' THEN "rule" IS NOT NULL
+        WHEN 'deny' THEN "reason" IS NOT NULL
+        WHEN 'ask' THEN "rule" IS NOT NULL AND "approval_id" IS NOT NULL
+        WHEN 'paused' THEN "pause_scope" IS NOT NULL
+        WHEN 'expired' THEN "approval_id" IS NOT NULL
+        WHEN 'approved' THEN "approval_id" IS NOT NULL AND "approver_id" IS NOT NULL
+        WHEN 'approval_denied' THEN "approval_id" IS NOT NULL AND "approver_id" IS NOT NULL
+        WHEN 'executed' THEN "approval_id" IS NOT NULL
+        ELSE 0
+      END)
 );
 --> statement-breakpoint
 CREATE INDEX `audit_log_org_at` ON `audit_log` (`org_id`,`at`);--> statement-breakpoint
