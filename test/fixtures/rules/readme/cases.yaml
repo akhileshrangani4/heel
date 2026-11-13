@@ -1,0 +1,19 @@
+# The spec's example cases (spec: Rules, "Loading, testing and reload").
+cases:
+  - name: personal account never emails a client
+    call:
+      {
+        agent: inbox-bot,
+        account: gmail-personal,
+        action: email.send,
+        recipients: [ceo@clientco.com],
+      }
+    expect: { decision: deny, rule: 2 }
+  - name: 21st removal this run asks
+    call: { agent: inbox-bot, account: gmail-work, action: email.remove, items: 1, run: r1 }
+    counts: { run: 20, hour: 20 }
+    expect: { decision: ask }
+  - name: merge with red checks falls through to deny
+    call: { agent: ci-bot, account: github, action: github.merge, repo: acme/web }
+    state: { checks: failing }
+    expect: { decision: deny, rule: default }

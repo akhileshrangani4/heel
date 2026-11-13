@@ -14,6 +14,19 @@ export interface CliFields {
   argv: string[];
 }
 
+/** What rules see of an HTTP proxy request (spec: HTTP proxy, "What rules see"). */
+export interface HttpFields {
+  method: string;
+  /** The literal request path. */
+  path: string;
+  /** The OpenAPI or built-in path template the path matched, when one did. */
+  pathTemplate?: string;
+  /** The decoded query; a repeated key holds every value. */
+  query: Record<string, string | string[]>;
+  /** Parsed from JSON or form bodies; absent for any other content type. */
+  body?: unknown;
+}
+
 export interface Call {
   // who
   /** Single org per install in v1. */
@@ -49,6 +62,7 @@ export interface Call {
   /** "owner/name" for GitHub. */
   repo?: string;
   cli?: CliFields;
+  http?: HttpFields;
   /** The tool creates something that outlives revocation (I-70). */
   persistence?: boolean;
 }

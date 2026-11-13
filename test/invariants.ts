@@ -17,4 +17,13 @@ export const REQUIRED_INVARIANTS: Readonly<Record<string, string>> = {
   "I-56":
     "Deciding needs a passkey assertion bound to the call hash; no control decides without one.",
   "I-57": "The approval page shows the full arguments, never truncated.",
+  // D2: rules engine
+  "I-10": "A call that matches no rule is denied.",
+  "I-12": "An org rule with `then: allow` is a load error.",
+  "I-13": "An org deny beats every owner rule, standing approval and watch mode.",
+  "I-18": "A check on a field the call doesn't have doesn't match.",
+  "I-23": "A state check on a service with no built-in definition is a load error.",
+  "I-71":
+    "Global watch lets owner-rule and default-deny outcomes run; it never relaxes org rules or fail-closed denies.",
+  "I-72": "A `watch: true` rule never decides a call.",
 };

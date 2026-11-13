@@ -5,36 +5,29 @@ import { z } from "zod";
 import { AdminClientError, adminCall } from "../admin/client.ts";
 import type { AdminRequest } from "../admin/protocol.ts";
 import { AdminSocketError } from "../admin/server.ts";
-import { loadConfig, resolveConfigSource } from "../config/load.ts";
 import type { HeelConfig, ListenAddress } from "../config/schema.ts";
-import { YamlValidationError } from "../config/yaml.ts";
 import { createLogger } from "../log.ts";
 import { startHeel } from "../serve.ts";
 import { hasErrnoCode } from "../util/errno.ts";
 import { createMasterKeyFile } from "../vault/key.ts";
 import { HEEL_VERSION } from "../version.ts";
+import {
+  type CliIo,
+  CONFIG_OPTION,
+  ConfigError,
+  configFrom,
+  EXIT,
+  onePositional,
+  parseOrUsage,
+  RefusedError,
+  UsageError,
+} from "./common.ts";
+import { RULES_USAGE, rulesCommand } from "./rules.ts";
 
-/** Exit codes, from sysexits(3) as the spec uses for `heel run`. */
-export const EXIT = {
-  ok: 0,
-  /** heel answered and refused the request. */
-  failed: 1,
-  usage: 64,
-  /** heel isn't running, or (for `serve`) another heel already owns the admin socket. */
-  unavailable: 69,
-  /** heel.yaml is missing or invalid. */
-  config: 78,
-} as const;
-
-export interface CliIo {
-  env: Readonly<Record<string, string | undefined>>;
-  stdin: AsyncIterable<string | Buffer>;
-  stdout: { write(text: string): unknown };
-  stderr: { write(text: string): unknown };
-}
+export { type CliIo, EXIT } from "./common.ts";
 
 export const USAGE = `usage:
-  heel serve                              start the agent, human and admin planes
+  heel serve [--watch]                    start the agent, human and admin planes
   heel vault init                         create the master key file
   heel agent add <name> [--owner <user>]  add an agent; prints its token once
   heel agent rotate <name>                replace an agent's token
@@ -42,17 +35,9 @@ export const USAGE = `usage:
   heel agent list
   heel connect <provider> --as <alias> [--owner <user>] [--credential-stdin]
   heel account list
-
+${RULES_USAGE}
 Every command takes --config <file>; the default is $HEEL_HOME/heel.yaml.
 `;
-
-class UsageError extends Error {
-  override readonly name = "UsageError";
-}
-
-class RefusedError extends Error {
-  override readonly name = "RefusedError";
-}
 
 const IssuedAgentResult = z.object({ name: z.string(), token: z.string() });
 const ConnectedAccountResult = z.object({
@@ -65,47 +50,6 @@ const ConnectedAccountResult = z.object({
 export function agentMcpUrl(listen: ListenAddress): string {
   const host = listen.host.includes(":") ? `[${listen.host}]` : listen.host;
   return `http://${host}:${listen.port}/mcp`;
-}
-
-/** The `--config <file>` flag every command accepts. */
-const CONFIG_OPTION = { config: { type: "string" } } as const;
-
-/** Runs a parseArgs call, turning node:util's ERR_PARSE_ARGS_* errors into usage errors. */
-function parseOrUsage<T>(parse: () => T): T {
-  try {
-    return parse();
-  } catch (error) {
-    if (error instanceof TypeError && /^ERR_PARSE_ARGS/.test(String(Reflect.get(error, "code")))) {
-      throw new UsageError(error.message);
-    }
-    throw error;
-  }
-}
-
-class ConfigError extends Error {
-  override readonly name = "ConfigError";
-}
-
-function configFrom(io: CliIo, configFlag: string | undefined): HeelConfig {
-  const source = resolveConfigSource(io.env, configFlag);
-  try {
-    return loadConfig(source);
-  } catch (error) {
-    if (error instanceof YamlValidationError) {
-      throw new ConfigError(`invalid config:\n${error.message}`, { cause: error });
-    }
-    if (hasErrnoCode(error, "ENOENT")) {
-      throw new ConfigError(`config file not found: ${source.file}`, { cause: error });
-    }
-    throw error;
-  }
-}
-
-function onePositional(positionals: string[], what: string): string {
-  const [value, ...extra] = positionals;
-  if (value === undefined) throw new UsageError(`missing ${what}`);
-  if (extra.length > 0) throw new UsageError(`unexpected argument "${extra[0]}"`);
-  return value;
 }
 
 /** Sends one admin request; a refusal becomes a RefusedError carrying heel's message. */
@@ -136,12 +80,23 @@ function waitForShutdownSignal(): Promise<NodeJS.Signals> {
 
 async function serveCommand(args: string[], io: CliIo): Promise<number> {
   const { values, positionals } = parseOrUsage(() =>
-    parseArgs({ args, options: CONFIG_OPTION, allowPositionals: true, strict: true }),
+    parseArgs({
+      args,
+      options: { ...CONFIG_OPTION, watch: { type: "boolean" } },
+      allowPositionals: true,
+      strict: true,
+    }),
   );
   if (positionals.length > 0) throw new UsageError(`unexpected argument "${positionals[0]}"`);
   const config = configFrom(io, values.config);
   const log = createLogger(config.log.level);
-  const heel = await startHeel({ config, env: io.env, log, version: HEEL_VERSION });
+  const heel = await startHeel({
+    config,
+    env: io.env,
+    log,
+    version: HEEL_VERSION,
+    watch: values.watch ?? false,
+  });
   const signal = await waitForShutdownSignal();
   log.info({ signal }, "shutting down");
   await heel.close();
@@ -292,6 +247,8 @@ async function dispatch(argv: string[], io: CliIo): Promise<number> {
       return connectCommand(rest, io);
     case "account":
       return accountCommand(rest, io);
+    case "rules":
+      return rulesCommand(rest, io);
     case "help":
     case "--help":
     case "-h":

@@ -34,6 +34,8 @@ jobs:
       - run: pnpm test:invariants
       - name: Drizzle migrations match the schema
         run: pnpm db:drift
+      - name: Rules JSON Schema matches the Zod schema
+        run: pnpm schema:drift
 
   linux-sandbox:
     # Code mode (D6) and the CLI runner (D8) run under bubblewrap, which needs

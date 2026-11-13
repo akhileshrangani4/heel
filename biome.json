@@ -6,7 +6,13 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!**/node_modules", "!**/*.md", "!src/store/migrations/meta"]
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!**/*.md",
+      "!src/store/migrations/meta",
+      "!schema/heel-rules.schema.json"
+    ]
   },
   "formatter": {
     "enabled": true,
