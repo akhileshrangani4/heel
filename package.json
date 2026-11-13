@@ -25,7 +25,8 @@
     "gen:schema": "node ./scripts/gen-rules-schema.ts",
     "schema:drift": "node ./scripts/gen-rules-schema.ts --check",
     "gen:looks-like": "node ./scripts/gen-looks-like.ts",
-    "eval:looks-like": "node ./scripts/eval-looks-like.ts"
+    "eval:looks-like": "node ./scripts/eval-looks-like.ts",
+    "gen:cli-tables": "node ./scripts/gen-cli-tables.ts"
   },
   "dependencies": {
     "@hono/node-server": "~2.1.8",
