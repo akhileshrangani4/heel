@@ -475,8 +475,18 @@ class DecisionPipeline implements Pipeline {
     }
     switch (verdict.decision) {
       case "allow": {
-        reserve(tx, call, facts, at);
         const { standingApprovalId } = verdict;
+        if (
+          standingApprovalId !== null &&
+          governing?.status === "approved" &&
+          governing.ruleHash === verdict.rule.hash
+        ) {
+          // Approved as standing: the re-send of the approved call itself runs on
+          // its one-time approval, so that approval is used up rather than left
+          // to run the same call again if the standing one is revoked (I-54).
+          return this.#runApproved(tx, input, verdict.rule, governing.id, at);
+        }
+        reserve(tx, call, facts, at);
         appendAudit(
           tx,
           {
@@ -503,6 +513,21 @@ class DecisionPipeline implements Pipeline {
     }
   }
 
+  /** Executes once (I-54): the approval is consumed in the transaction that reserves its items. */
+  #runApproved(
+    tx: HeelTx,
+    input: DecideInput,
+    rule: CompiledRule,
+    approvalId: string,
+    at: Date,
+  ): Decided {
+    const { call, hash, facts } = input;
+    this.#deps.approvals.consume(tx, approvalId, at);
+    reserve(tx, call, facts, at);
+    appendAudit(tx, { kind: "executed", call, callHash: hash, approvalId, rule: rule.ref }, at);
+    return { kind: "execute", via: { kind: "approval", rule: rule.ref, approvalId } };
+  }
+
   /**
    * An ask, given the request that governs this call hash (spec: Approvals).
    * An approval satisfies only an ask from the rule that created it; when a
@@ -515,21 +540,13 @@ class DecisionPipeline implements Pipeline {
     governing: GoverningApproval | null,
     at: Date,
   ): Decided {
-    const { call, hash, facts } = input;
+    const { call, hash } = input;
     if (governing !== null) {
       const approvalId = governing.id;
       switch (governing.status) {
         case "approved":
           if (governing.ruleHash !== rule.hash) break;
-          // Executes once (I-54): consumed in the transaction that reserves its items.
-          this.#deps.approvals.consume(tx, approvalId, at);
-          reserve(tx, call, facts, at);
-          appendAudit(
-            tx,
-            { kind: "executed", call, callHash: hash, approvalId, rule: rule.ref },
-            at,
-          );
-          return { kind: "execute", via: { kind: "approval", rule: rule.ref, approvalId } };
+          return this.#runApproved(tx, input, rule, approvalId, at);
         case "pending":
           // A repeat joins the pending request and notifies no one again (I-51).
           appendAudit(tx, { kind: "ask", call, callHash: hash, rule: rule.ref, approvalId }, at);
