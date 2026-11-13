@@ -1,4 +1,5 @@
 import type { Call, PauseScope, RuleRef, Surface } from "./call.ts";
+import { argsOrNone } from "./call-hash.ts";
 
 /**
  * What one audit row says (I-73): every decision and every approval
@@ -60,9 +61,10 @@ export type AuditEvent =
   | (CallEvent & { kind: "approval_denied"; approvalId: string; approverId: string })
   | (CallEvent & { kind: "executed"; approvalId: string; rule?: RuleRef })
   /**
-   * Watch mode logged instead of deciding: a `watch: true` rule that matched
-   * (I-72), or an owner-rule or default-deny outcome global watch let run
-   * (I-71). The call's real decision has its own row.
+   * Watch mode logged instead of deciding. For a `watch: true` rule that
+   * matched (I-72), the call's real decision has its own row. For an
+   * owner-rule or default-deny outcome global watch let run (I-71), this row
+   * is the decision record: the call ran.
    */
   | (CallEvent & { kind: "would_allow" | "would_ask"; rule: RuleRef })
   | (CallEvent & {
@@ -110,8 +112,8 @@ export function toAuditRecord(event: AuditEvent, at: Date): AuditRecord {
     provider: call.provider,
     tool: call.tool,
     action: call.action ?? null,
-    // MCP treats absent `arguments` as none, so a call without them is recorded as `{}`.
-    args: call.args ?? {},
+    // Recorded exactly as hashed, so the row reproduces its own call_hash.
+    args: argsOrNone(call.args),
     callHash: event.callHash,
     rule: "rule" in event ? (event.rule ?? null) : null,
     approvalId: "approvalId" in event ? (event.approvalId ?? null) : null,
