@@ -197,7 +197,14 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
 
     const admin = await startAdminServer({
       path: config.adminSocketPath,
-      handle: createAdminHandler({ db: store.db, orgId, vault, version, now }),
+      handle: createAdminHandler({
+        db: store.db,
+        orgId,
+        vault,
+        version,
+        publicUrl: config.publicUrl,
+        now,
+      }),
       log,
     });
     closers.push(() => admin.close());

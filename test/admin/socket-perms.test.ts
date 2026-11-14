@@ -28,7 +28,13 @@ import { type TestStore, tempDir, testStore } from "../helpers/store.ts";
 const silent = createLogger("silent");
 
 function handlerFor(t: TestStore, vault: Vault | null = null): AdminHandler {
-  return createAdminHandler({ db: t.db, orgId: t.orgId, vault, version: "test" });
+  return createAdminHandler({
+    db: t.db,
+    orgId: t.orgId,
+    vault,
+    version: "test",
+    publicUrl: new URL("https://heel.example.com"),
+  });
 }
 
 async function serve(

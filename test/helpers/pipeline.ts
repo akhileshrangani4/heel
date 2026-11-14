@@ -302,6 +302,12 @@ export interface HarnessOptions {
    * harness's own; `setRules` and `rules` then don't reach the pipeline.
    */
   rulesSource?: RulesSource;
+  /**
+   * D4b's SQLite stores in place of the in-memory fakes; the harness's
+   * `pauses` and `approvals` then don't reach the pipeline.
+   */
+  pauseStore?: PauseStore;
+  approvalStore?: ApprovalStore;
 }
 
 export interface CallInput {
@@ -398,8 +404,8 @@ export function pipelineHarness(options: HarnessOptions = {}): PipelineHarness {
       forAccount: (account) =>
         undefinedProviders.has(account.provider) ? null : provider.definition(),
     },
-    pauses,
-    approvals,
+    pauses: options.pauseStore ?? pauses,
+    approvals: options.approvalStore ?? approvals,
     log: logger,
     alerts: { raise: (alert) => alerts.push(alert) },
     watch: options.watch ?? false,

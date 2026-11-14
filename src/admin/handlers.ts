@@ -4,13 +4,16 @@ import {
   AgentError,
   type AgentErrorCode,
   addAgent,
+  agentIdByName,
   listAgents,
   revokeAgent,
   rotateAgentToken,
 } from "../gateway/agents.ts";
+import { listStanding, revokeStanding } from "../store/approvals.ts";
 import type { HeelDb } from "../store/db.ts";
 import { LOCAL_OWNER_NAME } from "../store/install.ts";
-import { users } from "../store/schema.ts";
+import { listPauses, type PauseKey, pause } from "../store/pauses.ts";
+import { accounts, users } from "../store/schema.ts";
 import {
   ConnectError,
   type ConnectErrorCode,
@@ -18,6 +21,7 @@ import {
   listAccounts,
 } from "../vault/connect.ts";
 import type { Vault } from "../vault/vault.ts";
+import { createEnrollment, EnrollmentError } from "../web/passkeys.ts";
 import {
   type AdminErrorCode,
   type AdminRequest,
@@ -33,8 +37,13 @@ export interface AdminDeps {
   /** Null when no master key is configured; credential writes are refused. */
   vault: Vault | null;
   version: string;
+  /** The human plane's public origin; enrollment links point at it. */
+  publicUrl: URL;
   now?: () => Date;
 }
+
+/** Recorded as `paused_by` for pauses made over the admin socket, which has no signed-in person. */
+export const ADMIN_SOCKET_ACTOR = "admin-socket";
 
 const AGENT_ERROR_CODES: Record<AgentErrorCode, AdminErrorCode> = {
   invalid_name: "invalid",
@@ -54,6 +63,10 @@ class OwnerNotFound extends Error {
   override readonly name = "OwnerNotFound";
 }
 
+class TargetNotFound extends Error {
+  override readonly name = "TargetNotFound";
+}
+
 function resolveOwner(db: HeelDb, orgId: string, name: string | undefined): string {
   const ownerName = name ?? LOCAL_OWNER_NAME;
   const row = db
@@ -63,6 +76,32 @@ function resolveOwner(db: HeelDb, orgId: string, name: string | undefined): stri
     .get();
   if (!row) throw new OwnerNotFound(`no user named "${ownerName}"`);
   return row.id;
+}
+
+type PauseParams = Extract<AdminRequest, { method: "pause" }>["params"];
+
+/**
+ * The pause row a `heel pause` names. Targets are checked to exist, so a
+ * typo fails loudly instead of pausing nothing.
+ */
+function pauseKeyFor(db: HeelDb, orgId: string, params: PauseParams): PauseKey {
+  switch (params.scope) {
+    case "global":
+      return { scope: "global", target: "" };
+    case "agent":
+      return { scope: "agent", target: agentIdByName(db, orgId, params.name) };
+    case "owner":
+      return { scope: "owner", target: resolveOwner(db, orgId, params.name) };
+    case "account": {
+      const account = db
+        .select({ alias: accounts.alias })
+        .from(accounts)
+        .where(and(eq(accounts.orgId, orgId), eq(accounts.alias, params.name)))
+        .get();
+      if (!account) throw new TargetNotFound(`no account named "${params.name}"`);
+      return { scope: "account", target: account.alias };
+    }
+  }
 }
 
 function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminResponse {
@@ -95,6 +134,49 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
     }
     case "account.list":
       return adminOk(listAccounts(db, orgId));
+    case "user.enroll": {
+      const enrollment = createEnrollment(db, {
+        orgId,
+        userName: request.params.name,
+        publicUrl: deps.publicUrl,
+        now,
+      });
+      return adminOk({ url: enrollment.url, expiresAt: enrollment.expiresAt.toISOString() });
+    }
+    case "pause": {
+      const key = pauseKeyFor(db, orgId, request.params);
+      return adminOk({ ...key, ...pause(db, orgId, key, ADMIN_SOCKET_ACTOR, now) });
+    }
+    case "pause.list":
+      return adminOk(
+        listPauses(db, orgId).map((row) => ({
+          scope: row.scope,
+          target: row.target,
+          pausedBy: row.pausedBy,
+          pausedAt: row.pausedAt.toISOString(),
+        })),
+      );
+    case "standing.revoke": {
+      const revoked = revokeStanding(db, orgId, request.params.id, null, now);
+      if (revoked.ok) return adminOk({ id: request.params.id, revoked: true });
+      return revoked.reason === "not_found"
+        ? adminError("not_found", `no standing approval "${request.params.id}"`)
+        : adminError("conflict", `standing approval "${request.params.id}" is already revoked`);
+    }
+    case "standing.list":
+      return adminOk(
+        listStanding(db, orgId).map(({ row, agentName, account, covers }) => ({
+          id: row.id,
+          agent: agentName,
+          account,
+          scope: row.scope,
+          covers,
+          rule: row.rule,
+          createdAt: row.createdAt.toISOString(),
+          expiresAt: row.expiresAt.toISOString(),
+          revokedAt: row.revokedAt?.toISOString() ?? null,
+        })),
+      );
     case "audit.export": {
       const { since, until, afterId, throughId, limit } = request.params;
       return adminOk(
@@ -127,7 +209,12 @@ export function createAdminHandler(deps: AdminDeps): AdminHandler {
       if (error instanceof ConnectError) {
         return adminError(CONNECT_ERROR_CODES[error.code], error.message);
       }
-      if (error instanceof OwnerNotFound) return adminError("not_found", error.message);
+      if (error instanceof OwnerNotFound || error instanceof TargetNotFound) {
+        return adminError("not_found", error.message);
+      }
+      if (error instanceof EnrollmentError) {
+        return adminError(error.code === "unknown_user" ? "not_found" : "conflict", error.message);
+      }
       throw error;
     }
   };

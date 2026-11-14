@@ -43,12 +43,19 @@ export interface IssuedAgent {
   token: string;
 }
 
-function findAgent(tx: HeelTx, orgId: string, name: string) {
+function findAgent(tx: HeelDb | HeelTx, orgId: string, name: string) {
   return tx
     .select()
     .from(agents)
     .where(and(eq(agents.orgId, orgId), eq(agents.name, name)))
     .get();
+}
+
+/** The id of the agent with this name, revoked or not; pausing a revoked agent is harmless. */
+export function agentIdByName(db: HeelDb, orgId: string, name: string): string {
+  const agent = findAgent(db, orgId, name);
+  if (!agent) throw new AgentError("not_found", `no agent named "${name}"`);
+  return agent.id;
 }
 
 function requireLiveAgent(tx: HeelTx, orgId: string, name: string) {

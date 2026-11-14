@@ -242,6 +242,7 @@ describe("normalizing", () => {
     expect(pauseTarget(base)).toEqual({
       orgId: h.t.orgId,
       agentId: h.agent.agentId,
+      ownerId: h.t.ownerId,
       account: "gmail-work",
       provider: "gmail",
     });

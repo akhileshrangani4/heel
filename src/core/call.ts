@@ -80,5 +80,10 @@ export interface RuleRef {
   line: number;
 }
 
-export const PAUSE_SCOPES = ["global", "agent", "account", "provider"] as const;
+/**
+ * What a pause covers (spec: Pause). `owner` pauses every agent a person
+ * owns, so a member can stop all of their agents in one tap; like every
+ * pause, it can only stop calls.
+ */
+export const PAUSE_SCOPES = ["global", "owner", "agent", "account", "provider"] as const;
 export type PauseScope = (typeof PAUSE_SCOPES)[number];
