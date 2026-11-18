@@ -1,6 +1,6 @@
 # Incidents heel would have stopped
 
-[README](../README.md) · [Why heel](why.md) · [How it works](how-it-works.md) · [Rules](rules.md) · [Approvals](approvals.md) · [Running](running.md)
+[README](../README.md) · [Using heel](using-heel.md) · [Why heel](why.md) · [How it works](how-it-works.md) · [Rules](rules.md) · [Approvals](approvals.md) · [Running](running.md)
 
 Each of these is replayed against heel in [`e2e/incidents`](../e2e/incidents/incidents.test.ts), with the [example rules](rules.md) unchanged: the harmful call is stopped before it reaches the mailbox, and the useful part of the same story still runs.
 

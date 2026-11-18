@@ -21,6 +21,7 @@ const GITHUB = "https://github.com/akhileshrangani4/heel/blob/main/";
 
 /** The sidebar, in order: [page, file in docs/]. */
 const PAGES = [
+  ["using-heel", "using-heel.md"],
   ["why", "why.md"],
   ["how-it-works", "how-it-works.md"],
   ["rules", "rules.md"],

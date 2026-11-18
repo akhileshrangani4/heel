@@ -207,12 +207,20 @@ export default function HomePage() {
             rules are a file you can read, review and test. the first match decides, and a call no
             rule matches is denied. these are the rules behind the activity above.
           </p>
-          <Link
-            href="/docs/rules"
-            className="mt-6 inline-block text-sm font-medium underline decoration-neutral-300 underline-offset-4 hover:decoration-current dark:decoration-neutral-600"
-          >
-            how rules work →
-          </Link>
+          <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm font-medium">
+            <Link
+              href="/docs/rules"
+              className="underline decoration-neutral-300 underline-offset-4 hover:decoration-current dark:decoration-neutral-600"
+            >
+              how rules work →
+            </Link>
+            <Link
+              href="/docs/using-heel"
+              className="underline decoration-neutral-300 underline-offset-4 hover:decoration-current dark:decoration-neutral-600"
+            >
+              what using heel is like →
+            </Link>
+          </div>
         </div>
         <figure className="min-w-0">
           <Window title="rules/owner.yaml">

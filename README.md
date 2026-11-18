@@ -53,7 +53,7 @@ rules:
 
 Run `heel rules check` to validate them. Then point your agent's MCP client at the printed URL, with `Authorization: Bearer <token>`. Reads go through, merges to `acme/web` with passing checks wait for your approval on the approval page, and everything else is denied.
 
-To run heel as a server with Docker, see [docs/running.md](docs/running.md).
+To connect Claude Code, Cursor or another agent, and see what it's like to use day to day, read [Using heel](docs/using-heel.md). To run heel as a server with Docker, see [docs/running.md](docs/running.md).
 
 ## What it does
 
@@ -70,6 +70,7 @@ The docs are at **[useheel.dev](https://useheel.dev)**, and in [`docs/`](docs).
 
 | | |
 | --- | --- |
+| [Using heel](docs/using-heel.md) | What it's like day to day: connecting your agent, what it sees, approving from your phone |
 | [Why heel](docs/why.md) | The problem, intent-based access control, and where heel comes from |
 | [How it works](docs/how-it-works.md) | Surfaces, code mode, the trust boundary, teams |
 | [Rules and hiding](docs/rules.md) | The rules file, state checks, counts, `hide` |
