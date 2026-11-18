@@ -12,6 +12,7 @@ import {
 import { listStanding, revokeStanding } from "../store/approvals.ts";
 import type { HeelDb } from "../store/db.ts";
 import { LOCAL_OWNER_NAME } from "../store/install.ts";
+import { setUserEmail } from "../store/notifications.ts";
 import { ADMIN_SOCKET_ACTOR, listPauses, type PauseKey, pause } from "../store/pauses.ts";
 import { accounts, users } from "../store/schema.ts";
 import {
@@ -139,6 +140,13 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
         now,
       });
       return adminOk({ url: enrollment.url, expiresAt: enrollment.expiresAt.toISOString() });
+    }
+    case "user.email": {
+      const { name, email } = request.params;
+      if (!setUserEmail(db, orgId, name, email)) {
+        return adminError("not_found", `no user named "${name}"`);
+      }
+      return adminOk({ name, email });
     }
     case "pause": {
       const key = pauseKeyFor(db, orgId, request.params);

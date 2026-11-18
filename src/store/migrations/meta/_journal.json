@@ -57,6 +57,13 @@
       "when": 1794960892772,
       "tag": "0007_audit_adapter",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1794970081985,
+      "tag": "0008_notifications",
+      "breakpoints": true
     }
   ]
 }

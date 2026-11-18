@@ -3,6 +3,7 @@ import { type HumanPlaneDeps, requireSameOrigin } from "./http.ts";
 import { approvalRoutes } from "./routes/approvals.ts";
 import { enrollRoutes } from "./routes/enroll.ts";
 import { pauseRoutes } from "./routes/pause.ts";
+import { pushRoutes } from "./routes/push.ts";
 import { signInRoutes } from "./routes/sign-in.ts";
 import { standingRoutes } from "./routes/standing.ts";
 
@@ -28,6 +29,7 @@ export function createHumanApp(deps: HumanPlaneDeps): Hono {
   app.route("/", approvalRoutes(deps));
   app.route("/", pauseRoutes(deps));
   app.route("/", standingRoutes(deps));
+  app.route("/", pushRoutes(deps));
   app.notFound((c) => c.text("Not found.", 404));
   app.onError((error, c) => {
     deps.log.error({ err: error, path: c.req.path }, "human plane request failed");

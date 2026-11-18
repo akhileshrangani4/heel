@@ -11,6 +11,8 @@ import { formatYamlIssue } from "./config/yaml.ts";
 import { createAgentApp } from "./gateway/app.ts";
 import type { Logger } from "./log.ts";
 import { logAdminAlerts } from "./notify/admin-alerts.ts";
+import { Notifier } from "./notify/notifier.ts";
+import { notifySetup } from "./notify/setup.ts";
 import { SqliteApprovalStore } from "./store/approvals.ts";
 import { type HeelDb, openStore } from "./store/db.ts";
 import { ensureInstall, ensureLocalOwner } from "./store/install.ts";
@@ -212,6 +214,21 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
     });
     closers.push(() => admin.close());
 
+    // Approval notifications (D4d). The pipeline hands new requests to
+    // `notifier.approvalRequested` once the agent plane runs it (D5).
+    const notify = notifySetup(config.notify, options.env);
+    const notifier = new Notifier({
+      db: store.db,
+      orgId,
+      log,
+      publicUrl: config.publicUrl,
+      senders: notify.senders,
+      now,
+    });
+    notifier.start();
+    closers.push(() => notifier.stop());
+    log.info({ channels: [...notifier.channels] }, "notifications ready");
+
     let human: PlaneState;
     const urlProblem = humanPlaneUrlProblem(config.publicUrl);
     if (urlProblem) {
@@ -227,6 +244,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         approvals: new SqliteApprovalStore(),
         pauses: new SqlitePauseStore(),
         rules,
+        vapidPublicKey: notify.vapidPublicKey,
         now,
       });
       const server = await listenHttp(humanApp.fetch, config.listen.human);

@@ -33,6 +33,8 @@ export interface HumanPlaneDeps {
   pauses: PauseStore;
   /** The rules in force, to tell a live standing approval from a lapsed one. */
   rules: RulesSource;
+  /** The VAPID public key devices subscribe to approval notifications with. */
+  vapidPublicKey: string;
   now: () => Date;
 }
 

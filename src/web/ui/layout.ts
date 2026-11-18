@@ -126,6 +126,10 @@ export function page(props: PageProps): Html {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#16181D" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icon-180.png" />
+    <link rel="apple-touch-icon" href="/icon-180.png" />
     <title>${props.title} · heel</title>
     <style>${trusted(STYLESHEET)}</style>
   </head>
