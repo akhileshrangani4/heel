@@ -1,0 +1,62 @@
+name: docs
+
+# Deploys useheel.dev to production, from one commit. The release workflow
+# calls this after each release with the released commit, so the site always
+# documents a version people can install. Run it by hand to redeploy: it
+# defaults to the latest release tag, or give it a ref (e.g. main) to ship a
+# fix to the site itself early.
+on:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: true
+    secrets:
+      VERCEL_TOKEN:
+        required: true
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit, tag or branch to deploy (default the latest release tag)
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: deploy useheel.dev
+    runs-on: ubuntu-24.04
+    env:
+      # The Vercel project (Root Directory: site) is identified by these;
+      # the token is a team-scoped Vercel token.
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      REF: ${{ inputs.ref }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check out what to deploy
+        run: |
+          if [ -z "$REF" ]; then
+            REF=$(git tag --list 'v*' --sort=-v:refname | grep -v -- - | head -1)
+            [ -n "$REF" ] || { echo "no release tag yet"; exit 1; }
+          fi
+          git checkout --detach "$REF"
+          echo "Deploying $REF ($(git rev-parse --short HEAD))"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+      - name: Deploy to production
+        run: |
+          url=$(npx --yes vercel@62.2.0 deploy --prod --yes --token "$VERCEL_TOKEN")
+          echo "Deployed $url"
+          npx --yes vercel@62.2.0 alias set "$url" useheel.dev --token "$VERCEL_TOKEN"

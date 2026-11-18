@@ -29,10 +29,12 @@ To release a version other than the one it proposes, put `Release-As: 1.0.0` in 
 | `build` | read only, no publish credentials | Installs, runs `pnpm package:smoke` (packs heel, installs the tarball with npm into an empty project, and checks that it starts, answers on both planes and accepts admin commands), packs the tarball and builds the image. |
 | `npm` | npm publish only | Publishes the tarball `build` made, with provenance. Installs nothing. |
 | `ghcr` | packages | Pushes the image `build` made, as `:<version>` and `:latest`. Installs nothing. |
+| `docs` | read; the Vercel token | Deploys [useheel.dev](https://useheel.dev) from the released commit, once npm has the release ([`docs.yml`](../.github/workflows/docs.yml)). Skipped for a pre-release. |
 | `notes` | contents | Adds install lines to the GitHub release. |
 
 - **Re-running:** each publish checks whether it's already done, so if a run fails you can re-run it to finish.
 - **`latest`:** only ever moves to a higher version, on npm and on ghcr.io. A pre-release version (`1.2.0-rc.1`) goes to npm's `next` tag instead.
+- **The docs site follows releases:** useheel.dev only changes when a release goes out, so it never documents a version that isn't on npm. To redeploy it, run the `docs` workflow from the Actions tab. By default it deploys the latest release tag; give it `main` to ship a fix to the site itself early.
 - **Registry errors:** an error from npm or ghcr.io stops the run. It's never treated as "not published yet".
 
 ## The npm package
@@ -53,4 +55,5 @@ These are needed once per repository:
 | `RELEASE_TOKEN` | Repository secret: a fine-grained GitHub token for this repository with read and write access to **Contents** and **Pull requests** | Release PRs are opened from your account, so CI runs on them. With the default token they're opened by `github-actions[bot]`, and CI doesn't run. |
 | npm trusted publisher | npmjs.com, `useheel` package settings: GitHub Actions, `akhileshrangani4/heel`, workflow `release.yml`, no environment | npm accepts publishes from the workflow with no stored token. |
 | `NPM_TOKEN` (first release only) | Repository secret: a granular npm token that can publish | npm doesn't allow a trusted publisher before the package exists. After the first release, add the trusted publisher, then delete this secret and revoke the token. |
+| Vercel project | Vercel: project `useheel` on your personal team, Root Directory `site`. Repository variables `VERCEL_ORG_ID` and `VERCEL_PROJECT_ID`, and the secret `VERCEL_TOKEN` (a token scoped to that team) | The `docs` job deploys useheel.dev and points the domain at the new deployment. |
 | Public image | GitHub, the `heel` container package's settings | GitHub creates container packages as private. Make it public after the first release, so `docker pull` works without signing in. |

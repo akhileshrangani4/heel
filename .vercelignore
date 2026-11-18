@@ -1,0 +1,10 @@
+# useheel.dev builds from site/, which reads README.md, docs/ and assets/.
+/*
+!/site
+!/docs
+!/assets
+!/README.md
+/site/node_modules
+/site/.next
+/docs/design
+/docs/research

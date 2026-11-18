@@ -16,8 +16,9 @@ npm run build
 
 ## Deploying
 
-Vercel, as its own project:
+useheel.dev is the Vercel project `useheel` (Root Directory `site`). Production deploys come from [`.github/workflows/docs.yml`](../.github/workflows/docs.yml), never from pushes:
 
-1. **Import the repository** and set **Root Directory** to `site`. Vercel detects Next.js; the default build settings work.
-2. **Keep files outside the root directory included** (the default). The build reads `../README.md`, `../docs` and `../assets`.
-3. **Add the domain** `useheel.dev` to the project.
+- **On a release:** the release workflow deploys the released commit once npm has it, so the site always documents a version people can install.
+- **By hand:** run the `docs` workflow from the Actions tab. It deploys the latest release tag by default, or any ref you give it.
+
+The root `.vercelignore` limits the upload to what the site reads: `site/`, `docs/` (without `design/` and `research/`), `assets/` and `README.md`.
