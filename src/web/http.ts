@@ -1,10 +1,13 @@
+import type { FetchLike } from "@modelcontextprotocol/client";
 import type { Context, MiddlewareHandler } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
+import type { UpstreamSignIns } from "../definitions/mcp/upstream-oauth.ts";
 import type { RulesSource } from "../gateway/pipeline/pipeline.ts";
 import type { PauseStore } from "../gateway/pipeline/ports.ts";
 import type { Logger } from "../log.ts";
 import type { SqliteApprovalStore } from "../store/approvals.ts";
 import type { HeelDb } from "../store/db.ts";
+import type { Vault } from "../vault/vault.ts";
 import type { Passkeys } from "./passkeys.ts";
 import {
   csrfMatches,
@@ -37,6 +40,11 @@ export interface HumanPlaneDeps {
   vapidPublicKey: string;
   /** The agent plane's public URL when OAuth for connectors is on (A2); null when off. */
   agentPublicUrl: URL | null;
+  /**
+   * Sign-in to remote MCP servers that want OAuth (D5c). Null when the vault
+   * is closed, since the tokens would have nowhere to go.
+   */
+  upstreamOAuth: { signIns: UpstreamSignIns; vault: Vault; fetch?: FetchLike } | null;
   now: () => Date;
 }
 

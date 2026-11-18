@@ -34,9 +34,11 @@ export const USAGE = `usage:
   heel agent revoke <name>                revoke an agent's token
   heel agent list
   heel connect <provider> --as <alias> [--owner <user>] [--credential-stdin]
-  heel connect mcp --as <alias> --url <upstream> [--credential-stdin]
+  heel connect mcp --as <alias> --url <upstream> [--credential-stdin | --oauth]
                                           put a remote MCP server behind heel; a
-                                          token on stdin is sent to it as a bearer
+                                          token on stdin is sent to it as a bearer,
+                                          or with --oauth its owner signs in from
+                                          the Connections page
   heel connect mcp --as <alias> --command <path> [--arg <a>]... [--egress <host>]...
                    [--mount <path>]... [--credential-env <NAME> --credential-stdin]
                                           run a local MCP server in heel's sandbox
@@ -253,6 +255,7 @@ async function connectCommand(args: string[], io: CliIo): Promise<number> {
         as: { type: "string" },
         owner: { type: "string" },
         url: { type: "string" },
+        oauth: { type: "boolean" },
         command: { type: "string" },
         arg: { type: "string", multiple: true },
         egress: { type: "string", multiple: true },
@@ -278,6 +281,7 @@ async function connectCommand(args: string[], io: CliIo): Promise<number> {
     alias: values.as,
     ...(values.owner === undefined ? {} : { owner: values.owner }),
     ...(values.url === undefined ? {} : { url: values.url }),
+    ...(values.oauth === true ? { oauth: true } : {}),
     ...(values.command === undefined
       ? {}
       : {

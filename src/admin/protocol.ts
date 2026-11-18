@@ -53,6 +53,8 @@ export const AdminRequestSchema = z.discriminatedUnion("method", [
       credential: StaticCredentialSchema.optional(),
       /** For an MCP passthrough (`provider: "mcp"`): the upstream server's URL. */
       url: z.string().min(1).max(2_048).optional(),
+      /** The remote server wants OAuth sign-in; its owner signs in from the Connections page. */
+      oauth: z.boolean().optional(),
       /** For an MCP passthrough: a local server heel starts in the sandbox, instead of a URL. */
       stdio: z
         .strictObject({

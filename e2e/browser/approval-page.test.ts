@@ -55,6 +55,7 @@ async function startHumanPlane(): Promise<Running> {
     rules: h.rules,
     vapidPublicKey: TEST_VAPID_PUBLIC_KEY,
     agentPublicUrl: null,
+    upstreamOAuth: null,
     now: () => h.clock.now,
   });
   server.on("request", getRequestListener(app.fetch));

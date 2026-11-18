@@ -126,7 +126,7 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
         })),
       );
     case "account.connect": {
-      const { provider, alias, owner, credential, url, stdio } = request.params;
+      const { provider, alias, owner, credential, url, stdio, oauth } = request.params;
       const ownerId = resolveOwner(db, orgId, owner);
       const input = {
         orgId,
@@ -136,6 +136,7 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
         ...(credential ? { credential } : {}),
         ...(url === undefined ? {} : { url }),
         ...(stdio === undefined ? {} : { stdio }),
+        ...(oauth === undefined ? {} : { oauth }),
       };
       return adminOk(connectAccount(db, deps.vault, input, now));
     }

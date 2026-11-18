@@ -18,6 +18,14 @@ const ENV_NAME = /^[A-Z_][A-Z0-9_]{0,63}$/;
 const HttpSettings = z.object({
   transport: z.literal("http").default("http"),
   url: z.string().min(1),
+  /**
+   * The server wants OAuth sign-in (D5c): heel is its OAuth client, and the
+   * account's tokens live in the vault. The account needs its owner to sign
+   * in from the Connections page before any call works.
+   */
+  oauth: z.boolean().default(false),
+  /** What the server registered heel as (dynamic client registration); public, never a secret. */
+  oauthClient: z.looseObject({ client_id: z.string() }).optional(),
 });
 
 const StdioSettings = z.object({
@@ -37,6 +45,7 @@ const UpstreamSettingsSchema = z.union([StdioSettings, HttpSettings]);
 
 export type UpstreamSettings = z.output<typeof UpstreamSettingsSchema>;
 export type StdioUpstream = z.output<typeof StdioSettings>;
+export type HttpUpstream = z.output<typeof HttpSettings>;
 
 /** The account's upstream settings, or null when they don't describe one. */
 export function upstreamSettings(settings: Record<string, unknown>): UpstreamSettings | null {
