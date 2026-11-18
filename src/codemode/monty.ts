@@ -7,6 +7,7 @@ import {
   type Snapshot,
 } from "@pydantic/monty";
 import type { StubModule } from "./stubs.ts";
+import { plainValue } from "./values.ts";
 import type { CodeWorker, ScriptLimits, Step } from "./worker.ts";
 
 /**
@@ -87,7 +88,18 @@ export class MontyWorker implements CodeWorker {
     } catch (error) {
       return { kind: "failed", error: error instanceof Error ? error.message : String(error) };
     }
-    if (snap instanceof MontyComplete) return { kind: "done", output: snap.output };
+    let output: unknown;
+    let kwargs: Record<string, unknown>;
+    try {
+      if (snap instanceof MontyComplete) output = plainValue(snap.output, "output");
+      kwargs =
+        snap instanceof FunctionSnapshot
+          ? (plainValue(snap.kwargs, "argument") as Record<string, unknown>)
+          : {};
+    } catch (error) {
+      return { kind: "failed", error: error instanceof Error ? error.message : String(error) };
+    }
+    if (snap instanceof MontyComplete) return { kind: "done", output };
     if (!(snap instanceof FunctionSnapshot)) {
       return {
         kind: "failed",
@@ -100,7 +112,7 @@ export class MontyWorker implements CodeWorker {
       kind: "call",
       module: dot < 0 ? "" : call.functionName.slice(0, dot),
       fn: dot < 0 ? call.functionName : call.functionName.slice(dot + 1),
-      kwargs: { ...call.kwargs },
+      kwargs,
       positional: call.args.length,
       resume: (value) => this.#step(() => call.resume(value)),
       raise: (type, message) => {

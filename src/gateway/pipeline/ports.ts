@@ -280,6 +280,8 @@ export type PipelineResult =
       approvalId?: string;
       /** The adapter that denied the call or withheld its result. */
       adapter?: string;
+      /** The call ran upstream; only its result was withheld (hiding or a response adapter). */
+      executed?: true;
     }
   | { status: "paused"; scope: PauseScope }
   | { status: "expired"; approvalId: string }

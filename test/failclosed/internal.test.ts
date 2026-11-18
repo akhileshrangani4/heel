@@ -131,7 +131,7 @@ describe("fail closed: hiding after the call ran", () => {
 
     const result = await h.call({ args: SEND });
 
-    expect(result).toEqual(INTERNAL);
+    expect(result).toEqual({ ...INTERNAL, executed: true });
     expect(h.provider.executed).toHaveLength(1);
     expect(h.counts()).toHaveLength(1);
     expect(h.logs()).toContain("result withheld");
@@ -145,7 +145,12 @@ describe("fail closed: hiding after the call ran", () => {
 
     const result = await h.call({ args: SEND });
 
-    expect(result).toEqual({ status: "denied", reason: "response_unparseable", rule: null });
+    expect(result).toEqual({
+      status: "denied",
+      reason: "response_unparseable",
+      rule: null,
+      executed: true,
+    });
     expect(h.provider.executed).toHaveLength(1);
   });
 
@@ -155,7 +160,7 @@ describe("fail closed: hiding after the call ran", () => {
 
     const result = await h.call({ args: SEND });
 
-    expect(result).toEqual(INTERNAL);
+    expect(result).toEqual({ ...INTERNAL, executed: true });
     expect(result).not.toHaveProperty("result");
   });
 });

@@ -2,10 +2,12 @@ import { mkdirSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { getRequestListener } from "@hono/node-server";
 import { createAdminHandler } from "./admin/handlers.ts";
 import { startAdminServer } from "./admin/server.ts";
 import { SiemSink } from "./audit/siem.ts";
+import { SandboxedCodeWorker } from "./codemode/sandboxed.ts";
 import { rulesPaths } from "./config/rules.ts";
 import { type ReloadOutcome, RulesHolder, watchRules } from "./config/rules-reload.ts";
 import { type HeelConfig, humanPlaneUrlProblem, type ListenAddress } from "./config/schema.ts";
@@ -88,6 +90,9 @@ export function listenerUrl(address: Pick<AddressInfo, "address" | "family" | "p
  * agent plane down (spec: Fail-closed behavior). Anything else is a fault in
  * heel or the host and aborts the boot.
  */
+/** heel's install directory (the repo root): mounted read-only into the code-mode worker. */
+const INSTALL_DIR = fileURLToPath(new URL("..", import.meta.url));
+
 function loadProviderClients(
   config: HeelConfig,
   env: Readonly<Record<string, string | undefined>>,
@@ -387,7 +392,19 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         looksLike,
         onHidden: (reason) => hideCounts.record(reason),
       });
-      const mcp = createMcpSurface({ db: store.db, pipeline, definitions, log, version, now });
+      const mcp = createMcpSurface({
+        db: store.db,
+        pipeline,
+        definitions,
+        log,
+        version,
+        now,
+        // Code mode only where the sandbox runs (D6b): heel never loads Monty itself.
+        ...(sandbox.ok && {
+          codeWorker: () =>
+            new SandboxedCodeWorker({ host: sandbox.host, installDir: INSTALL_DIR }),
+        }),
+      });
       closers.push(() => mcp.close());
       const app = createAgentApp({
         db: store.db,

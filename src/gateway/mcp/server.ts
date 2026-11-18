@@ -7,6 +7,9 @@ import {
   Server,
   type Tool,
 } from "@modelcontextprotocol/server";
+import { runScript } from "../../codemode/run.ts";
+import { accountModule } from "../../codemode/stubs.ts";
+import type { CodeWorker } from "../../codemode/worker.ts";
 import type { Logger } from "../../log.ts";
 import { approvalStatusForAgent } from "../../store/approvals.ts";
 import type { HeelDb } from "../../store/db.ts";
@@ -16,7 +19,17 @@ import { isMcpProvider } from "../../vault/connect.ts";
 import type { AuthenticatedAgent } from "../agent-tokens.ts";
 import type { Pipeline } from "../pipeline/pipeline.ts";
 import type { Definition, DefinitionRegistry } from "../pipeline/ports.ts";
-import { directName, HEEL_STATUS, HEEL_STATUS_TOOL, listedTool, splitDirectName } from "./names.ts";
+import {
+  directName,
+  HEEL_STATUS,
+  HEEL_STATUS_TOOL,
+  HEEL_STUBS,
+  HEEL_STUBS_TOOL,
+  listedTool,
+  RUN_CODE,
+  RUN_CODE_TOOL,
+  splitDirectName,
+} from "./names.ts";
 import { toolResult } from "./results.ts";
 
 /**
@@ -34,7 +47,11 @@ import { toolResult } from "./results.ts";
  */
 
 /** Which tools a request sees: one account's, or every account's prefixed. */
-export type McpScope = { kind: "account"; alias: string } | { kind: "direct" };
+export type McpScope =
+  | { kind: "account"; alias: string }
+  | { kind: "direct" }
+  /** Bare `/mcp`: code mode's `run_code` and `heel_stubs` (D6b). */
+  | { kind: "code" };
 
 export interface McpSurfaceDeps {
   db: HeelDb;
@@ -43,9 +60,13 @@ export interface McpSurfaceDeps {
   log: Logger;
   version: string;
   now?: () => Date;
+  /** A fresh sandboxed worker per script; absent where the sandbox can't run. */
+  codeWorker?: () => CodeWorker;
 }
 
 export interface McpSurface {
+  /** Whether bare `/mcp` serves code mode: only with a sandboxed worker. */
+  readonly codeMode: boolean;
   /** Serves one MCP request for an authenticated agent. */
   serve(request: Request, agent: AuthenticatedAgent, scope: McpScope): Promise<Response>;
   close(): Promise<void>;
@@ -79,6 +100,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
   }
 
   async function listTools(agent: AuthenticatedAgent, scope: McpScope): Promise<Tool[]> {
+    if (scope.kind === "code") return [RUN_CODE_TOOL, HEEL_STUBS_TOOL, HEEL_STATUS_TOOL];
     const accounts = accountsWithTools(agent);
     if (scope.kind === "account") {
       const listing = accounts.find(({ account }) => account.alias === scope.alias);
@@ -103,6 +125,80 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     return [...perAccount.flat(), HEEL_STATUS_TOOL];
   }
 
+  /** Every account the agent may use, as a Python module (spec: Code mode). */
+  async function modulesFor(agent: AuthenticatedAgent) {
+    const modules = await Promise.all(
+      accountsWithTools(agent).map(async ({ account, tools }) => {
+        try {
+          const module = accountModule(account.alias, await tools(AbortSignal.timeout(10_000)));
+          return module === null ? [] : [{ ...module, account: account.alias }];
+        } catch (error) {
+          deps.log.warn(
+            { account: account.alias, error: errorShape(error) },
+            "account's tools couldn't be listed; it's left out of code mode",
+          );
+          return [];
+        }
+      }),
+    );
+    return modules.flat();
+  }
+
+  async function heelStubs(
+    agent: AuthenticatedAgent,
+    args: Record<string, unknown>,
+  ): Promise<CallToolResult> {
+    const wanted = typeof args["account"] === "string" ? args["account"] : null;
+    const modules = (await modulesFor(agent)).filter(
+      (m) => wanted === null || m.account === wanted,
+    );
+    const text = modules
+      .map((m) => `# ${m.module}.pyi (account ${m.account})\n${m.stubs}`)
+      .join("\n");
+    return { content: [{ type: "text", text: text === "" ? "# no accounts" : text }] };
+  }
+
+  async function runCode(
+    agent: AuthenticatedAgent,
+    args: Record<string, unknown>,
+    metaRunId: unknown,
+  ): Promise<CallToolResult> {
+    const makeWorker = deps.codeWorker;
+    if (makeWorker === undefined) {
+      throw new ProtocolError(
+        ProtocolErrorCode.InvalidParams,
+        "Code mode isn't available on this host",
+      );
+    }
+    const code = typeof args["code"] === "string" ? args["code"] : "";
+    const runId =
+      typeof args["run_id"] === "string"
+        ? args["run_id"]
+        : typeof metaRunId === "string"
+          ? metaRunId
+          : undefined;
+    const result = await runScript({
+      code,
+      agent,
+      runId,
+      modules: await modulesFor(agent),
+      pipeline: deps.pipeline,
+      worker: makeWorker(),
+    });
+    const body = {
+      status: result.status,
+      ...(result.approvalId === undefined ? {} : { approvalId: result.approvalId }),
+      stdout: result.stdout,
+      calls: result.calls,
+      error: result.error,
+    };
+    return {
+      ...(result.status === "error" && { isError: true }),
+      content: [{ type: "text", text: JSON.stringify(body) }],
+      structuredContent: body,
+    };
+  }
+
   function heelStatus(agent: AuthenticatedAgent, args: Record<string, unknown>): CallToolResult {
     const approvalId = typeof args["approval_id"] === "string" ? args["approval_id"] : "";
     const status = approvalStatusForAgent(deps.db, agent, approvalId, now());
@@ -125,6 +221,11 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
   ): Promise<CallToolResult> {
     const args = params.arguments ?? {};
     if (params.name === HEEL_STATUS) return heelStatus(agent, args);
+    if (scope.kind === "code") {
+      if (params.name === RUN_CODE) return runCode(agent, args, params._meta?.[RUN_ID_META_KEY]);
+      if (params.name === HEEL_STUBS) return heelStubs(agent, args);
+      throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Unknown tool: ${params.name}`);
+    }
     const target =
       scope.kind === "account"
         ? { alias: scope.alias, tool: params.name }
@@ -164,6 +265,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
   });
 
   return {
+    codeMode: deps.codeWorker !== undefined,
     serve: (request, agent, scope) =>
       handler.fetch(request, {
         // Pass-through to the factory; the SDK never reads it as a credential.

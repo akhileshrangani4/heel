@@ -72,7 +72,7 @@ describe("listing tools", () => {
     expect(h.t.db.select().from(auditLog).all()).toMatchObject([{ account: "archive" }]);
   });
 
-  it("keeps bare /mcp for code mode, which isn't built yet", async () => {
+  it("keeps bare /mcp for code mode, which needs the sandbox", async () => {
     const h = await mcpHarness({ owner: READS_ALLOWED });
     const response = await h.request("/mcp", {
       method: "POST",

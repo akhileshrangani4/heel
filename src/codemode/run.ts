@@ -19,8 +19,9 @@ import { type CodeWorker, DEFAULT_LIMITS, type ScriptLimits, type Step } from ".
  *   call (I-59, I-62). The result carries the approval id and what already
  *   ran; the agent sends the rest as a new script;
  * - an upstream error: a `RuntimeError` at the call;
- * - an unknown outcome: the script is stopped, so it can't catch the error
- *   and retry a write that may have happened.
+ * - an unknown outcome, or a call that ran but whose result heel withheld:
+ *   the script is stopped, so it can't catch the error and retry a write
+ *   that happened or may have.
  */
 
 export interface CallRecord {
@@ -109,6 +110,14 @@ export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
         step = await step.resume(result.result);
         break;
       case "denied":
+        if (result.executed === true) {
+          // The call ran; a catchable error would let the script retry a write that happened.
+          record("deny");
+          return finish({
+            status: "error",
+            error: `${tool} on ${module.account} ran, but heel withheld its result; the script was stopped`,
+          });
+        }
         record("deny");
         step = await step.raise(
           "PermissionError",
