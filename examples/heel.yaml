@@ -1,0 +1,22 @@
+# heel's example configuration, as the OCI image ships it (/etc/heel/heel.yaml).
+# Every key is documented in docs/design/spec-v0.1.md, "Configuration".
+#
+# The master key comes from HEEL_MASTER_KEY (base64, 32 bytes), or a file:
+#   docker run -e HEEL_MASTER_KEY="$(head -c 32 /dev/urandom | base64)" ...
+# Keep it somewhere safe: without it, the stored credentials can't be read.
+
+# The human plane's public origin: its host becomes the passkey (WebAuthn) RP ID.
+# Only https:// may serve it, except localhost for trying heel out.
+public_url: http://localhost:7301
+
+listen:
+  # Agents' MCP, HTTP proxy and `heel run` endpoint.
+  agent: "0.0.0.0:7300"
+  # The approval page and sign-in.
+  human: "0.0.0.0:7301"
+
+# Where `heel connect`, `heel agent` and `heel pause` reach the running server.
+admin_socket: /var/lib/heel/admin.sock
+
+log:
+  level: info
