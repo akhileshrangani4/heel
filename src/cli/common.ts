@@ -22,6 +22,8 @@ export interface CliIo {
   stdin: AsyncIterable<string | Buffer>;
   stdout: { write(text: string): unknown };
   stderr: { write(text: string): unknown };
+  /** HTTP for commands that call out (`heel rules draft`); the global `fetch` when absent. */
+  fetch?: (input: string | URL, init?: RequestInit) => Promise<Response>;
   /** The current directory; `process.cwd()` when absent. */
   cwd?: () => string;
 }

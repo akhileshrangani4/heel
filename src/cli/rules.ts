@@ -1,7 +1,8 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { type LoadedRules, loadRuleSet, rulesPaths } from "../config/rules.ts";
+import { adminCall } from "../admin/client.ts";
+import { compileRulesText, type LoadedRules, loadRuleSet, rulesPaths } from "../config/rules.ts";
 import {
   formatYamlIssue,
   parseYamlDocument,
@@ -12,7 +13,10 @@ import {
 import { type CaseResult, type RulesCase, RulesCasesFile, runCase } from "../core/rules/cases.ts";
 import type { RuleSet } from "../core/rules/evaluate.ts";
 import { renderRulesJsonSchema } from "../core/rules/schema.ts";
+import { actionsFor, DraftingError, lineDiff, requestDraft } from "../drafting/draft.ts";
 import { hasErrnoCode } from "../util/errno.ts";
+import { Secret } from "../vault/secret.ts";
+import { loadSecret } from "../vault/secret-file.ts";
 import {
   type CliIo,
   CONFIG_OPTION,
@@ -30,6 +34,9 @@ import {
  */
 
 export const RULES_USAGE = `  heel rules check                        validate org-rules.yaml and rules/<user>.yaml
+  heel rules draft "<words>" [--user <user>] [--cases <cases.yaml>]
+                                          draft rules with the configured model; prints
+                                          the draft and a diff, never saves it
   heel rules test <cases.yaml> [--user <user>]
                                           run offline cases against the rules
   heel rules schema                       print the rules JSON Schema for editors
@@ -39,14 +46,17 @@ export async function rulesCommand(args: string[], io: CliIo): Promise<number> {
   const { values, positionals } = parseOrUsage(() =>
     parseArgs({
       args,
-      options: { ...CONFIG_OPTION, user: { type: "string" } },
+      options: { ...CONFIG_OPTION, user: { type: "string" }, cases: { type: "string" } },
       allowPositionals: true,
       strict: true,
     }),
   );
   const [subcommand, ...rest] = positionals;
-  if (subcommand !== "test" && values.user !== undefined) {
-    throw new UsageError("--user applies only to `heel rules test`");
+  if (subcommand !== "test" && subcommand !== "draft" && values.user !== undefined) {
+    throw new UsageError("--user applies only to `heel rules test` and `heel rules draft`");
+  }
+  if (subcommand !== "draft" && values.cases !== undefined) {
+    throw new UsageError("--cases applies only to `heel rules draft`");
   }
   switch (subcommand) {
     case "schema":
@@ -75,6 +85,8 @@ export async function rulesCommand(args: string[], io: CliIo): Promise<number> {
       io.stdout.write(formatCaseResults(results));
       return results.every((result) => result.outcome === "pass") ? EXIT.ok : EXIT.failed;
     }
+    case "draft":
+      return draftCommand(io, rest.join(" "), values);
     default:
       throw new UsageError(
         subcommand === undefined
@@ -175,4 +187,105 @@ function formatCaseLine(result: CaseResult): string {
 
 function count(n: number, one: string, many = `${one}s`): string {
   return `${n} ${n === 1 ? one : many}`;
+}
+
+/** The environment variable that carries the drafting API key; it beats `api_key_file`. */
+export const DRAFTING_API_KEY_ENV = "HEEL_DRAFTING_API_KEY";
+
+/**
+ * `heel rules draft "<words>"` (D13b; spec: Teams, "Rule drafting"): asks
+ * the configured model for a rules file, validates it, and prints it with a
+ * diff against the person's current file and, with `--cases`, the cases'
+ * results against it. It never writes a file (I-17).
+ */
+async function draftCommand(
+  io: CliIo,
+  description: string,
+  values: { config?: string | undefined; user?: string | undefined; cases?: string | undefined },
+): Promise<number> {
+  if (description.trim() === "")
+    throw new UsageError('describe the rule: heel rules draft "<words>"');
+  const config = configFrom(io, values.config);
+  if (config.drafting === null) {
+    io.stderr.write("heel: drafting is off; add a drafting: section to heel.yaml\n");
+    return EXIT.config;
+  }
+  const loaded = loadOrReport(io, config.home);
+  if (loaded === null) return EXIT.dataErr;
+  const users = [...loaded.set.owners.keys()];
+  const user = values.user ?? (users.length === 1 ? users[0] : undefined);
+  if (user === undefined) {
+    io.stderr.write("heel: name whose rules to draft with --user <user>\n");
+    return EXIT.usage;
+  }
+  const env = io.env;
+  const fromEnv = env[DRAFTING_API_KEY_ENV];
+  const apiKey =
+    fromEnv !== undefined && fromEnv !== ""
+      ? new Secret(fromEnv)
+      : config.drafting.apiKeyFile === null
+        ? null
+        : loadSecret(env, DRAFTING_API_KEY_ENV, config.drafting.apiKeyFile);
+
+  // The person's accounts, from heel if it is running; their names and providers only.
+  let accounts: { alias: string; provider: string }[] = [];
+  try {
+    const response = await adminCall(config.adminSocketPath, { method: "account.list" });
+    if (response.ok) {
+      accounts = (response.result as { alias: string; provider: string; owner: string }[])
+        .filter((a) => a.owner === user)
+        .map((a) => ({ alias: a.alias, provider: a.provider }));
+    }
+  } catch {
+    io.stderr.write("heel: heel isn't running, so the draft won't know your accounts\n");
+  }
+
+  let draft: string;
+  try {
+    draft = await requestDraft(
+      { baseUrl: config.drafting.baseUrl, model: config.drafting.model, apiKey },
+      {
+        description,
+        schema: renderRulesJsonSchema(),
+        accounts,
+        actions: actionsFor(accounts.map((a) => a.provider)),
+      },
+      io.fetch ?? fetch,
+      AbortSignal.timeout(120_000),
+    );
+  } catch (error) {
+    if (!(error instanceof DraftingError)) throw error;
+    io.stderr.write(`heel: ${error.message}\n`);
+    return EXIT.unavailable;
+  }
+
+  const display = `rules/${user}.yaml`;
+  io.stdout.write(`Draft for ${display}:\n\n${draft}\n`);
+  let compiled: ReturnType<typeof compileRulesText>;
+  try {
+    compiled = compileRulesText(draft, `${display} (draft)`, display, "owner");
+  } catch (error) {
+    if (!(error instanceof YamlValidationError)) throw error;
+    io.stderr.write(formatInvalid("the draft isn't a valid rules file", error.issues));
+    return EXIT.dataErr;
+  }
+  for (const warning of compiled.warnings) io.stdout.write(`warn  ${formatYamlIssue(warning)}\n`);
+  const path = join(config.home, display);
+  const current = existsSync(path) ? readFileSync(path, "utf8") : "";
+  io.stdout.write(
+    `\nChanges from ${current === "" ? "an empty file" : display}:\n${lineDiff(current, draft)}`,
+  );
+
+  let passed = true;
+  if (values.cases !== undefined) {
+    const cases = readCases(io, resolve(values.cases));
+    if (cases === null) return EXIT.dataErr;
+    const owners = new Map(loaded.set.owners);
+    owners.set(user, compiled.file);
+    const results = cases.map((testCase) => runCase({ ...loaded.set, owners }, testCase, user));
+    io.stdout.write(`\nCases against the draft:\n${formatCaseResults(results)}`);
+    passed = results.every((result) => result.outcome === "pass");
+  }
+  io.stdout.write(`\nNot saved. If it's right, save it as ${display} yourself.\n`);
+  return passed ? EXIT.ok : EXIT.failed;
 }
