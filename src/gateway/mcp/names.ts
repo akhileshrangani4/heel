@@ -27,6 +27,39 @@ export const HEEL_STATUS_TOOL: Tool = {
   },
 };
 
+export const RUN_CODE = "run_code";
+export const HEEL_STUBS = "heel_stubs";
+
+/** Code mode's one tool (spec: Code mode). */
+export const RUN_CODE_TOOL: Tool = {
+  name: RUN_CODE,
+  description:
+    "Run a Python script (Monty's subset) that calls your accounts as modules: `import gmail_work` then " +
+    "`gmail_work.send(...)`. Every call is checked by heel on its own. A denial raises PermissionError " +
+    "at the call. If a call needs approval or you're paused, the script stops there and the result says " +
+    "so, with what already ran; send the rest as a new script once it's approved. See heel_stubs for " +
+    "the functions and their arguments.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      code: { type: "string", description: "The script." },
+      run_id: { type: "string", description: "Your run id, for per-run limits." },
+    },
+    required: ["code"],
+    additionalProperties: false,
+  },
+};
+
+export const HEEL_STUBS_TOOL: Tool = {
+  name: HEEL_STUBS,
+  description: "The .pyi stubs of the modules run_code can import: one per account.",
+  inputSchema: {
+    type: "object",
+    properties: { account: { type: "string", description: "Only this account's module." } },
+    additionalProperties: false,
+  },
+};
+
 const SEPARATOR = "__";
 
 export function directName(alias: string, tool: string): string {
