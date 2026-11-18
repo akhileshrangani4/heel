@@ -1,6 +1,6 @@
 # Running heel
 
-[README](../README.md) · [Why heel](why.md) · [How it works](how-it-works.md) · [Rules](rules.md) · [Approvals](approvals.md) · [Running](running.md)
+[README](../README.md) · [Using heel](using-heel.md) · [Why heel](why.md) · [How it works](how-it-works.md) · [Rules](rules.md) · [Approvals](approvals.md) · [Running](running.md)
 
 heel is one process. It serves the **agent plane** on port 7300 (MCP at `/mcp`, the HTTP proxy at `/http/<account>/…`, `heel run` at `/run`) and the **human plane** on port 7301 (sign-in, passkeys, the approval page). Operators use the `heel` CLI, which reaches the running server over a local admin socket.
 
@@ -95,14 +95,3 @@ heel migrates its database when it starts. Back up `HEEL_HOME` (or the volume) a
 
 - **On a Linux host:** install `bubblewrap` and `util-linux`.
 - **In Docker:** the default seccomp profile blocks user namespaces, so heel starts with both turned off. To turn them on, run with a seccomp profile that allows `unshare` and `clone` with `CLONE_NEWUSER`, on a host kernel that allows unprivileged user namespaces.
-
-## From a checkout
-
-Node 26.13 or later and pnpm. A checkout runs the TypeScript source directly:
-
-```sh
-pnpm install
-export HEEL_HOME=~/.heel-dev
-node bin/heel.js vault init
-node bin/heel.js serve
-```

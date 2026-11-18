@@ -14,7 +14,7 @@
       "!schema/heel-rules.schema.json",
       "!src/lookslike/weights.json",
       "!corpus/looks-like/manifest.json",
-      "!site"
+      "!docs/site"
     ]
   },
   "formatter": {
