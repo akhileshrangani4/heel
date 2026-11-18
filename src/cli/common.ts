@@ -22,6 +22,8 @@ export interface CliIo {
   stdin: AsyncIterable<string | Buffer>;
   stdout: { write(text: string): unknown };
   stderr: { write(text: string): unknown };
+  /** The current directory; `process.cwd()` when absent. */
+  cwd?: () => string;
 }
 
 export class UsageError extends Error {

@@ -26,10 +26,13 @@ import { RULES_USAGE, rulesCommand } from "./rules.ts";
 
 export { type CliIo, EXIT } from "./common.ts";
 
+import { runCommand } from "./run.ts";
+
 export const USAGE = `usage:
   heel serve [--watch]                    start the agent, human and admin planes
   heel vault init                         create the master key file
   heel agent add <name> [--owner <user>]  add an agent; prints its token once
+  heel agent workdir <name> [<dir>...]    the directories heel run may work in
   heel agent rotate <name>                replace an agent's token
   heel agent revoke <name>                revoke an agent's token
   heel agent list
@@ -50,6 +53,14 @@ export const USAGE = `usage:
   heel connect mcp --as <alias> --command <path> [--arg <a>]... [--egress <host>]...
                    [--mount <path>]... [--credential-env <NAME> --credential-stdin]
                                           run a local MCP server in heel's sandbox
+  heel run [--account <alias>] [--json] -- <cmd> [args...]
+                                          (agent side) ask heel to run a command;
+                                          reads HEEL_TOKEN, HEEL_URL, HEEL_RUN_ID
+  heel connect cli <command> --as <alias> --bin <path> [--egress <host>]...
+                   [--credential-env <NAME>] --credential-stdin
+                                          let agents run a CLI (gh, kubectl, ...)
+                                          through heel with \`heel run\`; the
+                                          credential stays with heel
   heel account list
   heel user enroll <user>                 print a one-time passkey enrollment link
                                           (valid 15 minutes; also adds a device or
@@ -218,6 +229,17 @@ async function agentCommand(args: string[], io: CliIo): Promise<number> {
       );
       return EXIT.ok;
     }
+    case "workdir": {
+      const [name, ...roots] = rest;
+      if (name === undefined) throw new UsageError("missing agent name");
+      await admin(config, { method: "agent.workdirs", params: { name, workRoots: roots } });
+      io.stdout.write(
+        roots.length === 0
+          ? `"${name}" can no longer run commands.\n`
+          : `"${name}" may run commands in: ${roots.join(", ")}\n`,
+      );
+      return EXIT.ok;
+    }
     case "rotate": {
       const name = onePositional(rest, "agent name");
       const issued = IssuedAgentResult.parse(
@@ -273,12 +295,21 @@ async function connectCommand(args: string[], io: CliIo): Promise<number> {
         "base-url": { type: "string" },
         auth: { type: "string" },
         openapi: { type: "string" },
+        bin: { type: "string" },
       },
       allowPositionals: true,
       strict: true,
     }),
   );
-  const provider = onePositional(positionals, "provider");
+  const [provider, cliCommand, ...extra] = positionals;
+  if (provider === undefined) throw new UsageError("missing provider");
+  if (provider !== "cli" && cliCommand !== undefined) {
+    throw new UsageError(`unexpected argument "${cliCommand}"`);
+  }
+  if (extra.length > 0) throw new UsageError(`unexpected argument "${extra[0]}"`);
+  if (provider === "cli" && (cliCommand === undefined || values.bin === undefined)) {
+    throw new UsageError("heel connect cli <command> --bin <absolute path> --as <alias>");
+  }
   if (values.as === undefined) throw new UsageError("missing --as <alias>");
   const config = configFrom(io, values.config);
   let credential: { type: "static"; value: string } | undefined;
@@ -293,6 +324,16 @@ async function connectCommand(args: string[], io: CliIo): Promise<number> {
     ...(values.owner === undefined ? {} : { owner: values.owner }),
     ...(values.url === undefined ? {} : { url: values.url }),
     ...(values.oauth === true ? { oauth: true } : {}),
+    ...(provider === "cli"
+      ? {
+          cli: {
+            command: cliCommand as string,
+            bin: values.bin as string,
+            egress: values.egress ?? [],
+            credentialEnv: values["credential-env"] ?? null,
+          },
+        }
+      : {}),
     ...(values.command === undefined
       ? {}
       : {
@@ -559,6 +600,8 @@ async function dispatch(argv: string[], io: CliIo): Promise<number> {
       await codemodeWorkerMain();
       return new Promise<number>(() => {});
     }
+    case "run":
+      return runCommand(rest, io, { fetch, cwd: () => io.cwd?.() ?? process.cwd() });
     case "help":
     case "--help":
     case "-h":

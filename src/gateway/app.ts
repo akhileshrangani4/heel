@@ -6,7 +6,9 @@ import { findAccount } from "../store/directory.ts";
 import { requireServedHost } from "./allowed-hosts.ts";
 import { type HttpProxyDeps, handleHttpProxy } from "./http-proxy.ts";
 import type { McpSurface } from "./mcp/server.ts";
+import type { Pipeline } from "./pipeline/pipeline.ts";
 import { type AgentPlaneEnv, requireAgent } from "./require-agent.ts";
+import { handleRun } from "./run-route.ts";
 
 export interface AgentAppDeps {
   db: HeelDb;
@@ -26,18 +28,14 @@ export interface AgentAppDeps {
    * and `agent_public_url`'s host (DNS-rebinding protection).
    */
   hosts?: readonly string[];
+  /** The CLI runner's `/run` (D8b); without it, `/run` answers 501. */
+  run?: { pipeline: Pipeline; sandbox: boolean };
 }
 
 /** RFC 9728: where an MCP client learns which authorization server to use. */
 const PROTECTED_RESOURCE_PATH = "/.well-known/oauth-protected-resource";
 
-/**
- * The agent plane's surfaces (spec: Architecture, "Listeners"). Each one is
- * built by its own deliverable: MCP and code mode (D5, D6), the HTTP proxy
- * (D7) and the CLI runner (D8).
- */
-const SURFACE_ROUTES = ["/run"] as const;
-
+/** What a surface answers when its dependencies aren't wired in (as in some tests). */
 const NOT_BUILT = { status: "denied", reason: "surface_unavailable", rule: null } as const;
 
 /**
@@ -133,9 +131,13 @@ export function createAgentApp(deps: AgentAppDeps): Hono<AgentPlaneEnv> {
     if (http === undefined) return c.json(NOT_BUILT, 501);
     return handleHttpProxy(c, c.get("agent"), http);
   });
-  for (const route of SURFACE_ROUTES) {
-    app.all(route, (c) => c.json(NOT_BUILT, 501));
-  }
+  app.post("/run", async (c) => {
+    if (deps.run === undefined) return c.json(NOT_BUILT, 501);
+    return handleRun(c, c.get("agent"), { db: deps.db, ...deps.run });
+  });
+  app.all("/run", (c) =>
+    c.json({ status: "denied", reason: "method_not_allowed", rule: null }, 405),
+  );
   app.notFound((c) => c.json({ status: "denied", reason: "unknown_endpoint", rule: null }, 404));
   app.onError((error, c) => {
     // Fail closed (spec: Fail-closed behavior): nothing was sent upstream.

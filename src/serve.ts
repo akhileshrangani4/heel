@@ -26,6 +26,7 @@ import {
   microsoftRefresher,
 } from "./definitions/microsoft/oauth.ts";
 import { definitionRegistry } from "./definitions/registry.ts";
+import { workRootsOf } from "./gateway/agents.ts";
 import { createAgentApp } from "./gateway/app.ts";
 import { createMcpSurface } from "./gateway/mcp/server.ts";
 import { createPipeline } from "./gateway/pipeline/pipeline.ts";
@@ -280,6 +281,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         vault,
         version,
         publicUrl: config.publicUrl,
+        home: config.home,
         now,
       }),
       log,
@@ -378,6 +380,13 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         outlook: { vault: opening.vault, fetch },
         googleCalendar: { vault: opening.vault, fetch },
         http: { vault: opening.vault, fetch },
+        // `heel run` (D8b): every command runs in the sandbox, so without it each is denied.
+        cli: {
+          vault: opening.vault,
+          sandbox: sandbox.ok ? sandbox.host : null,
+          start: startSandboxed,
+          workRoots: (agentId) => workRootsOf(store.db, agentId),
+        },
       });
       const pipeline = createPipeline({
         db: store.db,
@@ -413,6 +422,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         log,
         now,
         mcp,
+        run: { pipeline, sandbox: sandbox.ok },
         hosts: [config.listen.agent.host],
         oauth:
           config.agentPublicUrl === null
