@@ -3,6 +3,12 @@
  * `[redacted by heel]` (spec: CLI runner, "Output scrub"). Output arrives in
  * chunks, and a credential can straddle two of them, so the scrubber holds
  * back the last `longest - 1` bytes until it knows no secret starts there.
+ *
+ * Except at a line break: a credential that contains no newline can't span
+ * one, so everything up to the last newline is released at once. Line-based
+ * output stays prompt, which a long-running server speaking newline-framed
+ * JSON (a local MCP server) depends on: holding back the newline that ends
+ * a message would stall it until the next one.
  */
 export const REDACTED = Buffer.from("[redacted by heel]", "utf8");
 
@@ -20,14 +26,19 @@ export function createScrubber(secrets: readonly string[]): Scrubber {
     // Longest first, so a secret that contains another is replaced whole.
     .sort((a, b) => b.length - a.length);
   const holdBack = Math.max(0, ...needles.map((needle) => needle.length - 1));
+  const NEWLINE = 0x0a;
+  // Only when no secret contains a newline is a line break a safe place to cut.
+  const cutAtNewline = needles.every((needle) => !needle.includes(NEWLINE));
   let pending = Buffer.alloc(0);
 
   return {
     push(chunk) {
       const data = Buffer.concat([pending, chunk]);
       const { out, rest } = replaceAll(data, needles);
-      // `rest` holds no whole secret, but its tail may be the start of one.
-      const safe = Math.max(0, rest.length - holdBack);
+      // `rest` holds no whole secret, but its tail may be the start of one,
+      // unless that tail comes after a newline no secret can span.
+      const afterNewline = cutAtNewline ? rest.lastIndexOf(NEWLINE) + 1 : 0;
+      const safe = Math.max(0, rest.length - holdBack, afterNewline);
       pending = Buffer.from(rest.subarray(safe));
       out.push(rest.subarray(0, safe));
       return Buffer.concat(out);

@@ -1,9 +1,16 @@
 import type { CallToolResult, FetchLike } from "@modelcontextprotocol/client";
-import { Client, StreamableHTTPClientTransport, type Tool } from "@modelcontextprotocol/client";
+import {
+  Client,
+  StreamableHTTPClientTransport,
+  type Tool,
+  type Transport,
+} from "@modelcontextprotocol/client";
 import type { Logger } from "../../log.ts";
 import type { AccountRecord } from "../../store/directory.ts";
 import type { Secret } from "../../vault/secret.ts";
 import { type Vault, VaultError } from "../../vault/vault.ts";
+import { SandboxStdioTransport, type StdioProcess } from "./sandbox-transport.ts";
+import { type StdioUpstream, type UpstreamSettings, upstreamSettings } from "./settings.ts";
 
 /**
  * Connections to the MCP servers that passthrough accounts point at (spec:
@@ -26,6 +33,15 @@ export interface UpstreamDeps {
   log: Logger;
   /** Overrides `fetch` for every upstream request; tests reach in-process servers with it. */
   fetch?: FetchLike;
+  /**
+   * Starts a local (stdio) MCP server in the sandbox. Absent when the host
+   * can't run the sandbox: those accounts' calls are then denied.
+   */
+  launchStdio?: (
+    account: AccountRecord,
+    upstream: StdioUpstream,
+    credential: string | null,
+  ) => Promise<StdioProcess>;
 }
 
 export class UpstreamPool {
@@ -97,18 +113,38 @@ export class UpstreamPool {
   }
 
   async #connect(account: AccountRecord): Promise<Client> {
-    const url = account.settings["url"];
-    if (typeof url !== "string") throw new Error(`account ${account.alias} has no upstream URL`);
+    const upstream = upstreamSettings(account.settings);
+    if (upstream === null) throw new Error(`account ${account.alias} has no upstream settings`);
     const token = await this.credential(account);
-    const transport = new StreamableHTTPClientTransport(new URL(url), {
-      ...(token === null
-        ? {}
-        : { requestInit: { headers: { authorization: `Bearer ${token.reveal()}` } } }),
-      ...(this.#deps.fetch === undefined ? {} : { fetch: this.#deps.fetch }),
-    });
     const client = new Client({ name: "heel", version: "0.1.0" });
-    await client.connect(transport);
-    this.#deps.log.info({ account: account.alias }, "connected to upstream MCP server");
+    await client.connect(await this.#transport(account, upstream, token));
+    this.#deps.log.info(
+      { account: account.alias, transport: upstream.transport },
+      "connected to upstream MCP server",
+    );
     return client;
+  }
+
+  async #transport(
+    account: AccountRecord,
+    upstream: UpstreamSettings,
+    token: Secret | null,
+  ): Promise<Transport> {
+    if (upstream.transport === "http") {
+      return new StreamableHTTPClientTransport(new URL(upstream.url), {
+        ...(token === null
+          ? {}
+          : { requestInit: { headers: { authorization: `Bearer ${token.reveal()}` } } }),
+        ...(this.#deps.fetch === undefined ? {} : { fetch: this.#deps.fetch }),
+      });
+    }
+    const launch = this.#deps.launchStdio;
+    if (launch === undefined) {
+      throw new Error("local MCP servers need the sandbox, which isn't available on this host");
+    }
+    const server = await launch(account, upstream, token === null ? null : token.reveal());
+    return new SandboxStdioTransport(server, (line) =>
+      this.#deps.log.info({ account: account.alias, stderr: line }, "upstream MCP server log"),
+    );
   }
 }
