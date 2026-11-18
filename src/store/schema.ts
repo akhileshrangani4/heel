@@ -514,6 +514,55 @@ export const sessions = sqliteTable(
   (t) => [index("sessions_user").on(t.userId)],
 );
 
+/** Who an account's principal names: one heel user, or everyone in an IdP group. */
+export const PRINCIPAL_KINDS = ["user", "group"] as const;
+export type PrincipalKind = (typeof PRINCIPAL_KINDS)[number];
+
+/**
+ * Who besides its owner may use an account (D13b; spec: Teams, "Who may use
+ * an account"): an agent may call an account only if the agent's owner may.
+ */
+export const accountShares = sqliteTable(
+  "account_shares",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accounts.id),
+    kind: text("kind", { enum: PRINCIPAL_KINDS }).notNull(),
+    /** A user id, or a group name exactly as the IdP sends it. */
+    principal: text("principal").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("account_shares_unique").on(t.accountId, t.kind, t.principal)],
+);
+
+/**
+ * Who decides an account's asks (D13b; spec: Teams, "Approvers"). With none,
+ * the owner does. `repo` narrows an approver to one GitHub repo.
+ */
+export const accountApprovers = sqliteTable(
+  "account_approvers",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    accountId: text("account_id")
+      .notNull()
+      .references(() => accounts.id),
+    kind: text("kind", { enum: PRINCIPAL_KINDS }).notNull(),
+    principal: text("principal").notNull(),
+    /** `owner/name`, lower-case, for a GitHub account; null for every call on the account. */
+    repo: text("repo"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("account_approvers_account").on(t.accountId)],
+);
+
 /**
  * OIDC sign-ins in progress (D13b): what heel must check when the person
  * comes back from the IdP. Keyed by the hash of a random cookie set on the

@@ -39,6 +39,7 @@ import { type HeelDb, type HeelTx, sqliteErrorCode } from "../../store/db.ts";
 import { findAccount, userName } from "../../store/directory.ts";
 import { type GrantRow, liveGrants } from "../../store/grants.ts";
 import { modeFor } from "../../store/modes.ts";
+import { mayUseAccount } from "../../store/sharing.ts";
 import { DeadlineExceededError, withDeadline } from "../../util/deadline.ts";
 import { errorShape } from "../../util/error-shape.ts";
 import type {
@@ -361,8 +362,8 @@ class DecisionPipeline implements Pipeline {
 
     this.#trace("account");
     const account = findAccount(db, agent.orgId, request.account);
-    // Until accounts can be shared (D13b), only the owner's agents may use one.
-    if (account === null || account.ownerId !== agent.ownerId) {
+    // An agent may use an account only if its owner may (spec: Teams, "Who may use an account").
+    if (account === null || !mayUseAccount(db, account, agent.ownerId)) {
       return this.#deny(call, identityHash, "account_unavailable");
     }
     call = { ...call, provider: account.provider };

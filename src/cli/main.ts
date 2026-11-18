@@ -62,6 +62,12 @@ export const USAGE = `usage:
                                           through heel with \`heel run\`; the
                                           credential stays with heel
   heel account list
+  heel account share|unshare <alias> --user <name> | --group <group>
+                                          let another person's agents use an account
+  heel account approvers <alias> [--repo <owner/name>] [--user <name>]... [--group <group>]...
+                                          who decides its asks (default: the owner);
+                                          no --user or --group clears that scope
+  heel account sharing <alias>
   heel user enroll <user>                 print a one-time passkey enrollment link
                                           (valid 15 minutes; also adds a device or
                                           recovers a lost passkey)
@@ -368,16 +374,74 @@ async function connectCommand(args: string[], io: CliIo): Promise<number> {
   return EXIT.ok;
 }
 
+/**
+ * `heel account list`, and sharing (D13b):
+ * `heel account share|unshare <alias> --user <name> | --group <group>`,
+ * `heel account approvers <alias> [--repo <owner/name>] [--user <name>]... [--group <group>]...`
+ * (no principals clears that scope), `heel account sharing <alias>`.
+ */
 async function accountCommand(args: string[], io: CliIo): Promise<number> {
   const { values, positionals } = parseOrUsage(() =>
-    parseArgs({ args, options: CONFIG_OPTION, allowPositionals: true, strict: true }),
+    parseArgs({
+      args,
+      options: {
+        ...CONFIG_OPTION,
+        user: { type: "string", multiple: true },
+        group: { type: "string", multiple: true },
+        repo: { type: "string" },
+      },
+      allowPositionals: true,
+      strict: true,
+    }),
   );
-  if (onePositional(positionals, "account subcommand") !== "list") {
-    throw new UsageError(`unknown account subcommand "${positionals[0]}"`);
-  }
+  const [subcommand, alias, ...extra] = positionals;
+  if (extra.length > 0) throw new UsageError(`unexpected argument "${extra[0]}"`);
   const config = configFrom(io, values.config);
-  io.stdout.write(`${JSON.stringify(await admin(config, { method: "account.list" }), null, 2)}\n`);
-  return EXIT.ok;
+  const principals = [
+    ...(values.user ?? []).map((name) => ({ kind: "user" as const, name })),
+    ...(values.group ?? []).map((name) => ({ kind: "group" as const, name })),
+  ];
+  const print = (result: unknown) => io.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  switch (subcommand) {
+    case "list":
+      if (alias !== undefined) throw new UsageError(`unexpected argument "${alias}"`);
+      print(await admin(config, { method: "account.list" }));
+      return EXIT.ok;
+    case "share":
+    case "unshare": {
+      if (alias === undefined) throw new UsageError("missing account alias");
+      const [principal, ...more] = principals;
+      if (principal === undefined || more.length > 0) {
+        throw new UsageError("give exactly one --user <name> or --group <group>");
+      }
+      print(
+        await admin(config, {
+          method: subcommand === "share" ? "account.share" : "account.unshare",
+          params: { alias, ...principal },
+        }),
+      );
+      return EXIT.ok;
+    }
+    case "approvers":
+      if (alias === undefined) throw new UsageError("missing account alias");
+      print(
+        await admin(config, {
+          method: "account.approvers",
+          params: { alias, repo: values.repo ?? null, approvers: principals },
+        }),
+      );
+      return EXIT.ok;
+    case "sharing":
+      if (alias === undefined) throw new UsageError("missing account alias");
+      print(await admin(config, { method: "account.sharing", params: { alias } }));
+      return EXIT.ok;
+    default:
+      throw new UsageError(
+        subcommand === undefined
+          ? "missing account subcommand"
+          : `unknown account subcommand "${subcommand}"`,
+      );
+  }
 }
 
 /** `heel user email <user> <address>` or `heel user email <user> --clear`. */

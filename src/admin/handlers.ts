@@ -17,6 +17,13 @@ import { setUserEmail } from "../store/notifications.ts";
 import { ADMIN_SOCKET_ACTOR, listPauses, type PauseKey, pause } from "../store/pauses.ts";
 import { accounts, users } from "../store/schema.ts";
 import {
+  SharingError,
+  setApprovers,
+  shareAccount,
+  sharingOf,
+  unshareAccount,
+} from "../store/sharing.ts";
+import {
   ConnectError,
   type ConnectErrorCode,
   connectAccount,
@@ -157,6 +164,20 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
     }
     case "account.list":
       return adminOk(listAccounts(db, orgId));
+    case "account.share":
+    case "account.unshare": {
+      const { alias, kind, name } = request.params;
+      if (request.method === "account.share") shareAccount(db, orgId, alias, { kind, name }, now);
+      else unshareAccount(db, orgId, alias, { kind, name });
+      return adminOk(sharingOf(db, orgId, alias));
+    }
+    case "account.approvers": {
+      const { alias, repo, approvers } = request.params;
+      setApprovers(db, orgId, alias, repo, approvers, now);
+      return adminOk(sharingOf(db, orgId, alias));
+    }
+    case "account.sharing":
+      return adminOk(sharingOf(db, orgId, request.params.alias));
     case "user.enroll": {
       const enrollment = createEnrollment(db, {
         orgId,
@@ -249,6 +270,9 @@ export function createAdminHandler(deps: AdminDeps): AdminHandler {
       }
       if (error instanceof ConnectError) {
         return adminError(CONNECT_ERROR_CODES[error.code], error.message);
+      }
+      if (error instanceof SharingError) {
+        return adminError(error.code === "invalid" ? "invalid" : "not_found", error.message);
       }
       if (error instanceof OwnerNotFound || error instanceof TargetNotFound) {
         return adminError("not_found", error.message);

@@ -36,6 +36,7 @@ import {
   type UserRole,
   users,
 } from "./schema.ts";
+import { accountApproverIds } from "./sharing.ts";
 
 export type ApprovalRow = typeof approvals.$inferSelect;
 export type StandingRow = typeof standingApprovals.$inferSelect;
@@ -226,10 +227,15 @@ export function approvalStatusForAgent(
   return row === undefined ? null : statusAt(row, now);
 }
 
-/** The user ids allowed to decide a request: the account's owner, or admins for an org ask. */
+/**
+ * The user ids allowed to decide a request (D13b; spec: Teams, "Approvers"):
+ * admins for an org ask; otherwise the account's approvers for the call's
+ * repo, its general approvers, or its owner. An admin who isn't one of them
+ * can't decide an account's ask.
+ */
 export function approverIds(
   db: HeelQuery,
-  row: Pick<ApprovalRow, "orgId" | "account" | "origin">,
+  row: Pick<ApprovalRow, "orgId" | "account" | "origin"> & { call?: Pick<Call, "repo"> },
 ): string[] {
   if (row.origin === "org") {
     return db
@@ -239,13 +245,7 @@ export function approverIds(
       .all()
       .map((u) => u.id);
   }
-  // D13b adds per-account and per-repo approvers; until then the owner decides (spec: Teams).
-  const account = db
-    .select({ ownerId: accounts.ownerId })
-    .from(accounts)
-    .where(and(eq(accounts.orgId, row.orgId), eq(accounts.alias, row.account)))
-    .get();
-  return account === undefined ? [] : [account.ownerId];
+  return accountApproverIds(db, row.orgId, row.account, row.call?.repo);
 }
 
 /** Requests this person may decide, newest first, including ones decided in the last day. */

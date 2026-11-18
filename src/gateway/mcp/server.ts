@@ -13,7 +13,8 @@ import type { CodeWorker } from "../../codemode/worker.ts";
 import type { Logger } from "../../log.ts";
 import { approvalStatusForAgent } from "../../store/approvals.ts";
 import type { HeelDb } from "../../store/db.ts";
-import { type AccountRecord, accountsOwnedBy } from "../../store/directory.ts";
+import type { AccountRecord } from "../../store/directory.ts";
+import { accountsUsableBy } from "../../store/sharing.ts";
 import { errorShape } from "../../util/error-shape.ts";
 import { isMcpProvider } from "../../vault/connect.ts";
 import type { AuthenticatedAgent } from "../agent-tokens.ts";
@@ -82,7 +83,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
 
   /** Of the accounts an agent may use, those whose definition lists tools. */
   function accountsWithTools(agent: AuthenticatedAgent): ListingAccount[] {
-    return accountsOwnedBy(deps.db, agent.orgId, agent.ownerId).flatMap((account) => {
+    return accountsUsableBy(deps.db, agent.orgId, agent.ownerId).flatMap((account) => {
       const tools = deps.definitions.forAccount(account)?.tools;
       return tools === undefined ? [] : [{ account, tools }];
     });
@@ -241,7 +242,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
       args,
       runId: params._meta?.[RUN_ID_META_KEY],
     });
-    const account = accountsOwnedBy(deps.db, agent.orgId, agent.ownerId).find(
+    const account = accountsUsableBy(deps.db, agent.orgId, agent.ownerId).find(
       (a) => a.alias === target.alias,
     );
     const native = account !== undefined && !isMcpProvider(account.provider);
