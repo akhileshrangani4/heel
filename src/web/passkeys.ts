@@ -202,7 +202,7 @@ export type OptionsResult<T> =
  */
 export type AssertionSubject =
   | { purpose: "sign_in"; userId: null }
-  | { purpose: "decide" | "resume" | "connect"; userId: string };
+  | { purpose: "decide" | "resume" | "connect" | "mode"; userId: string };
 
 export type AssertionRequest = AssertionSubject & {
   orgId: string;

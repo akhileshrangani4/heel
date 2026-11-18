@@ -54,7 +54,7 @@ export function run(
   return evaluate(set, {
     owner: OWNER,
     facts: callFacts,
-    watch: false,
+    mode: "enforce",
     state: (check) => {
       throw new Error(`unexpected state lookup: ${check}`);
     },

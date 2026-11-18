@@ -126,7 +126,7 @@ rules:
     match: { action: email.send, recipients: { all_domain_in: [company.com] } }
     then: allow
 `;
-  const watching = { watch: true } as const;
+  const watching = { mode: "shadow" } as const;
 
   it("I-71: lets an owner deny run and logs it as a would-be deny", () => {
     const evaluation = run(ruleSet({ owner }), send("ceo@clientco.com"), watching);

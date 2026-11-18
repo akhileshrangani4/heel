@@ -110,7 +110,7 @@ describe("evaluation order (property)", () => {
           const set = ruleSet({ org: file([...org, deny], "g"), owner: file(owner, "o") });
           const everything = new Set(owner.map((_, i) => `o${i}`));
           const evaluation = run(set, call, {
-            watch,
+            mode: watch ? "shadow" : "enforce",
             standing: approveAll ? standingOn(everything) : standingOn(new Set()),
           });
           expect(evaluation.verdict.rule?.layer).toBe("org");
@@ -162,11 +162,11 @@ describe("evaluation order (property)", () => {
           const standing = standingOn(new Set(named.map((r) => r.name)));
           const orgFile = file(org, "g");
           const withWatch = run(ruleSet({ org: orgFile, owner: rulesFile(watched) }), call, {
-            watch,
+            mode: watch ? "shadow" : "enforce",
             standing,
           });
           const without = run(ruleSet({ org: orgFile, owner: rulesFile(removed) }), call, {
-            watch,
+            mode: watch ? "shadow" : "enforce",
             standing,
           });
           expect(outcome(withWatch)).toEqual(outcome(without));
@@ -196,7 +196,7 @@ describe("evaluation order (property)", () => {
       fc.property(orgRules, ownerRules, callFacts, (org, owner, call) => {
         const set = ruleSet({ org: file(org, "g"), owner: file(owner, "o") });
         const strict = run(set, call);
-        const watching = run(set, call, { watch: true });
+        const watching = run(set, call, { mode: "shadow" });
         // Global watch changes whether the call runs, never what the rules decide.
         expect(watching.verdict).toEqual(strict.verdict);
         const { verdict } = watching;

@@ -102,6 +102,7 @@ export function humanPlaneHarness(
         ? null
         : { signIns, vault, fetch: options.upstreamOAuth.fetch },
     googleClient: options.googleClient ?? null,
+    watchFallback: false,
     now: () => h.clock.now,
   });
 
