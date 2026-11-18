@@ -10,6 +10,11 @@ import { rulesPaths } from "./config/rules.ts";
 import { type ReloadOutcome, RulesHolder, watchRules } from "./config/rules-reload.ts";
 import { type HeelConfig, humanPlaneUrlProblem, type ListenAddress } from "./config/schema.ts";
 import { formatYamlIssue } from "./config/yaml.ts";
+import {
+  GOOGLE_CLIENT_SECRET_ENV,
+  type GoogleClient,
+  googleRefresher,
+} from "./definitions/google/oauth.ts";
 import { definitionRegistry } from "./definitions/mcp/passthrough.ts";
 import { stdioSandboxSpec } from "./definitions/mcp/settings.ts";
 import { UpstreamPool } from "./definitions/mcp/upstream.ts";
@@ -28,6 +33,8 @@ import { type HeelDb, openStore } from "./store/db.ts";
 import { ensureInstall, ensureLocalOwner } from "./store/install.ts";
 import { SqlitePauseStore } from "./store/pauses.ts";
 import { loadMasterKey, MasterKeyError } from "./vault/key.ts";
+import type { RefresherLookup } from "./vault/refresh.ts";
+import { loadSecret } from "./vault/secret-file.ts";
 import { Vault, VaultError } from "./vault/vault.ts";
 import { createHumanApp } from "./web/app.ts";
 import { Passkeys, relyingPartyFor } from "./web/passkeys.ts";
@@ -80,11 +87,13 @@ function openVault(
   db: HeelDb,
   options: Pick<StartOptions, "config" | "env" | "log">,
   now: () => Date,
+  refreshers: RefresherLookup,
 ): VaultOpening {
   try {
     const key = loadMasterKey(options.env, options.config.vault.keyFile);
     const vault = Vault.open(db, key, {
       now,
+      refreshers,
       onReconnectRequired: (accountId) =>
         options.log.warn({ accountId }, "account needs reconnecting; its calls are denied"),
     });
@@ -207,7 +216,27 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
     const watch = options.watch ?? false;
     if (watch) log.warn("watch mode: owner-rule and default-deny outcomes are logged, then run");
 
-    const opening = openVault(store.db, options, now);
+    // The operator's Google client (D9a-1): signs Gmail accounts in and
+    // refreshes their tokens. A configured client whose secret is missing
+    // stops the boot, rather than letting every Gmail account lapse.
+    const googleConfig = config.providers.google;
+    const googleClient: GoogleClient | null =
+      googleConfig === null
+        ? null
+        : {
+            clientId: googleConfig.clientId,
+            clientSecret: loadSecret(
+              options.env,
+              GOOGLE_CLIENT_SECRET_ENV,
+              googleConfig.clientSecretFile,
+            ),
+            redirectUri: googleConfig.redirectUri,
+          };
+    const refreshers: RefresherLookup = (provider) =>
+      provider === "gmail" && googleClient !== null
+        ? googleRefresher({ fetch, now }, googleClient)
+        : undefined;
+    const opening = openVault(store.db, options, now, refreshers);
     const vault = opening.ok ? opening.vault : null;
 
     const admin = await startAdminServer({
@@ -261,6 +290,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         vapidPublicKey: notify.vapidPublicKey,
         agentPublicUrl: config.agentPublicUrl,
         upstreamOAuth: vault === null ? null : { signIns: upstreamSignIns, vault },
+        googleClient,
         now,
       });
       const server = await listenHttp(humanApp.fetch, config.listen.human);
@@ -305,10 +335,11 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
           "looks_like model didn't load; every message a looks_like entry covers is hidden",
         ),
       );
+      const definitions = definitionRegistry(upstream);
       const pipeline = createPipeline({
         db: store.db,
         rules,
-        definitions: definitionRegistry(upstream),
+        definitions,
         pauses: new SqlitePauseStore(),
         approvals: new SqliteApprovalStore(),
         log,
@@ -319,7 +350,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         looksLike,
         onHidden: (reason) => hideCounts.record(reason),
       });
-      const mcp = createMcpSurface({ db: store.db, pipeline, upstream, log, version, now });
+      const mcp = createMcpSurface({ db: store.db, pipeline, definitions, log, version, now });
       closers.push(() => mcp.close());
       const app = createAgentApp({
         db: store.db,

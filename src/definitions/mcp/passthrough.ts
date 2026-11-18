@@ -46,6 +46,8 @@ function argumentsOf(call: Call): Record<string, unknown> {
 
 export function mcpPassthrough(account: AccountRecord, upstream: UpstreamPool): Definition {
   return {
+    tools: (signal) => upstream.listTools(account, signal),
+
     async normalize(base, ctx): Promise<Normalized> {
       let tools: { name: string }[];
       try {
