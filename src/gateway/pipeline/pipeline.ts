@@ -31,11 +31,13 @@ import {
 } from "../../core/rules/evaluate.ts";
 import { factsOf, type RuleFacts } from "../../core/rules/facts.ts";
 import { parseRunId } from "../../core/run-id.ts";
+import { compileGrant } from "../../grants/compile.ts";
 import type { AdminAlerts } from "../../notify/admin-alerts.ts";
 import { appendAudit } from "../../store/audit.ts";
 import { readCountWindow, reserveCount } from "../../store/counts.ts";
 import { type HeelDb, type HeelTx, sqliteErrorCode } from "../../store/db.ts";
 import { findAccount, userName } from "../../store/directory.ts";
+import { type GrantRow, liveGrants } from "../../store/grants.ts";
 import { modeFor } from "../../store/modes.ts";
 import { DeadlineExceededError, withDeadline } from "../../util/deadline.ts";
 import { errorShape } from "../../util/error-shape.ts";
@@ -293,6 +295,24 @@ type Decided =
   | { kind: "execute"; via: AllowedVia };
 
 class DecisionPipeline implements Pipeline {
+  /** Intent grants compiled once each, by id; a grant's match never changes after signing. */
+  readonly #grantRules = new Map<string, CompiledRule | null>();
+
+  #grantRule(row: GrantRow): CompiledRule | null {
+    let rule = this.#grantRules.get(row.id);
+    if (rule === undefined) {
+      try {
+        rule = compileGrant(row.match, { id: row.id });
+      } catch (error) {
+        // Validated when signed; one that no longer compiles allows nothing.
+        this.#deps.log.error({ grant: row.id, error: errorShape(error) }, "grant didn't compile");
+        rule = null;
+      }
+      this.#grantRules.set(row.id, rule);
+    }
+    return rule;
+  }
+
   readonly #deps: PipelineDeps;
   readonly #timeouts: PipelineTimeouts;
   readonly #now: () => Date;
@@ -653,10 +673,16 @@ class DecisionPipeline implements Pipeline {
         // Read once per call, beside the pause check, so a switch applies
         // from the next call on (A3).
         const mode = modeFor(tx, call.orgId, call.ownerId, this.#deps.watch ? "shadow" : "enforce");
+        // Live intent grants for this agent (A4b), compiled once each.
+        const grants = liveGrants(tx, call.orgId, call.agentId, at).flatMap((row) => {
+          const compiled = this.#grantRule(row);
+          return compiled === null ? [] : [compiled];
+        });
         const evaluation = evaluate(input.set, {
           owner: input.owner,
           facts: input.facts,
           mode,
+          grants,
           state: (check) => {
             const outcome = input.states.get(check);
             if (outcome === undefined) throw new StateNeeded(check);

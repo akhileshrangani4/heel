@@ -26,7 +26,8 @@ export type CeremonyIntent =
   | "sign-in"
   | "enroll"
   | "connect"
-  | "mode";
+  | "mode"
+  | "grant";
 
 export interface CeremonyButtonProps {
   callback: CeremonyCallback;
@@ -103,7 +104,7 @@ export const CEREMONY_SCRIPT = `
     const options = {};
     const fieldset = button.dataset.heelOptions ? document.getElementById(button.dataset.heelOptions) : null;
     if (fieldset) {
-      for (const input of fieldset.querySelectorAll("input:checked, select")) options[input.name] = input.value;
+      for (const input of fieldset.querySelectorAll("input:checked, select, textarea, input:not([type=radio]):not([type=checkbox])")) options[input.name] = input.value;
     }
     const binding = { ...button.dataset };
     delete binding.heelCeremony;

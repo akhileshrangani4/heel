@@ -55,6 +55,11 @@ export interface EvalContext {
    */
   counted(rule: CompiledRule, per: "run" | "hour"): number;
   standing: StandingApprovals;
+  /**
+   * The agent's live intent grants (A4b), compiled as owner-layer allows.
+   * They sit after the org's rules and before the owner's own.
+   */
+  grants?: readonly CompiledRule[];
 }
 
 export const DENY_REASONS = [

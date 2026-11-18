@@ -294,6 +294,35 @@ export const standingApprovals = sqliteTable(
   (t) => [index("standing_approvals_agent_rule").on(t.agentId, t.ruleHash)],
 );
 
+/**
+ * Intent grants (A4b): narrow allows a person signed with a passkey for one
+ * agent and one stated task, enforced like a rule above the owner's own.
+ */
+export const grants = sqliteTable(
+  "grants",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    agentId: text("agent_id")
+      .notNull()
+      .references(() => agents.id),
+    /** The task, in the owner's words. */
+    task: text("task").notNull(),
+    /** One `match` in the rules language, as signed. */
+    match: text("match").notNull(),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    revokedAt: integer("revoked_at", { mode: "timestamp_ms" }),
+    revokedBy: text("revoked_by").references(() => users.id),
+  },
+  (t) => [index("grants_agent").on(t.agentId)],
+);
+
 // ── pause ───────────────────────────────────────────────────────────────────
 
 /**
@@ -397,6 +426,7 @@ export const CHALLENGE_PURPOSES = [
   "resume",
   "connect",
   "mode",
+  "grant",
 ] as const;
 export type ChallengePurpose = (typeof CHALLENGE_PURPOSES)[number];
 
