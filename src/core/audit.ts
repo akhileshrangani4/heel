@@ -1,5 +1,6 @@
 import type { Call, PauseScope, RuleRef, Surface } from "./call.ts";
 import { argsOrNone } from "./call-hash.ts";
+import type { Mode } from "./modes.ts";
 
 /**
  * What one audit row says (I-73): every decision and every approval
@@ -68,9 +69,11 @@ export type AuditEvent =
    * owner-rule or default-deny outcome global watch let run (I-71), this row
    * is the decision record: the call ran.
    */
-  | (CallEvent & { kind: "would_allow" | "would_ask"; rule: RuleRef })
+  | (CallEvent & { kind: "would_allow" | "would_ask"; rule: RuleRef; mode?: Mode })
   | (CallEvent & {
       kind: "would_deny";
+      /** The rollout mode that let the call run; absent for a `watch: true` rule's row. */
+      mode?: Mode;
       /** Null for the default deny and for a watching adapter. */
       rule: RuleRef | null;
       reason: string;
@@ -101,6 +104,8 @@ export interface AuditRecord {
   reason: string | null;
   /** The decision adapter that denied, or would have denied, the call. */
   adapter: string | null;
+  /** For a would-* row, the rollout mode that let the call run. */
+  mode: Mode | null;
 }
 
 /** Flattens an event into the row the audit log stores. */
@@ -128,5 +133,6 @@ export function toAuditRecord(event: AuditEvent, at: Date): AuditRecord {
     pauseScope: event.kind === "paused" ? event.pauseScope : null,
     reason: event.kind === "deny" || event.kind === "would_deny" ? event.reason : null,
     adapter: event.kind === "deny" || event.kind === "would_deny" ? (event.adapter ?? null) : null,
+    mode: "mode" in event ? (event.mode ?? null) : null,
   };
 }

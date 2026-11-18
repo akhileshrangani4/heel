@@ -36,6 +36,7 @@ import { appendAudit } from "../../store/audit.ts";
 import { readCountWindow, reserveCount } from "../../store/counts.ts";
 import { type HeelDb, type HeelTx, sqliteErrorCode } from "../../store/db.ts";
 import { findAccount, userName } from "../../store/directory.ts";
+import { modeFor } from "../../store/modes.ts";
 import { DeadlineExceededError, withDeadline } from "../../util/deadline.ts";
 import { errorShape } from "../../util/error-shape.ts";
 import type {
@@ -119,7 +120,10 @@ export interface PipelineDeps {
    * "SQLite read or write fails"). A throw is logged; the call stays denied.
    */
   alerts: AdminAlerts;
-  /** `heel serve --watch` (I-71 as amended). */
+  /**
+   * `heel serve --watch`: the mode is `shadow` wherever no mode is stored
+   * (A3). A stored mode, set on the human plane, takes precedence.
+   */
   watch: boolean;
   now?: () => Date;
   timeouts?: Partial<PipelineTimeouts>;
@@ -646,10 +650,13 @@ class DecisionPipeline implements Pipeline {
           appendAudit(tx, { kind: "expired", call, callHash: hash, approvalId: governing.id }, at);
         }
         this.#trace("decide");
+        // Read once per call, beside the pause check, so a switch applies
+        // from the next call on (A3).
+        const mode = modeFor(tx, call.orgId, call.ownerId, this.#deps.watch ? "shadow" : "enforce");
         const evaluation = evaluate(input.set, {
           owner: input.owner,
           facts: input.facts,
-          watch: this.#deps.watch,
+          mode,
           state: (check) => {
             const outcome = input.states.get(check);
             if (outcome === undefined) throw new StateNeeded(check);
@@ -680,17 +687,25 @@ class DecisionPipeline implements Pipeline {
     const { call, hash, facts } = input;
     const { verdict } = evaluation;
     if (evaluation.relaxed && verdict.decision !== "allow") {
-      // Global watch: record what the rules would have done, then let it run (I-71).
+      // Shadow or record mode (global watch): record what the rules would
+      // have done, then let it run (I-71).
       appendAudit(
         tx,
         verdict.decision === "ask"
-          ? { kind: "would_ask", call, callHash: hash, rule: verdict.rule.ref }
+          ? {
+              kind: "would_ask",
+              call,
+              callHash: hash,
+              rule: verdict.rule.ref,
+              mode: evaluation.mode,
+            }
           : {
               kind: "would_deny",
               call,
               callHash: hash,
               rule: verdict.rule?.ref ?? null,
               reason: verdict.reason,
+              mode: evaluation.mode,
             },
         at,
       );

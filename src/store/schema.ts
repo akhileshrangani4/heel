@@ -17,6 +17,7 @@ import {
   type RuleRef,
   type Surface,
 } from "../core/call.ts";
+import { MODES, type Mode } from "../core/modes.ts";
 
 /**
  * heel's SQLite schema (spec: Architecture; Teams, "Data model"). Every row
@@ -316,6 +317,49 @@ export const pauses = sqliteTable(
   ],
 );
 
+// ── rollout modes ───────────────────────────────────────────────────────────
+
+/**
+ * Rollout modes set on the human plane (A3): one row for the org's default
+ * (`owner_id` empty) and one per owner who has their own. With no row the
+ * mode is `enforce`, or `shadow` under `heel serve --watch`. The strictest
+ * row that applies wins.
+ */
+export const modes = sqliteTable(
+  "modes",
+  {
+    orgId: text("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    /** Empty for the org-wide default. */
+    ownerId: text("owner_id").notNull(),
+    mode: text("mode").$type<Mode>().notNull(),
+    setBy: text("set_by").notNull(),
+    setAt: integer("set_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.orgId, t.ownerId] }),
+    check("modes_mode", sql`"mode" IN (${sqlList(MODES)})`),
+  ],
+);
+
+/** Every mode switch, in order: who changed what, from what, and when. */
+export const modeChanges = sqliteTable(
+  "mode_changes",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    ownerId: text("owner_id").notNull(),
+    from: text("from_mode").$type<Mode>().notNull(),
+    to: text("to_mode").$type<Mode>().notNull(),
+    changedBy: text("changed_by").notNull(),
+    changedAt: integer("changed_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [index("mode_changes_org_at").on(t.orgId, t.changedAt)],
+);
+
 // ── passkeys and sessions ───────────────────────────────────────────────────
 
 /**
@@ -344,7 +388,14 @@ export const passkeys = sqliteTable(
   (t) => [index("passkeys_user").on(t.userId)],
 );
 
-export const CHALLENGE_PURPOSES = ["enroll", "sign_in", "decide", "resume", "connect"] as const;
+export const CHALLENGE_PURPOSES = [
+  "enroll",
+  "sign_in",
+  "decide",
+  "resume",
+  "connect",
+  "mode",
+] as const;
 export type ChallengePurpose = (typeof CHALLENGE_PURPOSES)[number];
 
 /**
@@ -570,6 +621,8 @@ export const auditLog = sqliteTable(
     approverId: text("approver_id"),
     pauseScope: text("pause_scope").$type<PauseScope>(),
     reason: text("reason"),
+    /** For a would-* row, the rollout mode that let the call run (A3). Empty means enforce. */
+    mode: text("mode").$type<Mode>(),
     adapter: text("adapter"),
   },
   (t) => [

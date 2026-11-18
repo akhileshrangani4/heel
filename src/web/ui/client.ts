@@ -180,6 +180,13 @@ export function clientScript(csrfToken: string | null): string {
         sign: getAssertion,
         finish: "/pause/resume",
       }),
+    mode: ({ binding, status }) =>
+      run({
+        status,
+        start: { url: "/modes/challenge", body: { owner: binding.owner, mode: binding.mode } },
+        sign: getAssertion,
+        finish: "/modes/confirm",
+      }),
   };
 })();
 `;
