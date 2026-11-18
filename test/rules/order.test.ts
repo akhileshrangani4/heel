@@ -294,7 +294,7 @@ rules:
   it("I-23: a state check on a service with no built-in definition is a load error", () => {
     expect(
       loadErrors(oneRule("{ provider: notion, action: github.merge, checks: passing }"), "owner"),
-    ).toEqual(["2: checks is a state check heel has only on github (I-23)"]);
+    ).toEqual(["2: checks is a state check heel has only on github, cli:gh (I-23)"]);
     expect(
       loadErrors(
         oneRule("{ action: linear.comment, recipients: { all_in_thread: true } }"),

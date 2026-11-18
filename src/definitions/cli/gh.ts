@@ -26,13 +26,16 @@ export function normalizeGh(argv: CliArgv): CliNormalization {
   const { args: gh } = parsed;
   const key = gh.path.join(" ");
   const mapping = ghCommandMapping(gh.path);
-  const repo = ghRepo(gh.flags["repo"]);
+  const pull = mapping?.action === "github.merge" ? ghPull(gh.positionals[0]) : undefined;
+  const repo = ghRepo(gh.flags["repo"]) ?? pull?.repo;
   return {
     cli: cliFields(argv, gh),
     ...(mapping !== undefined && { action: mapping.action, kind: mapping.kind }),
     ...(repo !== undefined && { repo }),
     ...(GH_PERSISTENCE.has(key) && { persistence: true as const }),
     ...(ghTakesRepo(gh.path) && { takesRepo: true as const }),
+    ...(pull !== undefined && { pull }),
+    ...(gh.argsLenAtDash !== undefined && { dashDash: true as const }),
     help: gh.help,
     refusals: ghRefusals(gh),
   };
@@ -96,6 +99,21 @@ export function ghTakesRepo(path: readonly string[]): boolean {
     if (flags.some(([name]) => name === "repo")) return true;
   }
   return false;
+}
+
+/**
+ * The pull request a `gh pr merge` argument names: a number, or a
+ * `https://github.com/<owner>/<name>/pull/<n>` URL. A branch name, or no
+ * argument (the current branch's PR), is undefined: heel can't pin those.
+ */
+export function ghPull(arg: string | undefined): { number: number; repo?: string } | undefined {
+  if (arg === undefined) return undefined;
+  const plain = /^#?([1-9][0-9]{0,9})$/.exec(arg);
+  if (plain !== null) return { number: Number(plain[1]) };
+  const url = /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/([1-9][0-9]{0,9})\/?$/i.exec(arg);
+  if (url === null) return undefined;
+  const repo = normalizeGhRepo(`${url[1]}/${url[2]}`);
+  return repo === undefined ? undefined : { number: Number(url[3]), repo };
 }
 
 /** The flags on a `gh pr merge` that skip required checks (denied under `checks: passing`). */

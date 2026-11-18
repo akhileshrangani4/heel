@@ -49,6 +49,8 @@ export function cliPipeline(options: {
   /** The account's settings and credential, in place of `gh`'s. */
   settings?: Record<string, unknown>;
   credential?: string;
+  /** GitHub's API, for `gh pr merge`; every read fails without it. */
+  fetch?: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 }) {
   const t = testStore();
   const command = String(options.settings?.["command"] ?? "gh");
@@ -101,6 +103,7 @@ export function cliPipeline(options: {
                 return (options.real as { start: StartSandboxed }).start(host, spec, o);
               },
         workRoots: (agentId) => workRootsOf(t.db, agentId),
+        fetch: options.fetch ?? (async () => new Response("{}", { status: 500 })),
       },
     }),
     pauses: new SqlitePauseStore(),

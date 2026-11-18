@@ -32,7 +32,7 @@ export type Layer = "org" | "owner";
  */
 export const STATE_CHECKS = {
   all_in_thread: { actions: ["email.send"], providers: ["gmail", "outlook"] },
-  checks: { actions: ["github.merge"], providers: ["github"] },
+  checks: { actions: ["github.merge"], providers: ["github", "cli:gh"] },
 } as const satisfies Record<string, { actions: readonly string[]; providers: readonly string[] }>;
 export type StateCheck = keyof typeof STATE_CHECKS;
 

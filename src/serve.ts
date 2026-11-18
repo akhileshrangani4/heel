@@ -386,6 +386,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
           sandbox: sandbox.ok ? sandbox.host : null,
           start: startSandboxed,
           workRoots: (agentId) => workRootsOf(store.db, agentId),
+          fetch,
         },
       });
       const pipeline = createPipeline({

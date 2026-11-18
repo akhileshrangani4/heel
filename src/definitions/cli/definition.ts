@@ -1,12 +1,21 @@
 import { realpath } from "node:fs/promises";
 import { sep } from "node:path";
 import { z } from "zod";
-import type { Call } from "../../core/call.ts";
-import type { Definition, HardDenyReason, Normalized } from "../../gateway/pipeline/ports.ts";
+import type { Call, CliFields } from "../../core/call.ts";
+import type { StateCheck } from "../../core/rules/compile.ts";
+import type {
+  Definition,
+  HardDenyReason,
+  NormalizeContext,
+  Normalized,
+} from "../../gateway/pipeline/ports.ts";
 import { DEFAULT_LIMITS, type SandboxHost, type SandboxSpec } from "../../runner/plan.ts";
 import type { SandboxProcess, SandboxRunOptions } from "../../runner/run.ts";
 import type { AccountRecord } from "../../store/directory.ts";
 import type { Vault } from "../../vault/vault.ts";
+import { GitHubApi } from "../github/api.ts";
+import type { FetchFn } from "../sign-in.ts";
+import { GH_MERGE_BYPASS_FLAGS } from "./gh-actions.ts";
 import { normalizeCliArgv } from "./index.ts";
 import { cliSettings } from "./settings.ts";
 import type { CliRefusal } from "./types.ts";
@@ -27,6 +36,11 @@ import type { CliRefusal } from "./types.ts";
  * - Network goes only through heel's egress proxy, to the account's hosts.
  * - Only the `/run` surface reaches it; an MCP call naming the account is
  *   refused.
+ * - `gh pr merge` (D11) is pinned: heel reads the pull request's head
+ *   commit and adds `--match-head-commit <sha>`, so GitHub refuses the merge
+ *   if the head moves after the decision. `checks: passing` is read on that
+ *   same commit, and fails when `--admin` or `--auto` would skip checks. A
+ *   merge heel can't pin (no PR number or repo) is refused.
  */
 
 export const CliArgsSchema = z.strictObject({
@@ -57,6 +71,8 @@ export interface CliDeps {
   start: StartSandboxed;
   /** The agent's work roots, as stored. */
   workRoots(agentId: string): readonly string[];
+  /** For the GitHub reads `gh pr merge` needs (D11). */
+  fetch: FetchFn;
 }
 
 function refusalReason(refusals: readonly CliRefusal[]): HardDenyReason | null {
@@ -95,6 +111,43 @@ export function cliDefinition(account: AccountRecord, deps: CliDeps): Definition
   // kubectl reads its credential from a file the command can be pointed at (see `cliAccountSettings`).
   if (settings.command === "kubectl") return null;
   const sandbox = deps.sandbox;
+  const credential = async () => (await deps.vault.accessToken(account.id)).reveal();
+
+  /** `gh pr merge`, pinned to the pull request's current head (D11). */
+  async function pinMerge(
+    normalized: ReturnType<typeof normalizeCliArgv>,
+    argv: readonly string[],
+    signal: AbortSignal,
+  ): Promise<
+    | { ok: true; cli: CliFields; argv: string[]; targets: string[] }
+    | { ok: false; reason: HardDenyReason }
+  > {
+    const { pull, repo } = normalized;
+    if (pull === undefined || repo === undefined || normalized.dashDash === true) {
+      return { ok: false, reason: "unsupported" };
+    }
+    let sha: string;
+    try {
+      sha = (
+        await new GitHubApi(await credential(), deps.fetch).pullHead(repo, pull.number, signal)
+      ).sha;
+    } catch {
+      return { ok: false, reason: "lookup_unavailable" };
+    }
+    const given = normalized.cli.flags["match-head-commit"];
+    if (given !== undefined && given !== sha) return { ok: false, reason: "unsupported" };
+    const pinned = given === undefined ? [...argv, "--match-head-commit", sha] : [...argv];
+    return {
+      ok: true,
+      cli: {
+        ...normalized.cli,
+        flags: { ...normalized.cli.flags, "match-head-commit": sha },
+        argv: pinned,
+      },
+      argv: pinned,
+      targets: [`${repo}#${pull.number}`],
+    };
+  }
 
   /**
    * The agent's roots that are still what was configured. Roots are stored
@@ -109,7 +162,7 @@ export function cliDefinition(account: AccountRecord, deps: CliDeps): Definition
   }
 
   return {
-    async normalize(base: Call): Promise<Normalized> {
+    async normalize(base: Call, ctx: NormalizeContext): Promise<Normalized> {
       // Only `heel run` reaches a CLI account, so a rule keyed on `surface: cli` sees every command.
       if (base.surface !== "cli") return { ok: false, reason: "unsupported" };
       const parsed = CliArgsSchema.safeParse(base.args);
@@ -129,7 +182,14 @@ export function cliDefinition(account: AccountRecord, deps: CliDeps): Definition
       if (normalized.takesRepo === true && normalized.repo === undefined) {
         return { ok: false, reason: "unsupported" };
       }
-      const cli = normalized.cli;
+      let cli = normalized.cli;
+      let runArgv = argv;
+      let targets: string[] | undefined;
+      if (settings.command === "gh" && normalized.action === "github.merge") {
+        const pinned = await pinMerge(normalized, argv, ctx.signal);
+        if (!pinned.ok) return pinned;
+        ({ cli, argv: runArgv, targets } = pinned);
+      }
       const tool = [cli.command, cli.verb, cli.subcommand].filter((p) => p !== undefined).join(" ");
       return {
         ok: true,
@@ -137,9 +197,10 @@ export function cliDefinition(account: AccountRecord, deps: CliDeps): Definition
           ...base,
           tool,
           // What runs: the resolved directory, so a symlink swapped after the decision can't move it.
-          args: { argv, cwd: dir },
+          args: { argv: runArgv, cwd: dir },
           cli,
           items: 1,
+          ...(targets === undefined ? {} : { targets }),
           ...(normalized.action === undefined ? {} : { action: normalized.action }),
           ...(normalized.kind === undefined ? {} : { kind: normalized.kind }),
           ...(normalized.repo === undefined ? {} : { repo: normalized.repo }),
@@ -151,6 +212,18 @@ export function cliDefinition(account: AccountRecord, deps: CliDeps): Definition
     // The sandbox's own wall-time limit, not the pipeline's 60-second upstream deadline.
     executeTimeoutMs: DEFAULT_LIMITS.wallTimeMs + 30_000,
 
+    async stateCheck(check: StateCheck, call: Call, signal: AbortSignal): Promise<"pass" | "fail"> {
+      if (check !== "checks" || settings.command !== "gh" || call.action !== "github.merge") {
+        return "fail";
+      }
+      const flags = call.cli?.flags ?? {};
+      if (GH_MERGE_BYPASS_FLAGS.some((flag) => flags[flag] === true)) return "fail";
+      const sha = flags["match-head-commit"];
+      if (typeof sha !== "string" || call.repo === undefined) return "fail";
+      const api = new GitHubApi(await credential(), deps.fetch);
+      return (await api.checksPass(call.repo, sha, signal)) ? "pass" : "fail";
+    },
+
     async execute(call, signal): Promise<CliResult> {
       const { argv, cwd } = CliArgsSchema.parse(call.args);
       const dir = await resolved(cwd);
@@ -159,8 +232,12 @@ export function cliDefinition(account: AccountRecord, deps: CliDeps): Definition
         // Nothing ran; the result says so rather than leaving the outcome unknown.
         return notRun("workdir_moved", "the working directory moved after the decision");
       }
-      const credential = (await deps.vault.accessToken(account.id)).reveal();
-      const spec = credentialSpec(settings.command, settings.credentialEnv, credential, call.repo);
+      const spec = credentialSpec(
+        settings.command,
+        settings.credentialEnv,
+        await credential(),
+        call.repo,
+      );
       const process = await deps.start(
         sandbox,
         {
