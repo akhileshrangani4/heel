@@ -1,4 +1,5 @@
 import { parse } from "yaml";
+import { type HideMapping, HideMappingError, parseHideMapping } from "./hide-map.ts";
 
 /**
  * The parts of an OpenAPI 3.0 or 3.1 file heel uses for an HTTP account
@@ -29,6 +30,8 @@ export interface Operation {
   action?: string;
   /** From `x-heel-kind`. Only an explicit `read` makes a call `kind: read` (I-20). */
   kind?: "read" | "write";
+  /** From `x-heel-hide`: where email-shaped items are in the response (D7b). */
+  hide?: HideMapping;
 }
 
 export class OpenApiError extends Error {
@@ -74,9 +77,23 @@ export function parseOpenApi(text: string): Operation[] {
       if (kind !== undefined && kind !== "read" && kind !== "write") {
         throw new OpenApiError(`${method} ${template}: x-heel-kind must be read or write`);
       }
+      let hide: HideMapping | undefined;
+      if (o["x-heel-hide"] !== undefined && kind !== "read") {
+        // A write aimed at a hidden item would run before its answer could be hidden (I-42).
+        throw new OpenApiError(`${method} ${template}: x-heel-hide is only for x-heel-kind: read`);
+      }
+      if (o["x-heel-hide"] !== undefined) {
+        try {
+          hide = parseHideMapping(o["x-heel-hide"], `${method} ${template}`);
+        } catch (error) {
+          if (error instanceof HideMappingError) throw new OpenApiError(error.message);
+          throw error;
+        }
+      }
       operations.push({
         method: method as HttpMethod,
         template,
+        ...(hide === undefined ? {} : { hide }),
         ...(typeof o["operationId"] === "string" ? { operationId: o["operationId"] } : {}),
         ...(typeof action === "string" ? { action } : {}),
         ...(kind === "read" || kind === "write" ? { kind } : {}),
