@@ -59,6 +59,7 @@ jobs:
       image: ${{ steps.plan.outputs.image }}
       channel: ${{ steps.plan.outputs.channel }}
       node: ${{ steps.plan.outputs.node }}
+      sha: ${{ steps.plan.outputs.sha }}
       npm: ${{ steps.plan.outputs.npm }}
       ghcr: ${{ steps.plan.outputs.ghcr }}
     steps:
@@ -79,16 +80,29 @@ jobs:
             echo "image=$image"
             echo "node=$(cat .node-version)"
           } >> "$GITHUB_OUTPUT"
-          # Publish only a version release-please has released.
+          # Publish only a version release-please has released, and publish
+          # the commit it tagged, even if this run is for a later commit
+          # (CI on main cancels superseded runs).
           if ! gh release view "v$version" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             echo "v$version has no GitHub release: nothing to publish."
             { echo "npm=false"; echo "ghcr=false"; echo "channel=none"; } >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          tagged=$(gh api "repos/$GITHUB_REPOSITORY/commits/v$version" -q .sha)
+          echo "sha=$tagged" >> "$GITHUB_OUTPUT"
+          # A registry error must not read as "not published yet".
+          # Sets $found to npm's answer; returns 1 for "doesn't exist" and
+          # stops the job for any other error.
+          npm_view() {
+            if found=$(npm view "$@" 2>&1); then return 0; fi
+            if grep -q E404 <<< "$found"; then found=""; return 1; fi
+            echo "$found" >&2; exit 1
+          }
           # A pre-release (1.2.0-rc.1) goes to `next`. Otherwise `latest`
           # moves only forward, so an older version finishing late can't
           # take it back.
-          latest=$(npm view "$name" dist-tags.latest 2>/dev/null || true)
+          latest=""
+          if npm_view "$name" dist-tags.latest; then latest=$found; fi
           if [[ "$version" == *-* ]]; then
             channel=next
           elif [ -z "$latest" ] || [ "$(printf '%s\n%s\n' "$latest" "$version" | sort -V | tail -1)" = "$version" ]; then
@@ -97,16 +111,18 @@ jobs:
             channel=previous
           fi
           echo "channel=$channel" >> "$GITHUB_OUTPUT"
-          if npm view "$name@$version" version > /dev/null 2>&1; then
+          if npm_view "$name@$version" version; then
             echo "npm=false" >> "$GITHUB_OUTPUT"; echo "$name@$version is already on npm."
           else
             echo "npm=true" >> "$GITHUB_OUTPUT"
           fi
           echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin > /dev/null
-          if docker manifest inspect "$image:$version" > /dev/null 2>&1; then
+          if out=$(docker manifest inspect "$image:$version" 2>&1); then
             echo "ghcr=false" >> "$GITHUB_OUTPUT"; echo "$image:$version is already pushed."
-          else
+          elif grep -qiE 'manifest unknown|not found' <<< "$out"; then
             echo "ghcr=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "$out" >&2; exit 1
           fi
 
   build:
@@ -122,12 +138,14 @@ jobs:
       NAME: ${{ needs.plan.outputs.name }}
       VERSION: ${{ needs.plan.outputs.version }}
       IMAGE: ${{ needs.plan.outputs.image }}
-      SHA: ${{ github.event.workflow_run.head_sha }}
+      SHA: ${{ needs.plan.outputs.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ needs.plan.outputs.sha }}
           persist-credentials: false
+      - name: The tagged commit is the version planned
+        run: test "$(jq -r .version package.json)" = "$VERSION"
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -173,11 +191,13 @@ jobs:
           node-version: ${{ needs.plan.outputs.node }}
           registry-url: https://registry.npmjs.org
       - env:
+          NAME: ${{ needs.plan.outputs.name }}
+          VERSION: ${{ needs.plan.outputs.version }}
           CHANNEL: ${{ needs.plan.outputs.channel }}
           # Only for a first publish before trusted publishing is set up;
           # npm uses the OIDC token instead whenever it can.
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish ./*.tgz --ignore-scripts --provenance --access public --tag "$CHANNEL"
+        run: npm publish "./$NAME-$VERSION.tgz" --ignore-scripts --provenance --access public --tag "$CHANNEL"
 
   ghcr:
     name: push to ghcr.io
@@ -209,8 +229,8 @@ jobs:
   notes:
     # Adds install lines to the GitHub release once both are published.
     name: install lines on the release
-    needs: [plan, npm, ghcr]
-    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && needs.plan.outputs.channel != 'none' }}
+    needs: [plan, build, npm, ghcr]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.channel != 'none' && !contains(needs.*.result, 'failure') }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
