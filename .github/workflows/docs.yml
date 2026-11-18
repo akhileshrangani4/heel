@@ -62,4 +62,9 @@ jobs:
           url=$(npx --yes vercel@62.2.0 deploy --prod --yes --token "$VERCEL_TOKEN" \
             --build-env HEEL_RELEASE_DEPLOY=1)
           echo "Deployed $url"
-          npx --yes vercel@62.2.0 alias set "$url" useheel.dev --token "$VERCEL_TOKEN"
+          # Point the domain at it through the API: the CLI's `alias` looks up a
+          # user first, and a team-scoped token has none.
+          api() { curl -fsS -H "Authorization: Bearer $VERCEL_TOKEN" "$@"; }
+          id=$(api "https://api.vercel.com/v13/deployments/${url#https://}?teamId=$VERCEL_ORG_ID" | jq -r .id)
+          api -X POST -H 'content-type: application/json' -d '{"alias":"useheel.dev"}' \
+            "https://api.vercel.com/v2/deployments/$id/aliases?teamId=$VERCEL_ORG_ID" | jq -r '"useheel.dev -> " + .alias'
