@@ -18,6 +18,11 @@ import {
 import { stdioSandboxSpec } from "./definitions/mcp/settings.ts";
 import { UpstreamPool } from "./definitions/mcp/upstream.ts";
 import { UpstreamSignIns } from "./definitions/mcp/upstream-oauth.ts";
+import {
+  MICROSOFT_CLIENT_SECRET_ENV,
+  type MicrosoftClient,
+  microsoftRefresher,
+} from "./definitions/microsoft/oauth.ts";
 import { definitionRegistry } from "./definitions/registry.ts";
 import { createAgentApp } from "./gateway/app.ts";
 import { createMcpSurface } from "./gateway/mcp/server.ts";
@@ -83,6 +88,32 @@ export function listenerUrl(address: Pick<AddressInfo, "address" | "family" | "p
  * agent plane down (spec: Fail-closed behavior). Anything else is a fault in
  * heel or the host and aborts the boot.
  */
+function loadProviderClients(
+  config: HeelConfig,
+  env: Readonly<Record<string, string | undefined>>,
+): { google: GoogleClient | null; microsoft: MicrosoftClient | null } {
+  const { google, microsoft } = config.providers;
+  return {
+    google:
+      google === null
+        ? null
+        : {
+            clientId: google.clientId,
+            clientSecret: loadSecret(env, GOOGLE_CLIENT_SECRET_ENV, google.clientSecretFile),
+            redirectUri: google.redirectUri,
+          },
+    microsoft:
+      microsoft === null
+        ? null
+        : {
+            clientId: microsoft.clientId,
+            clientSecret: loadSecret(env, MICROSOFT_CLIENT_SECRET_ENV, microsoft.clientSecretFile),
+            redirectUri: microsoft.redirectUri,
+            tenant: microsoft.tenant,
+          },
+  };
+}
+
 function openVault(
   db: HeelDb,
   options: Pick<StartOptions, "config" | "env" | "log">,
@@ -216,26 +247,20 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
     const watch = options.watch ?? false;
     if (watch) log.warn("watch mode: owner-rule and default-deny outcomes are logged, then run");
 
-    // The operator's Google client (D9a-1): signs Gmail accounts in and
-    // refreshes their tokens. A configured client whose secret is missing
-    // stops the boot, rather than letting every Gmail account lapse.
-    const googleConfig = config.providers.google;
-    const googleClient: GoogleClient | null =
-      googleConfig === null
-        ? null
-        : {
-            clientId: googleConfig.clientId,
-            clientSecret: loadSecret(
-              options.env,
-              GOOGLE_CLIENT_SECRET_ENV,
-              googleConfig.clientSecretFile,
-            ),
-            redirectUri: googleConfig.redirectUri,
-          };
-    const refreshers: RefresherLookup = (provider) =>
-      provider === "gmail" && googleClient !== null
-        ? googleRefresher({ fetch, now }, googleClient)
-        : undefined;
+    // The operator's own OAuth clients sign built-in mail accounts in and
+    // refresh their tokens: Google for Gmail (D9a-1), Microsoft for Outlook
+    // (D9b). A configured client whose secret is missing stops the boot,
+    // rather than letting every account of that provider lapse.
+    const providerClients = loadProviderClients(config, options.env);
+    const refreshers: RefresherLookup = (provider) => {
+      if (provider === "gmail" && providerClients.google !== null) {
+        return googleRefresher({ fetch, now }, providerClients.google);
+      }
+      if (provider === "outlook" && providerClients.microsoft !== null) {
+        return microsoftRefresher({ fetch, now }, providerClients.microsoft);
+      }
+      return undefined;
+    };
     const opening = openVault(store.db, options, now, refreshers);
     const vault = opening.ok ? opening.vault : null;
 
@@ -291,7 +316,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         agentPublicUrl: config.agentPublicUrl,
         upstreamOAuth: vault === null ? null : { signIns: upstreamSignIns, vault },
         watchFallback: watch,
-        googleClient,
+        providerClients,
         now,
       });
       const server = await listenHttp(humanApp.fetch, config.listen.human);

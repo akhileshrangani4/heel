@@ -3,16 +3,16 @@ import { z } from "zod";
 import type { Call } from "../../core/call.ts";
 import { isPlainAddress, normalizeAddress, parseAddressList } from "../../core/rules/address.ts";
 import { UpstreamError } from "../../gateway/pipeline/ports.ts";
-import { GmailError, type GmailMessage, GmailNotFoundError } from "./client.ts";
-import type { Mailbox } from "./mailbox.ts";
-import { header, type MessageContent, messageContent } from "./messages.ts";
 import {
   ComposeMismatchError,
   composeRaw,
   DELIVERY_HEADERS_REFUSED,
   rawHeaders,
   strictAddressList,
-} from "./mime.ts";
+} from "../mail/mime.ts";
+import { GmailError, type GmailMessage, GmailNotFoundError } from "./client.ts";
+import type { Mailbox } from "./mailbox.ts";
+import { header, type MessageContent, messageContent } from "./messages.ts";
 import { GmailId, type GmailTool, gmailTool, type Preparation } from "./tool.ts";
 
 /**

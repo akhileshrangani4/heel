@@ -1,17 +1,19 @@
 import { Hono } from "hono";
-import { GOOGLE_CALLBACK_PATH } from "../../config/schema.ts";
-import { GoogleSignInError } from "../../definitions/google/oauth.ts";
-import {
-  finishGoogleSignIn,
-  type GoogleSignInDeps,
-  startGoogleSignIn,
-} from "../../definitions/google/sign-in.ts";
+import { GOOGLE_CALLBACK_PATH, MICROSOFT_CALLBACK_PATH } from "../../config/schema.ts";
+import { googleSignIn } from "../../definitions/google/oauth.ts";
 import { upstreamSettings } from "../../definitions/mcp/settings.ts";
 import {
   finishUpstreamSignIn,
   startUpstreamSignIn,
   UPSTREAM_CALLBACK_PATH,
 } from "../../definitions/mcp/upstream-oauth.ts";
+import { microsoftSignIn } from "../../definitions/microsoft/oauth.ts";
+import {
+  finishSignIn,
+  type ProviderSignIn,
+  SignInError,
+  startSignIn,
+} from "../../definitions/sign-in.ts";
 import { accountsOwnedBy } from "../../store/directory.ts";
 import { errorShape } from "../../util/error-shape.ts";
 import {
@@ -36,8 +38,10 @@ import { type ConnectionsOutcome, connectionsPage } from "../ui/connections.ts";
  * - `GET /oauth/upstream/callback` finishes it: heel exchanges the code and
  *   keeps the tokens in its vault. Only the person who started a sign-in
  *   can finish it, and each one works once.
- * - Gmail accounts sign in to Google the same way (D9a-1), through the
- *   operator's own Google client, and come back to `/oauth/google/callback`.
+ * - Built-in mail accounts sign in the same way through the operator's own
+ *   client: Gmail with Google (D9a-1), back to `/oauth/google/callback`, and
+ *   Outlook with Microsoft (D9b), back to `/oauth/microsoft/callback`. A
+ *   callback only finishes a sign-in for an account of its own provider.
  */
 
 function isOAuthUpstream(settings: Record<string, unknown>): boolean {
@@ -61,18 +65,17 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
   const app = new Hono<SignedInEnv>();
   const signedIn = requireSession(deps);
   const oauth = deps.upstreamOAuth;
-  const google: GoogleSignInDeps | null =
-    oauth === null || deps.googleClient === null
-      ? null
-      : {
-          db: deps.db,
-          vault: oauth.vault,
-          client: deps.googleClient,
-          signIns: oauth.signIns,
-          fetch: oauth.fetch ?? fetch,
-          now: deps.now,
-        };
-  const signsInToGoogle = (provider: string) => google !== null && provider === "gmail";
+  // Sign-in for built-in mail accounts, by account provider; only for the
+  // providers the operator configured a client for.
+  const providers = new Map<string, ProviderSignIn>();
+  if (oauth !== null) {
+    const http = { fetch: oauth.fetch ?? fetch, now: deps.now };
+    const { google, microsoft } = deps.providerClients;
+    if (google !== null) providers.set("gmail", googleSignIn(http, google, GOOGLE_CALLBACK_PATH));
+    if (microsoft !== null) {
+      providers.set("outlook", microsoftSignIn(http, microsoft, MICROSOFT_CALLBACK_PATH));
+    }
+  }
 
   app.get("/connections", signedIn, (c) => {
     const session = c.get("session");
@@ -81,7 +84,7 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       provider: account.provider,
       status: account.status,
       signsIn:
-        signsInToGoogle(account.provider) || (oauth !== null && isOAuthUpstream(account.settings)),
+        providers.has(account.provider) || (oauth !== null && isOAuthUpstream(account.settings)),
     }));
     return renderPage(c, {
       title: "Connections",
@@ -104,8 +107,15 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     const account = accountsOwnedBy(deps.db, session.orgId, session.userId).find(
       (a) => a.alias === alias,
     );
-    if (account !== undefined && google !== null && signsInToGoogle(account.provider)) {
-      return c.redirect(startGoogleSignIn(google, account, session.userId).toString(), 303);
+    const provider = account === undefined ? undefined : providers.get(account.provider);
+    if (account !== undefined && provider !== undefined) {
+      const url = startSignIn(
+        { signIns: oauth.signIns, now: deps.now },
+        provider,
+        account,
+        session.userId,
+      );
+      return c.redirect(url.toString(), 303);
     }
     if (account === undefined || !isOAuthUpstream(account.settings)) {
       return c.text("Refused: no such account that signs in.", 404);
@@ -166,33 +176,54 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     return c.redirect(back({ account: alias, connected: "1" }), 303);
   });
 
-  if (google === null) return app;
-
-  app.get(GOOGLE_CALLBACK_PATH, signedIn, async (c) => {
-    const session = c.get("session");
-    const params = new URL(c.req.url).searchParams;
-    const pending = oauth.signIns.take(params.get("state") ?? "", deps.now());
-    if (pending === null || pending.userId !== session.userId) {
-      return c.redirect(
-        back({ failed: "That sign-in expired or wasn't yours. Start again." }),
-        303,
-      );
-    }
-    const account = accountsOwnedBy(deps.db, session.orgId, session.userId).find(
-      (a) => a.id === pending.accountId,
-    );
-    const alias = account?.alias ?? "";
-    try {
-      const { mailbox } = await finishGoogleSignIn(google, pending, params);
-      deps.log.info({ account: alias, mailbox, by: session.userId }, "signed in to Google");
-    } catch (error) {
-      deps.log.warn({ account: alias, error: errorShape(error) }, "Google sign-in failed");
-      const message =
-        error instanceof GoogleSignInError ? error.message : "Google didn't accept the sign-in.";
-      return c.redirect(back({ account: alias, failed: message }), 303);
-    }
-    return c.redirect(back({ account: alias, connected: "1" }), 303);
-  });
+  for (const [providerName, provider] of providers) {
+    app.get(provider.callbackPath, signedIn, async (c) => {
+      const session = c.get("session");
+      const params = new URL(c.req.url).searchParams;
+      const pending = oauth.signIns.take(params.get("state") ?? "", deps.now());
+      const account =
+        pending === null
+          ? undefined
+          : accountsOwnedBy(deps.db, session.orgId, session.userId).find(
+              (a) => a.id === pending.accountId,
+            );
+      // Only the person who started this sign-in can finish it, and only
+      // for an account of this callback's provider.
+      if (
+        pending === null ||
+        pending.userId !== session.userId ||
+        account?.provider !== providerName
+      ) {
+        return c.redirect(
+          back({ failed: "That sign-in expired or wasn't yours. Start again." }),
+          303,
+        );
+      }
+      try {
+        const { mailbox } = await finishSignIn(
+          { db: deps.db, vault: oauth.vault },
+          provider,
+          pending,
+          params,
+        );
+        deps.log.info(
+          { account: account.alias, mailbox, by: session.userId },
+          `signed in to ${provider.label}`,
+        );
+      } catch (error) {
+        deps.log.warn(
+          { account: account.alias, error: errorShape(error) },
+          `${provider.label} sign-in failed`,
+        );
+        const message =
+          error instanceof SignInError
+            ? error.message
+            : `${provider.label} didn't accept the sign-in.`;
+        return c.redirect(back({ account: account.alias, failed: message }), 303);
+      }
+      return c.redirect(back({ account: account.alias, connected: "1" }), 303);
+    });
+  }
 
   return app;
 }
