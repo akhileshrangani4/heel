@@ -92,6 +92,7 @@ describe("OIDC client against a mock issuer", () => {
       groups: ["heel-admins", "engineering"],
       preferred_username: "alice",
       email: "alice@example.com",
+      email_verified: true,
     };
     const client = await OidcClient.discover(settingsFor(issuer));
     const { authorizationUrl, pending } = await client.beginSignIn();

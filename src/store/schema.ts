@@ -54,6 +54,8 @@ export const users = sqliteTable(
     role: text("role", { enum: USER_ROLES }).notNull(),
     /** Where email and Slack notifications reach this person; null until set. */
     email: text("email"),
+    /** IdP groups as of the person's last OIDC sign-in (D13b); empty on single-user installs. */
+    groups: text("groups", { mode: "json" }).$type<string[]>().notNull().default([]),
     createdAt: createdAt(),
     disabledAt: integer("disabled_at", { mode: "timestamp_ms" }),
   },
@@ -511,6 +513,23 @@ export const sessions = sqliteTable(
   },
   (t) => [index("sessions_user").on(t.userId)],
 );
+
+/**
+ * OIDC sign-ins in progress (D13b): what heel must check when the person
+ * comes back from the IdP. Keyed by the hash of a random cookie set on the
+ * browser that started the sign-in, so a callback only completes in that
+ * browser (no login CSRF), and used once.
+ */
+export const oidcSignIns = sqliteTable("oidc_sign_ins", {
+  /** SHA-256 of the binding cookie's value. */
+  id: text("id").primaryKey(),
+  state: text("state").notNull(),
+  nonce: text("nonce").notNull(),
+  codeVerifier: text("code_verifier").notNull(),
+  /** Where to go after signing in: a path on this site. */
+  next: text("next").notNull(),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+});
 
 // ── OAuth for cloud connectors (A2) ─────────────────────────────────────────
 

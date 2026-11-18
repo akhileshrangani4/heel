@@ -5,6 +5,7 @@ import type { GoogleClient } from "../../src/definitions/google/oauth.ts";
 import { UpstreamSignIns } from "../../src/definitions/mcp/upstream-oauth.ts";
 import type { MicrosoftClient } from "../../src/definitions/microsoft/oauth.ts";
 import { LOCAL_OWNER_NAME } from "../../src/store/install.ts";
+import type { OidcClient } from "../../src/teams/oidc.ts";
 import { KEY_BYTES } from "../../src/vault/crypto.ts";
 import { Vault } from "../../src/vault/vault.ts";
 import { createHumanApp } from "../../src/web/app.ts";
@@ -81,6 +82,8 @@ export function humanPlaneHarness(
     /** Turns on Gmail sign-in (D9a-1); needs `upstreamOAuth` for its fetch. */
     /** Turns on built-in mail sign-in; needs `upstreamOAuth` for its fetch. */
     providerClients?: { google?: GoogleClient; microsoft?: MicrosoftClient };
+    /** Turns on team sign-in (D13b). */
+    oidc?: { client: () => Promise<OidcClient>; name: string };
   } = {},
 ): HumanPlaneHarness {
   const h = approvalHarness(options);
@@ -108,6 +111,7 @@ export function humanPlaneHarness(
       microsoft: options.providerClients?.microsoft ?? null,
     },
     watchFallback: false,
+    ...(options.oidc === undefined ? {} : { oidc: options.oidc }),
     now: () => h.clock.now,
   });
 

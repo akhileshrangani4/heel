@@ -7,6 +7,7 @@ import { enrollRoutes } from "./routes/enroll.ts";
 import { grantRoutes } from "./routes/grants.ts";
 import { modeRoutes } from "./routes/modes.ts";
 import { oauthRoutes } from "./routes/oauth.ts";
+import { oidcRoutes } from "./routes/oidc.ts";
 import { pauseRoutes } from "./routes/pause.ts";
 import { pushRoutes } from "./routes/push.ts";
 import { signInRoutes } from "./routes/sign-in.ts";
@@ -30,6 +31,7 @@ export function createHumanApp(deps: HumanPlaneDeps): Hono {
   app.use("*", requireSameOrigin(deps));
   app.get("/", (c) => c.redirect("/approvals", 303));
   app.route("/", signInRoutes(deps));
+  app.route("/", oidcRoutes(deps));
   app.route("/", enrollRoutes(deps));
   app.route("/", approvalRoutes(deps));
   app.route("/", pauseRoutes(deps));
