@@ -21,6 +21,8 @@ import { HTTP_METHODS, matchOperation, type Operation } from "./openapi.ts";
  * - Redirects are never followed, and `Set-Cookie` never reaches the agent.
  * - heel doesn't know these responses' shapes, so it can't hide items in
  *   them (I-46).
+ * - Only the `/http` surface reaches it; an MCP call naming the account is
+ *   refused.
  */
 
 /** What an HTTP account stores in `settings`. */
@@ -122,6 +124,8 @@ export function httpDefinition(account: AccountRecord, deps: HttpDeps): Definiti
 
   return {
     async normalize(base: Call): Promise<Normalized> {
+      // Only the proxy route reaches an HTTP account, so a rule keyed on `surface: http` sees every request.
+      if (base.surface !== "http") return { ok: false, reason: "unsupported" };
       const parsed = HttpArgsSchema.safeParse(base.args);
       if (!parsed.success) return { ok: false, reason: "unsupported" };
       const args = parsed.data;

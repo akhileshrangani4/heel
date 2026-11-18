@@ -95,7 +95,7 @@ function setUp(owner: string) {
     watch: false,
   });
   const app = createAgentApp({ db: t.db, log: logger, http: { db: t.db, pipeline, log: logger } });
-  const { token } = addAgent(
+  const { token, agentId } = addAgent(
     t.db,
     { orgId: t.orgId, ownerId: t.ownerId, name: "inbox-bot" },
     new Date(),
@@ -105,7 +105,14 @@ function setUp(owner: string) {
       ...init,
       headers: { authorization: `Bearer ${token}`, ...(init.headers as Record<string, string>) },
     });
-  return { request, seen, t };
+  const agent = {
+    orgId: t.orgId,
+    agentId,
+    agentName: "inbox-bot",
+    ownerId: t.ownerId,
+    tokenId: "tok_1",
+  };
+  return { request, seen, t, pipeline, agent };
 }
 
 const ALLOW_TICKETS = `rules:
@@ -202,6 +209,19 @@ describe("the HTTP proxy", () => {
       body: JSON.stringify({ title: "Broken" }),
     });
     expect(other.status).toBe(403);
+  });
+
+  it("refuses an HTTP account reached from another surface", async () => {
+    const h = setUp(ALLOW_TICKETS);
+    const result = await h.pipeline.run({
+      agent: h.agent,
+      surface: "mcp",
+      account: "tickets",
+      tool: "GET /tickets",
+      args: { method: "GET", path: "/tickets", query: {} },
+    });
+    expect(result).toMatchObject({ status: "denied", reason: "unsupported" });
+    expect(h.seen).toEqual([]);
   });
 
   it("never follows a redirect", async () => {
