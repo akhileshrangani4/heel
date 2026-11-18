@@ -13,7 +13,8 @@
       "!src/store/migrations/meta",
       "!schema/heel-rules.schema.json",
       "!src/lookslike/weights.json",
-      "!corpus/looks-like/manifest.json"
+      "!corpus/looks-like/manifest.json",
+      "!site"
     ]
   },
   "formatter": {

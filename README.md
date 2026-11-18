@@ -21,7 +21,7 @@ heel sits between an agent and everything it touches (MCP servers, HTTP APIs and
 ## Install
 
 ```sh
-npm install -g useheel                      # Node 26.13 or later; installs the `heel` command
+npm install -g useheel                      # Node 26.13 or later; installs the heel command
 docker pull ghcr.io/akhileshrangani4/heel    # or run the OCI image
 ```
 
@@ -65,6 +65,8 @@ To run heel as a server with Docker, see [docs/running.md](docs/running.md).
 - **No model decides a live call.** Rules, grants and people do. See [why heel](docs/why.md).
 
 ## Docs
+
+The docs are at **[useheel.dev](https://useheel.dev)**, and in [`docs/`](docs).
 
 | | |
 | --- | --- |

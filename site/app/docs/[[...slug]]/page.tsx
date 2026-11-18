@@ -1,0 +1,68 @@
+import { source } from '@/lib/source';
+import {
+  DocsBody,
+  DocsPage,
+  DocsTitle,
+  MarkdownCopyButton,
+  ViewOptionsPopover,
+} from 'fumadocs-ui/layouts/docs/page';
+import { notFound } from 'next/navigation';
+import { getMDXComponents } from '@/components/mdx';
+import type { Metadata } from 'next';
+import { createRelativeLink } from 'fumadocs-ui/mdx';
+import { getPageImageUrl, githubUrl, gitConfig } from '@/lib/shared';
+
+/** Pages are built from the repo (scripts/sync.mjs): link to what they're built from. */
+function sourceUrl(path: string): string {
+  const file = path === 'index.md' ? 'README.md' : `docs/${path}`;
+  return `${githubUrl}/blob/${gitConfig.branch}/${encodeURI(file)}`;
+}
+
+export default async function Page(props: PageProps<'/docs/[[...slug]]'>) {
+  const params = await props.params;
+  const page = source.getPage(params.slug);
+  if (!page) notFound();
+
+  const MDX = page.data.body;
+  const markdownUrl = `${page.url}.md`;
+
+  return (
+    <DocsPage toc={page.data.toc} full={page.data.full}>
+      <DocsTitle>{page.data.title}</DocsTitle>
+      <div className="flex flex-row gap-2 items-center border-b pb-6">
+        <MarkdownCopyButton markdownUrl={markdownUrl} />
+        <ViewOptionsPopover
+          markdownUrl={markdownUrl}
+          githubUrl={sourceUrl(page.path)}
+        />
+      </div>
+      <DocsBody>
+        <MDX
+          components={getMDXComponents({
+            // this allows you to link to other pages with relative file paths
+            a: createRelativeLink(source, page),
+          })}
+        />
+      </DocsBody>
+    </DocsPage>
+  );
+}
+
+export async function generateStaticParams() {
+  return source.generateParams();
+}
+
+export async function generateMetadata(props: PageProps<'/docs/[[...slug]]'>): Promise<Metadata> {
+  const params = await props.params;
+  const page = source.getPage(params.slug);
+  if (!page) notFound();
+
+  const image = getPageImageUrl(page).url;
+  return {
+    title: page.data.title,
+    description: page.data.description,
+    alternates: { canonical: page.url },
+    openGraph: { type: 'article', url: page.url, images: image },
+    twitter: { card: 'summary_large_image', images: image },
+  };
+}
