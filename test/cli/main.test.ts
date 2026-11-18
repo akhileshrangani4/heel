@@ -58,9 +58,11 @@ async function serveIn(home: string): Promise<{ agentUrl: string }> {
 }
 
 describe("agentMcpUrl", () => {
-  it("builds the MCP URL from the agent listen address", () => {
-    expect(agentMcpUrl({ host: "127.0.0.1", port: 7300 })).toBe("http://127.0.0.1:7300/mcp");
-    expect(agentMcpUrl({ host: "::1", port: 7300 })).toBe("http://[::1]:7300/mcp");
+  it("builds the MCP URL from the agent listen address, on the direct tools until code mode", () => {
+    expect(agentMcpUrl({ host: "127.0.0.1", port: 7300 })).toBe(
+      "http://127.0.0.1:7300/mcp?tools=direct",
+    );
+    expect(agentMcpUrl({ host: "::1", port: 7300 })).toBe("http://[::1]:7300/mcp?tools=direct");
   });
 });
 

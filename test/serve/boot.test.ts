@@ -1,49 +1,15 @@
-import { randomBytes } from "node:crypto";
 import { existsSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:net";
 import { join } from "node:path";
 import { describe, expect, it, onTestFinished } from "vitest";
-import { z } from "zod";
 import { adminCall } from "../../src/admin/client.ts";
 import { AdminSocketError } from "../../src/admin/server.ts";
-import { type HeelConfig, HeelConfigFileSchema, resolveConfig } from "../../src/config/schema.ts";
-import { createLogger, type Logger } from "../../src/log.ts";
-import { listenerUrl, type PlaneState, type RunningHeel, startHeel } from "../../src/serve.ts";
+import { listenerUrl, startHeel } from "../../src/serve.ts";
 import { openStore } from "../../src/store/db.ts";
-import { encodeMasterKey, MASTER_KEY_ENV } from "../../src/vault/key.ts";
+import { MASTER_KEY_ENV } from "../../src/vault/key.ts";
 import { captureLogger } from "../helpers/log.ts";
+import { addAgentToken, boot, configIn, newKey, silent, urlOf } from "../helpers/serve.ts";
 import { tempDir } from "../helpers/store.ts";
-
-const silent = createLogger("silent");
-
-function newKey(): string {
-  return encodeMasterKey(randomBytes(32));
-}
-
-/** A config rooted in a temp dir; both planes bind an ephemeral port unless overridden. */
-function configIn(home: string, file: Record<string, unknown> = {}): HeelConfig {
-  const parsed = HeelConfigFileSchema.parse({
-    admin_socket: "run/admin.sock",
-    listen: { agent: "127.0.0.1:0", human: "127.0.0.1:0" },
-    ...file,
-  });
-  return resolveConfig(parsed, home, null);
-}
-
-async function boot(
-  config: HeelConfig,
-  env: Record<string, string | undefined>,
-  log: Logger = silent,
-): Promise<RunningHeel> {
-  const heel = await startHeel({ config, env, log, version: "test" });
-  onTestFinished(() => heel.close());
-  return heel;
-}
-
-function urlOf(plane: PlaneState): string {
-  if (plane.state !== "listening") throw new Error(`plane refused: ${plane.reason}`);
-  return plane.url;
-}
 
 /** A port nothing listens on: bound once by the OS, then released. */
 async function freePort(): Promise<number> {
@@ -63,15 +29,6 @@ async function occupiedPort(): Promise<number> {
   const address = server.address();
   if (address === null || typeof address === "string") throw new Error("no TCP address");
   return address.port;
-}
-
-async function addAgentToken(config: HeelConfig, name: string): Promise<string> {
-  const response = await adminCall(config.adminSocketPath, {
-    method: "agent.add",
-    params: { name },
-  });
-  if (!response.ok) throw new Error(response.error.message);
-  return z.object({ token: z.string() }).parse(response.result).token;
 }
 
 describe("listenerUrl", () => {
@@ -154,13 +111,10 @@ describe("heel serve", () => {
     const unknown = await fetch(`${agentUrl}/mcp`, bearer(`heel_${"A".repeat(43)}`));
     expect(unknown.status).toBe(401);
 
+    // A valid token gets past authentication: bare /mcp then says code mode isn't built yet.
     const valid = await fetch(`${agentUrl}/mcp`, bearer(token));
     expect(valid.status).toBe(501);
-    expect(await valid.json()).toEqual({
-      status: "denied",
-      reason: "surface_unavailable",
-      rule: null,
-    });
+    expect(await valid.json()).toMatchObject({ status: "denied", reason: "surface_unavailable" });
 
     const revoke = await adminCall(config.adminSocketPath, {
       method: "agent.revoke",
@@ -171,7 +125,7 @@ describe("heel serve", () => {
     expect(revoked.status).toBe(401);
   });
 
-  it("denies every agent-plane surface until its pipeline exists", async () => {
+  it("answers surfaces that aren't built with 501, and an account the agent can't use with 404", async () => {
     const home = tempDir("heel-boot-");
     const config = configIn(home);
     const heel = await boot(config, { [MASTER_KEY_ENV]: newKey() });
@@ -179,10 +133,12 @@ describe("heel serve", () => {
     const token = await addAgentToken(config, "ci-bot");
     const headers = { authorization: `Bearer ${token}` };
 
-    for (const path of ["/mcp", "/mcp/gmail-work", "/http/github/repos", "/run"]) {
+    for (const path of ["/mcp", "/http/github/repos", "/run"]) {
       const response = await fetch(`${agentUrl}${path}`, { method: "POST", headers });
       expect(response.status, path).toBe(501);
     }
+    const noSuchAccount = await fetch(`${agentUrl}/mcp/gmail-work`, { method: "POST", headers });
+    expect(noSuchAccount.status).toBe(404);
     const unknown = await fetch(`${agentUrl}/elsewhere`, { headers });
     expect(unknown.status).toBe(404);
   });

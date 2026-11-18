@@ -15,6 +15,37 @@ export interface AccountRecord {
   settings: Record<string, unknown>;
 }
 
+/** The columns an `AccountRecord` reads. */
+const ACCOUNT_RECORD = {
+  id: accounts.id,
+  orgId: accounts.orgId,
+  ownerId: accounts.ownerId,
+  ownerName: users.name,
+  alias: accounts.alias,
+  provider: accounts.provider,
+  status: accounts.status,
+  settings: accounts.settings,
+};
+
+/**
+ * The accounts a user owns, by alias. An agent may use only its owner's
+ * accounts (until accounts can be shared, D13b), so this is also what an
+ * agent may see listed.
+ */
+export function accountsOwnedBy(
+  db: HeelDb | HeelTx,
+  orgId: string,
+  ownerId: string,
+): AccountRecord[] {
+  return db
+    .select(ACCOUNT_RECORD)
+    .from(accounts)
+    .innerJoin(users, eq(users.id, accounts.ownerId))
+    .where(and(eq(accounts.orgId, orgId), eq(accounts.ownerId, ownerId)))
+    .orderBy(accounts.alias)
+    .all();
+}
+
 /** The account named `alias` in `orgId`, with its owner's name; null when there is none. */
 export function findAccount(
   db: HeelDb | HeelTx,

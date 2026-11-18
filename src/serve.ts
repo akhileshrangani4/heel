@@ -8,7 +8,11 @@ import { rulesPaths } from "./config/rules.ts";
 import { type ReloadOutcome, RulesHolder, watchRules } from "./config/rules-reload.ts";
 import { type HeelConfig, humanPlaneUrlProblem, type ListenAddress } from "./config/schema.ts";
 import { formatYamlIssue } from "./config/yaml.ts";
+import { definitionRegistry } from "./definitions/mcp/passthrough.ts";
+import { UpstreamPool } from "./definitions/mcp/upstream.ts";
 import { createAgentApp } from "./gateway/app.ts";
+import { createMcpSurface } from "./gateway/mcp/server.ts";
+import { createPipeline } from "./gateway/pipeline/pipeline.ts";
 import type { Logger } from "./log.ts";
 import { logAdminAlerts } from "./notify/admin-alerts.ts";
 import { Notifier } from "./notify/notifier.ts";
@@ -214,8 +218,8 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
     });
     closers.push(() => admin.close());
 
-    // Approval notifications (D4d). The pipeline hands new requests to
-    // `notifier.approvalRequested` once the agent plane runs it (D5).
+    // Approval notifications (D4d). The pipeline below hands each new request
+    // to `notifier.approvalRequested`.
     const notify = notifySetup(config.notify, options.env);
     const notifier = new Notifier({
       db: store.db,
@@ -258,7 +262,24 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
       agent = { state: "refused", reason: `vault unavailable: ${opening.reason}` };
       log.error({ reason: agent.reason }, "agent plane refused");
     } else {
-      const app = createAgentApp({ db: store.db, log, now });
+      // The decision pipeline (D3) with the D4 stores, and the MCP surface (D5a).
+      const upstream = new UpstreamPool({ vault: opening.vault, log });
+      closers.push(() => upstream.close());
+      const pipeline = createPipeline({
+        db: store.db,
+        rules,
+        definitions: definitionRegistry(upstream),
+        pauses: new SqlitePauseStore(),
+        approvals: new SqliteApprovalStore(),
+        log,
+        alerts: logAdminAlerts(log),
+        watch,
+        now,
+        onApprovalRequested: (approvalId) => notifier.approvalRequested(approvalId),
+      });
+      const mcp = createMcpSurface({ db: store.db, pipeline, upstream, log, version, now });
+      closers.push(() => mcp.close());
+      const app = createAgentApp({ db: store.db, log, now, mcp });
       const server = await listenHttp(app.fetch, config.listen.agent);
       closers.push(() => closeHttp(server));
       agent = { state: "listening", url: boundUrl(server) };

@@ -53,6 +53,7 @@ const AGENT_ERROR_CODES: Record<AgentErrorCode, AdminErrorCode> = {
 const CONNECT_ERROR_CODES: Record<ConnectErrorCode, AdminErrorCode> = {
   invalid_alias: "invalid",
   unknown_provider: "invalid",
+  invalid_settings: "invalid",
   alias_taken: "conflict",
   vault_unavailable: "vault_unavailable",
 };
@@ -125,9 +126,16 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
         })),
       );
     case "account.connect": {
-      const { provider, alias, owner, credential } = request.params;
+      const { provider, alias, owner, credential, url } = request.params;
       const ownerId = resolveOwner(db, orgId, owner);
-      const input = { orgId, ownerId, provider, alias, ...(credential ? { credential } : {}) };
+      const input = {
+        orgId,
+        ownerId,
+        provider,
+        alias,
+        ...(credential ? { credential } : {}),
+        ...(url === undefined ? {} : { url }),
+      };
       return adminOk(connectAccount(db, deps.vault, input, now));
     }
     case "account.list":
