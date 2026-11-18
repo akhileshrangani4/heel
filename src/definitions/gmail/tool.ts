@@ -22,6 +22,10 @@ export interface Prepared<P> {
   action?: string;
   recipients?: string[];
   targets?: string[];
+  /** Messages the call affects, after expanding threads and batches; 1 when absent. */
+  items?: number;
+  /** The tool leaves something behind that outlives revoking heel (I-70). */
+  persistence?: boolean;
 }
 
 export type Preparation<P> = Prepared<P> | { deny: HardDenyReason };

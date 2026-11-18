@@ -89,6 +89,30 @@ const SendAsSchema = z.object({
     .default([]),
 });
 
+const FilterSchema = z.object({
+  id: z.string(),
+  criteria: z.record(z.string(), z.unknown()).default({}),
+  action: z.record(z.string(), z.unknown()).default({}),
+});
+export type GmailFilter = z.output<typeof FilterSchema>;
+const FiltersSchema = z.object({ filter: z.array(FilterSchema).default([]) });
+
+/** What a Gmail filter matches (`users.settings.filters`, `criteria`). */
+export interface FilterCriteria {
+  from?: string;
+  to?: string;
+  subject?: string;
+  query?: string;
+  hasAttachment?: boolean;
+}
+
+/** What a Gmail filter does to matching mail (`action`). */
+export interface FilterAction {
+  addLabelIds?: string[];
+  removeLabelIds?: string[];
+  forward?: string;
+}
+
 /**
  * How much of a message to read. `metadata` gives headers and labels only;
  * `full` adds the body, which only `looks_like` and the message tools need.
@@ -294,6 +318,63 @@ export class GmailClient {
       null,
       signal,
     );
+  }
+
+  /** `users.messages.batchModify`: up to 1,000 ids per request. */
+  async batchModify(
+    ids: readonly string[],
+    change: { add: readonly string[]; remove: readonly string[] },
+    signal: AbortSignal,
+  ): Promise<void> {
+    await this.#write(
+      "POST",
+      "users/me/messages/batchModify",
+      { ids, addLabelIds: change.add, removeLabelIds: change.remove },
+      null,
+      signal,
+    );
+  }
+
+  /** `users.messages.trash`: reversible from Gmail's Trash for 30 days. */
+  async trashMessage(id: string, signal: AbortSignal): Promise<void> {
+    await this.#write(
+      "POST",
+      `users/me/messages/${encodeURIComponent(id)}/trash`,
+      undefined,
+      null,
+      signal,
+    );
+  }
+
+  /** `users.threads.trash`: every message in the thread. */
+  async trashThread(id: string, signal: AbortSignal): Promise<void> {
+    await this.#write(
+      "POST",
+      `users/me/threads/${encodeURIComponent(id)}/trash`,
+      undefined,
+      null,
+      signal,
+    );
+  }
+
+  /** `users.settings.filters.list`. */
+  async listFilters(signal: AbortSignal): Promise<GmailFilter[]> {
+    return (await this.#get("users/me/settings/filters", [], FiltersSchema, signal)).filter;
+  }
+
+  /** `users.settings.filters.create`. */
+  async createFilter(
+    criteria: FilterCriteria,
+    action: FilterAction,
+    signal: AbortSignal,
+  ): Promise<GmailFilter> {
+    return (await this.#write(
+      "POST",
+      "users/me/settings/filters",
+      { criteria, action },
+      FilterSchema,
+      signal,
+    )) as GmailFilter;
   }
 
   /** `users.messages.list`: ids only, newest first. */

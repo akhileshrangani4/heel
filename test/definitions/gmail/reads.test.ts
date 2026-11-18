@@ -63,6 +63,7 @@ describe("Gmail tools", () => {
       "get_thread",
       "list_labels",
       "list_send_as",
+      "list_filters",
     ]);
   });
 
