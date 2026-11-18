@@ -6,14 +6,14 @@ import type { RuleFacts } from "../../src/core/rules/facts.ts";
 import { facts, ruleSet, run } from "./helpers.ts";
 
 /**
- * The README's example rules and hide entries, read from README.md itself,
- * load unchanged and decide as the README describes.
+ * The example rules and hide entries in docs/rules.md, read from the page
+ * itself, load unchanged and decide as the page describes.
  */
 
 const ROOT = join(import.meta.dirname, "..", "..");
 
 function readmeYamlBlocks(): string[] {
-  const readme = readFileSync(join(ROOT, "README.md"), "utf8");
+  const readme = readFileSync(join(ROOT, "docs", "rules.md"), "utf8");
   return [...readme.matchAll(/```yaml\n([\s\S]*?)```/g)].map((m) => m[1] ?? "");
 }
 
@@ -27,7 +27,7 @@ const ruleNumber = (call: RuleFacts, ctx: Parameters<typeof run>[2] = {}) => {
   return verdict.rule === null ? "default" : verdict.rule.index;
 };
 
-describe("README examples", () => {
+describe("docs/rules.md examples", () => {
   it("are a rules block and a hide block", () => {
     expect(blocks).toHaveLength(2);
     expect(blocks[0]?.startsWith("rules:\n")).toBe(true);

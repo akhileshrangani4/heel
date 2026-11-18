@@ -59,6 +59,8 @@ jobs:
           done
           test "$code" = "401" || { echo "agent plane answered $code"; exit 1; }
           curl -sf http://localhost:7301/sign-in > /dev/null
+      - name: Admin commands run inside the container
+        run: docker exec heel heel agent add ci-smoke | grep -q 'Added agent "ci-smoke"'
       - name: Logs
         if: always()
         run: docker logs heel

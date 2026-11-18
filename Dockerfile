@@ -26,6 +26,8 @@ COPY bin ./bin
 COPY src ./src
 COPY assets/logo ./assets/logo
 COPY examples/heel.yaml /etc/heel/heel.yaml
+# `docker exec heel heel <command>` for admin commands.
+RUN ln -s /opt/heel/bin/heel.js /usr/local/bin/heel
 ENV HEEL_HOME=/var/lib/heel \
   HEEL_CONFIG=/etc/heel/heel.yaml \
   NODE_ENV=production
