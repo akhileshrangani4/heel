@@ -1,9 +1,15 @@
 import { z } from "zod";
 import type { Call, HttpFields } from "../../core/call.ts";
-import type { Definition, Normalized } from "../../gateway/pipeline/ports.ts";
+import type { Hiding } from "../../core/hide.ts";
+import {
+  type Definition,
+  type Normalized,
+  ResponseUnparseableError,
+} from "../../gateway/pipeline/ports.ts";
 import type { AccountRecord } from "../../store/directory.ts";
 import type { Vault } from "../../vault/vault.ts";
 import type { FetchFn } from "../sign-in.ts";
+import { filterResponse } from "./hide-map.ts";
 import {
   HTTP_METHODS,
   matchesOnlyIgnoringCase,
@@ -34,8 +40,12 @@ import {
  *   form-encoded, JSON-escaped, base64, the header heel sent, a basic
  *   password on its own), is scrubbed from the body and every header passed
  *   back. Responses are read with a running 25 MB cap.
- * - heel doesn't know these responses' shapes, so it can't hide items in
- *   them (I-46).
+ * - Hiding (D7b): an operation with an `x-heel-hide` mapping has the hidden
+ *   items removed from its JSON response, with their count in a
+ *   `Heel-Hidden` header (one count, no per-row markers, spec Q-H1). A
+ *   response that is one hidden item answers 404 `not_available`. A mapped
+ *   response heel can't read is withheld. An operation without a mapping
+ *   has no shape heel knows, so nothing in it is hidden (I-46).
  * - Only the `/http` surface reaches it; an MCP call naming the account is
  *   refused.
  */
@@ -58,6 +68,16 @@ export const HttpSettingsSchema = z.object({
         operationId: z.string().optional(),
         action: z.string().optional(),
         kind: z.enum(["read", "write"]).optional(),
+        hide: z
+          .object({
+            items: z.string(),
+            from: z.string().optional(),
+            to: z.string().optional(),
+            subject: z.string().optional(),
+            labels: z.string().optional(),
+            body: z.string().optional(),
+          })
+          .optional(),
       }),
     )
     .default([]),
@@ -265,6 +285,49 @@ export function httpDefinition(account: AccountRecord, deps: HttpDeps): Definiti
           ...(op?.action === undefined ? {} : { action: op.action }),
           ...(op?.kind === undefined ? {} : { kind: op.kind }),
         },
+      };
+    },
+
+    async hide(call, result, hiding: Hiding): Promise<HttpResponse> {
+      const response = result as HttpResponse;
+      if (hiding.entries.length === 0) return response;
+      const args = HttpArgsSchema.parse(call.args);
+      const mapping = matchOperation(operations, args.method, args.path)?.hide;
+      if (mapping === undefined) return response;
+      const json = (response.headers["content-type"] ?? "").split(";")[0]?.trim().toLowerCase();
+      const isJson = json === "application/json" || json?.endsWith("+json") === true;
+      const ok = response.status >= 200 && response.status < 300;
+      // An error answer that isn't JSON carries no items; a success that isn't JSON can't be checked.
+      if (!isJson) {
+        if (ok) throw new ResponseUnparseableError();
+        return response;
+      }
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(Buffer.from(response.body, "base64").toString("utf8"));
+      } catch {
+        throw new ResponseUnparseableError();
+      }
+      const filtered = filterResponse(parsed, mapping, (c) => hiding.isHidden(c), hiding.needsBody);
+      if (filtered.kind === "unreadable") {
+        if (ok) throw new ResponseUnparseableError();
+        return response;
+      }
+      if (filtered.kind === "hidden_item") {
+        return {
+          status: 404,
+          headers: { "content-type": "application/json" },
+          body: Buffer.from(JSON.stringify({ status: "denied", reason: "not_available" })).toString(
+            "base64",
+          ),
+        };
+      }
+      if (filtered.hidden === 0) return response;
+      const { "content-length": _dropped, ...headers } = response.headers;
+      return {
+        status: response.status,
+        headers: { ...headers, "heel-hidden": String(filtered.hidden) },
+        body: Buffer.from(JSON.stringify(filtered.value)).toString("base64"),
       };
     },
 
