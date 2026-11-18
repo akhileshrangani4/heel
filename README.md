@@ -16,7 +16,7 @@
 
 heel sits between an agent and everything it touches (MCP servers, HTTP APIs and CLIs). It holds the credentials and checks every call against rules on the call's actual arguments: who an email goes to, which account it comes from, which repo, how many messages this run has deleted. It also hides what an agent shouldn't read. Calls that need a person go to the owner's phone, outside the agent's session. One switch pauses any agent.
 
-[![heel in 38 seconds](assets/heel.gif)](assets/heel.mp4)
+[![heel in 26 seconds](assets/heel.gif)](assets/heel.mp4)
 
 ## Install
 
