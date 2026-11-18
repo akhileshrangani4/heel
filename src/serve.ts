@@ -297,6 +297,10 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
     closers.push(() => notifier.stop());
     log.info({ channels: [...notifier.channels] }, "notifications ready");
 
+    // Messages hidden from agents, by reason; `uncertain` is the fail-closed
+    // count (I-44). Shown on the Activity page (A5).
+    const hideCounts = new HideCounts();
+
     let human: PlaneState;
     const urlProblem = humanPlaneUrlProblem(config.publicUrl);
     if (urlProblem) {
@@ -317,6 +321,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         upstreamOAuth: vault === null ? null : { signIns: upstreamSignIns, vault },
         watchFallback: watch,
         providerClients,
+        hiddenCounts: () => hideCounts.snapshot(),
         now,
       });
       const server = await listenHttp(humanApp.fetch, config.listen.human);
@@ -353,8 +358,6 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         }),
       });
       closers.push(() => upstream.close());
-      // Counted for A5's metrics export; `uncertain` is the fail-closed count (I-44).
-      const hideCounts = new HideCounts();
       const looksLike = defaultLooksLikeJudge((error) =>
         log.error(
           { error },
