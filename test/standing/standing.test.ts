@@ -4,6 +4,7 @@ import { listStanding, revokeStanding } from "../../src/store/approvals.ts";
 import {
   type ApprovalHarness,
   approvalHarness,
+  DAY,
   HOUR,
   pendingId,
   SEND,
@@ -147,6 +148,27 @@ describe("standing approvals", () => {
     });
   });
 
+  it("Q-A5: a person's deny of this exact call wins over a standing approval until the deny window ends", async () => {
+    const h = approvalHarness({ owner: ASK_SENDS });
+    const deniedCall = { ...SEND, subject: "the one they said no to" };
+    const deniedId = pendingId(await h.call({ args: deniedCall }));
+    h.decide(deniedId, "deny");
+    await grantStanding(h, { scope: "rule", duration: "7d" });
+
+    expect(await h.call({ args: deniedCall })).toMatchObject({
+      status: "denied",
+      reason: "approval_denied",
+      approvalId: deniedId,
+    });
+
+    // The deny window is the pending TTL from the request's creation (24 h).
+    h.clock.advance(DAY);
+    expect(await h.call({ args: deniedCall })).toMatchObject({
+      status: "allowed",
+      via: { kind: "rule", standingApprovalId: expect.any(String) },
+    });
+  });
+
   it("is scoped to the agent it was granted for", async () => {
     const h = approvalHarness({ owner: ASK_SENDS });
     const other = h.addAgent("ci-bot");
@@ -218,6 +240,15 @@ describe("standing approvals", () => {
     });
     expect(h.status(id)).toBe("pending");
     expect(listStanding(h.t.db, h.t.orgId)).toEqual([]);
+  });
+
+  it("refuses a duration that isn't one of the offered lengths", async () => {
+    const h = approvalHarness({ owner: ASK_SENDS });
+    const id = pendingId(await h.call({ args: SEND }));
+
+    const bogus = { scope: "rule", duration: "__proto__" } as unknown as StandingChoice;
+    expect(() => h.decide(id, "approve", { standing: bogus })).toThrow(/not a standing duration/);
+    expect(h.status(id)).toBe("pending");
   });
 
   it("Q-A6: durations are capped at 90 days", async () => {

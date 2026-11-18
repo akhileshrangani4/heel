@@ -13,7 +13,7 @@ import { and, eq, isNull, lt, or } from "drizzle-orm";
 import { z } from "zod";
 import type { HeelDb } from "../store/db.ts";
 import { newId } from "../store/ids.ts";
-import { type ChallengePurpose, enrollments, passkeys, users } from "../store/schema.ts";
+import { enrollments, passkeys, users } from "../store/schema.ts";
 import {
   type ChallengeBinding,
   type ChallengeRow,
@@ -195,14 +195,20 @@ export type OptionsResult<T> =
   | { ok: true; challengeId: string; options: T }
   | { ok: false; reason: PasskeyRefusal };
 
-export interface AssertionRequest {
+/**
+ * Who must answer an assertion. Sign-in names nobody (the passkey names the
+ * person); a decision or a resume always names the signed-in person, so no
+ * other passkey in the org can answer it.
+ */
+export type AssertionSubject =
+  | { purpose: "sign_in"; userId: null }
+  | { purpose: "decide" | "resume"; userId: string };
+
+export type AssertionRequest = AssertionSubject & {
   orgId: string;
-  /** The signed-in person who must answer; null for sign-in. */
-  userId: string | null;
-  purpose: Exclude<ChallengePurpose, "enroll">;
   binding: ChallengeBinding;
   now: Date;
-}
+};
 
 /**
  * WebAuthn ceremonies for the human plane (spec: The approval page). Every
@@ -281,14 +287,14 @@ export class Passkeys {
    * issued to, the signature must verify for this origin and RP ID, and the
    * authenticator must report user verification.
    */
-  async verifyAssertion(input: {
-    orgId: string;
-    challengeId: string;
-    purpose: Exclude<ChallengePurpose, "enroll">;
-    userId: string | null;
-    response: unknown;
-    now: Date;
-  }): Promise<
+  async verifyAssertion(
+    input: AssertionSubject & {
+      orgId: string;
+      challengeId: string;
+      response: unknown;
+      now: Date;
+    },
+  ): Promise<
     | { ok: true; userId: string; passkeyId: string; binding: ChallengeBinding }
     | { ok: false; reason: PasskeyRefusal; detail?: string }
   > {
@@ -349,11 +355,14 @@ export class Passkeys {
     if (!verified.verified || !verified.authenticationInfo.userVerified) {
       return { ok: false, reason: "invalid_assertion" };
     }
-    this.#db
+    // Compare-and-set on the counter: of two assertions verified against the
+    // same stored counter (a cloned authenticator), only one is accepted.
+    const updated = this.#db
       .update(passkeys)
       .set({ counter: verified.authenticationInfo.newCounter, lastUsedAt: input.now })
-      .where(eq(passkeys.id, passkey.id))
+      .where(and(eq(passkeys.id, passkey.id), eq(passkeys.counter, passkey.counter)))
       .run();
+    if (updated.changes !== 1) return { ok: false, reason: "invalid_assertion" };
     return {
       ok: true,
       userId: passkey.userId,

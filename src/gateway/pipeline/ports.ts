@@ -175,8 +175,8 @@ export interface ApprovalStore {
    * longer approved; the decision then fails closed.
    */
   consume(db: HeelQuery, approvalId: string, now: Date): void;
-  /** This agent's live standing approvals, for the evaluator. */
-  standing(db: HeelQuery, call: Call, now: Date): StandingApprovals;
+  /** This agent's live standing approvals for the call, whose hash the pipeline already holds. */
+  standing(db: HeelQuery, call: Call, callHash: string, now: Date): StandingApprovals;
 }
 
 // ── results ─────────────────────────────────────────────────────────────────

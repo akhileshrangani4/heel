@@ -8,6 +8,7 @@ import {
   type DecisionRefusal,
   decisionRefusal,
   governingOutcome,
+  isStandingDuration,
   STANDING_DURATIONS,
   STANDING_MAX_MS,
   type StandingDuration,
@@ -15,7 +16,6 @@ import {
   statusAt,
 } from "../core/approvals.ts";
 import type { Call, PauseScope } from "../core/call.ts";
-import { callHash } from "../core/call-hash.ts";
 import type { StandingApprovals } from "../core/rules/evaluate.ts";
 import type {
   ApprovalRequest,
@@ -131,7 +131,7 @@ export class SqliteApprovalStore implements ApprovalStore {
     if (result.changes !== 1) throw new Error(`approval ${approvalId} is no longer approved`);
   }
 
-  standing(db: HeelQuery, call: Call, now: Date): StandingApprovals {
+  standing(db: HeelQuery, call: Call, hash: string, now: Date): StandingApprovals {
     const rows = db
       .select()
       .from(standingApprovals)
@@ -146,11 +146,6 @@ export class SqliteApprovalStore implements ApprovalStore {
       .orderBy(standingApprovals.createdAt)
       .all();
     if (rows.length === 0) return { find: () => null };
-    let hash: string | null = null;
-    const thisCallHash = () => {
-      hash ??= callHash(call);
-      return hash;
-    };
     return {
       // The evaluator asks only for the owner rule that matched and would
       // ask, so a standing approval sits just above its parent rule and can
@@ -161,7 +156,7 @@ export class SqliteApprovalStore implements ApprovalStore {
           standingCovers(r, {
             agentId: call.agentId,
             ruleHash: rule.hash,
-            callHash: thisCallHash,
+            callHash: () => hash,
           }),
         );
         return row === undefined ? null : { id: row.id };
@@ -394,6 +389,10 @@ function grantStanding(
   approver: Approver,
   now: Date,
 ): string {
+  // Callers validate the choice; this keeps a bad value from writing an invalid expiry.
+  if (!isStandingDuration(choice.duration)) {
+    throw new TypeError(`not a standing duration: ${String(choice.duration)}`);
+  }
   const id = newId("standingApproval");
   const durationMs = Math.min(STANDING_DURATIONS[choice.duration], STANDING_MAX_MS);
   tx.insert(standingApprovals)

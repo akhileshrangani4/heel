@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { approvalHarness, pendingId, SEND } from "../helpers/approvals.ts";
+import { approvalHarness, DAY, pendingId, SEND } from "../helpers/approvals.ts";
 import { oneRule } from "../helpers/pipeline.ts";
 
 const ASK_SENDS = oneRule("{ action: email.send }", "ask");
@@ -117,6 +117,23 @@ describe("approving and re-sending", () => {
 });
 
 describe("who may decide", () => {
+  it("I-55: a request that expires is audited even when the re-send no longer asks", async () => {
+    const h = approvalHarness({ owner: ASK_SENDS });
+    const id = pendingId(await h.call({ args: SEND }));
+    h.clock.advance(DAY + 1);
+    h.setRules({ owner: oneRule("{ action: email.send }") });
+
+    const rerun = await h.call({ args: SEND });
+
+    expect(rerun).toMatchObject({ status: "allowed", via: { kind: "rule" } });
+    expect(h.status(id)).toBe("expired");
+    expect(h.audit().map((row) => [row.kind, row.approvalId])).toEqual([
+      ["ask", id],
+      ["expired", id],
+      ["allow", null],
+    ]);
+  });
+
   it("I-56: a decision must name the call hash of the request it decides", async () => {
     const h = approvalHarness({ owner: ASK_SENDS });
     const id = pendingId(await h.call({ args: SEND }));
