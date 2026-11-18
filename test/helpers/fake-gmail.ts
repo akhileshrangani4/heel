@@ -27,6 +27,8 @@ export interface FakeMessage {
   replyTo?: string;
   messageId?: string;
   references?: string;
+  /** Exact RFC 5322 text for format=raw, in place of the generated one. */
+  raw?: string;
 }
 
 /** A message heel sent, decoded from the raw bytes it posted. */
@@ -41,6 +43,8 @@ export interface SentMessage {
 export interface FakeDraft {
   id: string;
   threadId: string;
+  /** The draft's current message id; Gmail issues a new one on every update. */
+  messageId?: string;
   /** RFC 5322 text. */
   raw: string;
 }
@@ -83,7 +87,7 @@ export class FakeGmail {
     { sendAsEmail: "pending@alias.example", verificationStatus: "pending" },
   ];
   /** How messages.send answers: ok, a refusal, or a dropped connection. */
-  sendBehavior: "ok" | "refuse" | "drop" = "ok";
+  sendBehavior: "ok" | "refuse" | "drop" | "error500" = "ok";
   /** False to make drafts.delete fail. */
   draftDeletes = true;
   /** Runs after each raw read of a message or draft, e.g. to change it before the send. */
@@ -135,8 +139,41 @@ export class FakeGmail {
     return { ...base, payload: { mimeType: "multipart/alternative", headers, parts } };
   }
 
+  /**
+   * A draft as Gmail serves it through messages and threads: its own
+   * message, labelled DRAFT, in its thread.
+   */
+  #draftMessage(draft: FakeDraft): FakeMessage {
+    const headers = headersOf(draft.raw);
+    const body = draft.raw
+      .split(/\r?\n\r?\n/)
+      .slice(1)
+      .join("\n\n");
+    return {
+      id: draft.messageId ?? `msg-${draft.id}`,
+      threadId: draft.threadId,
+      labelIds: ["DRAFT"],
+      raw: draft.raw,
+      text: body,
+      ...(headers["from"] === undefined ? {} : { from: headers["from"] }),
+      ...(headers["to"] === undefined ? {} : { to: headers["to"] }),
+      ...(headers["cc"] === undefined ? {} : { cc: headers["cc"] }),
+      ...(headers["bcc"] === undefined ? {} : { bcc: headers["bcc"] }),
+      ...(headers["subject"] === undefined ? {} : { subject: headers["subject"] }),
+    };
+  }
+
+  /** Every message, drafts included, as threads.get and messages.get see them. */
+  #everyMessage(): FakeMessage[] {
+    return [
+      ...this.messages.values(),
+      ...[...this.drafts.values()].map((d) => this.#draftMessage(d)),
+    ];
+  }
+
   /** The message as RFC 5322 text, for format=raw. */
   rawOf(m: FakeMessage): string {
+    if (m.raw !== undefined) return m.raw;
     const lines = this.#headers(m).map((h) => `${h.name}: ${h.value}`);
     return `${lines.join("\r\n")}\r\n\r\n${m.text ?? m.html ?? ""}`;
   }
@@ -154,6 +191,9 @@ export class FakeGmail {
         );
       }
       if (this.sendBehavior === "drop") throw new TypeError("fetch failed");
+      if (this.sendBehavior === "error500") {
+        return Response.json({ error: { code: 500 } }, { status: 500 });
+      }
       const body = this.#json(init);
       const raw = Buffer.from(String(body["raw"]), "base64url").toString("utf8");
       const threadId = body["threadId"] as string | undefined;
@@ -166,7 +206,10 @@ export class FakeGmail {
       const id = `draft-${this.#nextId++}`;
       const raw = Buffer.from(message.raw, "base64url").toString("utf8");
       this.drafts.set(id, { id, threadId: message.threadId ?? `thread-${id}`, raw });
-      return Response.json({ id, message: { id: `msg-${id}`, threadId: `thread-${id}` } });
+      return Response.json({
+        id,
+        message: { id: `msg-${id}`, threadId: message.threadId ?? `thread-${id}` },
+      });
     }
     const draft = /^users\/me\/drafts\/([^/]+)$/.exec(path)?.[1];
     if (draft !== undefined && method === "PUT") {
@@ -174,6 +217,7 @@ export class FakeGmail {
       const existing = this.drafts.get(draft);
       if (existing === undefined) return Response.json({ error: { code: 404 } }, { status: 404 });
       existing.raw = Buffer.from(message.raw, "base64url").toString("utf8");
+      existing.messageId = `msg-${draft}-${this.#nextId++}`;
       return Response.json({
         id: draft,
         message: { id: `msg-${draft}`, threadId: existing.threadId },
@@ -214,7 +258,7 @@ export class FakeGmail {
       const response = Response.json({
         id: draft.id,
         message: {
-          id: `msg-${draft.id}`,
+          id: draft.messageId ?? `msg-${draft.id}`,
           threadId: draft.threadId,
           raw: Buffer.from(draft.raw, "utf8").toString("base64url"),
         },
@@ -233,7 +277,8 @@ export class FakeGmail {
     }
     const message = /^users\/me\/messages\/([^/]+)$/.exec(path);
     if (message?.[1] !== undefined) {
-      const found = this.messages.get(decodeURIComponent(message[1]));
+      const wanted = decodeURIComponent(message[1]);
+      const found = this.#everyMessage().find((m) => m.id === wanted);
       if (found === undefined) return Response.json({ error: { code: 404 } }, { status: 404 });
       if (format === "raw") {
         const response = Response.json({
@@ -249,7 +294,7 @@ export class FakeGmail {
     const thread = /^users\/me\/threads\/([^/]+)$/.exec(path);
     if (thread?.[1] !== undefined) {
       const id = decodeURIComponent(thread[1]);
-      const messages = [...this.messages.values()].filter((m) => m.threadId === id);
+      const messages = this.#everyMessage().filter((m) => m.threadId === id);
       return messages.length === 0
         ? Response.json({ error: { code: 404 } }, { status: 404 })
         : Response.json({ id, messages: messages.map((m) => this.#serve(m, format)) });

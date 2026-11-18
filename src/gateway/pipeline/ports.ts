@@ -53,6 +53,12 @@ export const HARD_DENY_REASONS = [
   "batch_unexpandable",
   /** A read heel needed to normalize the call (recipients, items, a hide verdict) failed. */
   "lookup_unavailable",
+  /**
+   * An address that decides delivery can't be read plainly: a quoted local
+   * part, a display name holding `<`, `>` or `@`, a draft header heel would
+   * read differently from the provider. Same name as the rules' own deny.
+   */
+  "address_unparseable",
   /** A send names a `from` the mailbox can't send as (spec: Email, `send`). */
   "sender_not_allowed",
   /** The definition has no such tool, or the call uses something it refuses (a CLI alias). */

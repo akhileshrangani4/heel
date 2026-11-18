@@ -31,7 +31,10 @@ export function normalizeAddress(text: string): string | null {
   const spec = (angle?.[1] ?? text).trim();
   const at = spec.lastIndexOf("@");
   if (at <= 0 || at === spec.length - 1) return null;
-  const local = spec.slice(0, at);
+  let local = spec.slice(0, at);
+  // `"ceo"@x.com` is the same mailbox as `ceo@x.com` (RFC 5321 §4.1.2), and
+  // mailers drop the quotes, so both must compare equal.
+  if (QUOTED_LOCAL.test(local) && DOT_ATOM.test(local.slice(1, -1))) local = local.slice(1, -1);
   if (!DOT_ATOM.test(local) && !QUOTED_LOCAL.test(local)) return null;
   const domain = normalizeDomain(spec.slice(at + 1));
   return domain === null ? null : `${local.toLowerCase()}@${domain}`;
@@ -54,8 +57,19 @@ export function parseAddressList(text: string): string[] | null {
   return addresses;
 }
 
+/**
+ * True for an address whose local part is a plain dot-atom (no quotes).
+ * heel only sends to these: a quoted local part is read differently by
+ * heel, by mail libraries and by providers, so what rules check could
+ * differ from where mail goes.
+ */
+export function isPlainAddress(address: string): boolean {
+  const at = address.lastIndexOf("@");
+  return at > 0 && DOT_ATOM.test(address.slice(0, at));
+}
+
 /** Splits on commas outside quoted strings and angle brackets. */
-function splitAddressList(text: string): string[] {
+export function splitAddressList(text: string): string[] {
   const parts: string[] = [];
   let current = "";
   let quoted = false;

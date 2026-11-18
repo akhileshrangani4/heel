@@ -194,6 +194,10 @@ export class GmailClient {
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       signal,
     });
+    // A 5xx or a timeout doesn't prove nothing happened: the outcome is unknown.
+    if (response.status >= 500 || response.status === 408) {
+      throw new Error(`Gmail answered ${response.status}; the write may have happened`);
+    }
     if (!response.ok) {
       throw new GmailWriteRefused(response.status, await response.json().catch(() => null));
     }

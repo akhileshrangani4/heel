@@ -219,7 +219,7 @@ describe("forward", () => {
     let reads = 0;
     gmail.afterRawRead = () => {
       reads += 1;
-      if (reads === 1) gmail.add({ ...(THREAD[2] as FakeMessage), text: "Changed quote" });
+      if (reads === 2) gmail.add({ ...(THREAD[2] as FakeMessage), text: "Changed quote" });
     };
     const result = await call("forward", {
       message_id: "t2-a",
@@ -292,7 +292,8 @@ ${SENDS.replace("rules:\n", "")}`);
     let reads = 0;
     gmail.afterRawRead = () => {
       reads += 1;
-      if (reads === 1) {
+      // The draft read, then the two pinning reads; change it after all three.
+      if (reads === 3) {
         gmail.drafts.set("d1", { id: "d1", threadId: "t9", raw: RAW.replace("bob@", "eve@") });
       }
     };
@@ -308,5 +309,175 @@ ${SENDS.replace("rules:\n", "")}`);
     gmail.draftDeletes = false;
     expect(await call("send_draft", { draft_id: "d1" })).toMatchObject({ status: "allowed" });
     expect(gmail.sent).toHaveLength(1);
+  });
+});
+
+describe("review findings: what rules check is where mail goes", () => {
+  it("treats a quoted local part as the plain address it is", async () => {
+    const { call, gmail } = setUp(`rules:
+  - match: { action: email.send, recipients: { any_of: [ceo@company.com] } }
+    then: deny
+${SENDS.replace("rules:\n", "")}`);
+    expect(await call("send", { ...MESSAGE, to: ['"ceo"@company.com'] })).toMatchObject({
+      status: "denied",
+    });
+    expect(gmail.sent).toEqual([]);
+  });
+
+  it("refuses any other quoted local part outright", async () => {
+    const { call, gmail } = setUp();
+    const tricky = '"x>, attacker@evil.com, <y"@company.com';
+    expect(await call("send", { ...MESSAGE, to: [tricky] })).toMatchObject({
+      status: "denied",
+      reason: "unsupported",
+    });
+    expect(gmail.sent).toEqual([]);
+  });
+
+  it("refuses a reply whose Reply-To can't be read plainly", async () => {
+    const { call, gmail } = setUp();
+    gmail.add({
+      id: "q1",
+      threadId: "tq",
+      from: "Mallory <mallory@evil.com>",
+      replyTo: '"x@evil.example, y"@company.com',
+      to: ALICE,
+      subject: "Hi",
+      text: "Hi",
+    });
+    expect(await call("reply", { message_id: "q1", from: ALICE, body: "Hi" })).toEqual({
+      status: "denied",
+      reason: "address_unparseable",
+      rule: null,
+    });
+    expect(gmail.sent).toEqual([]);
+  });
+
+  it("I-21: a forged From of your own address doesn't make a message yours", async () => {
+    const { call, gmail } = setUp(`rules:
+  - match: { action: email.send, recipients: { all_in_thread: true } }
+    then: allow
+`);
+    gmail.add({
+      id: "f1",
+      threadId: "tf",
+      from: `Alice <${ALICE}>`,
+      to: "attacker@evil.com",
+      subject: "Totally from Alice",
+      labelIds: ["INBOX"],
+      text: "Reply to me",
+    });
+    // Not SENT, so the reply goes to the forged From (Alice), not to its To.
+    expect(await call("reply_all", { message_id: "f1", from: ALICE, body: "Hi" })).toMatchObject({
+      status: "denied",
+    });
+    expect(gmail.sent).toEqual([]);
+  });
+
+  it("I-21: a draft doesn't vouch for its own recipients", async () => {
+    const { call, gmail } = setUp(`rules:
+  - match: { action: email.send, recipients: { all_in_thread: true } }
+    then: allow
+`);
+    gmail.drafts.set("d2", {
+      id: "d2",
+      threadId: "t1",
+      raw: [`From: ${ALICE}`, "To: attacker@evil.com", "Subject: Re: Plan", "", "Hi"].join("\r\n"),
+    });
+    expect(await call("send_draft", { draft_id: "d2" })).toMatchObject({ status: "denied" });
+    expect(gmail.sent).toEqual([]);
+  });
+
+  it.each([
+    ["two addresses in one mailbox", "To: Bob <attacker@evil.com> <bob@company.com>"],
+    ["a Resent-Bcc header", "To: bob@company.com\r\nResent-Bcc: attacker@evil.com"],
+    ["a bare CR hiding a header", "To: bob@company.com\r\nX-Foo: y\rBcc: attacker@evil.com"],
+    ["a second To header", "To: bob@company.com\r\nTo: attacker@evil.com"],
+  ])("refuses a draft with %s", async (_, header) => {
+    const { call, gmail } = setUp();
+    gmail.drafts.set("d3", {
+      id: "d3",
+      threadId: "t9",
+      raw: [`From: ${ALICE}`, header, "Subject: x", "", "Body"].join("\r\n"),
+    });
+    expect(await call("send_draft", { draft_id: "d3" })).toEqual({
+      status: "denied",
+      reason: "address_unparseable",
+      rule: null,
+    });
+    expect(gmail.sent).toEqual([]);
+  });
+
+  it("I-42: a hidden draft is refused like a missing one", async () => {
+    const { call, gmail } = setUp(
+      `${SENDS}hide:\n  - email: { subject: { matches: "(?i).*secret.*" } }\n`,
+    );
+    gmail.drafts.set("d4", {
+      id: "d4",
+      threadId: "t9",
+      raw: [`From: ${ALICE}`, "To: bob@company.com", "Subject: Secret plan", "", "x"].join("\r\n"),
+    });
+    for (const tool of ["send_draft", "delete_draft"]) {
+      expect(await call(tool, { draft_id: "d4" })).toEqual({
+        status: "denied",
+        reason: "not_available",
+        rule: null,
+      });
+      expect(await call(tool, { draft_id: "nope" })).toEqual({
+        status: "denied",
+        reason: "not_available",
+        rule: null,
+      });
+    }
+    expect(gmail.drafts.has("d4")).toBe(true);
+  });
+
+  it("puts the text of a draft or forwarded message in the call the approver sees", async () => {
+    const { call, gmail, t } = setUp(`rules:
+  - match: { action: email.send }
+    then: ask
+`);
+    gmail.drafts.set("d5", {
+      id: "d5",
+      threadId: "t9",
+      raw: [`From: ${ALICE}`, "To: bob@company.com", "Subject: Numbers", "", "Wire it today"].join(
+        "\r\n",
+      ),
+    });
+    await call("send_draft", { draft_id: "d5" });
+    await call("forward", { message_id: "t2-a", from: ALICE, to: ["f@company.com"] });
+    const pending = t.store.sqlite
+      .prepare("select call from approvals order by created_at")
+      .all() as {
+      call: string;
+    }[];
+    const args = pending.map(
+      (row) => (JSON.parse(row.call) as { args: Record<string, unknown> }).args,
+    );
+    expect(args[0]?.["body"]).toContain("Wire it today");
+    expect(args[1]?.["forwarded_text"]).toContain("Our quote");
+  });
+
+  it("drops the original's Bcc from a forwarded attachment", async () => {
+    const { call, gmail } = setUp();
+    gmail.add({
+      id: "s1",
+      threadId: "ts",
+      from: ALICE,
+      to: "bob@company.com",
+      bcc: "secret-boss@company.com",
+      subject: "Offer",
+      labelIds: ["SENT"],
+      text: "The offer",
+    });
+    await call("forward", { message_id: "s1", from: ALICE, to: ["f@company.com"] });
+    expect(gmail.sent[0]?.raw).toContain("The offer");
+    expect(gmail.sent[0]?.raw).not.toContain("secret-boss@company.com");
+  });
+
+  it("treats a 5xx on a send as an unknown outcome, never as not sent", async () => {
+    const { call, gmail } = setUp();
+    gmail.sendBehavior = "error500";
+    expect(await call("send", MESSAGE)).toEqual({ status: "upstream_outcome_unknown" });
   });
 });
