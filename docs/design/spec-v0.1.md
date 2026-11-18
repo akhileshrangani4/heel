@@ -912,7 +912,7 @@ Part 4
 
 > **Delivery** (locked):
 >
-> - The work lands on a release branch, `release/heel-v0.1`, cut from `main` on Nov 13. Its draft release PR is [akhileshrangani4/heel#1](https://github.com/akhileshrangani4/heel/pull/1).
+> - The work lands on a release branch, `release/heel-v0.1`, cut from `main` on Nov 13. Its draft release PR was [akhileshrangani4/heel#1](https://github.com/akhileshrangani4/heel/pull/1), reopened from the maintainer's account as [#50](https://github.com/akhileshrangani4/heel/pull/50).
 > - Each deliverable, D1 to D14, is its own PR into that branch. A deliverable that turns out too large may be split, but never merged with another.
 > - The release branch merges to `main` once, after D14's incident replays pass on it.
 > - `main` stays README-only until then, so nobody installs a half-built gateway.
