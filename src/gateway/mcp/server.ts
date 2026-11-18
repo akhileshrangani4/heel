@@ -7,15 +7,14 @@ import {
   Server,
   type Tool,
 } from "@modelcontextprotocol/server";
-import type { UpstreamPool } from "../../definitions/mcp/upstream.ts";
 import type { Logger } from "../../log.ts";
 import { approvalStatusForAgent } from "../../store/approvals.ts";
 import type { HeelDb } from "../../store/db.ts";
 import { type AccountRecord, accountsOwnedBy } from "../../store/directory.ts";
 import { errorShape } from "../../util/error-shape.ts";
-import { isMcpProvider } from "../../vault/connect.ts";
 import type { AuthenticatedAgent } from "../agent-tokens.ts";
 import type { Pipeline } from "../pipeline/pipeline.ts";
+import type { Definition, DefinitionRegistry } from "../pipeline/ports.ts";
 import { directName, HEEL_STATUS, HEEL_STATUS_TOOL, listedTool, splitDirectName } from "./names.ts";
 import { toolResult } from "./results.ts";
 
@@ -27,11 +26,10 @@ import { toolResult } from "./results.ts";
  * and scope, which answers two things:
  *
  * - `tools/list`: the tools of the accounts the agent's owner owns, as each
- *   upstream lists them now, plus `heel_status`;
+ *   account's definition lists them (a passthrough asks its server now),
+ *   plus `heel_status`;
  * - `tools/call`: every call goes through the decision pipeline as one
  *   `Call` with `surface: "mcp"`; `heel_status` only reads an approval.
- *
- * Built-in providers list no tools until their definitions land (D9 on).
  */
 
 /** Which tools a request sees: one account's, or every account's prefixed. */
@@ -40,7 +38,7 @@ export type McpScope = { kind: "account"; alias: string } | { kind: "direct" };
 export interface McpSurfaceDeps {
   db: HeelDb;
   pipeline: Pipeline;
-  upstream: UpstreamPool;
+  definitions: DefinitionRegistry;
   log: Logger;
   version: string;
   now?: () => Date;
@@ -55,43 +53,47 @@ export interface McpSurface {
 /** `_meta` key an agent puts its run id under (spec: Run ids). */
 export const RUN_ID_META_KEY = "heel/runId";
 
-/** Of the accounts an agent may use, those that list tools today. */
-function accountsWithTools(db: HeelDb, agent: AuthenticatedAgent): AccountRecord[] {
-  return accountsOwnedBy(db, agent.orgId, agent.ownerId).filter((account) =>
-    isMcpProvider(account.provider),
-  );
-}
+type ListingAccount = { account: AccountRecord; tools: NonNullable<Definition["tools"]> };
 
 export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
   const now = deps.now ?? (() => new Date());
 
-  /** An upstream's tools as this scope lists them, or [] when it can't be reached. */
-  async function upstreamTools(
-    account: AccountRecord,
+  /** Of the accounts an agent may use, those whose definition lists tools. */
+  function accountsWithTools(agent: AuthenticatedAgent): ListingAccount[] {
+    return accountsOwnedBy(deps.db, agent.orgId, agent.ownerId).flatMap((account) => {
+      const tools = deps.definitions.forAccount(account)?.tools;
+      return tools === undefined ? [] : [{ account, tools }];
+    });
+  }
+
+  /** An account's tools as this scope lists them. */
+  async function accountTools(
+    { tools }: ListingAccount,
     rename: (tool: string) => string,
   ): Promise<Tool[]> {
-    const tools = await deps.upstream.listTools(account, AbortSignal.timeout(10_000));
-    return tools
+    const listed = await tools(AbortSignal.timeout(10_000));
+    return listed
       .filter((tool) => tool.name !== HEEL_STATUS)
       .map((tool) => listedTool(tool, rename(tool.name)));
   }
 
   async function listTools(agent: AuthenticatedAgent, scope: McpScope): Promise<Tool[]> {
-    const accounts = accountsWithTools(deps.db, agent);
+    const accounts = accountsWithTools(agent);
     if (scope.kind === "account") {
-      const account = accounts.find((a) => a.alias === scope.alias);
-      const tools = account === undefined ? [] : await upstreamTools(account, (name) => name);
+      const listing = accounts.find(({ account }) => account.alias === scope.alias);
+      const tools = listing === undefined ? [] : await accountTools(listing, (name) => name);
       return [...tools, HEEL_STATUS_TOOL];
     }
     const perAccount = await Promise.all(
-      accounts.map(async (account) => {
+      accounts.map(async (listing) => {
+        const { alias } = listing.account;
         try {
-          return await upstreamTools(account, (name) => directName(account.alias, name));
+          return await accountTools(listing, (name) => directName(alias, name));
         } catch (error) {
           // One unreachable upstream must not hide every other account's tools.
           deps.log.warn(
-            { account: account.alias, error: errorShape(error) },
-            "upstream MCP server unreachable; its tools are left out of the list",
+            { account: alias, error: errorShape(error) },
+            "account's tools couldn't be listed; they are left out",
           );
           return [];
         }

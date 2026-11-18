@@ -22,7 +22,19 @@ export interface OAuthRefreshRequest {
   refreshToken: Secret;
 }
 
-/** Throws (or rejects) when the grant can no longer be refreshed. */
+/**
+ * A refresh that failed for a reason that may pass (the provider's 5xx, a
+ * timeout, the network). The account stays as it is; this call is denied.
+ * Any other throw means the grant is gone and the account must reconnect.
+ */
+export class RefreshUnavailableError extends Error {
+  override readonly name = "RefreshUnavailableError";
+}
+
+/**
+ * Throws `RefreshUnavailableError` when the provider can't be reached, and
+ * anything else when the grant can no longer be refreshed.
+ */
 export type OAuthRefresher = (request: OAuthRefreshRequest) => Promise<OAuthTokens>;
 
 /** Finds the refresher for a provider; undefined when it has none. */

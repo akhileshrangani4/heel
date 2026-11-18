@@ -202,6 +202,23 @@ export const HeelConfigFileSchema = z.strictObject({
     })
     .prefault({}),
   notify: NotifySectionSchema.prefault({}),
+  providers: z
+    .strictObject({
+      /**
+       * The operator's Google OAuth client (a "Web application" client in
+       * Google Cloud), for signing in Gmail accounts. Its redirect URI is
+       * `public_url` + /oauth/google/callback. Without it, Gmail accounts
+       * can be connected but not signed in.
+       */
+      google: z
+        .strictObject({
+          client_id: z.string().min(1),
+          /** HEEL_GOOGLE_CLIENT_SECRET in the environment takes precedence. Relative to $HEEL_HOME. */
+          client_secret_file: z.string().min(1).default("google-client-secret"),
+        })
+        .optional(),
+    })
+    .prefault({}),
 });
 
 export type HeelConfigFile = z.output<typeof HeelConfigFileSchema>;
@@ -249,6 +266,16 @@ export interface SiemConfig {
   backlogAlert: { rows: number; ageMs: number };
 }
 
+export interface GoogleProviderConfig {
+  clientId: string;
+  clientSecretFile: string;
+  /** `public_url` + GOOGLE_CALLBACK_PATH. */
+  redirectUri: URL;
+}
+
+/** Where Google sends people back after signing in a Gmail account. */
+export const GOOGLE_CALLBACK_PATH = "/oauth/google/callback";
+
 /** The resolved configuration every other module receives. */
 export interface HeelConfig {
   home: string;
@@ -266,6 +293,8 @@ export interface HeelConfig {
   oidc: OidcConfig | null;
   audit: { siem: SiemConfig | null };
   notify: NotifyConfig;
+  /** Null when the operator configured no Google client. */
+  providers: { google: GoogleProviderConfig | null };
 }
 
 /** Pure: resolves relative paths against `home` and renames to camelCase. */
@@ -288,6 +317,15 @@ export function resolveConfig(
     oidc: file.oidc ? resolveOidc(file.oidc, new URL(file.public_url), fromHome) : null,
     audit: { siem: file.audit.siem ? resolveSiem(file.audit.siem, fromHome) : null },
     notify: resolveNotify(file.notify, new URL(file.public_url), fromHome),
+    providers: {
+      google: file.providers.google
+        ? {
+            clientId: file.providers.google.client_id,
+            clientSecretFile: fromHome(file.providers.google.client_secret_file),
+            redirectUri: new URL(GOOGLE_CALLBACK_PATH, file.public_url),
+          }
+        : null,
+    },
   };
 }
 

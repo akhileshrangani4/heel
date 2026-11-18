@@ -121,10 +121,11 @@ export async function mcpHarness(options: {
   }
   const pool = new UpstreamPool({ vault, log: logger, fetch: upstream.fetch });
   const notified: string[] = [];
+  const definitions = definitionRegistry(pool);
   const pipeline = createPipeline({
     db: t.db,
     rules: { set: compileRules({ owner: options.owner }) },
-    definitions: definitionRegistry(pool),
+    definitions,
     pauses: new SqlitePauseStore(),
     approvals: new SqliteApprovalStore(),
     log: logger,
@@ -135,7 +136,7 @@ export async function mcpHarness(options: {
   const mcp = createMcpSurface({
     db: t.db,
     pipeline,
-    upstream: pool,
+    definitions,
     log: logger,
     version: "test",
   });

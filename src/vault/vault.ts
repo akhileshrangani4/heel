@@ -6,7 +6,12 @@ import { newId } from "../store/ids.ts";
 import { accounts, credentials, vaultKeys } from "../store/schema.ts";
 import { KEY_BYTES, open, SealError, seal } from "./crypto.ts";
 import type { MasterKey } from "./key.ts";
-import { noRefreshers, type OAuthTokens, type RefresherLookup } from "./refresh.ts";
+import {
+  noRefreshers,
+  type OAuthTokens,
+  type RefresherLookup,
+  RefreshUnavailableError,
+} from "./refresh.ts";
 import { Secret } from "./secret.ts";
 
 /** The master key version new credentials are sealed with. Rotation is not in v0.1. */
@@ -59,7 +64,9 @@ export type VaultErrorCode =
   /** The stored credential failed to open or parse. */
   | "unreadable"
   /** Refresh failed or the grant was revoked; the owner must reconnect. */
-  | "reconnect_required";
+  | "reconnect_required"
+  /** The provider couldn't be reached to refresh; the account is unchanged. */
+  | "refresh_unavailable";
 
 /** Messages name the account, never a credential value. */
 export class VaultError extends Error {
@@ -286,6 +293,13 @@ export class Vault {
         refreshToken: new Secret(previous.refreshToken),
       });
     } catch (error) {
+      if (error instanceof RefreshUnavailableError) {
+        throw new VaultError(
+          "refresh_unavailable",
+          `refreshing account ${accountId} failed for now; it stays connected`,
+          { cause: error },
+        );
+      }
       this.#markReconnectRequired(accountId);
       throw new VaultError("reconnect_required", `refreshing account ${accountId} failed`, {
         cause: error,

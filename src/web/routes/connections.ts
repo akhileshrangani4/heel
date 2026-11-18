@@ -1,4 +1,11 @@
 import { Hono } from "hono";
+import { GOOGLE_CALLBACK_PATH } from "../../config/schema.ts";
+import { GoogleSignInError } from "../../definitions/google/oauth.ts";
+import {
+  finishGoogleSignIn,
+  type GoogleSignInDeps,
+  startGoogleSignIn,
+} from "../../definitions/google/sign-in.ts";
 import { upstreamSettings } from "../../definitions/mcp/settings.ts";
 import {
   finishUpstreamSignIn,
@@ -29,6 +36,8 @@ import { type ConnectionsOutcome, connectionsPage } from "../ui/connections.ts";
  * - `GET /oauth/upstream/callback` finishes it: heel exchanges the code and
  *   keeps the tokens in its vault. Only the person who started a sign-in
  *   can finish it, and each one works once.
+ * - Gmail accounts sign in to Google the same way (D9a-1), through the
+ *   operator's own Google client, and come back to `/oauth/google/callback`.
  */
 
 function isOAuthUpstream(settings: Record<string, unknown>): boolean {
@@ -52,6 +61,18 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
   const app = new Hono<SignedInEnv>();
   const signedIn = requireSession(deps);
   const oauth = deps.upstreamOAuth;
+  const google: GoogleSignInDeps | null =
+    oauth === null || deps.googleClient === null
+      ? null
+      : {
+          db: deps.db,
+          vault: oauth.vault,
+          client: deps.googleClient,
+          signIns: oauth.signIns,
+          fetch: oauth.fetch ?? fetch,
+          now: deps.now,
+        };
+  const signsInToGoogle = (provider: string) => google !== null && provider === "gmail";
 
   app.get("/connections", signedIn, (c) => {
     const session = c.get("session");
@@ -59,7 +80,8 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       alias: account.alias,
       provider: account.provider,
       status: account.status,
-      signsIn: oauth !== null && isOAuthUpstream(account.settings),
+      signsIn:
+        signsInToGoogle(account.provider) || (oauth !== null && isOAuthUpstream(account.settings)),
     }));
     return renderPage(c, {
       title: "Connections",
@@ -82,6 +104,9 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     const account = accountsOwnedBy(deps.db, session.orgId, session.userId).find(
       (a) => a.alias === alias,
     );
+    if (account !== undefined && google !== null && signsInToGoogle(account.provider)) {
+      return c.redirect(startGoogleSignIn(google, account, session.userId).toString(), 303);
+    }
     if (account === undefined || !isOAuthUpstream(account.settings)) {
       return c.text("Refused: no such account that signs in.", 404);
     }
@@ -138,6 +163,34 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       );
     }
     deps.log.info({ account: alias, by: session.userId }, "signed in to an upstream MCP server");
+    return c.redirect(back({ account: alias, connected: "1" }), 303);
+  });
+
+  if (google === null) return app;
+
+  app.get(GOOGLE_CALLBACK_PATH, signedIn, async (c) => {
+    const session = c.get("session");
+    const params = new URL(c.req.url).searchParams;
+    const pending = oauth.signIns.take(params.get("state") ?? "", deps.now());
+    if (pending === null || pending.userId !== session.userId) {
+      return c.redirect(
+        back({ failed: "That sign-in expired or wasn't yours. Start again." }),
+        303,
+      );
+    }
+    const account = accountsOwnedBy(deps.db, session.orgId, session.userId).find(
+      (a) => a.id === pending.accountId,
+    );
+    const alias = account?.alias ?? "";
+    try {
+      const { mailbox } = await finishGoogleSignIn(google, pending, params);
+      deps.log.info({ account: alias, mailbox, by: session.userId }, "signed in to Google");
+    } catch (error) {
+      deps.log.warn({ account: alias, error: errorShape(error) }, "Google sign-in failed");
+      const message =
+        error instanceof GoogleSignInError ? error.message : "Google didn't accept the sign-in.";
+      return c.redirect(back({ account: alias, failed: message }), 303);
+    }
     return c.redirect(back({ account: alias, connected: "1" }), 303);
   });
 

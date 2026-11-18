@@ -1,3 +1,4 @@
+import type { Tool } from "@modelcontextprotocol/server";
 import type { AdapterDenyReason } from "../../core/adapters.ts";
 import type { Call, PauseScope, RuleRef, Surface } from "../../core/call.ts";
 import type { Hiding } from "../../core/hide.ts";
@@ -98,6 +99,12 @@ export interface Definition {
    * account, provider) must come back unchanged. A failed provider read is
    * `{ ok: false, reason: "lookup_unavailable" }`, never a guess.
    */
+  /**
+   * The tools an agent sees for this account, under their own names. A
+   * built-in definition lists a fixed table; a passthrough lists what its
+   * server lists now. Absent on surfaces with no tool list (HTTP, CLI).
+   */
+  tools?(signal: AbortSignal): Promise<Tool[]>;
   normalize(base: Call, ctx: NormalizeContext): Promise<Normalized>;
   /**
    * Reads the provider state a rule's check needs, with heel's own

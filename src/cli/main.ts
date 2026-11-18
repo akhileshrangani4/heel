@@ -34,6 +34,9 @@ export const USAGE = `usage:
   heel agent revoke <name>                revoke an agent's token
   heel agent list
   heel connect <provider> --as <alias> [--owner <user>] [--credential-stdin]
+  heel connect gmail --as <alias> [--owner <user>]
+                                          add a Gmail account; its owner signs in
+                                          with Google from the Connections page
   heel connect mcp --as <alias> --url <upstream> [--credential-stdin | --oauth]
                                           put a remote MCP server behind heel; a
                                           token on stdin is sent to it as a bearer,

@@ -1,6 +1,7 @@
 import type { FetchLike } from "@modelcontextprotocol/client";
 import type { Context, MiddlewareHandler } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
+import type { GoogleClient } from "../definitions/google/oauth.ts";
 import type { UpstreamSignIns } from "../definitions/mcp/upstream-oauth.ts";
 import type { RulesSource } from "../gateway/pipeline/pipeline.ts";
 import type { PauseStore } from "../gateway/pipeline/ports.ts";
@@ -45,6 +46,12 @@ export interface HumanPlaneDeps {
    * is closed, since the tokens would have nowhere to go.
    */
   upstreamOAuth: { signIns: UpstreamSignIns; vault: Vault; fetch?: FetchLike } | null;
+  /**
+   * The operator's Google client, for signing in Gmail accounts (D9a-1).
+   * Null when heel.yaml has no `providers.google`. Sign-ins share
+   * `upstreamOAuth`'s state store, vault and fetch.
+   */
+  googleClient: GoogleClient | null;
   now: () => Date;
 }
 
