@@ -8,6 +8,7 @@ import { type HttpDeps, httpDefinition } from "./http/definition.ts";
 import { mcpPassthrough } from "./mcp/passthrough.ts";
 import type { UpstreamPool } from "./mcp/upstream.ts";
 import { type OutlookDeps, outlookDefinition } from "./outlook/definition.ts";
+import { type SlackDeps, slackDefinition } from "./slack/definition.ts";
 
 /**
  * Which definition serves an account: an MCP passthrough for `mcp:<alias>`,
@@ -22,6 +23,8 @@ export function definitionRegistry(deps: {
   outlook?: OutlookDeps | null;
   /** The same for Google Calendar. */
   googleCalendar?: GoogleCalendarDeps | null;
+  /** Slack (D12b). */
+  slack?: SlackDeps | null;
   /** HTTP accounts (D7a). */
   http?: HttpDeps | null;
   /** GitHub (D11). */
@@ -46,6 +49,9 @@ export function definitionRegistry(deps: {
       }
       if (account.provider === "github" && deps.github != null) {
         return githubDefinition(account, deps.github);
+      }
+      if (account.provider === "slack" && deps.slack != null) {
+        return slackDefinition(account, deps.slack);
       }
       if (account.provider === "outlook" && deps.outlook != null) {
         return outlookDefinition(account, deps.outlook);

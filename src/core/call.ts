@@ -20,6 +20,28 @@ export interface CliFields {
   argv: string[];
 }
 
+/** The provider fields rules can name; see `Call.fields`. */
+export const PROVIDER_FIELDS = [
+  /** Slack: the channel id. */
+  "channel",
+  /** Slack: the channel is shared with another organization (Slack Connect). */
+  "external",
+  /** Linear: the team key. */
+  "team",
+  /** Linear: the project id. */
+  "project",
+  /** Notion: the parent page or database id. */
+  "parent",
+  /** Stripe: the amount in the currency's smallest unit. */
+  "amount",
+  /** Stripe: the three-letter currency code, lower-case. */
+  "currency",
+  /** Stripe: the customer id. */
+  "customer",
+] as const;
+export type ProviderField = (typeof PROVIDER_FIELDS)[number];
+export type ProviderFields = Partial<Record<ProviderField, string | number | boolean>>;
+
 /** What rules see of an HTTP proxy request (spec: HTTP proxy, "What rules see"). */
 export interface HttpFields {
   method: string;
@@ -71,6 +93,12 @@ export interface Call {
   calendar?: string;
   cli?: CliFields;
   http?: HttpFields;
+  /**
+   * What a built-in definition derives about the resource a call touches,
+   * for rules to name (D12b; spec: "Calendar, Slack, Linear, Notion,
+   * Stripe"). Only built-in definitions set these (I-20).
+   */
+  fields?: ProviderFields;
   /** The tool creates something that outlives revocation (I-70). */
   persistence?: boolean;
 }
