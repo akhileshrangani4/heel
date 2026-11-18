@@ -1,5 +1,5 @@
 /**
- * Builds the site's docs pages from the repo, so the docs are written once
+ * Builds the site's docs pages from the repo (this app lives in docs/site/), so the docs are written once
  * (runs before `next dev` and `next build`):
  *
  * - docs/*.md become pages under /docs. design/ and research/ stay in the repo.
@@ -15,7 +15,7 @@ import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const site = join(dirname(fileURLToPath(import.meta.url)), "..");
-const repo = join(site, "..");
+const repo = join(site, "..", "..");
 const out = join(site, "content", "docs");
 const GITHUB = "https://github.com/akhileshrangani4/heel/blob/main/";
 

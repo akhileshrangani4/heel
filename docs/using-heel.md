@@ -15,7 +15,9 @@ heel serve
 
 In a second terminal:
 
-1. **Register your passkey.** `heel user enroll owner` prints a one-time link. Open it on your phone. That phone now approves requests. Add the approval page to your home screen and allow notifications, so requests reach you there.
+1. **Register your passkey.** `heel user enroll owner` prints a one-time link; opening it registers a passkey on that device.
+   - **On `localhost`,** that's this computer: you approve here, with Touch ID, say.
+   - **To approve from your phone,** give the approval page an HTTPS address first, and set it as `public_url` before you enroll, because a passkey is tied to the address. Tailscale (`tailscale serve --bg 7301`), a Cloudflare tunnel or a server with TLS all work. Only port 7301 needs to be reachable. Then open the enrollment link on your phone, add the page to your home screen, and allow notifications. [Approve from your phone](../README.md#approve-from-your-phone) has the steps.
 2. **Connect the accounts your agent should use.** Each one gets an alias, and the agent only ever sees the alias.
    ```sh
    gh auth token | heel connect github --as github --credential-stdin
@@ -76,7 +78,7 @@ The agent never sees why a rule matched, and it can't answer an approval. Approv
 
 ## 4. When it needs you
 
-1. **Your phone buzzes.** The notification says which agent wants to do what, and links to heel. Replying to it approves nothing.
+1. **You get a notification** on your phone (web push), or by email or Slack, if heel has an HTTPS address ([setting one up](../README.md#approve-from-your-phone)). It says which agent wants to do what, and links to heel. Replying to it approves nothing. Without notifications, waiting requests are listed on the approval page.
 2. **You open the request.** The page shows the account, the tool, the rule that asked, the counts, and the **full arguments**: every recipient and the whole body, exactly what will run. If [hints](approvals.md#hints) are on, they appear under the call ("asks someone for money", "looks routine for this agent").
 3. **You decide, with your passkey:**
    - **Approve once:** this exact call runs the next time the agent sends it, once.

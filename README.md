@@ -36,13 +36,13 @@ heel serve                                  # agents on :7300, approvals on :730
 In a second terminal, with the same `HEEL_HOME`:
 
 ```sh
-heel user enroll owner                      # open the link on your phone, register a passkey
+heel user enroll owner                      # open the link and register a passkey
 gh auth token | heel connect github --as github --credential-stdin
 heel connect gmail --as gmail-work          # then sign in from the Connections page
 heel agent add my-agent                     # prints the agent's token (once) and MCP URL
 ```
 
-- **Your phone approves requests:** open the enrollment link on it, add the approval page to your home screen, and allow notifications.
+- **Approving:** on `localhost`, you approve on this computer, with a passkey (Touch ID, say). To approve from your phone, give heel an HTTPS address first: see [Approve from your phone](#approve-from-your-phone).
 - **Every account gets an alias** (`gmail-work`, `github`), and the agent only sees the alias. Any MCP server, any HTTP API with an OpenAPI file, and any CLI can go behind heel. `heel --help` lists the forms.
 - **The agent's heel token is its only credential.**
 
@@ -139,7 +139,7 @@ The agent can't approve anything itself.
 
 ## When it needs you
 
-1. **Your phone buzzes.** The notification links to heel. Replying to it approves nothing.
+1. **You get a notification** on your phone (once heel has an HTTPS address: see below), or by email or Slack. It links to heel, and replying to it approves nothing. Waiting requests are also listed on the approval page.
 2. **The request page shows exactly what will run:** the account, the rule that asked, the counts, and the full arguments (every recipient and the whole body).
 3. **You decide with your passkey:**
    - **Approve once:** the call runs the next time the agent sends it.
@@ -148,6 +148,23 @@ The agent can't approve anything itself.
 4. **The agent re-sends,** and the call runs once, after the rules check it again. A request nobody answers expires after 24 hours.
 
 To stop an agent, tap **Pause** on the approval page or run `heel pause --agent my-agent`. You can pause one agent, one account or everything. Every call in scope stops, even one already approved, and resuming needs your passkey.
+
+## Approve from your phone
+
+Your phone has to reach heel's approval page over HTTPS, and heel has to know that address before you enroll, because a passkey is tied to the address it was made on. Only the approval page (port 7301) needs to be reachable. Keep the agent port (7300) private.
+
+1. **Give the approval page an HTTPS address.** Any HTTPS front works:
+   - **Tailscale,** private to your own devices: `tailscale serve --bg 7301` gives it `https://<machine>.<tailnet>.ts.net`.
+   - **Cloudflare Tunnel:** `cloudflared tunnel --url http://127.0.0.1:7301` gives a public `trycloudflare.com` address to try it out (a new one each run). A named tunnel on your own domain keeps it fixed.
+   - **A server:** run the OCI image behind Caddy or nginx with TLS.
+2. **Tell heel the address, then restart it.** In `$HEEL_HOME/heel.yaml`:
+   ```yaml
+   public_url: https://heel.example.com
+   ```
+3. **Enroll from your phone.** `heel user enroll owner` now prints a link at that address. Open it on your phone and register a passkey.
+4. **Turn on notifications.** Add the approval page to your home screen (an iPhone only shows web notifications for a page added this way), then allow notifications. Email and Slack can notify too: see `notify` in [Running heel](docs/running.md#configuration).
+
+If you change `public_url` later, enroll again.
 
 ## Hide what it reads
 
