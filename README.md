@@ -168,7 +168,7 @@ hide:
 | `from`, `to`, `subject`, `labels` | Plain checks, like in rules. |
 | `looks_like` | The one place a model decides on a live call, and it can only hide. Patterns catch common reset links and codes, and a classifier inside heel catches the rest. When it's unsure or can't run, the message is hidden. |
 | Where it works | Only where heel knows the response shape: built-in definitions and OpenAPI-described APIs. For an unknown MCP server or CLI, heel can allow or deny the call but can't remove items. |
-| Known gap | A hidden message quoted inside a reply is only hidden if the reply matches too. |
+| Known gaps | A hidden message quoted inside a reply is only hidden if the reply matches too. The placeholder's count tells the agent that something was hidden, and how much. |
 
 ### Approvals and pause
 

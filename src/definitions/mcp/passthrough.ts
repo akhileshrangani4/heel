@@ -1,7 +1,6 @@
 import type { Call } from "../../core/call.ts";
-import type { Definition, DefinitionRegistry, Normalized } from "../../gateway/pipeline/ports.ts";
+import type { Definition, Normalized } from "../../gateway/pipeline/ports.ts";
 import type { AccountRecord } from "../../store/directory.ts";
-import { isMcpProvider } from "../../vault/connect.ts";
 import type { UpstreamPool } from "./upstream.ts";
 
 /**
@@ -66,13 +65,5 @@ export function mcpPassthrough(account: AccountRecord, upstream: UpstreamPool): 
       const token = await upstream.credential(account);
       return token === null ? result : scrubValue(result, token.reveal());
     },
-  };
-}
-
-/** Definitions for every provider heel can serve today: MCP passthroughs. Built-ins arrive with D9. */
-export function definitionRegistry(upstream: UpstreamPool): DefinitionRegistry {
-  return {
-    forAccount: (account) =>
-      isMcpProvider(account.provider) ? mcpPassthrough(account, upstream) : null,
   };
 }
