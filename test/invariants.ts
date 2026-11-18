@@ -43,6 +43,12 @@ export const REQUIRED_INVARIANTS: Readonly<Record<string, string>> = {
   // D9a-3: Gmail removes, labels and filters
   "I-70":
     "A built-in tool that outlives revoking heel (a forwarding filter) is denied unless a rule names it; a broad allow doesn't.",
+  // D6a: code mode
+  "I-27":
+    "Each call in a code-mode script is checked and counted on its own, so a loop meets the same limits as a batch.",
+  "I-59":
+    "An ask stops a code-mode script for good; try/except can't swallow it and nothing after it runs.",
+  "I-62": "A pause stops a code-mode script at its next heel call.",
   // D10b: hide path
   "I-43":
     "`looks_like` can only add items to the hidden set; no verdict allows a call or un-hides an item.",
