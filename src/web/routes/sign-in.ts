@@ -15,7 +15,7 @@ import {
 import { anyPasskeyEnrolled } from "../passkeys.ts";
 import { endSession, readSession, startSession } from "../sessions.ts";
 import { clientScript } from "../ui/client.ts";
-import { passkeySignIn, type SignInNotice } from "../ui/sign-in.ts";
+import { oidcSignIn, passkeySignIn, type SignInNotice } from "../ui/sign-in.ts";
 
 /**
  * Passkey sign-in (single-user installs, and every decision on team
@@ -53,6 +53,20 @@ export function signInRoutes(deps: HumanPlaneDeps): Hono {
     const cookie = readSessionCookie(c, deps);
     if (cookie !== undefined && readSession(deps.db, cookie, now) !== null) {
       return c.redirect(safeNext(c.req.query("next")), 303);
+    }
+    // A team install signs people in through the IdP.
+    if (deps.oidc != null) {
+      const next = safeNext(c.req.query("next"));
+      return renderPage(c, {
+        title: "Sign in",
+        viewer: null,
+        body: oidcSignIn({
+          providerName: deps.oidc.name,
+          startHref: `/auth/oidc?next=${encodeURIComponent(next)}`,
+          notice: noticeFrom(c.req.query()),
+        }),
+        script: clientScript(null),
+      });
     }
     const challenge = issueChallenge(deps.db, {
       orgId: deps.orgId,
