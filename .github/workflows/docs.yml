@@ -33,10 +33,10 @@ jobs:
     name: deploy useheel.dev
     runs-on: ubuntu-24.04
     env:
-      # The Vercel project (Root Directory: docs/site) is identified by these;
-      # the token is a team-scoped Vercel token.
-      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      # The Vercel team and the `useheel` project (Root Directory: docs/site).
+      # IDs, not secrets; the token (scoped to this team) is the only secret.
+      VERCEL_ORG_ID: team_lu5Ex29SgeATYe27KLSjNaO4
+      VERCEL_PROJECT_ID: prj_mVfWhNJXcmxI36G3cPAoNb9OzEmo
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       REF: ${{ inputs.ref }}
     steps:
