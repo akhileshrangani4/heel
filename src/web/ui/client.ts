@@ -108,6 +108,39 @@ export function clientScript(csrfToken: string | null): string {
     deny: () => ({ intent: "deny" }),
   };
 
+  // ── notifications on this device (not a ceremony: it can't decide anything) ──
+  const pushButton = document.getElementById("heel-push");
+  if (pushButton) {
+    const pushStatus = document.getElementById("heel-push-status");
+    const sayPush = (text) => { if (pushStatus) pushStatus.textContent = text; };
+    const supported = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+    if (!supported) {
+      pushButton.disabled = true;
+      sayPush("This browser can't receive notifications. On an iPhone, add heel to your Home Screen and open it from there.");
+    }
+    pushButton.addEventListener("click", async () => {
+      try {
+        sayPush("Asking this browser for permission…");
+        if ((await Notification.requestPermission()) !== "granted") {
+          sayPush("Notifications are blocked for this site. Allow them in the browser's settings.");
+          return;
+        }
+        const registration = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+        await navigator.serviceWorker.ready;
+        const subscription =
+          (await registration.pushManager.getSubscription()) ||
+          (await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: toBytes(pushButton.dataset.key),
+          }));
+        await post("/push/subscribe", subscription.toJSON());
+        sayPush("Notifications are on for this device.");
+      } catch (error) {
+        sayPush("Couldn't turn on notifications: " + String((error && error.message) || error));
+      }
+    });
+  }
+
   window.heelCeremony = {
     signIn: ({ binding, status }) =>
       run({

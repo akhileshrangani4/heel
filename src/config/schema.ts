@@ -85,6 +85,45 @@ const OidcSectionSchema = z.strictObject({
  * The optional SIEM sink (spec: Teams, "Audit"): batched HTTPS POSTs of JSON
  * Lines, retried with backoff, with a backlog alert when it falls behind.
  */
+/**
+ * Where approval notifications go (spec: Notifications). Web push is always
+ * available once someone turns it on from the approval page; email and Slack
+ * are on when their section is present. Secrets live in files, with an
+ * environment variable taking precedence, like the SIEM token.
+ */
+const NotifySectionSchema = z.strictObject({
+  web_push: z
+    .strictObject({
+      /** The VAPID key pair, created on first boot. Relative to $HEEL_HOME. */
+      key_file: z.string().min(1).default("vapid.json"),
+      /** A `mailto:` or `https:` contact push services can reach; defaults to the public URL. */
+      subject: z
+        .string()
+        .regex(/^(mailto:|https:\/\/)/, "expected a mailto: or https:// contact")
+        .optional(),
+    })
+    .prefault({}),
+  email: z
+    .strictObject({
+      host: z.string().min(1),
+      port: z.int().min(1).max(65_535).default(587),
+      /** true for implicit TLS (usually port 465); otherwise STARTTLS is required. */
+      tls: z.boolean().default(false),
+      username: z.string().min(1).optional(),
+      /** HEEL_SMTP_PASSWORD in the environment takes precedence. Relative to $HEEL_HOME. */
+      password_file: z.string().min(1).optional(),
+      /** The From header, e.g. "heel <heel@example.com>". */
+      from: z.string().min(3),
+    })
+    .optional(),
+  slack: z
+    .strictObject({
+      /** A bot token with chat:write and users:read.email. HEEL_SLACK_TOKEN takes precedence. */
+      token_file: z.string().min(1),
+    })
+    .optional(),
+});
+
 const SiemSectionSchema = z.strictObject({
   url: secureUrl,
   auth: z
@@ -155,6 +194,7 @@ export const HeelConfigFileSchema = z.strictObject({
       siem: SiemSectionSchema.optional(),
     })
     .prefault({}),
+  notify: NotifySectionSchema.prefault({}),
 });
 
 export type HeelConfigFile = z.output<typeof HeelConfigFileSchema>;
@@ -180,6 +220,19 @@ export interface OidcConfig {
   roles: RoleGroups;
 }
 
+export interface NotifyConfig {
+  webPush: { keyFile: string; subject: string };
+  email: {
+    host: string;
+    port: number;
+    tls: boolean;
+    username: string | null;
+    passwordFile: string | null;
+    from: string;
+  } | null;
+  slack: { tokenFile: string } | null;
+}
+
 export interface SiemConfig {
   url: URL;
   auth: { header: string; scheme: string; tokenFile: string } | null;
@@ -203,6 +256,7 @@ export interface HeelConfig {
   /** Null on a single-user, passkey-only install. */
   oidc: OidcConfig | null;
   audit: { siem: SiemConfig | null };
+  notify: NotifyConfig;
 }
 
 /** Pure: resolves relative paths against `home` and renames to camelCase. */
@@ -223,6 +277,32 @@ export function resolveConfig(
     log: { level: file.log.level },
     oidc: file.oidc ? resolveOidc(file.oidc, new URL(file.public_url), fromHome) : null,
     audit: { siem: file.audit.siem ? resolveSiem(file.audit.siem, fromHome) : null },
+    notify: resolveNotify(file.notify, new URL(file.public_url), fromHome),
+  };
+}
+
+function resolveNotify(
+  notify: HeelConfigFile["notify"],
+  publicUrl: URL,
+  fromHome: (path: string) => string,
+): NotifyConfig {
+  const { email, slack } = notify;
+  return {
+    webPush: {
+      keyFile: fromHome(notify.web_push.key_file),
+      subject: notify.web_push.subject ?? publicUrl.origin,
+    },
+    email: email
+      ? {
+          host: email.host,
+          port: email.port,
+          tls: email.tls,
+          username: email.username ?? null,
+          passwordFile: email.password_file ? fromHome(email.password_file) : null,
+          from: email.from,
+        }
+      : null,
+    slack: slack ? { tokenFile: fromHome(slack.token_file) } : null,
   };
 }
 

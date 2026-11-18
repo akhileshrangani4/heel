@@ -12,6 +12,7 @@ import {
   pendingId,
   SEND,
 } from "../../test/helpers/approvals.ts";
+import { TEST_VAPID_PUBLIC_KEY } from "../../test/helpers/human-plane.ts";
 import { captureLogger } from "../../test/helpers/log.ts";
 import { oneRule } from "../../test/helpers/pipeline.ts";
 
@@ -52,6 +53,7 @@ async function startHumanPlane(): Promise<Running> {
     approvals: h.store,
     pauses: h.pauseStore,
     rules: h.rules,
+    vapidPublicKey: TEST_VAPID_PUBLIC_KEY,
     now: () => h.clock.now,
   });
   server.on("request", getRequestListener(app.fetch));

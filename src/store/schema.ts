@@ -51,6 +51,8 @@ export const users = sqliteTable(
     /** The IdP subject when OIDC is configured (D13); null on single-user installs. */
     oidcSubject: text("oidc_subject"),
     role: text("role", { enum: USER_ROLES }).notNull(),
+    /** Where email and Slack notifications reach this person; null until set. */
+    email: text("email"),
     createdAt: createdAt(),
     disabledAt: integer("disabled_at", { mode: "timestamp_ms" }),
   },
@@ -427,6 +429,55 @@ export const pushSubscriptions = sqliteTable(
     createdAt: createdAt(),
   },
   (t) => [index("push_subscriptions_user").on(t.userId)],
+);
+
+export const NOTIFY_CHANNELS = ["web_push", "email", "slack"] as const;
+export type NotifyChannel = (typeof NOTIFY_CHANNELS)[number];
+
+export const DELIVERY_STATUSES = ["pending", "sent", "failed", "dropped"] as const;
+export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
+
+/**
+ * The notification outbox (spec: Fail-closed, "The notification channel
+ * fails"). A new approval request gets one row per approver and channel;
+ * the notifier sends due rows and retries with backoff. A failed delivery
+ * never changes the request: it stays pending and listed on the page.
+ *
+ * - `sent`: delivered to the channel.
+ * - `failed`: gave up after the last retry.
+ * - `dropped`: no longer worth sending (the request was decided or expired,
+ *   or the push subscription is gone).
+ */
+export const notificationDeliveries = sqliteTable(
+  "notification_deliveries",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    approvalId: text("approval_id")
+      .notNull()
+      .references(() => approvals.id),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    channel: text("channel", { enum: NOTIFY_CHANNELS }).notNull(),
+    /** The push endpoint or email address. */
+    target: text("target").notNull(),
+    status: text("status", { enum: DELIVERY_STATUSES }).notNull(),
+    attempts: integer("attempts").notNull().default(0),
+    nextAttemptAt: integer("next_attempt_at", { mode: "timestamp_ms" }).notNull(),
+    /** Why the last attempt failed: a short code or status, never message content. */
+    lastError: text("last_error"),
+    createdAt: createdAt(),
+    sentAt: integer("sent_at", { mode: "timestamp_ms" }),
+  },
+  (t) => [
+    uniqueIndex("notification_deliveries_once").on(t.approvalId, t.userId, t.channel, t.target),
+    index("notification_deliveries_due").on(t.status, t.nextAttemptAt),
+    check("notification_deliveries_channel", sql`"channel" IN (${sqlList(NOTIFY_CHANNELS)})`),
+    check("notification_deliveries_status", sql`"status" IN (${sqlList(DELIVERY_STATUSES)})`),
+  ],
 );
 
 // ── audit ───────────────────────────────────────────────────────────────────

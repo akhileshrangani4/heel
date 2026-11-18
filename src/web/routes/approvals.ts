@@ -24,6 +24,7 @@ import { type ApprovalRequestView, approvalRequest } from "../ui/approval-reques
 import { clientScript } from "../ui/client.ts";
 import { html } from "../ui/html.ts";
 import { type PendingRow, pendingList } from "../ui/pending-list.ts";
+import { pushControl } from "../ui/push-control.ts";
 
 /**
  * The approval page (spec: The approval page). A person sees every request
@@ -138,7 +139,9 @@ export function approvalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       title: "Approvals",
       viewer: viewerOf(session),
       current: "approvals",
-      body: pendingList({ now, load: { ok: true, rows } }),
+      body: html`${pendingList({ now, load: { ok: true, rows } })}
+      ${pushControl({ vapidPublicKey: deps.vapidPublicKey })}`,
+      script: clientScript(session.csrfToken),
     });
   });
 

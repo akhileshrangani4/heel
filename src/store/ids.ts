@@ -11,6 +11,7 @@ export const ID_PREFIXES = {
   standingApproval: "sta",
   challenge: "chl",
   enrollment: "enr",
+  delivery: "dlv",
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;
