@@ -1,0 +1,76 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+
+/* Neutral, with heel's amber (#F2A33A, assets/logo) as the one accent. */
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  --color-fd-background: #f5f5f4;
+  --color-fd-foreground: #171717;
+  --color-fd-muted: #ededec;
+  --color-fd-muted-foreground: #6b6b6b;
+  --color-fd-popover: #fafaf9;
+  --color-fd-popover-foreground: #171717;
+  --color-fd-card: #efefee;
+  --color-fd-card-foreground: #171717;
+  --color-fd-border: rgb(0 0 0 / 9%);
+  --color-fd-primary: oklch(55% 0.13 60);
+  --color-fd-primary-foreground: #fafaf9;
+  --color-fd-secondary: #ebebea;
+  --color-fd-secondary-foreground: #171717;
+  --color-fd-accent: rgb(0 0 0 / 5%);
+  --color-fd-accent-foreground: #171717;
+  --color-fd-ring: oklch(70% 0.12 70);
+}
+
+.dark {
+  --color-fd-background: #111111;
+  --color-fd-foreground: #ededed;
+  --color-fd-muted: #1a1a1a;
+  --color-fd-muted-foreground: #a3a3a3;
+  --color-fd-popover: #161616;
+  --color-fd-popover-foreground: #ededed;
+  --color-fd-card: #171717;
+  --color-fd-card-foreground: #ededed;
+  --color-fd-border: rgb(255 255 255 / 9%);
+  --color-fd-primary: oklch(80% 0.14 72);
+  --color-fd-primary-foreground: #111111;
+  --color-fd-secondary: #1c1c1c;
+  --color-fd-secondary-foreground: #ededed;
+  --color-fd-accent: rgb(255 255 255 / 6%);
+  --color-fd-accent-foreground: #ededed;
+  --color-fd-ring: oklch(70% 0.12 70);
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+
+html > body[data-scroll-locked] {
+  margin-right: 0px !important;
+  --removed-body-scroll-bar-size: 0px !important;
+}
+
+/* The home page's entrance: one staggered reveal, nothing after. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.rise {
+  animation: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise {
+    animation: none;
+  }
+}
