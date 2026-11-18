@@ -30,10 +30,16 @@ export async function codemodeWorkerMain(): Promise<void> {
         functions: new Map(m.functions),
         skipped: [],
       }));
+      // Output past the script's limit is dropped here, so the sandbox's own ceiling isn't reached.
+      let sent = 0;
+      const max = message.limits.maxStdout;
       report(
-        await worker.start(message.code, modules, message.limits, (text) =>
-          send({ type: "stdout", text }),
-        ),
+        await worker.start(message.code, modules, message.limits, (text) => {
+          if (sent >= max) return;
+          const part = text.slice(0, max - sent);
+          sent += part.length;
+          send({ type: "stdout", text: part });
+        }),
       );
       return;
     }

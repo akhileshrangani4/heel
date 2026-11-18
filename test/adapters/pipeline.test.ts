@@ -314,6 +314,7 @@ describe("response adapters", () => {
       reason: "response_withheld",
       rule: null,
       adapter: "dlp",
+      executed: true,
     });
     expect(h.provider.executed).toHaveLength(1);
     expect(h.counts()).toHaveLength(1);
