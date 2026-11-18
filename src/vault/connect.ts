@@ -1,5 +1,7 @@
+import { realpathSync } from "node:fs";
 import { and, eq } from "drizzle-orm";
 import { isLoopbackUrl } from "../config/schema.ts";
+import { GH_EGRESS } from "../definitions/cli/settings.ts";
 import { OpenApiError, type Operation, parseOpenApi } from "../definitions/http/openapi.ts";
 import { isEnvName } from "../definitions/mcp/settings.ts";
 import { EgressConfigError, parseEgressAllow } from "../runner/egress.ts";
@@ -122,6 +124,94 @@ function httpAccountSettings(input: ConnectInput): Record<string, unknown> {
   return { transport: "http", baseUrl: http.baseUrl, auth, operations };
 }
 
+/** What `heel connect` calls a CLI account (D8b). */
+export const CLI_PASSTHROUGH = "cli";
+
+/** The provider a CLI account is stored under (spec: Call model, `cli:<name>`). */
+export function cliProvider(command: string): string {
+  return `${CLI_PASSTHROUGH}:${command}`;
+}
+
+export function isCliProvider(provider: string): boolean {
+  return provider.startsWith(`${CLI_PASSTHROUGH}:`);
+}
+
+/** The settings a CLI account stores; see `definitions/cli/settings.ts`. */
+function cliAccountSettings(input: ConnectInput): Record<string, unknown> {
+  const cli = input.cli;
+  if (cli === undefined)
+    throw new ConnectError("invalid_settings", "cli needs <command> and --bin <path>");
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(cli.command)) {
+    throw new ConnectError(
+      "invalid_settings",
+      "the command name is letters, digits, '.', '_' or '-'",
+    );
+  }
+  if (!cli.bin.startsWith("/")) {
+    throw new ConnectError(
+      "invalid_settings",
+      "--bin must be an absolute path; heel never looks it up on PATH",
+    );
+  }
+  // The path stored is the binary itself, not a link someone could repoint later (I-34).
+  let real: string | null = null;
+  try {
+    real = realpathSync(cli.bin);
+  } catch {
+    real = null;
+  }
+  if (real !== cli.bin) {
+    throw new ConnectError(
+      "invalid_settings",
+      real === null
+        ? `--bin ${cli.bin} doesn't exist on this host`
+        : `--bin must be the binary itself, not a link: use ${real}`,
+    );
+  }
+  if (cli.command === "kubectl") {
+    // kubectl reads its credential from a kubeconfig file in the sandbox, and a
+    // command can be pointed at that file (a symlink the agent leaves in its
+    // work root, read with --from-file) and print or upload it. Until heel can
+    // hand kubectl its credential without a readable file, it isn't offered.
+    throw new ConnectError(
+      "invalid_settings",
+      "kubectl isn't supported by heel run yet: its credential would be readable by the command",
+    );
+  }
+  if (input.credential?.type !== "static") {
+    throw new ConnectError(
+      "invalid_settings",
+      "a cli account needs its credential (--credential-stdin)",
+    );
+  }
+  let egress: string[];
+  if (cli.command === "gh") {
+    egress = [...GH_EGRESS, ...cli.egress];
+  } else {
+    if (cli.credentialEnv === null || !isEnvName(cli.credentialEnv)) {
+      throw new ConnectError(
+        "invalid_settings",
+        "a CLI heel doesn't know needs --credential-env <NAME>",
+      );
+    }
+    egress = [...cli.egress];
+  }
+  try {
+    if (egress.length > 0) parseEgressAllow(egress);
+  } catch (error) {
+    if (error instanceof EgressConfigError)
+      throw new ConnectError("invalid_settings", error.message);
+    throw error;
+  }
+  return {
+    transport: "cli",
+    command: cli.command,
+    bin: cli.bin,
+    egress,
+    credentialEnv: cli.command === "gh" ? null : cli.credentialEnv,
+  };
+}
+
 /** What `heel connect` calls an MCP passthrough account. */
 export const MCP_PASSTHROUGH = "mcp";
 
@@ -226,6 +316,8 @@ export interface ConnectInput {
   url?: string;
   /** For `http` (D7a): the base URL, `--auth`, and the OpenAPI file's text. */
   http?: { baseUrl: string; auth: string; openapi: string };
+  /** For `cli` (D8b): the command name, the binary heel runs, extra egress, and where the credential goes. */
+  cli?: { command: string; bin: string; egress: string[]; credentialEnv: string | null };
   /** For a remote `mcp` server that wants OAuth sign-in (D5c). */
   oauth?: boolean;
   /** For `mcp`: a local server heel starts in the sandbox, instead of a URL. */
@@ -264,6 +356,7 @@ export function connectAccount(
   }
   const passthrough = input.provider === MCP_PASSTHROUGH;
   const http = input.provider === HTTP_PASSTHROUGH;
+  const cli = input.provider === CLI_PASSTHROUGH;
   if (!passthrough && (input.url !== undefined || input.stdio !== undefined)) {
     throw new ConnectError("invalid_settings", "--url and --command are only for mcp accounts");
   }
@@ -273,8 +366,17 @@ export function connectAccount(
       "--base-url and --openapi are only for http accounts",
     );
   }
-  const settings = passthrough ? mcpSettings(input) : http ? httpAccountSettings(input) : {};
-  if (!passthrough && !http && !isBuiltInProvider(input.provider)) {
+  if (!cli && input.cli !== undefined) {
+    throw new ConnectError("invalid_settings", "--bin is only for cli accounts");
+  }
+  const settings = passthrough
+    ? mcpSettings(input)
+    : http
+      ? httpAccountSettings(input)
+      : cli
+        ? cliAccountSettings(input)
+        : {};
+  if (!passthrough && !http && !cli && !isBuiltInProvider(input.provider)) {
     throw new ConnectError(
       "unknown_provider",
       `unknown provider "${input.provider}"; use mcp, or a built-in provider: ${BUILT_IN_PROVIDERS.join(", ")}`,
@@ -312,7 +414,9 @@ export function connectAccount(
           ? mcpProvider(input.alias)
           : http
             ? httpProvider(input.alias)
-            : input.provider,
+            : cli
+              ? cliProvider((input.cli as { command: string }).command)
+              : input.provider,
         settings,
         // A built-in provider needs its credential first; a passthrough may need none,
         // unless its owner still has to sign in to it (OAuth).
@@ -343,7 +447,9 @@ export function connectAccount(
       ? mcpProvider(input.alias)
       : http
         ? httpProvider(input.alias)
-        : input.provider,
+        : cli
+          ? cliProvider((input.cli as { command: string }).command)
+          : input.provider,
     status: row.status,
   };
 }

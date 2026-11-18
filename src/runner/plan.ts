@@ -71,6 +71,13 @@ export interface SandboxSpec {
   readonly limits?: Partial<SandboxLimits>;
   /** `null` (the default) gives the program `/dev/null`; `pipe` hands the caller its stdin. */
   readonly stdin?: "null" | "pipe";
+  /**
+   * Whether the sandbox gets a `/proc` (default true). A program holding a
+   * credential in its environment can read it back from
+   * `/proc/self/environ`, and so can any file argument that names it or a
+   * symlink to it, so `heel run` turns it off (D8b).
+   */
+  readonly proc?: boolean;
 }
 
 /** A top-level host directory the sandbox mirrors: a symlink into `/usr`, or a real directory. */
@@ -211,7 +218,7 @@ export function planSandbox(
     String(statusFd),
     "--seccomp",
     String(seccompFd),
-    ...systemMounts(host),
+    ...systemMounts(host, spec.proc !== false),
     ...programMounts(host, spec, egressSocket),
   ];
   for (const file of spec.files ?? []) {
@@ -250,7 +257,7 @@ const NAMESPACE_OPTIONS = [
 ];
 
 /** The read-only system view plus the sandbox's own `/proc`, `/dev` and tmpfs directories. */
-function systemMounts(host: SandboxHost): string[] {
+function systemMounts(host: SandboxHost, proc: boolean): string[] {
   const options = ["--ro-bind", "/usr", "/usr"];
   for (const dir of host.systemDirs) {
     if (dir.kind === "symlink") options.push("--symlink", dir.target, dir.path);
@@ -259,9 +266,8 @@ function systemMounts(host: SandboxHost): string[] {
   for (const certs of ["/etc/ssl", "/etc/ca-certificates", "/etc/pki"]) {
     options.push("--ro-bind-try", certs, certs);
   }
+  if (proc) options.push("--proc", "/proc");
   options.push(
-    "--proc",
-    "/proc",
     "--dev",
     "/dev",
     "--tmpfs",

@@ -63,6 +63,8 @@ export const HARD_DENY_REASONS = [
   "sender_not_allowed",
   /** The definition has no such tool, or the call uses something it refuses (a CLI alias). */
   "unsupported",
+  /** A `heel run` directory outside the agent's work roots (D8b). */
+  "workdir_not_allowed",
 ] as const;
 export type HardDenyReason = (typeof HARD_DENY_REASONS)[number];
 
@@ -126,6 +128,11 @@ export interface Definition {
    * whether the call took effect.
    */
   execute(call: Call, signal: AbortSignal): Promise<unknown>;
+  /**
+   * How long `execute` may take, when not the pipeline's upstream deadline:
+   * a `heel run` command has the sandbox's own wall-time limit (D8b).
+   */
+  executeTimeoutMs?: number;
   /**
    * Removes hidden items from an allowed call's result (I-40). Absent when
    * heel doesn't know the response shape (I-46). Throws

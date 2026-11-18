@@ -76,6 +76,11 @@ export const agents = sqliteTable(
     name: text("name").notNull(),
     /** Set for an agent created by connecting an OAuth client (A2); reused when it connects again. */
     oauthClientId: text("oauth_client_id"),
+    /**
+     * Absolute directories `heel run` may use as its working directory (D8b;
+     * spec: CLI runner, "Same host"). Empty: the agent can't run commands.
+     */
+    workRoots: text("work_roots", { mode: "json" }).$type<string[]>().notNull().default([]),
     createdAt: createdAt(),
     /** A revoked agent's tokens stop working on the next call. */
     revokedAt: integer("revoked_at", { mode: "timestamp_ms" }),

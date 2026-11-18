@@ -35,6 +35,14 @@ export const AdminRequestSchema = z.discriminatedUnion("method", [
     }),
   }),
   z.strictObject({
+    /** `heel agent workdir`: the directories `heel run` may work in (D8b); replaces the list. */
+    method: z.literal("agent.workdirs"),
+    params: z.strictObject({
+      name: agentName,
+      workRoots: z.array(z.string().min(1).max(4_096)).max(32),
+    }),
+  }),
+  z.strictObject({
     method: z.literal("agent.rotate"),
     params: z.strictObject({ name: agentName }),
   }),
@@ -59,6 +67,15 @@ export const AdminRequestSchema = z.discriminatedUnion("method", [
           baseUrl: z.string().min(1).max(2_048),
           auth: z.string().min(1).max(256),
           openapi: z.string().max(5_000_000),
+        })
+        .optional(),
+      /** For a CLI account (`provider: "cli"`, D8b). */
+      cli: z
+        .strictObject({
+          command: z.string().min(1).max(64),
+          bin: z.string().min(1).max(4_096),
+          egress: z.array(z.string().max(255)).max(32),
+          credentialEnv: z.string().max(64).nullable(),
         })
         .optional(),
       /** The remote server wants OAuth sign-in; its owner signs in from the Connections page. */

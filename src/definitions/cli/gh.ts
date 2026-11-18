@@ -32,6 +32,7 @@ export function normalizeGh(argv: CliArgv): CliNormalization {
     ...(mapping !== undefined && { action: mapping.action, kind: mapping.kind }),
     ...(repo !== undefined && { repo }),
     ...(GH_PERSISTENCE.has(key) && { persistence: true as const }),
+    ...(ghTakesRepo(gh.path) && { takesRepo: true as const }),
     help: gh.help,
     refusals: ghRefusals(gh),
   };
@@ -78,6 +79,23 @@ function ghRepo(value: CliFlagValue | undefined): string | undefined {
   // pflag keeps the last value of a repeated string flag.
   const last = Array.isArray(value) ? value[value.length - 1] : value;
   return last === undefined ? undefined : normalizeGhRepo(last);
+}
+
+/**
+ * Whether a gh command takes `--repo`, as a local flag or one inherited from
+ * a parent. Without `-R`, gh reads the repo from the git remotes in the
+ * agent's checkout, which a rule on `repo` can't see, so heel requires it.
+ */
+export function ghTakesRepo(path: readonly string[]): boolean {
+  for (let i = path.length; i >= 0; i--) {
+    const def = GH_TABLE.commands[path.slice(0, i).join(" ")];
+    const flags =
+      i === path.length
+        ? [...(def?.local ?? []), ...(def?.persistent ?? [])]
+        : (def?.persistent ?? []);
+    if (flags.some(([name]) => name === "repo")) return true;
+  }
+  return false;
 }
 
 /** The flags on a `gh pr merge` that skip required checks (denied under `checks: passing`). */

@@ -8,6 +8,7 @@ import {
   listAgents,
   revokeAgent,
   rotateAgentToken,
+  setWorkRoots,
 } from "../gateway/agents.ts";
 import { listStanding, revokeStanding } from "../store/approvals.ts";
 import type { HeelDb } from "../store/db.ts";
@@ -40,6 +41,8 @@ export interface AdminDeps {
   version: string;
   /** The human plane's public origin; enrollment links point at it. */
   publicUrl: URL;
+  /** heel's own state directory; no agent work root may overlap it (D8b). */
+  home?: string;
   now?: () => Date;
 }
 
@@ -112,6 +115,16 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
       const ownerId = resolveOwner(db, orgId, request.params.owner);
       return adminOk(addAgent(db, { orgId, ownerId, name: request.params.name }, now));
     }
+    case "agent.workdirs":
+      return adminOk(
+        setWorkRoots(
+          db,
+          orgId,
+          request.params.name,
+          request.params.workRoots,
+          deps.home === undefined ? [] : [deps.home],
+        ),
+      );
     case "agent.rotate":
       return adminOk(rotateAgentToken(db, orgId, request.params.name, now));
     case "agent.revoke":
@@ -126,7 +139,7 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
         })),
       );
     case "account.connect": {
-      const { provider, alias, owner, credential, url, stdio, oauth, http } = request.params;
+      const { provider, alias, owner, credential, url, stdio, oauth, http, cli } = request.params;
       const ownerId = resolveOwner(db, orgId, owner);
       const input = {
         orgId,
@@ -138,6 +151,7 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
         ...(stdio === undefined ? {} : { stdio }),
         ...(oauth === undefined ? {} : { oauth }),
         ...(http === undefined ? {} : { http }),
+        ...(cli === undefined ? {} : { cli }),
       };
       return adminOk(connectAccount(db, deps.vault, input, now));
     }

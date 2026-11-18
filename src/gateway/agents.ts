@@ -1,3 +1,5 @@
+import { realpathSync } from "node:fs";
+import { isAbsolute, resolve } from "node:path";
 import { and, eq } from "drizzle-orm";
 import type { HeelDb, HeelTx } from "../store/db.ts";
 import { newId } from "../store/ids.ts";
@@ -129,4 +131,119 @@ export function listAgents(db: HeelDb, orgId: string): AgentSummary[] {
     .where(eq(agents.orgId, orgId))
     .orderBy(agents.name)
     .all();
+}
+
+/**
+ * Sets the directories an agent's `heel run` may use (D8b). An empty list
+ * means the agent can't run commands at all. Each root:
+ *
+ * - must exist, and is stored resolved (symlinks followed), so a later swap
+ *   of the path is caught when a command runs;
+ * - can't be `/`, `/var`, `/home` or `/tmp` themselves, or sit inside a
+ *   system directory (`/usr`, `/etc`, `/proc`, ...);
+ * - can't overlap heel's own state (`protectedPaths`, e.g. its home) or a
+ *   root of another owner's agent, since the root is writable in the sandbox.
+ *
+ * A root and its parents must not be writable by the agent's own OS user,
+ * or it could rename them between heel's check and the sandbox's mount.
+ */
+export function setWorkRoots(
+  db: HeelDb,
+  orgId: string,
+  name: string,
+  roots: readonly string[],
+  protectedPaths: readonly string[] = [],
+): { name: string; workRoots: string[] } {
+  const guarded = protectedPaths.map((p) => realOrSelf(p));
+  const normalized = roots.map((root) => {
+    const refuse = (why: string) =>
+      new AgentError("invalid_name", `not a usable work root: ${root} (${why})`);
+    if (!isAbsolute(root) || resolve(root) !== root.replace(/(.)\/$/, "$1")) {
+      throw refuse("an absolute, normalized path");
+    }
+    let real: string;
+    try {
+      real = realpathSync(resolve(root));
+    } catch {
+      throw refuse("it doesn't exist");
+    }
+    if (EXACT_SYSTEM_DIRS.has(real) || SYSTEM_TREES.some((dir) => within(real, dir))) {
+      throw refuse("a system directory");
+    }
+    if (guarded.some((p) => overlaps(real, p))) throw refuse("it overlaps heel's own files");
+    return real;
+  });
+  return db.transaction((tx) => {
+    const agent = requireLiveAgent(tx, orgId, name);
+    const others = tx
+      .select({ ownerId: agents.ownerId, workRoots: agents.workRoots })
+      .from(agents)
+      .where(eq(agents.orgId, orgId))
+      .all()
+      .filter((a) => a.ownerId !== agent.ownerId)
+      .flatMap((a) => a.workRoots);
+    for (const root of normalized) {
+      if (others.some((other) => overlaps(root, other))) {
+        throw new AgentError(
+          "invalid_name",
+          `not a usable work root: ${root} (it overlaps another owner's agent)`,
+        );
+      }
+    }
+    tx.update(agents).set({ workRoots: normalized }).where(eq(agents.id, agent.id)).run();
+    return { name, workRoots: normalized };
+  });
+}
+
+/** Directories that can never be a work root themselves: the agent would see too much. */
+const EXACT_SYSTEM_DIRS = new Set([
+  "/",
+  "/var",
+  "/home",
+  "/tmp",
+  "/private",
+  "/private/var",
+  "/private/tmp",
+]);
+/** Directories nothing inside of can be a work root. */
+const SYSTEM_TREES = [
+  "/usr",
+  "/etc",
+  "/private/etc",
+  "/bin",
+  "/sbin",
+  "/lib",
+  "/lib64",
+  "/proc",
+  "/sys",
+  "/dev",
+  "/boot",
+  "/root",
+  "/run",
+];
+
+function within(path: string, dir: string): boolean {
+  return path === dir || path.startsWith(`${dir}/`);
+}
+
+function overlaps(a: string, b: string): boolean {
+  return within(a, b) || within(b, a);
+}
+
+function realOrSelf(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    return resolve(path);
+  }
+}
+
+/** An agent's work roots (D8b); empty for an unknown agent. */
+export function workRootsOf(db: HeelDb, agentId: string): string[] {
+  const row = db
+    .select({ workRoots: agents.workRoots })
+    .from(agents)
+    .where(eq(agents.id, agentId))
+    .get();
+  return row?.workRoots ?? [];
 }
