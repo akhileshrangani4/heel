@@ -115,7 +115,8 @@ function respond(c: Context, result: PipelineResult): Response {
         NULL_BODY.has(upstream.status) ? null : Buffer.from(upstream.body, "base64"),
         {
           status: upstream.status,
-          headers: { ...upstream.headers, "heel-decision": "allow" },
+          // heel's own answers from the hide step (a hidden item) carry their own decision.
+          headers: { "heel-decision": "allow", ...upstream.headers },
         },
       );
     }

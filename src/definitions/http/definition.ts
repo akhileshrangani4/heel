@@ -43,8 +43,12 @@ import {
  * - Hiding (D7b): an operation with an `x-heel-hide` mapping has the hidden
  *   items removed from its JSON response, with their count in a
  *   `Heel-Hidden` header (one count, no per-row markers, spec Q-H1). A
- *   response that is one hidden item answers 404 `not_available`. A mapped
- *   response heel can't read is withheld. An operation without a mapping
+ *   response that is one hidden item answers 403 `not_available`. A mapped
+ *   response heel can't read is withheld, an error answer reaches the agent
+ *   as its status only, and what is returned is always what heel checked,
+ *   serialized again. Mappings are only allowed on `x-heel-kind: read`
+ *   operations, since a write aimed at a hidden item can't be refused before
+ *   it runs (I-42). An operation without a mapping
  *   has no shape heel knows, so nothing in it is hidden (I-46).
  * - Only the `/http` surface reaches it; an MCP call naming the account is
  *   refused.
@@ -294,13 +298,21 @@ export function httpDefinition(account: AccountRecord, deps: HttpDeps): Definiti
       const args = HttpArgsSchema.parse(call.args);
       const mapping = matchOperation(operations, args.method, args.path)?.hide;
       if (mapping === undefined) return response;
-      const json = (response.headers["content-type"] ?? "").split(";")[0]?.trim().toLowerCase();
-      const isJson = json === "application/json" || json?.endsWith("+json") === true;
-      const ok = response.status >= 200 && response.status < 300;
-      // An error answer that isn't JSON carries no items; a success that isn't JSON can't be checked.
-      if (!isJson) {
-        if (ok) throw new ResponseUnparseableError();
-        return response;
+      const jsonBody = (status: number, value: unknown, extra: Record<string, string> = {}) => ({
+        status,
+        headers: { "content-type": "application/json", ...extra },
+        body: Buffer.from(JSON.stringify(value)).toString("base64"),
+      });
+      // An error answer on a mapped operation may echo an item; only its status reaches the agent.
+      if (response.status < 200 || response.status >= 300) {
+        return jsonBody(response.status, {
+          status: "upstream_error",
+          upstreamStatus: response.status,
+        });
+      }
+      const type = (response.headers["content-type"] ?? "").split(";")[0]?.trim().toLowerCase();
+      if (type !== "application/json" && type?.endsWith("+json") !== true) {
+        throw new ResponseUnparseableError();
       }
       let parsed: unknown;
       try {
@@ -309,24 +321,23 @@ export function httpDefinition(account: AccountRecord, deps: HttpDeps): Definiti
         throw new ResponseUnparseableError();
       }
       const filtered = filterResponse(parsed, mapping, (c) => hiding.isHidden(c), hiding.needsBody);
-      if (filtered.kind === "unreadable") {
-        if (ok) throw new ResponseUnparseableError();
-        return response;
-      }
+      if (filtered.kind === "unreadable") throw new ResponseUnparseableError();
       if (filtered.kind === "hidden_item") {
-        return {
-          status: 404,
-          headers: { "content-type": "application/json" },
-          body: Buffer.from(JSON.stringify({ status: "denied", reason: "not_available" })).toString(
-            "base64",
-          ),
-        };
+        return jsonBody(
+          403,
+          { status: "denied", reason: "not_available", rule: null },
+          { "heel-decision": "deny" },
+        );
       }
-      if (filtered.hidden === 0) return response;
+      // Always what heel checked, serialized again: never the upstream's own bytes, which a
+      // duplicate key could make mean something else.
       const { "content-length": _dropped, ...headers } = response.headers;
       return {
         status: response.status,
-        headers: { ...headers, "heel-hidden": String(filtered.hidden) },
+        headers: {
+          ...headers,
+          ...(filtered.hidden === 0 ? {} : { "heel-hidden": String(filtered.hidden) }),
+        },
         body: Buffer.from(JSON.stringify(filtered.value)).toString("base64"),
       };
     },

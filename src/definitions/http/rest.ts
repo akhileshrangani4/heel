@@ -61,7 +61,10 @@ export const gmailRest = restMap("/gmail/v1/users/me", [
     path: /^\/messages$/,
     query: ["q", "maxResults", "pageToken"],
     build: (_m, { query }) => {
+      // A value given twice, or one that isn't a number, is refused, not dropped.
+      if (Object.values(query).some(Array.isArray)) return null;
       const max = int(one(query["maxResults"]));
+      if (query["maxResults"] !== undefined && max === undefined) return null;
       const page = one(query["pageToken"]);
       return {
         tool: "search",

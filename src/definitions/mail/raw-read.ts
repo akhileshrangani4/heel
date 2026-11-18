@@ -10,8 +10,8 @@ import { draftEnvelope, rawHeaders } from "./mime.ts";
  * Only plain mail is read: one `text/plain` or `text/html` part, or a
  * `multipart/alternative` of exactly those, in UTF-8 or US-ASCII, with a
  * 7bit, 8bit, quoted-printable or base64 transfer encoding. Attachments,
- * other charsets, nested multiparts, threading headers and anything read two
- * ways are refused (null). Headers other than the envelope, Subject and the
+ * other charsets, nested multiparts, threading headers, Reply-To and
+ * anything read two ways are refused (null). Headers other than the envelope, Subject and the
  * MIME ones are not carried over. Pure.
  */
 
@@ -66,13 +66,14 @@ function decodeText(body: Buffer, encoding: string | undefined, charset: string 
     if (!/^[A-Za-z0-9+/]*={0,2}$/.test(clean)) return null;
     bytes = Buffer.from(clean, "base64");
   } else if (cte === "quoted-printable") {
-    const text = body
-      .toString("latin1")
+    const raw = body.toString("latin1");
+    // Every `=` starts a soft line break or a two-digit escape; anything else reads two ways.
+    if (/=(?![0-9A-Fa-f]{2}|\r?\n)/.test(raw)) return null;
+    const text = raw
       .replace(/=\r?\n/g, "")
       .replace(/=([0-9A-Fa-f]{2})/g, (_, hex: string) =>
         String.fromCharCode(Number.parseInt(hex, 16)),
       );
-    if (/=/.test(text.replace(/=[0-9A-Fa-f]{2}/g, ""))) return null;
     bytes = Buffer.from(text, "latin1");
   } else {
     return null;
@@ -117,7 +118,8 @@ function subjectText(values: readonly string[] | undefined): string | null {
       }
     },
   );
-  if (failed || /[\r\n]/.test(decoded)) return null;
+  // No control characters but tab: nothing that could start a new header once composed.
+  if (failed || [...decoded].some((c) => c.charCodeAt(0) < 0x20 && c !== "\t")) return null;
   return decoded;
 }
 
@@ -143,6 +145,8 @@ export function readPlainMessage(raw: Buffer): PlainMessage | null {
     return values !== undefined && values.length > 1 ? null : values?.[0];
   };
   if (headers.has("in-reply-to") || headers.has("references")) return null;
+  // Reply-To decides where answers go and heel wouldn't carry it over; refused rather than dropped.
+  if (headers.has("reply-to")) return null;
   const subject = subjectText(headers.get("subject"));
   const ct = single("content-type");
   const cte = single("content-transfer-encoding");

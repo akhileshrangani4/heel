@@ -151,6 +151,44 @@ describe("x-heel-hide mappings", () => {
   });
 });
 
+describe("hiding when a mapped field can't be read", () => {
+  const mapping = parseHideMapping(
+    { items: "$.messages[*]", from: "$.from", to: "$.to", body: "$.parts[*].text" },
+    "GET /messages",
+  );
+  const bossHidden = (c: { from: string | null }) => c.from === "boss@example.com";
+
+  it.each([
+    ["no from at all (a sparse fieldset)", { snippet: "secret from boss" }],
+    ["from as an object", { from: { email: "boss@example.com" } }],
+    ["from as null", { from: null }],
+    ["two from values", { from: ["x@y.example", "boss@example.com"] }],
+    ["to as a list of objects", { from: "a@b.example", to: [{ email: "hr@x.example" }] }],
+  ])("hides an item with %s", (_label, item) => {
+    const response = { messages: [item] };
+    const filtered = filterResponse(response, mapping, bossHidden, false);
+    expect(filtered).toMatchObject({ kind: "list", hidden: 1 });
+  });
+
+  it("judges every body part, joined", () => {
+    const seen: string[] = [];
+    filterResponse(
+      {
+        messages: [
+          { from: "a@b.example", to: [], parts: [{ text: "hi" }, { text: "reset code 1" }] },
+        ],
+      },
+      mapping,
+      (c) => {
+        seen.push(c.body?.body ?? "");
+        return false;
+      },
+      true,
+    );
+    expect(seen).toEqual(["hi\nreset code 1"]);
+  });
+});
+
 describe("hiding through the HTTP proxy", () => {
   it("removes hidden items from a list and says how many", async () => {
     const request = setUp(() => Response.json(MESSAGES));
@@ -165,8 +203,13 @@ describe("hiding through the HTTP proxy", () => {
   it("answers a single hidden item as not available", async () => {
     const request = setUp(() => Response.json(MESSAGES.messages[0]));
     const response = await request("/http/mail/messages/1");
-    expect(response.status).toBe(404);
-    expect(await response.json()).toEqual({ status: "denied", reason: "not_available" });
+    expect(response.status).toBe(403);
+    expect(response.headers.get("heel-decision")).toBe("deny");
+    expect(await response.json()).toEqual({
+      status: "denied",
+      reason: "not_available",
+      rule: null,
+    });
   });
 
   it("withholds a mapped response it can't read", async () => {
@@ -176,6 +219,36 @@ describe("hiding through the HTTP proxy", () => {
     const response = await request("/http/mail/messages");
     expect(response.status).toBe(403);
     expect(await response.text()).not.toContain("html");
+  });
+
+  it("returns only the status of an error answer on a mapped operation", async () => {
+    const request = setUp(() =>
+      Response.json({ error: "x", message: MESSAGES.messages[0] }, { status: 409 }),
+    );
+    const response = await request("/http/mail/messages");
+    expect(response.status).toBe(409);
+    expect(await response.text()).not.toContain("Offer");
+  });
+
+  it("returns what it checked, not a duplicate key the upstream sent", async () => {
+    const request = setUp(
+      () =>
+        new Response(`{"messages":[${JSON.stringify(MESSAGES.messages[0])}],"messages":[]}`, {
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    const response = await request("/http/mail/messages");
+    expect(await response.text()).toBe('{"messages":[]}');
+  });
+
+  it("refuses a mapping on an operation that isn't a read", () => {
+    expect(() =>
+      parseOpenApi(`openapi: 3.0.0
+paths:
+  /m/{id}:
+    delete: { x-heel-hide: { items: $, from: $.from } }
+`),
+    ).toThrow(/only for x-heel-kind: read/);
   });
 
   it("leaves an operation with no mapping as it is (I-46)", async () => {

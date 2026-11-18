@@ -50,6 +50,11 @@ describe("reading a raw message", () => {
     });
   });
 
+  it("reads an escaped = in quoted-printable", () => {
+    const text = ALTERNATIVE.replace("caf=C3=A9 at 9", "x =3D y");
+    expect(readPlainMessage(Buffer.from(text.replaceAll("\n", "\r\n")))?.body).toBe("x = y");
+  });
+
   it("reads text and HTML alternatives", () => {
     const message = readPlainMessage(Buffer.from(ALTERNATIVE.replaceAll("\n", "\r\n")));
     expect(message?.body).toBe("café at 9");
@@ -68,6 +73,12 @@ describe("reading a raw message", () => {
       PLAIN.replace("Content-Type:", "Content-Transfer-Encoding: x-uuencode\nContent-Type:"),
     ],
     ["an unclosed multipart", ALTERNATIVE.replace("--b1--", "")],
+    ["a Reply-To", PLAIN.replace("Subject:", "Reply-To: eve@evil.example\nSubject:")],
+    ["a stray = in quoted-printable", ALTERNATIVE.replace("caf=C3=A9", "caf= x")],
+    [
+      "a control character in the subject",
+      PLAIN.replace("Subject: =?UTF-8?B?UTMgcGxhbiDinIU=?=", "Subject: =?UTF-8?Q?a=00b?="),
+    ],
     [
       "a part with its own disposition",
       ALTERNATIVE.replace(
@@ -109,6 +120,14 @@ describe("the Gmail REST map", () => {
     [
       "an unknown query key",
       { method: "GET", path: "/gmail/v1/users/me/messages", query: { format: "raw" } },
+    ],
+    [
+      "a repeated q",
+      { method: "GET", path: "/gmail/v1/users/me/messages", query: { q: ["a", "b"] } },
+    ],
+    [
+      "a maxResults that isn't a number",
+      { method: "GET", path: "/gmail/v1/users/me/messages", query: { maxResults: "-1" } },
     ],
     [
       "a send with a threadId",

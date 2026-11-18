@@ -116,33 +116,57 @@ function select(root: unknown, steps: readonly Step[]): unknown[] {
   return nodes;
 }
 
-function strings(item: unknown, path: string | undefined): string[] {
-  if (path === undefined) return [];
-  return select(item, parsePath(path)).flatMap((v) =>
-    typeof v === "string"
-      ? [v]
-      : Array.isArray(v)
-        ? v.filter((x): x is string => typeof x === "string")
-        : [],
-  );
+/**
+ * The strings a mapped path reaches: each node must be a string or a list
+ * of strings, and the path must reach at least one node. Anything else is
+ * null, so the item counts as unreadable and hides (fails closed): an agent
+ * that asks the API to leave a field out (`?fields=...`) can't make an item
+ * look like one that matches no hide entry.
+ */
+function strings(item: unknown, path: string): string[] | null {
+  const nodes = select(item, parsePath(path));
+  if (nodes.length === 0) return null;
+  const out: string[] = [];
+  for (const node of nodes) {
+    if (typeof node === "string") out.push(node);
+    else if (Array.isArray(node) && node.every((x) => typeof x === "string")) out.push(...node);
+    else return null;
+  }
+  return out;
 }
 
-/** One item as hiding sees it. `withBody` only when an entry uses `looks_like`. */
-export function candidateOf(item: unknown, mapping: HideMapping, withBody: boolean): HideCandidate {
-  const from = strings(item, mapping.from)[0] ?? null;
-  const subject = strings(item, mapping.subject)[0] ?? null;
-  const body = strings(item, mapping.body)[0];
+/**
+ * One item as hiding sees it, or null when a mapped field can't be read
+ * plainly (the caller hides it). `withBody` only when an entry uses
+ * `looks_like`. More than one `from` is unreadable; every body string is
+ * judged, joined.
+ */
+export function candidateOf(
+  item: unknown,
+  mapping: HideMapping,
+  withBody: boolean,
+): HideCandidate | null {
+  const read = (path: string | undefined) => (path === undefined ? [] : strings(item, path));
+  const from = read(mapping.from);
+  const subject = read(mapping.subject);
+  const to = read(mapping.to);
+  const labels = read(mapping.labels);
+  const body = read(mapping.body);
+  if (from === null || subject === null || to === null || labels === null || body === null) {
+    return null;
+  }
+  if (from.length > 1 || subject.length > 1) return null;
   return {
-    from: from?.toLowerCase() ?? null,
-    to: strings(item, mapping.to).map((a) => a.toLowerCase()),
-    subject,
-    labels: strings(item, mapping.labels),
-    // No body mapped, or none in this item: unreadable, so a looks_like entry hides it.
+    from: from[0]?.toLowerCase() ?? null,
+    to: to.map((a) => a.toLowerCase()),
+    subject: subject[0] ?? null,
+    labels,
+    // No body mapped: unreadable, so a looks_like entry hides it.
     ...(withBody && {
       body:
-        body === undefined
+        mapping.body === undefined
           ? { body: "", bodyFormat: "text" as const, unreadable: "unparseable" as const }
-          : { body, bodyFormat: "text" as const },
+          : { body: body.join("\n"), bodyFormat: "text" as const },
     }),
   };
 }
@@ -163,14 +187,18 @@ export function filterResponse(
 ): Filtered {
   const steps = parsePath(mapping.items);
   if (steps.length === 0) {
-    return isHidden(candidateOf(response, mapping, withBody))
+    const candidate = candidateOf(response, mapping, withBody);
+    return candidate === null || isHidden(candidate)
       ? { kind: "hidden_item" }
       : { kind: "list", value: response, hidden: 0 };
   }
   const parents = select(response, steps.slice(0, -1));
   if (parents.length !== 1 || !Array.isArray(parents[0])) return { kind: "unreadable" };
   const list = parents[0] as unknown[];
-  const kept = list.filter((item) => !isHidden(candidateOf(item, mapping, withBody)));
+  const kept = list.filter((item) => {
+    const candidate = candidateOf(item, mapping, withBody);
+    return candidate !== null && !isHidden(candidate);
+  });
   const hidden = list.length - kept.length;
   list.splice(0, list.length, ...kept);
   return { kind: "list", value: response, hidden };

@@ -78,6 +78,10 @@ export function parseOpenApi(text: string): Operation[] {
         throw new OpenApiError(`${method} ${template}: x-heel-kind must be read or write`);
       }
       let hide: HideMapping | undefined;
+      if (o["x-heel-hide"] !== undefined && kind !== "read") {
+        // A write aimed at a hidden item would run before its answer could be hidden (I-42).
+        throw new OpenApiError(`${method} ${template}: x-heel-hide is only for x-heel-kind: read`);
+      }
       if (o["x-heel-hide"] !== undefined) {
         try {
           hide = parseHideMapping(o["x-heel-hide"], `${method} ${template}`);
