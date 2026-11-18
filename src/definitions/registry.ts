@@ -5,6 +5,7 @@ import { type CliDeps, cliDefinition } from "./cli/definition.ts";
 import { type GitHubDeps, githubDefinition } from "./github/definition.ts";
 import { type GmailDeps, gmailDefinition } from "./gmail/definition.ts";
 import { type HttpDeps, httpDefinition } from "./http/definition.ts";
+import { type LinearDeps, linearDefinition } from "./linear/definition.ts";
 import { mcpPassthrough } from "./mcp/passthrough.ts";
 import type { UpstreamPool } from "./mcp/upstream.ts";
 import { type NotionDeps, notionDefinition } from "./notion/definition.ts";
@@ -29,6 +30,8 @@ export function definitionRegistry(deps: {
   notion?: NotionDeps | null;
   /** Stripe (D12b). */
   stripe?: StripeDeps | null;
+  /** Linear (D12b). */
+  linear?: LinearDeps | null;
   /** Slack (D12b). */
   slack?: SlackDeps | null;
   /** HTTP accounts (D7a). */
@@ -61,6 +64,9 @@ export function definitionRegistry(deps: {
       }
       if (account.provider === "stripe" && deps.stripe != null) {
         return stripeDefinition(account, deps.stripe);
+      }
+      if (account.provider === "linear" && deps.linear != null) {
+        return linearDefinition(account, deps.linear);
       }
       if (account.provider === "slack" && deps.slack != null) {
         return slackDefinition(account, deps.slack);
