@@ -35,6 +35,11 @@ export const REQUIRED_INVARIANTS: Readonly<Record<string, string>> = {
   "I-41":
     "List, search and thread responses never include a hidden item's sender, subject, body or id; one placeholder gives the count.",
   "I-42": "Fetch-by-id aimed at a hidden message is denied, the same way as a missing one.",
+  // D9a-2: Gmail sending
+  "I-19":
+    "`email.send` covers send, reply, reply-all, forward and draft send; recipients are To ∪ Cc ∪ Bcc, so a Bcc-only address trips `any_domain_in`.",
+  "I-21":
+    "`all_in_thread` fails when any recipient wasn't on a message the account sent in that thread, and always for a new message.",
   // D10b: hide path
   "I-43":
     "`looks_like` can only add items to the hidden set; no verdict allows a call or un-hides an item.",
