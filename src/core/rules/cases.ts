@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { CliFields, HttpFields } from "../call.ts";
+import { PROVIDER_FIELDS } from "../call.ts";
 import type { CompiledRule, StateCheck } from "./compile.ts";
 import {
   DENY_REASONS,
@@ -33,6 +34,9 @@ const CaseCall = z.strictObject({
   recipients: z.array(z.string()).optional(),
   repo: z.string().min(1).optional(),
   calendar: z.string().min(1).optional(),
+  fields: z
+    .partialRecord(z.enum(PROVIDER_FIELDS), z.union([z.string(), z.number(), z.boolean()]))
+    .optional(),
   items: count.default(1),
   /** The run id the agent sent. */
   run: z.string().min(1).optional(),
@@ -171,6 +175,7 @@ export function caseFacts(call: CaseCallInput): RuleFacts {
     ...(call.recipients !== undefined && { recipients: call.recipients }),
     ...(call.repo !== undefined && { repo: call.repo }),
     ...(call.calendar !== undefined && { calendar: call.calendar }),
+    ...(call.fields !== undefined && { fields: call.fields }),
     ...(call.run !== undefined && { runId: call.run }),
     ...(call.args !== undefined && { args: call.args }),
     ...(call.persistence !== undefined && { persistence: call.persistence }),

@@ -195,3 +195,58 @@ describe("runCase", () => {
     ).toThrow();
   });
 });
+
+describe("cases with provider fields", () => {
+  it("take only the fields they need, and match on them", () => {
+    const slack = ruleSet({
+      owner:
+        "rules:\n  - match: { action: slack.post, external: true }\n    then: deny\n  - match: { action: slack.post }\n    then: allow\n",
+    });
+    const post = (external: boolean) =>
+      caseOf({
+        call: {
+          agent: "bot",
+          account: "slack",
+          action: "slack.post",
+          fields: { channel: "C0123", external },
+        },
+        expect: { decision: external ? "deny" : "allow" },
+      });
+    expect(runCase(slack, post(true), OWNER).outcome).toBe("pass");
+    expect(runCase(slack, post(false), OWNER).outcome).toBe("pass");
+  });
+});
+
+describe("provider field values in rules", () => {
+  const decide = (owner: string, fields: Record<string, string | number | boolean>) =>
+    runCase(
+      ruleSet({ owner }),
+      caseOf({
+        call: { agent: "bot", account: "x", action: "a.b", fields },
+        expect: { decision: "deny" },
+      }),
+      OWNER,
+    ).outcome;
+
+  it("compare a team key in any case", () => {
+    const deny =
+      "rules:\n  - match: { team: eng }\n    then: deny\n  - match: {}\n    then: allow\n";
+    expect(decide(deny, { team: "ENG" })).toBe("pass");
+  });
+
+  it("compare a Notion id with or without dashes", () => {
+    const deny =
+      "rules:\n  - match: { parent: AAAAAAAAAAAA4AAA8AAAAAAAAAAAAAAA }\n    then: deny\n  - match: {}\n    then: allow\n";
+    expect(decide(deny, { parent: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" })).toBe("pass");
+  });
+
+  it.each([
+    ["a project slug", "project: my-project-1a2b"],
+    ["a parent that isn't an id", "parent: aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaaxx"],
+    ["a customer email", "customer: alice@example.com"],
+  ])("refuse %s when they load", (_label, condition) => {
+    expect(() =>
+      ruleSet({ owner: `rules:\n  - match: { ${condition} }\n    then: deny\n` }),
+    ).toThrow();
+  });
+});
