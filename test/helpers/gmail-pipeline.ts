@@ -18,7 +18,7 @@ import { addAccount, testStore } from "./store.ts";
  * mailbox. `owner` is the owner's rules file (YAML); `call` sends one tool
  * call on `gmail-work` as the agent `inbox-bot`.
  */
-export function gmailPipeline(options: { owner: string; judge?: LooksLikeJudge }) {
+export function gmailPipeline(options: { owner: string; org?: string; judge?: LooksLikeJudge }) {
   const t = testStore();
   const gmail = new FakeGmail();
   const accountId = addAccount(t, "gmail-work", "gmail");
@@ -28,7 +28,12 @@ export function gmailPipeline(options: { owner: string; judge?: LooksLikeJudge }
   const hidden: string[] = [];
   const pipeline = createPipeline({
     db: t.db,
-    rules: { set: compileRules({ owner: options.owner }) },
+    rules: {
+      set: compileRules({
+        owner: options.owner,
+        ...(options.org === undefined ? {} : { org: options.org }),
+      }),
+    },
     definitions: definitionRegistry({
       upstream: new UpstreamPool({ vault: null, log: logger }),
       gmail: { vault, fetch: gmail.fetch },

@@ -17,9 +17,11 @@ import { GmailId, type GmailTool, gmailTool, type Preparation } from "./tool.ts"
  *   doesn't say which (I-42, Q-H3).
  * - heel never asks for the scope that deletes permanently, so there is no
  *   delete tool: trash is reversible for 30 days.
- * - A filter is `email.filter`. One that forwards is also persistence: it
- *   keeps sending mail out after heel is revoked, so only a rule that names
- *   it can allow it (I-70). Its forward address is the call's recipient.
+ * - A filter is `email.filter`. One that forwards is `email.send` instead,
+ *   so every rule that limits where mail may go also limits where a filter
+ *   may forward it, and it is persistence: it keeps sending mail out after
+ *   heel is revoked, so only a rule that names it can allow it (I-70). Its
+ *   forward address is the call's recipient.
  */
 
 /** Gmail's limit for `batchModify` (research §2.1). */
@@ -122,10 +124,22 @@ const trash = gmailTool({
     return { args: { message_ids: ids }, action: "email.remove", targets: ids, items: ids.length };
   },
   async run(mailbox, args, signal) {
-    // One documented call per message, in order. If one fails part way,
-    // the error leaves the outcome unknown, which is the truth: some went.
-    for (const id of args.message_ids) await mailbox.client.trashMessage(id, signal);
-    return { trashed: args.message_ids.length };
+    // One documented call per message, in order. A refusal of the first is
+    // a clean "not done"; a failure after some went leaves the outcome
+    // unknown, which is the truth. Counts stay reserved either way.
+    let done = 0;
+    try {
+      for (const id of args.message_ids) {
+        await mailbox.client.trashMessage(id, signal);
+        done += 1;
+      }
+    } catch (error) {
+      if (done === 0) throw error;
+      throw new Error(`trashed ${done} of ${args.message_ids.length} before a failure`, {
+        cause: error,
+      });
+    }
+    return { trashed: done };
   },
   show: changed,
 });
@@ -250,8 +264,9 @@ const createFilter = gmailTool({
     if (Object.keys(action).length === 0) return { deny: "unsupported" };
     return {
       args: { criteria, action },
-      action: "email.filter",
-      ...(forward === null ? {} : { recipients: [forward], persistence: true }),
+      ...(forward === null
+        ? { action: "email.filter" }
+        : { action: "email.send", recipients: [forward], persistence: true }),
     };
   },
   async run(mailbox, args, signal) {

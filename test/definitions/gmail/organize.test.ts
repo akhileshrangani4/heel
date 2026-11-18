@@ -30,8 +30,8 @@ const INBOX: FakeMessage[] = Array.from({ length: 5 }, (_, i) => ({
 
 const FAMILY = "hide:\n  - email: { from: { any_of: [sarah@example.com] } }\n";
 
-function setUp(owner = ORGANIZE) {
-  const h = gmailPipeline({ owner });
+function setUp(owner = ORGANIZE, org?: string) {
+  const h = gmailPipeline({ owner, ...(org === undefined ? {} : { org }) });
   h.gmail.add(...INBOX.map((m) => ({ ...m })));
   return h;
 }
@@ -76,6 +76,14 @@ ${ORGANIZE.replace("rules:\n", "")}`);
       status: "denied",
     });
     expect(h.gmail.messages.get("m2")?.labelIds).toEqual(["INBOX"]);
+  });
+
+  it("reports a trash that failed part way as an unknown outcome", async () => {
+    const h = setUp();
+    const result = await h.call("trash", { message_ids: ["m0", "m1", "gone"] });
+    expect(result).toEqual({ status: "upstream_outcome_unknown" });
+    expect(h.gmail.messages.get("m0")?.labelIds).toEqual(["TRASH"]);
+    expect(counted(h)).toEqual([{ action: "email.remove", items: 3 }]);
   });
 
   it("trash_thread counts the thread's messages", async () => {
@@ -161,5 +169,24 @@ describe("create_filter", () => {
 `);
     expect(await named.call("create_filter", forward)).toMatchObject({ status: "allowed" });
     expect(named.gmail.filters).toMatchObject([{ action: { forward: "me@elsewhere.com" } }]);
+  });
+
+  it("a forwarding filter is email.send, so an org send deny stops it", async () => {
+    const h = setUp(
+      `rules:
+  - match: { tool: create_filter }
+    then: allow
+`,
+      `rules:
+  - match: { action: email.send, recipients: { any_domain_in: [elsewhere.com] } }
+    then: deny
+`,
+    );
+    const result = await h.call("create_filter", {
+      criteria: { from: "bank@example.com" },
+      forward_to: "me@elsewhere.com",
+    });
+    expect(result).toMatchObject({ status: "denied" });
+    expect(h.gmail.filters).toEqual([]);
   });
 });
