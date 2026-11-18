@@ -25,7 +25,7 @@ export class GitHubWriteRefused extends Error {
   }
 }
 
-type Method = "GET" | "POST" | "PATCH" | "PUT";
+type Method = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
 
 export class GitHubClient {
   readonly #fetch: FetchFn;

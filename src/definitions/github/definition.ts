@@ -333,10 +333,18 @@ const TOOLS: Record<string, GitHubTool> = {
       method: z.enum(["merge", "squash", "rebase"]).default("merge"),
       commit_title: z.string().max(256).optional(),
       commit_message: Text.optional(),
+      /** The head the caller expects (GitHub's own `sha`); refused unless it is the head. */
+      expected_sha: z
+        .string()
+        .regex(/^[0-9a-f]{40}$/)
+        .optional(),
     }),
     readOnly: false,
     prepare: async (box, args, _hiding, signal) => {
       const head = await box.api.pullHead(args.repo, args.number, signal);
+      if (args.expected_sha !== undefined && args.expected_sha !== head.sha) {
+        return { deny: "unsupported" };
+      }
       if (head.state !== "open" || head.merged) return { deny: "unsupported" };
       // Merging lands its files on the base branch: a workflow among them is persistence (I-70).
       const files = await box.api.pullFiles(args.repo, args.number, signal);
@@ -415,7 +423,35 @@ export function isMergeAction(action: string | undefined): boolean {
   return action === "github.merge" || action === "github.workflow.merge";
 }
 
+/**
+ * `github.api` (spec: GitHub, "Actions"): a REST call heel has no mapping
+ * for, sent to api.github.com as it is. heel can't tell what it does, so it
+ * has no `kind` or `repo`, and it is persistence: only a rule naming
+ * `github.api` (or this tool) literally lets it through; a broad allow never
+ * does (I-70). It isn't listed over MCP.
+ */
+const api = tool({
+  description: "A raw GitHub REST call.",
+  args: z.strictObject({
+    method: z.enum(["GET", "POST", "PATCH", "PUT", "DELETE"]),
+    path: z.string().regex(/^\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]{0,2000}$/, "expected an API path"),
+    query: z.record(z.string(), z.string()).default({}),
+    body: z.unknown().optional(),
+  }),
+  readOnly: false,
+  prepare: async (_box, args) => ({ args, action: "github.api", persistence: true }),
+  run: (box, a, signal) =>
+    box.client.request(a.method, a.path, signal, {
+      query: a.query,
+      ...(a.body === undefined ? {} : { body: a.body }),
+    }),
+  show: passThrough,
+});
+
 export const GITHUB_TOOLS: readonly Tool[] = listedTools(TOOLS);
+
+/** Every tool heel runs, including `api`, which only the REST proxy uses. */
+const ALL_TOOLS: Record<string, GitHubTool> = { ...TOOLS, api };
 
 export function githubDefinition(account: AccountRecord, deps: GitHubDeps): Definition {
   const token = async () => (await deps.vault.accessToken(account.id)).reveal();
@@ -424,7 +460,7 @@ export function githubDefinition(account: AccountRecord, deps: GitHubDeps): Defi
     api: new GitHubApi(token, deps.fetch),
   };
   return mailDefinition({
-    tools: TOOLS,
+    tools: ALL_TOOLS,
     listed: GITHUB_TOOLS,
     mailbox: box,
     errors: {
