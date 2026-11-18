@@ -536,6 +536,13 @@ async function dispatch(argv: string[], io: CliIo): Promise<number> {
       return rulesCommand(rest, io);
     case "audit":
       return auditCommand(rest, io);
+    case "codemode-worker": {
+      // Internal: heel starts this itself, under bubblewrap, for one script
+      // (D6b). It never returns; it exits when the script ends.
+      const { codemodeWorkerMain } = await import("../codemode/worker-main.ts");
+      await codemodeWorkerMain();
+      return new Promise<number>(() => {});
+    }
     case "help":
     case "--help":
     case "-h":

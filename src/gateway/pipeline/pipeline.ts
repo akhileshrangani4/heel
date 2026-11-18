@@ -451,7 +451,7 @@ class DecisionPipeline implements Pipeline {
         { ...logContext(call), reason, error: errorShape(error) },
         "result withheld: hiding failed after the call ran",
       );
-      return { status: "denied", reason, rule: null };
+      return { status: "denied", reason, rule: null, executed: true };
     }
     return this.#respond(call, visible, decided.via);
   }
@@ -486,7 +486,13 @@ class DecisionPipeline implements Pipeline {
         { ...logContext(call), adapter: adapter.name, detail: reason },
         "withheld",
       );
-      return { status: "denied", reason: "response_withheld", rule: null, adapter: adapter.name };
+      return {
+        status: "denied",
+        reason: "response_withheld",
+        rule: null,
+        adapter: adapter.name,
+        executed: true,
+      };
     }
     return { status: "allowed", result, via };
   }

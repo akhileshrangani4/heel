@@ -83,18 +83,20 @@ export function createAgentApp(deps: AgentAppDeps): Hono<AgentPlaneEnv> {
     }),
   );
 
-  // MCP (spec: Endpoints and tools). Bare /mcp is code mode, which arrives
-  // with D6; until then it says where the direct tools are.
+  // MCP (spec: Endpoints and tools). Bare /mcp is code mode, served only
+  // where the sandbox runs (D6b); without it, it says where the direct tools are.
   app.all("/mcp", async (c) => {
     const mcp = deps.mcp;
     if (mcp === undefined) return c.json(NOT_BUILT, 501);
     if (c.req.query("tools") === "direct") {
       return mcp.serve(c.req.raw, c.get("agent"), { kind: "direct" });
     }
+    if (mcp.codeMode) return mcp.serve(c.req.raw, c.get("agent"), { kind: "code" });
     return c.json(
       {
         ...NOT_BUILT,
-        message: "Code mode isn't available yet. Use /mcp?tools=direct, or /mcp/<account>.",
+        message:
+          "Code mode needs the sandbox, which this host can't run. Use /mcp?tools=direct, or /mcp/<account>.",
       },
       501,
     );

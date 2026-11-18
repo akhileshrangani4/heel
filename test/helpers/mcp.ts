@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { createMcpHandler, Server, type Tool } from "@modelcontextprotocol/server";
+import type { CodeWorker } from "../../src/codemode/worker.ts";
 import { UpstreamPool } from "../../src/definitions/mcp/upstream.ts";
 import { definitionRegistry } from "../../src/definitions/registry.ts";
 import { addAgent } from "../../src/gateway/agents.ts";
@@ -91,6 +92,8 @@ export async function mcpHarness(options: {
   upstreamToken?: string;
   /** More passthrough accounts on the same fake upstream, besides `notes`. */
   moreAccounts?: readonly string[];
+  /** Turns on code mode on bare /mcp with this worker (D6b). */
+  codeWorker?: () => CodeWorker;
 }): Promise<McpHarness> {
   const t = testStore();
   const { logger } = captureLogger();
@@ -138,6 +141,7 @@ export async function mcpHarness(options: {
     pipeline,
     definitions,
     log: logger,
+    ...(options.codeWorker === undefined ? {} : { codeWorker: options.codeWorker }),
     version: "test",
   });
   const app = createAgentApp({ db: t.db, log: logger, mcp });
