@@ -198,7 +198,6 @@ const rulesStory = (
   label,
   title: "Rules",
   viewer: ALICE,
-  current: "rules",
   pause,
   body: () =>
     rulesPage({ file: "rules/alice.yaml", load, draftForm: DRAFT_FORM, saveForm: SAVE_FORM }),
