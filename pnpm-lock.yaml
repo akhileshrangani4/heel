@@ -175,6 +175,9 @@ importers:
       '@modelcontextprotocol/server':
         specifier: ~2.4.0
         version: 2.4.0
+      '@pydantic/monty':
+        specifier: 1.6.0
+        version: 1.6.0
       '@simplewebauthn/server':
         specifier: ~14.1.0
         version: 14.1.0
@@ -186,7 +189,7 @@ importers:
         version: 13.1.1
       drizzle-orm:
         specifier: ~0.45.4
-        version: 0.45.4(@types/better-sqlite3@9.6.0)(better-sqlite3@13.1.1)
+        version: 0.45.4(@opentelemetry/api@1.10.0)(@types/better-sqlite3@9.6.0)(better-sqlite3@13.1.1)
       hono:
         specifier: ~4.13.18
         version: 4.13.18
@@ -238,7 +241,7 @@ importers:
         version: 7.0.2
       vitest:
         specifier: ~5.1.0
-        version: 5.1.0(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+        version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
 packages:
 
@@ -310,6 +313,9 @@ packages:
     engines: {node: '>=14.21.3'}
     cpu: [x64]
     os: [win32]
+
+  '@bytecodealliance/preview2-shim@0.19.0':
+    resolution: {integrity: sha512-OSUlcM62fXLuzYP0DjBn/SwjKMZ/y/2PMXZ8v5cRiiFcroauntlPRl/oCnx0xYjYiqdYvE0PY50VCNutll0xOw==}
 
   '@drizzle-team/brocli@0.10.2':
     resolution: {integrity: sha512-z33Il7l5dKjUgGULTqBsQBQwckHh5AbIuxhdsIxDDiZAzBOrZO6q9ogcWC65kU382AfynTfgNumVcNIjuIua6w==}
@@ -816,6 +822,14 @@ packages:
       '@emnapi/core': ^1.7.1 || 2.0.0-beta.2
       '@emnapi/runtime': ^1.7.1 || 2.0.0-beta.2
 
+  '@opentelemetry/api-logs@0.222.0':
+    resolution: {integrity: sha512-9mb1If+IF6u0ZVXkHQ6ogEae5HwA6ajIVUgpSDQyRASxft6BSXHvBvPooRle3yFN/fKnCdSOnuu0OC3PLcF6+g==}
+    engines: {node: '>=8.0.0'}
+
+  '@opentelemetry/api@1.10.0':
+    resolution: {integrity: sha512-lMkyes8iHrG+mk6WH7X70MdCLI2RS0FwNBY1PyQ8UemaijE2m5mv5A0Niy3HtbYTFrgkUEQjFMXmSAk2hQDuPQ==}
+    engines: {node: '>=8.0.0'}
+
   '@oxc-project/types@0.156.0':
     resolution: {integrity: sha512-1Duyg48TdJNdyhEB8Xn1L36bT9Pv6GUtlKjHxOys8xkaF/rQq3XJE+bAurSK/AgIz5mGFsb77cn9Pb20+WCScw==}
 
@@ -885,6 +899,42 @@ packages:
     resolution: {integrity: sha512-iGURLGuKDLakSEl7Pgfv8h7f+XLT+V861Wfhz0zlEl5nyFuKUopdkFBPKqTllTUp06aOwPuH8iuUEb3yp3MpbQ==}
     engines: {node: '>=20'}
     hasBin: true
+
+  '@pydantic/monty-darwin-arm64@1.6.0':
+    resolution: {integrity: sha512-uNuF8a/NY4YGZth/3No9UrF/T+Az31z+NOsb9MPNdVod/3TP6u9v8enLRF5C3ICAcnLkEVWy9znmj+iZF+WlNw==}
+    engines: {node: '>= 20'}
+    cpu: [arm64]
+    os: [darwin]
+
+  '@pydantic/monty-darwin-x64@1.6.0':
+    resolution: {integrity: sha512-LUOIJff4ENipiDBSbHPaEB9aeBM41uhJwgSqCF0FYOkGS1HxRROZt488ZIQT8pf2d9SdU1ABIoJDQFs3H6tCiA==}
+    engines: {node: '>= 20'}
+    cpu: [x64]
+    os: [darwin]
+
+  '@pydantic/monty-linux-arm64-gnu@1.6.0':
+    resolution: {integrity: sha512-jDhqFFYNEwd3nmyXaFlYPaTDC5kxszKohDA/4jC4svDRRklUBr4IZBjKHv+YmVgZLqqlzcS7UySm/H3x8oFouQ==}
+    engines: {node: '>= 20'}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@pydantic/monty-linux-x64-gnu@1.6.0':
+    resolution: {integrity: sha512-JH6d0t5ZePh89aRekLqOEkJ4ZhY1912RWAANFOGu4hDUC2MY9MhIX1C/GaCYH45lntm5HgGw3wMsRmwJIvOKlQ==}
+    engines: {node: '>= 20'}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  '@pydantic/monty-win32-x64-msvc@1.6.0':
+    resolution: {integrity: sha512-4zb9wcQoexLa0AJh0Vv2R4nOv38kHyu1XymOKSuV6i9E8BIiNq92qYRJ8+aV25SkFJkB00uw8iI9gKbge7KN4g==}
+    engines: {node: '>= 20'}
+    cpu: [x64]
+    os: [win32]
+
+  '@pydantic/monty@1.6.0':
+    resolution: {integrity: sha512-i8MkLKs0rumMzn8rhQJMCOugvEgkD67ktZznbdKnX27cH4V0hw2RXII530Z9R1PijoaiWDsb3CdB6oT6tzJK0w==}
+    engines: {node: '>= 20'}
 
   '@rolldown/binding-android-arm-eabi@1.2.19':
     resolution: {integrity: sha512-e+Ebe0WT+9tbXmNKPIiC8YrWAHYwug3m6i4p3rZGGulfZri1jtI4HslT+OZnFf/OIHowWF71DTlHwXBP2SiA7A==}
@@ -1927,6 +1977,8 @@ snapshots:
   '@biomejs/cli-win32-x64@2.6.7':
     optional: true
 
+  '@bytecodealliance/preview2-shim@0.19.0': {}
+
   '@drizzle-team/brocli@0.10.2': {}
 
   '@emnapi/core@2.0.0-beta.2':
@@ -2220,6 +2272,12 @@ snapshots:
       '@tybys/wasm-util': 0.10.4
     optional: true
 
+  '@opentelemetry/api-logs@0.222.0':
+    dependencies:
+      '@opentelemetry/api': 1.10.0
+
+  '@opentelemetry/api@1.10.0': {}
+
   '@oxc-project/types@0.156.0': {}
 
   '@peculiar/asn1-android@2.11.1':
@@ -2343,6 +2401,33 @@ snapshots:
   '@playwright/test@1.65.0':
     dependencies:
       playwright: 1.65.0
+
+  '@pydantic/monty-darwin-arm64@1.6.0':
+    optional: true
+
+  '@pydantic/monty-darwin-x64@1.6.0':
+    optional: true
+
+  '@pydantic/monty-linux-arm64-gnu@1.6.0':
+    optional: true
+
+  '@pydantic/monty-linux-x64-gnu@1.6.0':
+    optional: true
+
+  '@pydantic/monty-win32-x64-msvc@1.6.0':
+    optional: true
+
+  '@pydantic/monty@1.6.0':
+    dependencies:
+      '@bytecodealliance/preview2-shim': 0.19.0
+      '@opentelemetry/api': 1.10.0
+      '@opentelemetry/api-logs': 0.222.0
+    optionalDependencies:
+      '@pydantic/monty-darwin-arm64': 1.6.0
+      '@pydantic/monty-darwin-x64': 1.6.0
+      '@pydantic/monty-linux-arm64-gnu': 1.6.0
+      '@pydantic/monty-linux-x64-gnu': 1.6.0
+      '@pydantic/monty-win32-x64-msvc': 1.6.0
 
   '@rolldown/binding-android-arm-eabi@1.2.19':
     optional: true
@@ -2625,8 +2710,9 @@ snapshots:
       esbuild: 0.25.12
       tsx: 4.23.15
 
-  drizzle-orm@0.45.4(@types/better-sqlite3@9.6.0)(better-sqlite3@13.1.1):
+  drizzle-orm@0.45.4(@opentelemetry/api@1.10.0)(@types/better-sqlite3@9.6.0)(better-sqlite3@13.1.1):
     optionalDependencies:
+      '@opentelemetry/api': 1.10.0
       '@types/better-sqlite3': 9.6.0
       better-sqlite3: 13.1.1
 
@@ -3080,7 +3166,7 @@ snapshots:
       tsx: 4.23.15
       yaml: 2.9.1
 
-  vitest@5.1.0(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)):
+  vitest@5.1.0(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)):
     dependencies:
       '@types/chai': 5.2.3
       '@vitest/mocker': 5.1.0(vite@8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
@@ -3097,6 +3183,7 @@ snapshots:
       vite: 8.3.8(@types/node@26.6.6)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1)
       why-is-node-running: 3.2.1
     optionalDependencies:
+      '@opentelemetry/api': 1.10.0
       '@types/node': 26.6.6
     transitivePeerDependencies:
       - msw
