@@ -51,7 +51,8 @@ export function cliPipeline(options: {
   credential?: string;
 }) {
   const t = testStore();
-  const accountId = addAccount(t, "github", "cli:gh");
+  const command = String(options.settings?.["command"] ?? "gh");
+  const accountId = addAccount(t, "github", `cli:${command}`);
   t.db
     .update(accounts)
     .set({
