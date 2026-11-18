@@ -468,6 +468,7 @@ export const auditLog = sqliteTable(
     approverId: text("approver_id"),
     pauseScope: text("pause_scope").$type<PauseScope>(),
     reason: text("reason"),
+    adapter: text("adapter"),
   },
   (t) => [
     index("audit_log_org_at").on(t.orgId, t.at),

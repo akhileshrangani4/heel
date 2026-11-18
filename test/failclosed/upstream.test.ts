@@ -65,8 +65,12 @@ function sendOver(h: PipelineHarness, upstream: Upstream): void {
 }
 
 describe("fail closed: the upstream", () => {
-  it("uses the spec's deadlines: 60 s upstream, 5 s per state lookup", () => {
-    expect(DEFAULT_PIPELINE_TIMEOUTS).toEqual({ upstreamMs: 60_000, stateCheckMs: 5_000 });
+  it("uses the spec's deadlines: 60 s upstream, 5 s per state lookup and per adapter", () => {
+    expect(DEFAULT_PIPELINE_TIMEOUTS).toEqual({
+      upstreamMs: 60_000,
+      stateCheckMs: 5_000,
+      adapterMs: 5_000,
+    });
   });
 
   it("passes an upstream error through, and the call stays counted", async () => {
