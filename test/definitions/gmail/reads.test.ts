@@ -207,7 +207,14 @@ describe("list_labels", () => {
     const { call } = setUp();
     expect(await call("list_labels")).toMatchObject({
       status: "allowed",
-      result: { labels: [{ id: "INBOX" }, { id: "SENT" }, { id: "Label_1", name: "Family" }] },
+      result: {
+        labels: [
+          { id: "INBOX" },
+          { id: "SENT" },
+          { id: "DRAFT" },
+          { id: "Label_1", name: "Family" },
+        ],
+      },
     });
   });
 });

@@ -1,18 +1,23 @@
-import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { Call } from "../../core/call.ts";
-import { isPlainAddress, normalizeAddress, parseAddressList } from "../../core/rules/address.ts";
-import { UpstreamError } from "../../gateway/pipeline/ports.ts";
+import { parseAddressList } from "../../core/rules/address.ts";
+import {
+  Address,
+  Addresses,
+  Body,
+  Composed,
+  type ComposedArgs,
+  composeOrRefuse,
+  MESSAGE_ID,
+  notSent,
+  prefixed,
+  sha256,
+  unique,
+} from "../mail/compose.ts";
+import { draftEnvelope, strictAddressList } from "../mail/mime.ts";
 import { GmailError, type GmailMessage, GmailNotFoundError } from "./client.ts";
 import type { Mailbox } from "./mailbox.ts";
 import { header, type MessageContent, messageContent } from "./messages.ts";
-import {
-  ComposeMismatchError,
-  composeRaw,
-  DELIVERY_HEADERS_REFUSED,
-  rawHeaders,
-  strictAddressList,
-} from "./mime.ts";
 import { GmailId, type GmailTool, gmailTool, type Preparation } from "./tool.ts";
 
 /**
@@ -38,50 +43,6 @@ import { GmailId, type GmailTool, gmailTool, type Preparation } from "./tool.ts"
  *   header can be forged by anyone, and a draft hasn't been sent.
  */
 
-/** An address as the agent gave it: a plain addr-spec, lower-cased. */
-const Address = z
-  .string()
-  .max(320)
-  .transform((text, ctx) => {
-    const address = normalizeAddress(text);
-    if (address === null || !isPlainAddress(address)) {
-      ctx.addIssue({ code: "custom", message: "expected a plain email address" });
-      return z.NEVER;
-    }
-    return address;
-  });
-
-const Addresses = z.array(Address).max(100);
-
-/** Text that goes into a header: one line. */
-const HeaderText = z
-  .string()
-  .max(998)
-  .regex(/^[^\r\n]*$/, "must be one line");
-
-const Body = z.string().max(1_000_000);
-
-const Composed = {
-  from: Address,
-  to: Addresses.min(1),
-  cc: Addresses.default([]),
-  bcc: Addresses.default([]),
-  subject: HeaderText,
-  body: Body,
-  html: Body.optional(),
-};
-
-/** A message heel composes, exactly as it will run. */
-interface ComposedArgs {
-  from: string;
-  to: string[];
-  cc: string[];
-  bcc: string[];
-  subject: string;
-  body: string;
-  html?: string | undefined;
-}
-
 interface ThreadedArgs extends ComposedArgs {
   message_id: string;
   thread_id: string;
@@ -93,19 +54,6 @@ interface ThreadedArgs extends ComposedArgs {
 interface Sent {
   id: string;
   thread_id: string;
-}
-
-function unique(addresses: readonly string[]): string[] {
-  return [...new Set(addresses)];
-}
-
-function sha256(bytes: Buffer): string {
-  return createHash("sha256").update(bytes).digest("hex");
-}
-
-/** A failure in `run` before anything was posted: the call's outcome is known. */
-function notSent(reason: string, status = 409): UpstreamError {
-  return new UpstreamError(status, { error: `${reason}; nothing was sent` });
 }
 
 /** Reads `run` makes before sending fail as "not sent", never as "outcome unknown". */
@@ -132,13 +80,6 @@ async function checkSender(
   return (await mailbox.sendAs(signal)).has(from) ? null : { deny: "sender_not_allowed" };
 }
 
-function prefixed(prefix: "Re" | "Fwd", subject: string | null): string {
-  const text = (subject ?? "").replace(/[\r\n]+/g, " ");
-  return new RegExp(`^${prefix}:`, "i").test(text) ? text : `${prefix}: ${text}`;
-}
-
-const MESSAGE_ID = /^<[^<>\s]+>$/;
-
 /** The threading headers for a message that answers `original` (RFC 5322 §3.6.4). */
 function threading(original: GmailMessage) {
   const messageId = header(original, "Message-ID")?.trim() ?? null;
@@ -160,24 +101,18 @@ async function sendComposed(
   signal: AbortSignal,
   forwarded?: Buffer,
 ): Promise<Sent> {
-  let raw: string;
-  try {
-    raw = await composeRaw({
-      from: args.from,
-      to: args.to,
-      cc: args.cc,
-      bcc: args.bcc,
-      subject: args.subject,
-      text: args.body,
-      html: args.html,
-      inReplyTo: args.in_reply_to,
-      references: args.references,
-      forwarded,
-    });
-  } catch (error) {
-    if (error instanceof ComposeMismatchError) throw notSent(error.message, 422);
-    throw error;
-  }
+  const raw = await composeOrRefuse({
+    from: args.from,
+    to: args.to,
+    cc: args.cc,
+    bcc: args.bcc,
+    subject: args.subject,
+    text: args.body,
+    html: args.html,
+    inReplyTo: args.in_reply_to,
+    references: args.references,
+    forwarded,
+  });
   const sent = await mailbox.client.sendMessage({ raw, threadId: args.thread_id }, signal);
   return { id: sent.id, thread_id: sent.threadId };
 }
@@ -360,15 +295,6 @@ const createDraft = gmailTool({
   show: sent,
 });
 
-async function composeOrRefuse(message: Parameters<typeof composeRaw>[0]): Promise<string> {
-  try {
-    return await composeRaw(message);
-  } catch (error) {
-    if (error instanceof ComposeMismatchError) throw notSent(error.message, 422);
-    throw error;
-  }
-}
-
 /**
  * Reads a draft a call is aimed at and checks hiding on it, as for any
  * by-id call (I-42): a hidden draft is refused like a missing one.
@@ -445,31 +371,6 @@ interface SendDraftArgs {
   thread_id: string;
   /** SHA-256 of the draft's raw bytes when heel checked them. */
   raw_sha256: string;
-}
-
-/**
- * Who a draft sends to and from, read strictly from its own headers. Null
- * when anything could be read two ways: a header heel can't parse plainly,
- * a repeated From, To, Cc or Bcc, or a header that changes delivery.
- */
-function draftEnvelope(raw: Buffer) {
-  const headers = rawHeaders(raw);
-  if (headers === null) return null;
-  if ([...headers.keys()].some((name) => DELIVERY_HEADERS_REFUSED.test(name))) return null;
-  const single = (name: string): string[] | null => {
-    const values = headers.get(name) ?? [];
-    if (values.length > 1) return null;
-    // Bytes outside ASCII would be read as latin1 here and as UTF-8 elsewhere.
-    if (values.some((value) => [...value].some((c) => c.charCodeAt(0) > 0x7f))) return null;
-    return values.length === 0 ? [] : strictAddressList(values[0] ?? "");
-  };
-  const from = single("from");
-  const to = single("to");
-  const cc = single("cc");
-  const bcc = single("bcc");
-  if (from === null || from.length !== 1 || to === null || cc === null || bcc === null) return null;
-  const subject = (headers.get("subject") ?? []).join(" ");
-  return { from: from[0] as string, to, cc, bcc, subject };
 }
 
 const sendDraft = gmailTool({

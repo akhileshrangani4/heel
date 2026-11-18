@@ -57,7 +57,7 @@ async function startHumanPlane(): Promise<Running> {
     agentPublicUrl: null,
     upstreamOAuth: null,
     watchFallback: false,
-    googleClient: null,
+    providerClients: { google: null, microsoft: null },
     now: () => h.clock.now,
   });
   server.on("request", getRequestListener(app.fetch));

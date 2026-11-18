@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { GMAIL_MODIFY_SCOPE, googleRefresher } from "../../../src/definitions/google/oauth.ts";
-import { gmailSettings } from "../../../src/definitions/google/sign-in.ts";
+import { mailboxSettings } from "../../../src/definitions/sign-in.ts";
 import { findAccount } from "../../../src/store/directory.ts";
 import { ConnectError, connectAccount } from "../../../src/vault/connect.ts";
 import { RefreshUnavailableError } from "../../../src/vault/refresh.ts";
@@ -17,7 +17,7 @@ function setUp() {
   const google = new FakeGoogle();
   const h = humanPlaneHarness({
     upstreamOAuth: { fetch: google.fetch },
-    googleClient: TEST_GOOGLE_CLIENT,
+    providerClients: { google: TEST_GOOGLE_CLIENT },
   });
   connectAccount(
     h.t.db,
@@ -57,7 +57,7 @@ describe("Gmail sign-in", () => {
 
     expect(outcome.get("connected")).toBe("1");
     expect(account(h)?.status).toBe("active");
-    expect(gmailSettings(account(h)?.settings ?? {})).toEqual({ mailbox: "alice@company.com" });
+    expect(mailboxSettings(account(h)?.settings ?? {})).toEqual({ mailbox: "alice@company.com" });
     const stored = h.vault.get(account(h)?.id ?? "");
     expect(stored.type === "oauth" && stored.refreshToken?.reveal()).toBe(
       "refresh-alice@company.com",
@@ -73,7 +73,7 @@ describe("Gmail sign-in", () => {
     const outcome = await signIn(h, google, owner);
 
     expect(outcome.get("failed")).toContain("This account is alice@company.com");
-    expect(gmailSettings(account(h)?.settings ?? {})).toEqual({ mailbox: "alice@company.com" });
+    expect(mailboxSettings(account(h)?.settings ?? {})).toEqual({ mailbox: "alice@company.com" });
     const stored = h.vault.get(account(h)?.id ?? "");
     expect(stored.type === "oauth" && stored.refreshToken?.reveal()).toBe(
       "refresh-alice@company.com",

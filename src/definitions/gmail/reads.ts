@@ -1,6 +1,6 @@
 import { z } from "zod";
+import { mapLimit } from "../mail/map-limit.ts";
 import type { GmailLabel, GmailMessage } from "./client.ts";
-import { mapLimit } from "./mailbox.ts";
 import {
   type MessageDetail,
   type MessageSummary,

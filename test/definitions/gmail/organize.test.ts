@@ -123,6 +123,16 @@ describe("modify_labels", () => {
     });
   });
 
+  it("never adds SENT or DRAFT, which decide what counts as the mailbox's own mail", async () => {
+    const h = setUp();
+    for (const label of ["SENT", "DRAFT"]) {
+      expect(await h.call("modify_labels", { message_ids: ["m0"], add: [label] })).toMatchObject({
+        status: "denied",
+        reason: "unsupported",
+      });
+    }
+  });
+
   it("refuses a label name the mailbox doesn't have", async () => {
     const h = setUp();
     expect(await h.call("modify_labels", { message_ids: ["m0"], add: ["Nope"] })).toMatchObject({
