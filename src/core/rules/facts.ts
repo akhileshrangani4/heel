@@ -18,6 +18,7 @@ export interface RuleFacts {
   /** Addresses as the definition derived them; normalized again before any check. */
   recipients?: readonly string[];
   repo?: string;
+  calendar?: string;
   cli?: CliFields;
   http?: HttpFields;
   /** Expanded item count; 1 when unknown. */
@@ -39,6 +40,7 @@ export function factsOf(call: Call, agentName: string): RuleFacts {
     ...(call.kind !== undefined && { kind: call.kind }),
     ...(call.recipients !== undefined && { recipients: call.recipients }),
     ...(call.repo !== undefined && { repo: call.repo }),
+    ...(call.calendar !== undefined && { calendar: call.calendar }),
     ...(call.cli !== undefined && { cli: call.cli }),
     ...(call.http !== undefined && { http: call.http }),
     ...(call.runId !== undefined && { runId: call.runId }),
@@ -54,6 +56,7 @@ export const TEXT_FIELDS = [
   "action",
   "kind",
   "repo",
+  "calendar",
   "tool",
   "method",
   "path",
@@ -114,6 +117,7 @@ function textValue(facts: RuleFacts, name: TextField): string | undefined {
     case "action":
     case "kind":
     case "repo":
+    case "calendar":
     case "tool":
       return facts[name];
     case "method":

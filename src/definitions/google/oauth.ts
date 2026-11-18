@@ -41,13 +41,14 @@ export type GoogleClient = ConfidentialClient;
 export function googleAuthorizeUrl(
   client: Pick<GoogleClient, "clientId" | "redirectUri">,
   input: { state: string; challenge: string },
+  scopes: readonly string[] = GMAIL_SCOPES,
 ): URL {
   const url = new URL(GOOGLE_AUTHORIZE_URL);
   url.search = new URLSearchParams({
     client_id: client.clientId,
     redirect_uri: client.redirectUri.toString(),
     response_type: "code",
-    scope: GMAIL_SCOPES.join(" "),
+    scope: scopes.join(" "),
     access_type: "offline",
     prompt: "consent",
     state: input.state,
@@ -90,26 +91,74 @@ export async function gmailMailbox(
 }
 
 /**
- * Google's part of signing a Gmail account in. Refuses a sign-in that
- * didn't grant `gmail.modify`, since no tool could run.
+ * What one kind of Google account asks for and checks: Gmail and Google
+ * Calendar accounts sign in through the same client, with different scopes.
  */
+export interface GoogleProfile {
+  scopes: readonly string[];
+  /** Without this scope granted, no tool could run, so the sign-in is refused. */
+  required: string;
+  missing: string;
+  /** The address the token opens: the mailbox, or the primary calendar's id. */
+  address(fetch: FetchFn, accessToken: string, signal: AbortSignal): Promise<string>;
+}
+
+export const GMAIL_PROFILE: GoogleProfile = {
+  scopes: GMAIL_SCOPES,
+  required: GMAIL_MODIFY_SCOPE,
+  missing: "heel needs access to read and manage mail. Tick every box.",
+  address: gmailMailbox,
+};
+
+export const CALENDAR_API_BASE = "https://www.googleapis.com/calendar/v3/";
+/** Events on every calendar the person can edit (Calendar API "Choose scopes"). */
+export const CALENDAR_EVENTS_SCOPE = "https://www.googleapis.com/auth/calendar.events";
+/** The calendar list, read-only. */
+export const CALENDAR_LIST_SCOPE = "https://www.googleapis.com/auth/calendar.calendarlist.readonly";
+
+const PrimarySchema = z.object({ id: z.string().min(1) });
+
+/** The primary calendar's id, which is the account's address. */
+export async function primaryCalendar(
+  fetch: FetchFn,
+  accessToken: string,
+  signal: AbortSignal,
+): Promise<string> {
+  const response = await fetch(new URL("calendars/primary", CALENDAR_API_BASE), {
+    headers: { authorization: `Bearer ${accessToken}`, accept: "application/json" },
+    signal,
+  });
+  const body = response.ok ? PrimarySchema.safeParse(await response.json()) : null;
+  if (!body?.success) throw new SignInError("heel couldn't read the primary calendar.");
+  return body.data.id.toLowerCase();
+}
+
+export const CALENDAR_PROFILE: GoogleProfile = {
+  scopes: [CALENDAR_EVENTS_SCOPE, CALENDAR_LIST_SCOPE],
+  required: CALENDAR_EVENTS_SCOPE,
+  missing: "heel needs access to your calendar's events. Tick every box.",
+  address: primaryCalendar,
+};
+
+/** Google's part of signing an account in, for one kind of account. */
 export function googleSignIn(
   deps: { fetch: FetchFn; now: () => Date },
   client: GoogleClient,
   callbackPath: string,
+  profile: GoogleProfile = GMAIL_PROFILE,
 ): ProviderSignIn {
   return {
     label: "Google",
     callbackPath,
-    authorizeUrl: (input) => googleAuthorizeUrl(client, input),
+    authorizeUrl: (input) => googleAuthorizeUrl(client, input, profile.scopes),
     async exchange(input) {
       const tokens = await exchangeCode(deps, GOOGLE_TOKEN_URL, client, input);
       if (tokens === null) throw new SignInError("Google didn't accept the sign-in.");
-      if (!grantedScopes(tokens.scope).has(GMAIL_MODIFY_SCOPE)) {
-        throw new SignInError("heel needs access to read and manage mail. Tick every box.");
+      if (!grantedScopes(tokens.scope).has(profile.required)) {
+        throw new SignInError(profile.missing);
       }
       return tokens;
     },
-    mailbox: (accessToken, signal) => gmailMailbox(deps.fetch, accessToken, signal),
+    mailbox: (accessToken, signal) => profile.address(deps.fetch, accessToken, signal),
   };
 }

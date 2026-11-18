@@ -37,6 +37,8 @@ export interface Prepared<P> {
   items?: number;
   /** The tool leaves something behind that outlives revoking heel (I-70). */
   persistence?: boolean;
+  /** The calendar a calendar tool touches (spec: Calendar). */
+  calendar?: string;
 }
 
 export type Preparation<P> = Prepared<P> | { deny: HardDenyReason };
@@ -130,6 +132,7 @@ export function mailDefinition<M>(input: {
           items: prepared.items ?? 1,
           ...(prepared.action === undefined ? {} : { action: prepared.action }),
           ...(prepared.persistence === undefined ? {} : { persistence: prepared.persistence }),
+          ...(prepared.calendar === undefined ? {} : { calendar: prepared.calendar }),
           ...(prepared.recipients === undefined ? {} : { recipients: prepared.recipients }),
           ...(prepared.targets === undefined ? {} : { targets: prepared.targets }),
         },

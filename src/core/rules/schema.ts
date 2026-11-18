@@ -31,7 +31,7 @@ function condition<S extends z.ZodType, O extends z.ZodType>(shorthand: S, ops: 
   });
 }
 
-/** Single text values: account, provider, agent, action, repo, tool, method, path, command, verb, subcommand. */
+/** Single text values: account, provider, agent, action, repo, calendar, tool, method, path, command, verb, subcommand. */
 export const TextCondition = condition(
   z.string(),
   z.strictObject({
@@ -142,6 +142,7 @@ const fixedMatchKeys = {
   kind: KindCondition.optional(),
   recipients: RecipientsCondition.optional(),
   repo: TextCondition.optional(),
+  calendar: TextCondition.optional(),
   checks: ChecksCondition.optional(),
   items: ItemsCondition.optional(),
   tool: TextCondition.optional(),

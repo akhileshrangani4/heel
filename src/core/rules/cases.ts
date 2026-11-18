@@ -32,6 +32,7 @@ const CaseCall = z.strictObject({
   kind: z.enum(["read", "write"]).optional(),
   recipients: z.array(z.string()).optional(),
   repo: z.string().min(1).optional(),
+  calendar: z.string().min(1).optional(),
   items: count.default(1),
   /** The run id the agent sent. */
   run: z.string().min(1).optional(),
@@ -169,6 +170,7 @@ export function caseFacts(call: CaseCallInput): RuleFacts {
     ...(call.kind !== undefined && { kind: call.kind }),
     ...(call.recipients !== undefined && { recipients: call.recipients }),
     ...(call.repo !== undefined && { repo: call.repo }),
+    ...(call.calendar !== undefined && { calendar: call.calendar }),
     ...(call.run !== undefined && { runId: call.run }),
     ...(call.args !== undefined && { args: call.args }),
     ...(call.persistence !== undefined && { persistence: call.persistence }),
