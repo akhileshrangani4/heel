@@ -28,6 +28,7 @@ export async function codemodeWorkerMain(): Promise<void> {
         module: m.module,
         stubs: m.stubs,
         functions: new Map(m.functions),
+        renamed: new Map(),
         skipped: [],
       }));
       // Output past the script's limit is dropped here, so the sandbox's own ceiling isn't reached.

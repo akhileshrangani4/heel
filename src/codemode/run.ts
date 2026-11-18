@@ -88,6 +88,22 @@ export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
       );
       continue;
     }
+    // `from_` in Python is the tool's `from`. Passing both is ambiguous.
+    const renamed = module.renamed.get(step.fn);
+    const args: Record<string, unknown> = {};
+    let clash: string | null = null;
+    for (const [key, value] of Object.entries(step.kwargs)) {
+      const name = renamed?.get(key) ?? key;
+      if (Object.hasOwn(args, name)) clash = name;
+      args[name] = value;
+    }
+    if (clash !== null) {
+      step = await step.raise(
+        "RuntimeError",
+        `${step.module}.${step.fn} got ${clash} twice (as ${clash} and ${clash}_)`,
+      );
+      continue;
+    }
     if (calls.length >= limits.maxCalls) {
       return finish({
         status: "error",
@@ -99,7 +115,7 @@ export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
       surface: "code",
       account: module.account,
       tool,
-      args: step.kwargs,
+      args,
       ...(input.runId === undefined ? {} : { runId: input.runId }),
     });
     const record = (decision: CallRecord["decision"]) =>

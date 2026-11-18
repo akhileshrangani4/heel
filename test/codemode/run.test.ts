@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { MontyWorker } from "../../src/codemode/monty.ts";
 import { runScript } from "../../src/codemode/run.ts";
 import { accountModule, moduleName, pythonType } from "../../src/codemode/stubs.ts";
+import { GMAIL_TOOLS } from "../../src/definitions/gmail/definition.ts";
+import { OUTLOOK_TOOLS } from "../../src/definitions/outlook/definition.ts";
 import { oneRule, pipelineHarness } from "../helpers/pipeline.ts";
 
 /**
@@ -71,6 +73,90 @@ describe("stubs", () => {
     ]);
     expect(module?.stubs).toContain("def create_page(*, title: str) -> Any:");
     expect(module?.skipped.map((s) => s.tool)).toEqual(["create_page", "class"]);
+  });
+});
+
+describe("parameters named after Python reserved words", () => {
+  const MAIL = [
+    {
+      name: "send",
+      inputSchema: {
+        type: "object",
+        properties: {
+          action: { type: "string" },
+          from: { type: "string" },
+          recipients: { type: "array", items: { type: "string" } },
+        },
+        required: ["action", "from"],
+      },
+    },
+  ];
+
+  it("are spelled with a trailing underscore, so tools that require one aren't left out", () => {
+    const module = accountModule("gmail-work", MAIL);
+    expect(module?.skipped).toEqual([]);
+    expect(module?.stubs).toContain(
+      "def send(*, action: str, from_: str, recipients: list[str] = ...)",
+    );
+    expect(module?.renamed.get("send")?.get("from_")).toBe("from");
+  });
+
+  it("leave no Gmail or Outlook tool out: sending takes `from_`", () => {
+    for (const tools of [GMAIL_TOOLS, OUTLOOK_TOOLS]) {
+      const module = accountModule("mail", tools as never);
+      expect(module?.skipped).toEqual([]);
+      expect(module?.stubs).toMatch(/def send\(\*, [^)]*from_: str/);
+    }
+  });
+
+  it("skip a tool whose reserved-word parameter's underscore spelling is taken", () => {
+    const module = accountModule("x", [
+      {
+        name: "send",
+        inputSchema: {
+          type: "object",
+          properties: { from: { type: "string" }, from_: { type: "string" } },
+          required: ["from"],
+        },
+      },
+    ]);
+    expect(module?.skipped.map((s) => s.tool)).toEqual(["send"]);
+  });
+
+  function mailRun() {
+    const h = pipelineHarness({ owner: oneRule("{ action: email.send }") });
+    const module = accountModule("gmail-work", MAIL);
+    if (module === null) throw new Error("no module");
+    const run = (code: string) =>
+      runScript({
+        code,
+        agent: h.agent,
+        modules: [{ ...module, account: "gmail-work" }],
+        pipeline: h.pipeline,
+        worker: new MontyWorker(),
+        limits: {},
+      });
+    return { h, run };
+  }
+
+  it("reach the rules and the upstream under the tool's own name", async () => {
+    const { h, run } = mailRun();
+    const result = await run(
+      `import gmail_work\ngmail_work.send(action="email.send", from_="me@company.com", recipients=["bob@company.com"])`,
+    );
+    expect(result).toMatchObject({ status: "completed", calls: [{ decision: "allow" }] });
+    expect(h.provider.executed[0]?.args).toMatchObject({ from: "me@company.com" });
+    expect(h.provider.executed[0]?.args).not.toHaveProperty("from_");
+  });
+
+  it("refuse the same argument passed under both spellings", async () => {
+    const { h, run } = mailRun();
+    const result = await run(
+      `import gmail_work\ntry:\n    gmail_work.send(action="email.send", from_="a@x.com", **{"from": "b@x.com"})\nexcept RuntimeError as e:\n    print("refused:", e)`,
+    );
+    // Monty's type check refuses it before running; heel refuses it too if one ever gets through.
+    expect(result.status === "error" || result.stdout.includes("got from twice")).toBe(true);
+    expect(h.provider.executed).toHaveLength(0);
   });
 });
 
