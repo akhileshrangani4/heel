@@ -90,7 +90,7 @@
     const top = y + h / 2 - (lines.length * 13) / 2 + 4;
     if (opts.num) text(x + 10, top + 1, opts.num, "num", "start", g);
     text(tx, top, title, "t1", "start", g);
-    lines.forEach((line, i) => text(tx, top + 14 + i * 13, line, "t2", "start", g));
+    for (const [i, line] of lines.entries()) text(tx, top + 14 + i * 13, line, "t2", "start", g);
     return { x, y, w, h, cx: x + w / 2, cy: y + h / 2, right: x + w, bottom: y + h };
   };
   const pill = (x, y, w, kind, label) => {
