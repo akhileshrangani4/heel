@@ -4,6 +4,7 @@ import type { AccountRecord } from "../../store/directory.ts";
 import type { Vault } from "../../vault/vault.ts";
 import { listedTools, mailDefinition } from "../mail/tool.ts";
 import { type FetchFn, mailboxSettings } from "../sign-in.ts";
+import { CALENDAR_TOOLS } from "./calendar.ts";
 import { OutlookClient, OutlookNotFoundError, OutlookWriteRefused } from "./client.ts";
 import { OutlookMailbox } from "./messages.ts";
 import { ORGANIZE_TOOLS } from "./organize.ts";
@@ -26,7 +27,12 @@ export interface OutlookDeps {
   fetch: FetchFn;
 }
 
-const TOOLS: Record<string, OutlookTool> = { ...READ_TOOLS, ...SEND_TOOLS, ...ORGANIZE_TOOLS };
+const TOOLS: Record<string, OutlookTool> = {
+  ...READ_TOOLS,
+  ...SEND_TOOLS,
+  ...ORGANIZE_TOOLS,
+  ...CALENDAR_TOOLS,
+};
 
 /** The tools as MCP lists them. */
 export const OUTLOOK_TOOLS: readonly Tool[] = listedTools(TOOLS);

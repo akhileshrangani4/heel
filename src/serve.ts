@@ -253,7 +253,10 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
     // rather than letting every account of that provider lapse.
     const providerClients = loadProviderClients(config, options.env);
     const refreshers: RefresherLookup = (provider) => {
-      if (provider === "gmail" && providerClients.google !== null) {
+      if (
+        (provider === "gmail" || provider === "google-calendar") &&
+        providerClients.google !== null
+      ) {
         return googleRefresher({ fetch, now }, providerClients.google);
       }
       if (provider === "outlook" && providerClients.microsoft !== null) {
@@ -368,6 +371,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         upstream,
         gmail: { vault: opening.vault, fetch },
         outlook: { vault: opening.vault, fetch },
+        googleCalendar: { vault: opening.vault, fetch },
       });
       const pipeline = createPipeline({
         db: store.db,

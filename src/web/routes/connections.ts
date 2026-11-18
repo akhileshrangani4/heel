@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { GOOGLE_CALLBACK_PATH, MICROSOFT_CALLBACK_PATH } from "../../config/schema.ts";
-import { googleSignIn } from "../../definitions/google/oauth.ts";
+import { CALENDAR_PROFILE, GMAIL_PROFILE, googleSignIn } from "../../definitions/google/oauth.ts";
 import { upstreamSettings } from "../../definitions/mcp/settings.ts";
 import {
   finishUpstreamSignIn,
@@ -71,7 +71,13 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
   if (oauth !== null) {
     const http = { fetch: oauth.fetch ?? fetch, now: deps.now };
     const { google, microsoft } = deps.providerClients;
-    if (google !== null) providers.set("gmail", googleSignIn(http, google, GOOGLE_CALLBACK_PATH));
+    if (google !== null) {
+      providers.set("gmail", googleSignIn(http, google, GOOGLE_CALLBACK_PATH, GMAIL_PROFILE));
+      providers.set(
+        "google-calendar",
+        googleSignIn(http, google, GOOGLE_CALLBACK_PATH, CALENDAR_PROFILE),
+      );
+    }
     if (microsoft !== null) {
       providers.set("outlook", microsoftSignIn(http, microsoft, MICROSOFT_CALLBACK_PATH));
     }
@@ -176,8 +182,10 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     return c.redirect(back({ account: alias, connected: "1" }), 303);
   });
 
-  for (const [providerName, provider] of providers) {
-    app.get(provider.callbackPath, signedIn, async (c) => {
+  // One route per callback path; Gmail and Google Calendar share Google's.
+  const callbackPaths = new Set([...providers.values()].map((p) => p.callbackPath));
+  for (const callbackPath of callbackPaths) {
+    app.get(callbackPath, signedIn, async (c) => {
       const session = c.get("session");
       const params = new URL(c.req.url).searchParams;
       const pending = oauth.signIns.take(params.get("state") ?? "", deps.now());
@@ -187,12 +195,15 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
           : accountsOwnedBy(deps.db, session.orgId, session.userId).find(
               (a) => a.id === pending.accountId,
             );
-      // Only the person who started this sign-in can finish it, and only
-      // for an account of this callback's provider.
+      const provider = account === undefined ? undefined : providers.get(account.provider);
+      // Only the person who started this sign-in can finish it, and only for
+      // an account whose provider comes back to this callback.
       if (
         pending === null ||
         pending.userId !== session.userId ||
-        account?.provider !== providerName
+        account === undefined ||
+        provider === undefined ||
+        provider.callbackPath !== callbackPath
       ) {
         return c.redirect(
           back({ failed: "That sign-in expired or wasn't yours. Start again." }),

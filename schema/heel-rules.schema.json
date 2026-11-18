@@ -73,6 +73,9 @@
         "repo": {
           "$ref": "#/$defs/TextCondition"
         },
+        "calendar": {
+          "$ref": "#/$defs/TextCondition"
+        },
         "checks": {
           "type": "string",
           "const": "passing",
@@ -118,6 +121,7 @@
               "kind",
               "recipients",
               "repo",
+              "calendar",
               "checks",
               "items",
               "tool",

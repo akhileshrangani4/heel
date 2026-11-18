@@ -1,5 +1,6 @@
 import type { DefinitionRegistry } from "../gateway/pipeline/ports.ts";
 import { isMcpProvider } from "../vault/connect.ts";
+import { type GoogleCalendarDeps, googleCalendarDefinition } from "./calendar/google.ts";
 import { type GmailDeps, gmailDefinition } from "./gmail/definition.ts";
 import { mcpPassthrough } from "./mcp/passthrough.ts";
 import type { UpstreamPool } from "./mcp/upstream.ts";
@@ -16,12 +17,17 @@ export function definitionRegistry(deps: {
   gmail: GmailDeps | null;
   /** The same for Outlook. */
   outlook?: OutlookDeps | null;
+  /** The same for Google Calendar. */
+  googleCalendar?: GoogleCalendarDeps | null;
 }): DefinitionRegistry {
   return {
     forAccount(account) {
       if (isMcpProvider(account.provider)) return mcpPassthrough(account, deps.upstream);
       if (account.provider === "gmail" && deps.gmail !== null) {
         return gmailDefinition(account, deps.gmail);
+      }
+      if (account.provider === "google-calendar" && deps.googleCalendar != null) {
+        return googleCalendarDefinition(account, deps.googleCalendar);
       }
       if (account.provider === "outlook" && deps.outlook != null) {
         return outlookDefinition(account, deps.outlook);
