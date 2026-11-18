@@ -77,7 +77,16 @@ function mcpSettings(input: ConnectInput): Record<string, unknown> {
   if (input.url !== undefined) {
     const problem = upstreamUrlProblem(input.url);
     if (problem !== null) throw new ConnectError("invalid_settings", problem);
-    return { transport: "http", url: input.url };
+    if (input.oauth === true && input.credential !== undefined) {
+      throw new ConnectError(
+        "invalid_settings",
+        "--oauth signs in from the Connections page; give no token",
+      );
+    }
+    return { transport: "http", url: input.url, oauth: input.oauth === true };
+  }
+  if (input.oauth === true) {
+    throw new ConnectError("invalid_settings", "--oauth is for remote servers (--url)");
   }
   const stdio = input.stdio as NonNullable<ConnectInput["stdio"]>;
   if (!stdio.command.startsWith("/")) {
@@ -144,6 +153,8 @@ export interface ConnectInput {
   credential?: CredentialPayload;
   /** For `mcp`: the upstream server's URL (a remote server). */
   url?: string;
+  /** For a remote `mcp` server that wants OAuth sign-in (D5c). */
+  oauth?: boolean;
   /** For `mcp`: a local server heel starts in the sandbox, instead of a URL. */
   stdio?: {
     command: string;
@@ -213,8 +224,9 @@ export function connectAccount(
         alias: input.alias,
         provider: passthrough ? mcpProvider(input.alias) : input.provider,
         settings,
-        // A built-in provider needs its credential first; a passthrough may need none.
-        status: passthrough ? "active" : "reconnect_required",
+        // A built-in provider needs its credential first; a passthrough may need none,
+        // unless its owner still has to sign in to it (OAuth).
+        status: passthrough && settings["oauth"] !== true ? "active" : "reconnect_required",
         createdAt: now,
       })
       .run();

@@ -13,6 +13,7 @@ import { formatYamlIssue } from "./config/yaml.ts";
 import { definitionRegistry } from "./definitions/mcp/passthrough.ts";
 import { stdioSandboxSpec } from "./definitions/mcp/settings.ts";
 import { UpstreamPool } from "./definitions/mcp/upstream.ts";
+import { UpstreamSignIns } from "./definitions/mcp/upstream-oauth.ts";
 import { createAgentApp } from "./gateway/app.ts";
 import { createMcpSurface } from "./gateway/mcp/server.ts";
 import { createPipeline } from "./gateway/pipeline/pipeline.ts";
@@ -222,6 +223,10 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
     });
     closers.push(() => admin.close());
 
+    // Sign-ins to remote MCP servers that want OAuth (D5c), shared by the
+    // Connections page and the upstream pool.
+    const upstreamSignIns = new UpstreamSignIns();
+
     // Approval notifications (D4d). The pipeline below hands each new request
     // to `notifier.approvalRequested`.
     const notify = notifySetup(config.notify, options.env);
@@ -254,6 +259,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         rules,
         vapidPublicKey: notify.vapidPublicKey,
         agentPublicUrl: config.agentPublicUrl,
+        upstreamOAuth: vault === null ? null : { signIns: upstreamSignIns, vault },
         now,
       });
       const server = await listenHttp(humanApp.fetch, config.listen.human);
@@ -276,6 +282,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
       const upstream = new UpstreamPool({
         vault: opening.vault,
         log,
+        oauth: { db: store.db, vault: opening.vault, publicUrl: config.publicUrl, now },
         ...(sandbox.ok && {
           launchStdio: (account, settings, credential) => {
             // Each local server gets its own work directory, and nothing else of heel's.

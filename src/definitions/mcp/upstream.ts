@@ -11,6 +11,7 @@ import type { Secret } from "../../vault/secret.ts";
 import { type Vault, VaultError } from "../../vault/vault.ts";
 import { SandboxStdioTransport, type StdioProcess } from "./sandbox-transport.ts";
 import { type StdioUpstream, type UpstreamSettings, upstreamSettings } from "./settings.ts";
+import { type UpstreamOAuthDeps, UpstreamOAuthProvider } from "./upstream-oauth.ts";
 
 /**
  * Connections to the MCP servers that passthrough accounts point at (spec:
@@ -37,6 +38,8 @@ export interface UpstreamDeps {
    * Starts a local (stdio) MCP server in the sandbox. Absent when the host
    * can't run the sandbox: those accounts' calls are then denied.
    */
+  /** Where OAuth upstreams keep their state (D5c); absent when the vault is closed. */
+  oauth?: UpstreamOAuthDeps;
   launchStdio?: (
     account: AccountRecord,
     upstream: StdioUpstream,
@@ -83,6 +86,12 @@ export class UpstreamPool {
   async credential(account: AccountRecord): Promise<Secret | null> {
     if (this.#deps.vault === null) return null;
     try {
+      // An OAuth upstream's tokens are refreshed by the SDK through its provider, not by the vault.
+      const settings = upstreamSettings(account.settings);
+      if (settings?.transport === "http" && settings.oauth) {
+        const stored = this.#deps.vault.get(account.id);
+        return stored.type === "oauth" ? stored.accessToken : null;
+      }
       return await this.#deps.vault.accessToken(account.id);
     } catch (error) {
       if (error instanceof VaultError && error.code === "no_credential") return null;
@@ -131,11 +140,22 @@ export class UpstreamPool {
     token: Secret | null,
   ): Promise<Transport> {
     if (upstream.transport === "http") {
+      const fetch = this.#deps.fetch === undefined ? {} : { fetch: this.#deps.fetch };
+      if (upstream.oauth) {
+        // The SDK signs requests with the stored token and refreshes it when the server asks.
+        const oauth = this.#deps.oauth;
+        if (oauth === undefined)
+          throw new Error("OAuth upstreams need the vault, which isn't open");
+        return new StreamableHTTPClientTransport(new URL(upstream.url), {
+          authProvider: new UpstreamOAuthProvider(oauth, account.id),
+          ...fetch,
+        });
+      }
       return new StreamableHTTPClientTransport(new URL(upstream.url), {
         ...(token === null
           ? {}
           : { requestInit: { headers: { authorization: `Bearer ${token.reveal()}` } } }),
-        ...(this.#deps.fetch === undefined ? {} : { fetch: this.#deps.fetch }),
+        ...fetch,
       });
     }
     const launch = this.#deps.launchStdio;
