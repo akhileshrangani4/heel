@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
 import type { HeelDb, HeelTx } from "../store/db.ts";
 import { newId } from "../store/ids.ts";
-import { agents, agentTokens, users } from "../store/schema.ts";
+import { type AgentTokenKind, agents, agentTokens, users } from "../store/schema.ts";
 
 /**
  * Per-agent bearer tokens (spec: MCP and code mode, "Agent authentication").
@@ -46,7 +46,7 @@ export function parseBearer(header: string | undefined): BearerParse {
   return { kind: "token", token };
 }
 
-export type AgentAuthFailure = "missing" | "malformed" | "unknown" | "revoked";
+export type AgentAuthFailure = "missing" | "malformed" | "unknown" | "revoked" | "expired";
 
 export interface AuthenticatedAgent {
   orgId: string;
@@ -64,15 +64,23 @@ export type AgentAuthResult =
  * Resolves an `Authorization` header to an agent. Runs first on every agent
  * plane request: a missing, unknown or revoked token stops here, before any
  * rule, lookup or upstream is touched (I-03). A token is revoked when it, its
- * agent, or the agent's owner has been revoked or disabled.
+ * agent, or the agent's owner has been revoked or disabled. An OAuth access
+ * token also stops at its expiry, and a refresh token never authenticates a
+ * call: it only buys a new pair at the token endpoint.
  */
-export function authenticateAgent(db: HeelDb, header: string | undefined): AgentAuthResult {
+export function authenticateAgent(
+  db: HeelDb,
+  header: string | undefined,
+  now: Date = new Date(),
+): AgentAuthResult {
   const parsed = parseBearer(header);
   if (parsed.kind !== "token") return { ok: false, failure: parsed.kind };
   const row = db
     .select({
       tokenId: agentTokens.id,
       tokenRevokedAt: agentTokens.revokedAt,
+      tokenKind: agentTokens.kind,
+      tokenExpiresAt: agentTokens.expiresAt,
       orgId: agents.orgId,
       agentId: agents.id,
       agentName: agents.name,
@@ -85,9 +93,12 @@ export function authenticateAgent(db: HeelDb, header: string | undefined): Agent
     .innerJoin(users, eq(users.id, agents.ownerId))
     .where(eq(agentTokens.tokenHash, hashAgentToken(parsed.token)))
     .get();
-  if (!row) return { ok: false, failure: "unknown" };
+  if (!row || row.tokenKind === "oauth_refresh") return { ok: false, failure: "unknown" };
   if (row.tokenRevokedAt || row.agentRevokedAt || row.ownerDisabledAt) {
     return { ok: false, failure: "revoked" };
+  }
+  if (row.tokenExpiresAt !== null && row.tokenExpiresAt.getTime() <= now.getTime()) {
+    return { ok: false, failure: "expired" };
   }
   return {
     ok: true,
@@ -101,11 +112,15 @@ export function authenticateAgent(db: HeelDb, header: string | undefined): Agent
   };
 }
 
-/** Issues a new token for an agent inside `tx`; returns the plaintext once. */
+/**
+ * Issues a new token for an agent inside `tx`; returns the plaintext once.
+ * Static by default; OAuth tokens pass their kind and expiry.
+ */
 export function issueAgentToken(
   tx: HeelTx,
   agent: { orgId: string; agentId: string },
   now: Date,
+  options: { kind?: AgentTokenKind; expiresAt?: Date } = {},
 ): string {
   const token = generateAgentToken();
   tx.insert(agentTokens)
@@ -114,6 +129,8 @@ export function issueAgentToken(
       orgId: agent.orgId,
       agentId: agent.agentId,
       tokenHash: hashAgentToken(token),
+      kind: options.kind ?? "static",
+      expiresAt: options.expiresAt ?? null,
       createdAt: now,
       revokedAt: null,
     })

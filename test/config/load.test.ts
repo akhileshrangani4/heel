@@ -254,6 +254,14 @@ describe("oidc and audit sections", () => {
     });
   });
 
+  it("turns OAuth for connectors on only with an https agent_public_url", () => {
+    expect(load().agentPublicUrl).toBeNull();
+    writeConfig("agent_public_url: https://agents.example.com/\n");
+    expect(load().agentPublicUrl).toEqual(new URL("https://agents.example.com/"));
+    writeConfig("agent_public_url: http://agents.example.com/\n");
+    expect(validationIssues(load)[0]?.message).toMatch(/https/);
+  });
+
   it("rejects a web push contact that isn't mailto: or https:", () => {
     writeConfig("notify:\n  web_push:\n    subject: ops@example.com\n");
     expect(validationIssues(load)[0]?.message).toMatch(/mailto/);

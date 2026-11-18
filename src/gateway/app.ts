@@ -12,7 +12,15 @@ export interface AgentAppDeps {
   now?: () => Date;
   /** The MCP endpoints; without it they answer 501, like any surface not built yet. */
   mcp?: McpSurface;
+  /**
+   * OAuth for connectors (A2): where the agent plane is reachable and which
+   * authorization server issues its tokens. Null or absent: static tokens only.
+   */
+  oauth?: { agentPublicUrl: URL; authorizationServer: URL } | null;
 }
+
+/** RFC 9728: where an MCP client learns which authorization server to use. */
+const PROTECTED_RESOURCE_PATH = "/.well-known/oauth-protected-resource";
 
 /**
  * The agent plane's surfaces (spec: Architecture, "Listeners"). Each one is
@@ -31,7 +39,36 @@ const NOT_BUILT = { status: "denied", reason: "surface_unavailable", rule: null 
  */
 export function createAgentApp(deps: AgentAppDeps): Hono<AgentPlaneEnv> {
   const app = new Hono<AgentPlaneEnv>();
-  app.use("*", requireAgent(deps));
+  const oauth = deps.oauth ?? null;
+  if (oauth !== null) {
+    // Before authentication: a client reads this to find out how to get a token.
+    app.get(`${PROTECTED_RESOURCE_PATH}/*`, (c) => {
+      const resourcePath = new URL(c.req.url).pathname.slice(PROTECTED_RESOURCE_PATH.length);
+      return c.json({
+        resource: new URL(resourcePath, oauth.agentPublicUrl).toString(),
+        authorization_servers: [oauth.authorizationServer.origin],
+        bearer_methods_supported: ["header"],
+        resource_name: "heel",
+      });
+    });
+    app.get(PROTECTED_RESOURCE_PATH, (c) =>
+      c.json({
+        resource: oauth.agentPublicUrl.toString(),
+        authorization_servers: [oauth.authorizationServer.origin],
+        bearer_methods_supported: ["header"],
+        resource_name: "heel",
+      }),
+    );
+  }
+  app.use(
+    "*",
+    requireAgent({
+      ...deps,
+      ...(oauth !== null && {
+        resourceMetadataUrl: new URL(PROTECTED_RESOURCE_PATH, oauth.agentPublicUrl).toString(),
+      }),
+    }),
+  );
 
   // MCP (spec: Endpoints and tools). Bare /mcp is code mode, which arrives
   // with D6; until then it says where the direct tools are.

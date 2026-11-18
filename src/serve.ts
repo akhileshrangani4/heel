@@ -249,6 +249,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         pauses: new SqlitePauseStore(),
         rules,
         vapidPublicKey: notify.vapidPublicKey,
+        agentPublicUrl: config.agentPublicUrl,
         now,
       });
       const server = await listenHttp(humanApp.fetch, config.listen.human);
@@ -279,7 +280,16 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
       });
       const mcp = createMcpSurface({ db: store.db, pipeline, upstream, log, version, now });
       closers.push(() => mcp.close());
-      const app = createAgentApp({ db: store.db, log, now, mcp });
+      const app = createAgentApp({
+        db: store.db,
+        log,
+        now,
+        mcp,
+        oauth:
+          config.agentPublicUrl === null
+            ? null
+            : { agentPublicUrl: config.agentPublicUrl, authorizationServer: config.publicUrl },
+      });
       const server = await listenHttp(app.fetch, config.listen.agent);
       closers.push(() => closeHttp(server));
       agent = { state: "listening", url: boundUrl(server) };

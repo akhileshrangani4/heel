@@ -24,7 +24,8 @@ export type CeremonyIntent =
   | "deny"
   | "resume"
   | "sign-in"
-  | "enroll";
+  | "enroll"
+  | "connect";
 
 export interface CeremonyButtonProps {
   callback: CeremonyCallback;

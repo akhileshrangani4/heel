@@ -73,12 +73,22 @@ export const agents = sqliteTable(
       .notNull()
       .references(() => users.id),
     name: text("name").notNull(),
+    /** Set for an agent created by connecting an OAuth client (A2); reused when it connects again. */
+    oauthClientId: text("oauth_client_id"),
     createdAt: createdAt(),
     /** A revoked agent's tokens stop working on the next call. */
     revokedAt: integer("revoked_at", { mode: "timestamp_ms" }),
   },
   (t) => [uniqueIndex("agents_org_name").on(t.orgId, t.name)],
 );
+
+/**
+ * How an agent token was issued. A static token (`heel agent add`) never
+ * expires. OAuth access tokens are short-lived; refresh tokens only ever buy
+ * a new pair at the token endpoint and never authenticate a call.
+ */
+export const AGENT_TOKEN_KINDS = ["static", "oauth_access", "oauth_refresh"] as const;
+export type AgentTokenKind = (typeof AGENT_TOKEN_KINDS)[number];
 
 /** Agent bearer tokens. Only the SHA-256 of the token is ever stored (I-03). */
 export const agentTokens = sqliteTable(
@@ -93,6 +103,9 @@ export const agentTokens = sqliteTable(
       .references(() => agents.id),
     /** Lower-case hex SHA-256 of the full token string. */
     tokenHash: text("token_hash").notNull(),
+    kind: text("kind", { enum: AGENT_TOKEN_KINDS }).notNull().default("static"),
+    /** Null for a static token. */
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }),
     createdAt: createdAt(),
     revokedAt: integer("revoked_at", { mode: "timestamp_ms" }),
   },
@@ -331,7 +344,7 @@ export const passkeys = sqliteTable(
   (t) => [index("passkeys_user").on(t.userId)],
 );
 
-export const CHALLENGE_PURPOSES = ["enroll", "sign_in", "decide", "resume"] as const;
+export const CHALLENGE_PURPOSES = ["enroll", "sign_in", "decide", "resume", "connect"] as const;
 export type ChallengePurpose = (typeof CHALLENGE_PURPOSES)[number];
 
 /**
@@ -410,6 +423,44 @@ export const sessions = sqliteTable(
   },
   (t) => [index("sessions_user").on(t.userId)],
 );
+
+// ── OAuth for cloud connectors (A2) ─────────────────────────────────────────
+
+/**
+ * Clients registered through dynamic client registration (RFC 7591): Claude,
+ * ChatGPT, Grok and other MCP hosts adding heel as a custom connector. They
+ * are public clients (no secret), so every code exchange needs PKCE.
+ */
+export const oauthClients = sqliteTable("oauth_clients", {
+  id: text("id").primaryKey(),
+  orgId: text("org_id")
+    .notNull()
+    .references(() => orgs.id),
+  /** What the client calls itself, e.g. "Claude"; shown on the consent page, never trusted. */
+  name: text("name").notNull(),
+  redirectUris: text("redirect_uris", { mode: "json" }).$type<string[]>().notNull(),
+  createdAt: createdAt(),
+});
+
+/** One-time authorization codes, kept only as hashes, valid for a minute. */
+export const oauthCodes = sqliteTable("oauth_codes", {
+  codeHash: text("code_hash").primaryKey(),
+  orgId: text("org_id")
+    .notNull()
+    .references(() => orgs.id),
+  clientId: text("client_id")
+    .notNull()
+    .references(() => oauthClients.id),
+  agentId: text("agent_id")
+    .notNull()
+    .references(() => agents.id),
+  redirectUri: text("redirect_uri").notNull(),
+  /** The PKCE S256 challenge the token request's verifier must match. */
+  codeChallenge: text("code_challenge").notNull(),
+  createdAt: createdAt(),
+  expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  usedAt: integer("used_at", { mode: "timestamp_ms" }),
+});
 
 // ── notifications ───────────────────────────────────────────────────────────
 

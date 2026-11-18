@@ -165,6 +165,13 @@ export const HeelConfigFileSchema = z.strictObject({
    * Architecture, "Listeners").
    */
   public_url: httpUrl.default("http://localhost:7301"),
+  /**
+   * Where cloud agents (Claude, ChatGPT, Grok connectors) reach the agent
+   * plane, e.g. through a reverse proxy. Setting it turns on OAuth for
+   * connectors (A2): heel's human plane becomes their authorization server.
+   * https, or http on localhost.
+   */
+  agent_public_url: secureUrl.optional(),
   listen: z
     .strictObject({
       agent: listenAddress.default({ host: "127.0.0.1", port: 7300 }),
@@ -249,6 +256,8 @@ export interface HeelConfig {
   configFile: string | null;
   databasePath: string;
   publicUrl: URL;
+  /** Null when OAuth for connectors is off; agents then use static tokens only. */
+  agentPublicUrl: URL | null;
   listen: { agent: ListenAddress; human: ListenAddress };
   adminSocketPath: string;
   vault: { keyFile: string };
@@ -271,6 +280,7 @@ export function resolveConfig(
     configFile,
     databasePath: fromHome(file.database),
     publicUrl: new URL(file.public_url),
+    agentPublicUrl: file.agent_public_url === undefined ? null : new URL(file.agent_public_url),
     listen: { agent: file.listen.agent, human: file.listen.human },
     adminSocketPath: fromHome(file.admin_socket),
     vault: { keyFile: fromHome(file.vault.key_file) },

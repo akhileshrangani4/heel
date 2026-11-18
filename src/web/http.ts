@@ -35,6 +35,8 @@ export interface HumanPlaneDeps {
   rules: RulesSource;
   /** The VAPID public key devices subscribe to approval notifications with. */
   vapidPublicKey: string;
+  /** The agent plane's public URL when OAuth for connectors is on (A2); null when off. */
+  agentPublicUrl: URL | null;
   now: () => Date;
 }
 
@@ -68,7 +70,9 @@ export function requireSession(deps: HumanPlaneDeps): MiddlewareHandler<SignedIn
     const session = cookie === undefined ? null : readSession(deps.db, cookie, deps.now());
     if (session === null || session.orgId !== deps.orgId) {
       if (c.req.method === "GET") {
-        const next = encodeURIComponent(new URL(c.req.url).pathname);
+        // Path and query: an OAuth authorize request needs its parameters back after sign-in.
+        const url = new URL(c.req.url);
+        const next = encodeURIComponent(url.pathname + url.search);
         return c.redirect(`/sign-in?next=${next}`, 303);
       }
       return c.json({ error: "signed_out" }, 401);
@@ -107,8 +111,16 @@ export function clearSessionCookie(c: Context, deps: HumanPlaneDeps): void {
  * This runs before CSRF, and also guards the sign-in and enrollment posts,
  * which have no session yet.
  */
+/**
+ * OAuth endpoints a connector's servers call directly, server to server. They
+ * send no Origin and carry no session; each checks its own credentials
+ * (client registration, code plus PKCE verifier, refresh token).
+ */
+const SERVER_TO_SERVER_PATHS = new Set(["/oauth/register", "/oauth/token"]);
+
 export function requireSameOrigin(deps: HumanPlaneDeps): MiddlewareHandler {
   return async (c, next) => {
+    if (SERVER_TO_SERVER_PATHS.has(new URL(c.req.url).pathname)) return next();
     if (c.req.method !== "GET" && c.req.method !== "HEAD") {
       if (c.req.header("origin") !== deps.publicUrl.origin) {
         return c.json({ error: "cross_origin" }, 403);
