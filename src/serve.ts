@@ -281,6 +281,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         vault,
         version,
         publicUrl: config.publicUrl,
+        home: config.home,
         now,
       }),
       log,
@@ -421,7 +422,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         log,
         now,
         mcp,
-        run: { pipeline },
+        run: { pipeline, sandbox: sandbox.ok },
         hosts: [config.listen.agent.host],
         oauth:
           config.agentPublicUrl === null

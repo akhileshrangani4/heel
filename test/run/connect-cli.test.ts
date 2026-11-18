@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { realpathSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { kubeconfigServers } from "../../src/definitions/cli/settings.ts";
 import { findAccount } from "../../src/store/directory.ts";
@@ -8,6 +9,9 @@ import { Vault } from "../../src/vault/vault.ts";
 import { testStore } from "../helpers/store.ts";
 
 /** `heel connect cli` (D8b): what a CLI account stores, and what it refuses. */
+
+/** A real binary on this host, as `--bin` must be. */
+const BIN = realpathSync(process.execPath);
 
 const KUBECONFIG = `apiVersion: v1
 clusters:
@@ -43,7 +47,7 @@ describe("heel connect cli", () => {
   it("stores gh with GitHub's hosts as its egress", () => {
     const { result, account } = connect({
       command: "gh",
-      bin: "/usr/bin/gh",
+      bin: BIN,
       egress: [],
       credentialEnv: null,
     });
@@ -51,34 +55,30 @@ describe("heel connect cli", () => {
     expect(account?.settings).toEqual({
       transport: "cli",
       command: "gh",
-      bin: "/usr/bin/gh",
+      bin: BIN,
       egress: ["api.github.com", "github.com"],
       credentialEnv: null,
     });
   });
 
-  it("takes kubectl's egress from its kubeconfig", () => {
-    const { account } = connect(
-      { command: "kubectl", bin: "/usr/bin/kubectl", egress: [], credentialEnv: null },
-      KUBECONFIG,
-    );
-    expect(account?.settings["egress"]).toEqual(["k8s.example.test:6443"]);
-  });
-
   it.each<[string, Cli, string?]>([
     ["a relative binary", { command: "gh", bin: "gh", egress: [], credentialEnv: null }],
     [
-      "kubectl without a kubeconfig",
-      { command: "kubectl", bin: "/usr/bin/kubectl", egress: [], credentialEnv: null },
-      "just-a-token",
+      "a binary that doesn't exist",
+      { command: "gh", bin: "/nonexistent/gh", egress: [], credentialEnv: null },
+    ],
+    [
+      "kubectl, whose kubeconfig the command could read",
+      { command: "kubectl", bin: BIN, egress: [], credentialEnv: null },
+      KUBECONFIG,
     ],
     [
       "an unknown CLI with no credential variable",
-      { command: "terraform", bin: "/usr/bin/terraform", egress: [], credentialEnv: null },
+      { command: "terraform", bin: BIN, egress: [], credentialEnv: null },
     ],
     [
       "a command name with a slash",
-      { command: "../gh", bin: "/usr/bin/gh", egress: [], credentialEnv: null },
+      { command: "../gh", bin: BIN, egress: [], credentialEnv: null },
     ],
   ])("refuses %s", (_label, cli, credential) => {
     expect(() => connect(cli, credential)).toThrow();

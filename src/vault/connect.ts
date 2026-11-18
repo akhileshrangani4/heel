@@ -1,6 +1,7 @@
+import { realpathSync } from "node:fs";
 import { and, eq } from "drizzle-orm";
 import { isLoopbackUrl } from "../config/schema.ts";
-import { GH_EGRESS, kubeconfigServers } from "../definitions/cli/settings.ts";
+import { GH_EGRESS } from "../definitions/cli/settings.ts";
 import { OpenApiError, type Operation, parseOpenApi } from "../definitions/http/openapi.ts";
 import { isEnvName } from "../definitions/mcp/settings.ts";
 import { EgressConfigError, parseEgressAllow } from "../runner/egress.ts";
@@ -152,6 +153,31 @@ function cliAccountSettings(input: ConnectInput): Record<string, unknown> {
       "--bin must be an absolute path; heel never looks it up on PATH",
     );
   }
+  // The path stored is the binary itself, not a link someone could repoint later (I-34).
+  let real: string | null = null;
+  try {
+    real = realpathSync(cli.bin);
+  } catch {
+    real = null;
+  }
+  if (real !== cli.bin) {
+    throw new ConnectError(
+      "invalid_settings",
+      real === null
+        ? `--bin ${cli.bin} doesn't exist on this host`
+        : `--bin must be the binary itself, not a link: use ${real}`,
+    );
+  }
+  if (cli.command === "kubectl") {
+    // kubectl reads its credential from a kubeconfig file in the sandbox, and a
+    // command can be pointed at that file (a symlink the agent leaves in its
+    // work root, read with --from-file) and print or upload it. Until heel can
+    // hand kubectl its credential without a readable file, it isn't offered.
+    throw new ConnectError(
+      "invalid_settings",
+      "kubectl isn't supported by heel run yet: its credential would be readable by the command",
+    );
+  }
   if (input.credential?.type !== "static") {
     throw new ConnectError(
       "invalid_settings",
@@ -161,15 +187,6 @@ function cliAccountSettings(input: ConnectInput): Record<string, unknown> {
   let egress: string[];
   if (cli.command === "gh") {
     egress = [...GH_EGRESS, ...cli.egress];
-  } else if (cli.command === "kubectl") {
-    const servers = kubeconfigServers(input.credential.value);
-    if (servers === null) {
-      throw new ConnectError(
-        "invalid_settings",
-        "kubectl's credential must be a kubeconfig naming https clusters",
-      );
-    }
-    egress = [...servers, ...cli.egress];
   } else {
     if (cli.credentialEnv === null || !isEnvName(cli.credentialEnv)) {
       throw new ConnectError(
@@ -191,7 +208,7 @@ function cliAccountSettings(input: ConnectInput): Record<string, unknown> {
     command: cli.command,
     bin: cli.bin,
     egress,
-    credentialEnv: cli.command === "gh" || cli.command === "kubectl" ? null : cli.credentialEnv,
+    credentialEnv: cli.command === "gh" ? null : cli.credentialEnv,
   };
 }
 

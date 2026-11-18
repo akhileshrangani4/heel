@@ -29,6 +29,8 @@ export interface CliNormalization {
   readonly repo?: string;
   /** The command creates access that outlives revocation (I-70). */
   readonly persistence?: true;
+  /** The command takes `--repo` (gh); heel requires it, so `repo` is always known. */
+  readonly takesRepo?: true;
   /** The program would print its help and run nothing. */
   readonly help: boolean;
   readonly refusals: readonly CliRefusal[];

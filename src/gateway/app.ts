@@ -29,7 +29,7 @@ export interface AgentAppDeps {
    */
   hosts?: readonly string[];
   /** The CLI runner's `/run` (D8b); without it, `/run` answers 501. */
-  run?: { pipeline: Pipeline };
+  run?: { pipeline: Pipeline; sandbox: boolean };
 }
 
 /** RFC 9728: where an MCP client learns which authorization server to use. */
@@ -139,7 +139,7 @@ export function createAgentApp(deps: AgentAppDeps): Hono<AgentPlaneEnv> {
   });
   app.post("/run", async (c) => {
     if (deps.run === undefined) return c.json(NOT_BUILT, 501);
-    return handleRun(c, c.get("agent"), { db: deps.db, pipeline: deps.run.pipeline });
+    return handleRun(c, c.get("agent"), { db: deps.db, ...deps.run });
   });
   app.all("/run", (c) =>
     c.json({ status: "denied", reason: "method_not_allowed", rule: null }, 405),

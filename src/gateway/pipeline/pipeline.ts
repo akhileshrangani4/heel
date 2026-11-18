@@ -423,8 +423,9 @@ class DecisionPipeline implements Pipeline {
     this.#trace("execute");
     let result: unknown;
     try {
-      result = await withDeadline(this.#timeouts.upstreamMs, (signal) =>
-        definition.execute(call, signal),
+      result = await withDeadline(
+        definition.executeTimeoutMs ?? this.#timeouts.upstreamMs,
+        (signal) => definition.execute(call, signal),
       );
     } catch (error) {
       if (error instanceof UpstreamError) {

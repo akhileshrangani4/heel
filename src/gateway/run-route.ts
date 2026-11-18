@@ -1,4 +1,4 @@
-import { isAbsolute, normalize } from "node:path";
+import { isAbsolute } from "node:path";
 import type { Context } from "hono";
 import { z } from "zod";
 import type { CliResult } from "../definitions/cli/definition.ts";
@@ -30,7 +30,12 @@ export const RunRequestSchema = z.strictObject({
 export interface RunRouteDeps {
   db: HeelDb;
   pipeline: Pipeline;
+  /** False when bubblewrap isn't usable here: every command is refused as a heel error (exit 70). */
+  sandbox: boolean;
 }
+
+/** A command line and its directory fit well under this; anything larger is refused unread. */
+export const MAX_RUN_BODY_BYTES = 1024 * 1024;
 
 const deny = (c: Context, reason: string, status: 400 | 404 | 409 = 400) =>
   c.json({ status: "denied", reason, rule: null }, status);
@@ -70,18 +75,25 @@ export async function handleRun(
   agent: AuthenticatedAgent,
   deps: RunRouteDeps,
 ): Promise<Response> {
+  if (!deps.sandbox) {
+    return c.json({ status: "error", reason: "sandbox_unavailable" }, 503);
+  }
+  if (Number(c.req.header("content-length") ?? "0") > MAX_RUN_BODY_BYTES) {
+    return deny(c, "invalid_request");
+  }
   let body: unknown;
   try {
-    body = await c.req.json();
+    const text = await c.req.text();
+    if (Buffer.byteLength(text) > MAX_RUN_BODY_BYTES) return deny(c, "invalid_request");
+    body = JSON.parse(text);
   } catch {
     return deny(c, "invalid_request");
   }
   const parsed = RunRequestSchema.safeParse(body);
   if (!parsed.success) return deny(c, "invalid_request");
   const { argv, cwd, runId } = parsed.data;
-  if (!isAbsolute(cwd) || normalize(cwd) !== cwd.replace(/(.)\/$/, "$1")) {
-    return deny(c, "invalid_request");
-  }
+  // Absolute only; the definition resolves it, symlinks and all, before any check.
+  if (!isAbsolute(cwd)) return deny(c, "invalid_request");
   const command = argv[0] as string;
   const candidates = accountsOwnedBy(deps.db, agent.orgId, agent.ownerId).filter(
     (account) =>

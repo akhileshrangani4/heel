@@ -129,6 +129,11 @@ export interface Definition {
    */
   execute(call: Call, signal: AbortSignal): Promise<unknown>;
   /**
+   * How long `execute` may take, when not the pipeline's upstream deadline:
+   * a `heel run` command has the sandbox's own wall-time limit (D8b).
+   */
+  executeTimeoutMs?: number;
+  /**
    * Removes hidden items from an allowed call's result (I-40). Absent when
    * heel doesn't know the response shape (I-46). Throws
    * `ResponseUnparseableError` when the response can't be parsed.

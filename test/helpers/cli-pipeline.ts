@@ -127,7 +127,9 @@ export function cliPipeline(options: {
   setWorkRoots(t.db, t.orgId, "coder", [root]);
 
   const app = new Hono();
-  app.post("/run", (c) => handleRun(c, agent, { db: t.db, pipeline }));
+  app.post("/run", (c) =>
+    handleRun(c, agent, { db: t.db, pipeline, sandbox: options.sandbox !== false }),
+  );
   const run = async (body: Record<string, unknown>) => {
     const response = await app.request("/run", {
       method: "POST",

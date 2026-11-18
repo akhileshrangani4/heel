@@ -11,7 +11,8 @@ import { parseOrUsage, UsageError } from "./common.ts";
  * When the command ran, its output is written out and its own exit code
  * returned. When it didn't, one line `heel: {"status":...}` goes to stderr
  * and the exit code says why (spec: "Exit codes"): 75 pending, 77 denied or
- * expired, 69 paused, 70 a heel error or a sandbox limit, 64 usage. With
+ * expired, 69 paused, 70 a heel error, a sandbox limit or no sandbox, 64 a
+ * usage error, here or in the request heel refused. With
  * `--json` the whole answer goes to stdout instead, and the exit codes stay.
  */
 
@@ -79,6 +80,11 @@ export async function runCommand(args: string[], io: CliIo, deps: RunDeps): Prom
     return typeof code === "number" && Number.isInteger(code) ? code : RUN_EXIT.error;
   }
   if (values.json !== true) io.stderr.write(`heel: ${JSON.stringify(answer)}\n`);
+  // heel refused the request itself: the command line or the account choice, not a rule.
+  const reason = answer["reason"];
+  if (status === "denied" && (reason === "invalid_request" || reason === "account_ambiguous")) {
+    return RUN_EXIT.usage;
+  }
   switch (status) {
     case "pending":
       return RUN_EXIT.pending;

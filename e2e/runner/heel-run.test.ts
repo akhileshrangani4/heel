@@ -56,12 +56,18 @@ describe.skipIf(!probe.ok)("heel run under bubblewrap", () => {
     expect(JSON.stringify(answer.body)).not.toContain(TOKEN);
   });
 
-  it("starts in the agent's directory, with only its work root writable", async () => {
+  it("starts in the agent's directory, with no /proc to read the credential back from", async () => {
     const h = setUp();
-    const answer = await h.run({ argv: ["fake", h.script, "inspect", "FAKE_TOKEN"], cwd: h.repo });
+    // Built at run time: an argument naming /proc is refused before it gets here.
+    const probe = `const fs = require("node:fs");
+const environ = "/pro" + "c/self/environ";
+let proc;
+try { fs.readFileSync(environ); proc = "readable"; } catch (e) { proc = e.code; }
+console.log(JSON.stringify({ cwd: process.cwd(), proc }));`;
+    const answer = await h.run({ argv: ["fake", "-e", probe], cwd: h.repo });
     expect(answer.body["status"]).toBe("ran");
     const report = JSON.parse(String(answer.body["stdout"])) as Record<string, unknown>;
-    expect(report["cwd"]).toBe(h.repo);
+    expect(report).toEqual({ cwd: h.repo, proc: "ENOENT" });
     expect(JSON.stringify(answer.body)).not.toContain(TOKEN);
   });
 });
