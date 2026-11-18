@@ -25,6 +25,8 @@ export type Theme = "auto" | "light" | "dark";
 
 export const NAV = [
   { id: "approvals", href: "/approvals", label: "Approvals" },
+  { id: "activity", href: "/activity", label: "Activity" },
+  { id: "agents", href: "/agents", label: "Agents" },
   { id: "standing", href: "/standing", label: "Standing approvals" },
   { id: "pause", href: "/pause", label: "Pause" },
   { id: "connections", href: "/connections", label: "Connections" },
