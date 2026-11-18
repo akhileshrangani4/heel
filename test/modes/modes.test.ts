@@ -51,15 +51,27 @@ describe("modes", () => {
     expect(h.audit().at(-1)).toMatchObject({ kind: "would_deny", mode: "shadow", reason: "rule" });
   });
 
-  it("record doesn't evaluate the owner's rules at all", async () => {
+  it("record decides exactly as shadow does, logging the mode", async () => {
     const h = withMode("record", { owner: OWNER_DENY });
     expect(await h.call({ args: SEND })).toMatchObject({ status: "allowed" });
-    expect(h.audit().at(-1)).toMatchObject({
-      kind: "would_deny",
-      mode: "record",
-      reason: "no_rule_matched",
-    });
+    expect(h.audit().at(-1)).toMatchObject({ kind: "would_deny", mode: "record", reason: "rule" });
   });
+
+  it.each(["shadow", "record"] as const)(
+    "I-71: %s keeps an owner rule's fail-closed deny when its state check can't run",
+    async (mode) => {
+      const h = withMode(mode, {
+        owner:
+          "rules:\n  - match: { action: email.send, recipients: { all_in_thread: true } }\n    then: allow\n",
+      });
+      h.provider.states.set("all_in_thread", "throw");
+      expect(await h.call({ args: SEND })).toMatchObject({
+        status: "denied",
+        reason: "state_check_unavailable",
+      });
+      expect(h.provider.executed).toEqual([]);
+    },
+  );
 
   it.each(["shadow", "record"] as const)("I-71: %s never relaxes an org deny", async (mode) => {
     const h = withMode(mode, { org: ORG_DENY });
@@ -77,6 +89,11 @@ describe("modes", () => {
     const h = withMode(mode, { owner: OWNER_DENY });
     h.pauses.paused.global = true;
     expect(await h.call({ args: SEND })).toMatchObject({ status: "paused" });
+  });
+
+  it("an owner's row only tightens: record under an unset org default stays enforce", async () => {
+    const h = withMode("record", { owner: OWNER_DENY }, true);
+    expect(await h.call({ args: SEND })).toMatchObject({ status: "denied" });
   });
 
   it("the strictest stored mode wins: an owner on enforce under an org on record", async () => {

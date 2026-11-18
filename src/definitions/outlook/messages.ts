@@ -1,6 +1,11 @@
 import type { HideCandidate, Hiding } from "../../core/hide.ts";
 import { isPlainAddress, normalizeAddress } from "../../core/rules/address.ts";
-import type { OutlookClient, OutlookMessage, Recipient } from "./client.ts";
+import {
+  type OutlookClient,
+  type OutlookMessage,
+  OutlookNotFoundError,
+  type Recipient,
+} from "./client.ts";
 
 /**
  * Turning a Graph message into what hiding judges and what the agent reads,
@@ -87,6 +92,17 @@ export type Destination =
   | { kind: "removal"; id: string }
   | { kind: "refused" };
 
+/**
+ * A folder Graph says doesn't exist is null; any other failure (a 429, a 5xx,
+ * the network) is rethrown, so the call is denied rather than judged on a
+ * guess. Treating a failed Sent Items lookup as "no such folder" would let a
+ * move into it pass as a label change.
+ */
+function notFoundIsNull(error: unknown): null {
+  if (error instanceof OutlookNotFoundError) return null;
+  throw error;
+}
+
 /** One step up a folder chain. */
 interface FolderNode {
   id: string;
@@ -119,7 +135,7 @@ export class OutlookMailbox {
           parentId: f.parentFolderId ?? null,
           hidden: f.isHidden,
         }),
-        () => null,
+        notFoundIsNull,
       );
       this.#folders.set(idOrName, node);
     }
@@ -147,10 +163,7 @@ export class OutlookMailbox {
   wellKnownId(name: string, signal: AbortSignal): Promise<string | null> {
     let id = this.#wellKnown.get(name);
     if (id === undefined) {
-      id = this.client.getFolder(name, signal).then(
-        (folder) => folder.id,
-        () => null,
-      );
+      id = this.client.getFolder(name, signal).then((folder) => folder.id, notFoundIsNull);
       this.#wellKnown.set(name, id);
     }
     return id;

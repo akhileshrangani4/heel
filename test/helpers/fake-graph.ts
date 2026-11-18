@@ -62,6 +62,8 @@ export class FakeGraph {
   readonly rules: { id: string; [key: string]: unknown }[] = [];
   readonly requests: string[] = [];
   sendBehavior: "ok" | "refuse" | "error500" = "ok";
+  /** A folder (by well-known name or id) whose reads answer 503. */
+  failFolder: string | null = null;
   /** Runs after each `$value` read, e.g. to change a message before the send. */
   afterMimeRead: (() => void) | null = null;
   #nextId = 1;
@@ -246,6 +248,9 @@ export class FakeGraph {
       });
     }
     const folder = /^me\/mailFolders\/([^/]+)$/.exec(path)?.[1];
+    if (folder !== undefined && decodeURIComponent(folder) === this.failFolder) {
+      return Response.json({ error: { code: "ServiceUnavailable" } }, { status: 503 });
+    }
     if (folder !== undefined) {
       const found = this.#folder(decodeURIComponent(folder));
       return found === undefined
