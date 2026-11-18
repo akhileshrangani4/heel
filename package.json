@@ -1,9 +1,23 @@
 {
-  "name": "heel",
+  "name": "@akhileshrangani4/heel",
   "version": "0.1.0",
   "description": "A self-hosted gateway that holds every agent credential and decides each call with default-deny rules.",
   "license": "Apache-2.0",
-  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/akhileshrangani4/heel.git"
+  },
+  "homepage": "https://github.com/akhileshrangani4/heel#readme",
+  "bugs": "https://github.com/akhileshrangani4/heel/issues",
+  "keywords": [
+    "agents",
+    "mcp",
+    "gateway",
+    "credentials",
+    "approvals",
+    "rules",
+    "security"
+  ],
   "type": "module",
   "packageManager": "pnpm@12.18.0",
   "engines": {
@@ -12,8 +26,22 @@
   "bin": {
     "heel": "./bin/heel.js"
   },
+  "files": [
+    "bin",
+    "dist",
+    "assets/logo",
+    "examples",
+    "schema"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "scripts": {
     "heel": "node ./bin/heel.js",
+    "build": "node ./scripts/build.ts",
+    "prepack": "node ./scripts/build.ts",
+    "package:smoke": "node ./scripts/package-smoke.ts",
     "lint": "biome ci .",
     "format": "biome check --write .",
     "typecheck": "tsc --noEmit",

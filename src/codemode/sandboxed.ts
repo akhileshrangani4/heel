@@ -1,6 +1,7 @@
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { SandboxHost, SandboxProcess } from "../runner/index.ts";
 import { startSandboxed } from "../runner/index.ts";
 import { lineReader, parseFromWorker, type ToWorker, type WireStep } from "./protocol.ts";
@@ -37,8 +38,35 @@ const WALL_BACKSTOP_MS = 10 * 60 * 1000;
 const WALL_SLACK_MS = 10_000;
 /** Everything the worker writes: protocol lines and output. heel caps stdout itself. */
 const OUTPUT_CEILING = 64 * 1024 * 1024;
-/** What the worker needs of heel's install. */
-const INSTALL_PARTS = ["bin", "src", "node_modules", "package.json"] as const;
+/** What the worker needs of heel's install: `src` from source, `dist` in the npm package. */
+const INSTALL_PARTS = ["bin", "src", "dist", "assets", "node_modules", "package.json"] as const;
+
+/** Where Monty's entry point resolves, which every worker dependency sits beside. */
+function resolvedDependency(): string | null {
+  try {
+    return fileURLToPath(import.meta.resolve("@pydantic/monty"));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The `node_modules` that holds heel's dependencies when it isn't inside the
+ * install: npm hoists them above the package for local and npx installs.
+ * Null when they're under the install already, or can't be found.
+ */
+export function hoistedDependencies(
+  install: string,
+  entry: string | null = resolvedDependency(),
+): string | null {
+  if (entry === null) return null;
+  const marker = `${sep}node_modules${sep}`;
+  const at = entry.lastIndexOf(marker);
+  if (at < 0) return null;
+  const dir = entry.slice(0, at + marker.length - 1);
+  const inside = relative(install, dir);
+  return inside === "" || (!inside.startsWith("..") && !inside.startsWith(sep)) ? null : dir;
+}
 /** The sandbox's memory ceiling: Node and Monty's worker on top of the script's budget. */
 const MEMORY_CEILING = 1024 * 1024 * 1024;
 
@@ -71,9 +99,10 @@ export class SandboxedCodeWorker implements CodeWorker {
         args: [join(install, "bin", "heel.js"), "codemode-worker"],
         workRoot,
         cwd: workRoot,
-        readOnlyPaths: INSTALL_PARTS.map((part) => join(install, part)).filter((p) =>
-          existsSync(p),
-        ),
+        readOnlyPaths: [
+          ...INSTALL_PARTS.map((part) => join(install, part)),
+          ...[hoistedDependencies(install)].filter((p) => p !== null),
+        ].filter((p) => existsSync(p)),
         network: { kind: "none" },
         stdin: "pipe",
         limits: {

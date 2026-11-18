@@ -1,0 +1,135 @@
+name: release
+
+# Releases heel when CI passes on main and package.json names a version that
+# hasn't been released yet. Merging to main is the release; bumping
+# `version` in a PR is how the next one is made. In order, each step skipped
+# if it's already done, so a failed run can simply be re-run:
+#   1. the npm package (trusted publishing with provenance; see docs/releasing.md),
+#   2. the OCI image on ghcr.io,
+#   3. the tag v<version> and its GitHub release.
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: npm, ghcr.io and GitHub release
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # the tag and the GitHub release
+      packages: write # the image on ghcr.io
+      id-token: write # npm trusted publishing and provenance
+    env:
+      SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+      - name: What to release
+        id: plan
+        run: |
+          name=$(jq -r .name package.json)
+          version=$(jq -r .version package.json)
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          {
+            echo "name=$name"
+            echo "version=$version"
+            echo "image=$image"
+            # A version with a pre-release part (1.2.0-rc.1) isn't "latest".
+            if [[ "$version" == *-* ]]; then echo "channel=next"; else echo "channel=latest"; fi
+          } >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/v$version" > /dev/null; then
+            echo "released=true" >> "$GITHUB_OUTPUT"
+            echo "v$version is already tagged: nothing to release."
+          else
+            echo "released=false" >> "$GITHUB_OUTPUT"
+            echo "Releasing $name $version from $SHA."
+          fi
+      - if: steps.plan.outputs.released == 'false'
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - if: steps.plan.outputs.released == 'false'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - if: steps.plan.outputs.released == 'false'
+        run: pnpm install --frozen-lockfile
+      - name: The package installs and serves
+        if: steps.plan.outputs.released == 'false'
+        run: pnpm package:smoke
+      - name: Publish to npm
+        if: steps.plan.outputs.released == 'false'
+        env:
+          NAME: ${{ steps.plan.outputs.name }}
+          VERSION: ${{ steps.plan.outputs.version }}
+          CHANNEL: ${{ steps.plan.outputs.channel }}
+          # Only for a first publish before trusted publishing is set up;
+          # npm uses the OIDC token instead whenever it can.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if npm view "$NAME@$VERSION" version > /dev/null 2>&1; then
+            echo "$NAME@$VERSION is already on npm."
+          else
+            npm publish --tag "$CHANNEL"
+          fi
+      - name: Push the image to ghcr.io
+        if: steps.plan.outputs.released == 'false'
+        env:
+          IMAGE: ${{ steps.plan.outputs.image }}
+          VERSION: ${{ steps.plan.outputs.version }}
+          CHANNEL: ${{ steps.plan.outputs.channel }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          if docker manifest inspect "$IMAGE:$VERSION" > /dev/null 2>&1; then
+            echo "$IMAGE:$VERSION is already pushed."
+            exit 0
+          fi
+          docker build \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.version=$VERSION" \
+            --label "org.opencontainers.image.revision=$SHA" \
+            --label "org.opencontainers.image.licenses=Apache-2.0" \
+            -t "$IMAGE:$VERSION" .
+          docker push "$IMAGE:$VERSION"
+          if [ "$CHANNEL" = "latest" ]; then
+            docker tag "$IMAGE:$VERSION" "$IMAGE:latest"
+            docker push "$IMAGE:latest"
+          fi
+      - name: Tag and GitHub release
+        if: steps.plan.outputs.released == 'false'
+        env:
+          NAME: ${{ steps.plan.outputs.name }}
+          IMAGE: ${{ steps.plan.outputs.image }}
+          VERSION: ${{ steps.plan.outputs.version }}
+          CHANNEL: ${{ steps.plan.outputs.channel }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git tag "v$VERSION" "$SHA"
+          git push origin "v$VERSION"
+          cat > "$RUNNER_TEMP/notes.md" <<NOTES
+          ## Install
+
+          \`\`\`sh
+          npm install -g $NAME@$VERSION
+          docker pull $IMAGE:$VERSION
+          \`\`\`
+
+          See [docs/running.md](https://github.com/$GITHUB_REPOSITORY/blob/v$VERSION/docs/running.md) to start it.
+          NOTES
+          flags=()
+          if [ "$CHANNEL" = "next" ]; then flags+=(--prerelease); fi
+          gh release create "v$VERSION" --verify-tag --title "heel $VERSION" \
+            --notes-file "$RUNNER_TEMP/notes.md" --generate-notes "${flags[@]}"

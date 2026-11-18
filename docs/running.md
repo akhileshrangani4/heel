@@ -2,16 +2,29 @@
 
 heel v0.1 runs as one process with two HTTP planes and an admin socket (spec: Architecture, "Listeners").
 
+## From npm
+
+Node 26.13 or later:
+
+```sh
+npm install -g @akhileshrangani4/heel
+heel vault init
+heel serve
+```
+
+`heel run` and code mode need Linux with bubblewrap (see [The sandbox in a container](#the-sandbox-in-a-container) for what that needs); on other hosts heel starts with both refused.
+
 ## With the OCI image
 
 ```sh
-docker build -t heel .
 docker run -d --name heel \
   -p 127.0.0.1:7300:7300 -p 127.0.0.1:7301:7301 \
   -v heel-data:/var/lib/heel \
   -e HEEL_MASTER_KEY="$(head -c 32 /dev/urandom | base64)" \
-  heel
+  ghcr.io/akhileshrangani4/heel
 ```
+
+Each release is tagged with its version (`ghcr.io/akhileshrangani4/heel:0.1.0`) and `latest`. To build the image yourself from a checkout, run `docker build -t heel .` and use `heel` as the image name.
 
 - The image starts with `examples/heel.yaml` (`/etc/heel/heel.yaml`). Mount your own over it, or set `HEEL_CONFIG`.
 - **Keep the master key.** It encrypts every stored credential; without it they can't be read. Prefer a key file mounted read-only (`vault.key_file`) over the environment.
