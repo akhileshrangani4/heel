@@ -1,14 +1,30 @@
-<h1>
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/logo/heel-mark-dark.svg">
-    <img alt="" src="assets/logo/heel-mark-light.svg" width="56" align="center">
-  </picture>
-  heel
-</h1>
+<p align="center">
+  <img src="assets/logo/heel-icon.svg" alt="heel logo: a dog sitting at heel" width="128">
+</p>
 
-**Your agent has the tools. heel decides what it does with them.**
+<h1 align="center">heel</h1>
 
-Open source, self-hosted intent-based access control (IBAC) for AI agents. You say what an agent is for, and heel holds it to that on every call. heel sits between an agent and everything it touches (MCP servers, HTTP APIs, and CLIs) and checks every call against rules on the actual arguments: who an email goes to, which account it comes from, which repo, how many messages this run has deleted. It also hides what an agent shouldn't read, like mail from your partner or password reset codes. Approvals go to a signed-in person outside the agent's session, so the agent can't answer them itself, and one switch pauses any agent or all of them.
+<p align="center">
+  <strong>Your agent has the tools. heel decides what it does with them.</strong><br>
+  Intent-based access control for AI agents. Open source and self-hosted.
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-16181D"></a>
+  <a href="https://github.com/akhileshrangani4/heel/pull/1"><img alt="Status: building v0.1" src="https://img.shields.io/badge/status-building%20v0.1-F2A33A"></a>
+</p>
+
+<p align="center">
+  <a href="#how-it-works">How it works</a>
+  &nbsp;•&nbsp;
+  <a href="#rules">Rules</a>
+  &nbsp;•&nbsp;
+  <a href="#approvals">Approvals</a>
+  &nbsp;•&nbsp;
+  <a href="#how-it-compares">How it compares</a>
+</p>
+
+heel is intent-based access control (IBAC): you say what an agent is for, and heel holds it to that on every call. It sits between an agent and everything it touches (MCP servers, HTTP APIs, and CLIs) and checks every call against rules on the actual arguments: who an email goes to, which account it comes from, which repo, how many messages this run has deleted. It also hides what an agent shouldn't read, like mail from your partner or password reset codes. Approvals go to a signed-in person outside the agent's session, so the agent can't answer them itself, and one switch pauses any agent or all of them.
 
 [![heel in 38 seconds](assets/heel.gif)](assets/heel.mp4)
 
