@@ -86,37 +86,73 @@ export function parseOpenApi(text: string): Operation[] {
   return operations;
 }
 
+/** Whether a template segment is one `{param}`. */
+const isParam = (part: string) => /^\{[^/{}]+\}$/.test(part);
+
+/**
+ * Which segments of `path` a template matches literally, from the left, or
+ * null when it doesn't match. `fold` compares literals ignoring case.
+ */
+function literalMask(template: string, path: string, fold: boolean): boolean[] | null {
+  const parts = template.split("/").slice(1);
+  const segments = path.split("/").slice(1);
+  if (parts.length !== segments.length) return null;
+  const mask: boolean[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i] as string;
+    const segment = segments[i] as string;
+    if (isParam(part)) {
+      if (segment === "") return null;
+      mask.push(false);
+    } else if (fold ? part.toLowerCase() === segment.toLowerCase() : part === segment) {
+      mask.push(true);
+    } else {
+      return null;
+    }
+  }
+  return mask;
+}
+
+/** Earlier literal segments win: `/a/b/{y}` beats `/a/{x}/c` for `/a/b/c`. */
+function moreSpecific(a: boolean[], b: boolean[]): boolean {
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return a[i] === true;
+  }
+  return false;
+}
+
 /**
  * The operation a request is, or null. A `{param}` matches exactly one
- * non-empty segment; when several templates match, the one with the most
- * literal segments wins, so `/users/me` beats `/users/{id}`.
+ * non-empty segment. When several templates match, the one whose literal
+ * segments come first wins, so `/users/me` beats `/users/{id}` and the
+ * choice never depends on the order of the file.
  */
 export function matchOperation(
   operations: readonly Operation[],
   method: string,
   path: string,
 ): Operation | null {
-  const segments = path.split("/").slice(1);
-  let best: { op: Operation; literals: number } | null = null;
+  let best: { op: Operation; mask: boolean[] } | null = null;
   for (const op of operations) {
     if (op.method !== method) continue;
-    const parts = op.template.split("/").slice(1);
-    if (parts.length !== segments.length) continue;
-    let literals = 0;
-    let matches = true;
-    for (let i = 0; i < parts.length; i++) {
-      const part = parts[i] as string;
-      const segment = segments[i] as string;
-      if (/^\{[^/{}]+\}$/.test(part)) {
-        if (segment === "") matches = false;
-      } else if (part === segment) {
-        literals++;
-      } else {
-        matches = false;
-      }
-      if (!matches) break;
-    }
-    if (matches && (best === null || literals > best.literals)) best = { op, literals };
+    const mask = literalMask(op.template, path, false);
+    if (mask !== null && (best === null || moreSpecific(mask, best.mask))) best = { op, mask };
   }
   return best?.op ?? null;
+}
+
+/**
+ * Whether a request would match a template only when case is ignored
+ * (`/Tickets/42` for `/tickets/{id}`). Many servers route it the same way,
+ * so it would run as an operation its rules never saw; heel refuses it.
+ */
+export function matchesOnlyIgnoringCase(
+  operations: readonly Operation[],
+  method: string,
+  path: string,
+): boolean {
+  if (matchOperation(operations, method, path) !== null) return false;
+  return operations.some(
+    (op) => op.method === method && literalMask(op.template, path, true) !== null,
+  );
 }

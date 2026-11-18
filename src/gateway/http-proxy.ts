@@ -13,10 +13,14 @@ import type { PipelineResult } from "./pipeline/ports.ts";
  * The HTTP proxy surface (D7a; spec: HTTP proxy):
  * `<METHOD> /http/<account>/<path>?<query>` with the agent's heel token.
  *
- * - The target can't change: an encoded slash or backslash, a `.` or `..`
- *   segment after decoding, a scheme-relative path, or a forwarded-host
- *   header is refused with 400 before anything else.
- * - Request bodies are capped at 25 MB.
+ * - The target can't change, and the path rules see is the path sent. The
+ *   path is decoded once and must then be canonical: no encoded slash or
+ *   backslash, no `%` left (a double-encoded `..` would decode again
+ *   upstream), no `.` or `..` segment, no empty segment or trailing slash, no
+ *   control character. A forwarded-host header is refused too. Each is a 400
+ *   before anything else. The definition re-encodes each segment itself.
+ * - Request bodies are capped at 25 MB while they are read.
+ * - TRACE is refused.
  * - The decision maps to the spec's statuses: the upstream's own status for
  *   an allow (with `Heel-Decision: allow`), 202 for an ask, 403 for a deny,
  *   423 for a pause, 410 for an expired approval.
@@ -42,21 +46,54 @@ const refuse = (status: Refusal["status"], reason: string): Refusal => ({
 export function proxiedPath(rawPath: string): { account: string; path: string } | Refusal {
   const match = PREFIX.exec(rawPath);
   if (match === null) return refuse(404, "unknown_endpoint");
-  const account = decodeURIComponent(match[1] ?? "");
+  let account: string;
+  try {
+    account = decodeURIComponent(match[1] ?? "");
+  } catch {
+    return refuse(404, "unknown_endpoint");
+  }
   const raw = match[2] ?? "/";
   if (/%2f|%5c|\\/i.test(raw)) return refuse(400, "path_not_allowed");
-  if (raw.startsWith("//")) return refuse(400, "path_not_allowed");
   let decoded: string;
   try {
     decoded = decodeURIComponent(raw);
   } catch {
     return refuse(400, "path_not_allowed");
   }
+  if (decoded === "/") return { account, path: decoded };
+  // Anything an upstream would decode or normalize again: what rules see must be what is sent.
+  if (decoded.includes("%")) return refuse(400, "path_not_allowed");
   const segments = decoded.split("/").slice(1);
-  if (segments.some((s) => s === "." || s === "..")) return refuse(400, "path_not_allowed");
-  if ([...decoded].some((ch) => ch.charCodeAt(0) < 0x20)) return refuse(400, "path_not_allowed");
+  if (segments.some((s) => s === "" || s === "." || s === "..")) {
+    return refuse(400, "path_not_allowed");
+  }
+  if ([...decoded].some((ch) => ch.charCodeAt(0) < 0x20 || ch.charCodeAt(0) === 0x7f)) {
+    return refuse(400, "path_not_allowed");
+  }
   return { account, path: decoded };
 }
+
+/** Reads a body, stopping as soon as it passes the cap. Null when it does. */
+async function readCapped(body: ReadableStream<Uint8Array> | null): Promise<Buffer | null> {
+  if (body === null) return Buffer.alloc(0);
+  const chunks: Buffer[] = [];
+  let size = 0;
+  const reader = body.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > MAX_BODY_BYTES) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(Buffer.from(value));
+  }
+  return Buffer.concat(chunks);
+}
+
+/** Statuses whose response can't carry a body. */
+const NULL_BODY = new Set([101, 103, 204, 205, 304]);
 
 function queryOf(url: URL): Record<string, string | string[]> {
   const out: Record<string, string | string[]> = {};
@@ -73,10 +110,13 @@ function respond(c: Context, result: PipelineResult): Response {
   switch (result.status) {
     case "allowed": {
       const upstream = result.result as HttpResponse;
-      return new Response(Buffer.from(upstream.body, "base64"), {
-        status: upstream.status,
-        headers: { ...upstream.headers, "heel-decision": "allow" },
-      });
+      return new Response(
+        NULL_BODY.has(upstream.status) ? null : Buffer.from(upstream.body, "base64"),
+        {
+          status: upstream.status,
+          headers: { ...upstream.headers, "heel-decision": "allow" },
+        },
+      );
     }
     case "pending":
       return c.json(
@@ -89,6 +129,10 @@ function respond(c: Context, result: PipelineResult): Response {
         { "heel-decision": "ask" },
       );
     case "denied":
+      // An internal failure is the spec's 503 "heel error", not a rule's 403.
+      if (result.reason === "internal") {
+        return c.json({ status: "denied", reason: "heel error" }, 503, { "heel-decision": "deny" });
+      }
       return c.json({ status: "denied", reason: result.reason, rule: result.rule }, 403, {
         "heel-decision": "deny",
       });
@@ -120,15 +164,15 @@ export async function handleHttpProxy(
     return c.json(refuse(404, "unknown_endpoint").body, 404);
   }
   const method = c.req.method.toUpperCase();
-  if (!(HTTP_METHODS as readonly string[]).includes(method)) {
+  if (!(HTTP_METHODS as readonly string[]).includes(method) || method === "TRACE") {
     return c.json(refuse(400, "method_not_allowed").body, 400);
   }
   const declared = Number(c.req.header("content-length") ?? "0");
   if (declared > MAX_BODY_BYTES) return c.json(refuse(413, "body_too_large").body, 413);
-  const bytes =
-    method === "GET" || method === "HEAD" ? null : Buffer.from(await c.req.arrayBuffer());
-  if (bytes !== null && bytes.length > MAX_BODY_BYTES) {
-    return c.json(refuse(413, "body_too_large").body, 413);
+  let bytes: Buffer | null = null;
+  if (method !== "GET" && method !== "HEAD") {
+    bytes = await readCapped(c.req.raw.body);
+    if (bytes === null) return c.json(refuse(413, "body_too_large").body, 413);
   }
   const stripped = ["cookie", "proxy-authorization"].filter((h) => c.req.header(h) !== undefined);
   if (stripped.length > 0) {

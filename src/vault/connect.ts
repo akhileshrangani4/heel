@@ -72,8 +72,23 @@ export function parseHttpAuth(text: string) {
   if (text === "bearer" || text === "basic") return { type: text } as const;
   const match = /^(header|query):([A-Za-z0-9_.-]{1,64})$/.exec(text);
   if (match === null) return null;
-  return { type: match[1] as "header" | "query", name: match[2] as string } as const;
+  const name = match[2] as string;
+  // Headers that frame the request itself can't carry a credential.
+  if (match[1] === "header" && RESERVED_AUTH_HEADERS.has(name.toLowerCase())) return null;
+  return { type: match[1] as "header" | "query", name } as const;
 }
+
+const RESERVED_AUTH_HEADERS = new Set([
+  "host",
+  "content-type",
+  "content-length",
+  "transfer-encoding",
+  "connection",
+  "accept",
+  "te",
+  "upgrade",
+  "trailer",
+]);
 
 /** The settings an HTTP account stores: its base URL, how it authenticates, and its operations. */
 function httpAccountSettings(input: ConnectInput): Record<string, unknown> {

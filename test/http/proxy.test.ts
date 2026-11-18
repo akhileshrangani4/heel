@@ -39,7 +39,15 @@ interface Seen {
   body: string;
 }
 
-function setUp(owner: string) {
+interface SetUpOptions {
+  /** Answers instead of the default upstream. */
+  respond?: (url: URL, init: RequestInit | undefined) => Response;
+  auth?: string;
+  baseUrl?: string;
+  credential?: string;
+}
+
+function setUp(owner: string, options: SetUpOptions = {}) {
   const t = testStore();
   const vault = Vault.open(t.db, { bytes: randomBytes(KEY_BYTES), source: "test" });
   const seen: Seen[] = [];
@@ -55,6 +63,7 @@ function setUp(owner: string) {
       body: init?.body === undefined ? "" : Buffer.from(init.body as Uint8Array).toString(),
     });
     const url = new URL(input.toString());
+    if (options.respond !== undefined) return options.respond(url, init);
     if (url.pathname.endsWith("/redirect")) {
       return new Response(null, {
         status: 302,
@@ -74,8 +83,12 @@ function setUp(owner: string) {
       ownerId: t.ownerId,
       provider: "http",
       alias: "tickets",
-      credential: { type: "static", value: TOKEN },
-      http: { baseUrl: "https://api.example.com/v1", auth: "bearer", openapi: OPENAPI },
+      credential: { type: "static", value: options.credential ?? TOKEN },
+      http: {
+        baseUrl: options.baseUrl ?? "https://api.example.com/v1",
+        auth: options.auth ?? "bearer",
+        openapi: OPENAPI,
+      },
     },
     new Date(),
   );
@@ -263,5 +276,139 @@ describe("connecting an HTTP account", () => {
         ConnectError,
       );
     }
+  });
+});
+
+describe("the proxy, against the review's attacks", () => {
+  const ALLOW_ALL = `rules:
+  - match: { account: tickets }
+    then: allow
+`;
+
+  it.each([
+    "/http/tickets/%252e%252e/tenant-b/secrets",
+    "/http/tickets/files/x%252f..%252fadmin",
+    "/http/tickets/%2574ickets/42",
+    "/http/tickets/tickets//42",
+    "/http/tickets/tickets/42/",
+  ])("refuses %s before anything is sent", async (path) => {
+    const h = setUp(ALLOW_ALL);
+    const response = await h.request(path, { method: "DELETE" });
+    expect(response.status).toBe(400);
+    expect(h.seen).toEqual([]);
+  });
+
+  it("keeps the request below the base path, with each segment encoded", async () => {
+    const h = setUp(ALLOW_ALL, { baseUrl: "https://api.example.com/v1/tenant-a" });
+    await h.request("/http/tickets/files/a%3Fb");
+    expect(h.seen[0]?.url).toBe("https://api.example.com/v1/tenant-a/files/a%3Fb");
+  });
+
+  it("refuses a path that matches a template only when case is ignored", async () => {
+    const h = setUp(ALLOW_TICKETS + "  - match: { account: tickets }\n    then: allow\n");
+    const response = await h.request("/http/tickets/Tickets/42", { method: "DELETE" });
+    expect(response.status).toBe(403);
+    expect(h.seen).toEqual([]);
+  });
+
+  it("scrubs a query credential from Location, Link and an encoded echo", async () => {
+    const secret = "k3y+s/cr=t";
+    const encoded = encodeURIComponent(secret);
+    const h = setUp(ALLOW_ALL, {
+      auth: "query:api_key",
+      credential: secret,
+      respond: () =>
+        new Response(`see api_key=${encoded}`, {
+          status: 301,
+          headers: {
+            location: `https://api.example.com/v1/items/?api_key=${encoded}`,
+            link: `<https://api.example.com/v1/items?api_key=${encoded}&page=2>; rel="next"`,
+          },
+        }),
+    });
+    const response = await h.request("/http/tickets/items");
+    const all = `${response.headers.get("location")} ${response.headers.get("link")} ${await response.text()}`;
+    expect(all).not.toContain(encoded);
+    expect(all).not.toContain(secret);
+    expect(all).toContain("[redacted by heel]");
+  });
+
+  it("scrubs the basic header heel sent, its password, and a JSON-escaped echo", async () => {
+    const h = setUp(ALLOW_ALL, {
+      auth: "basic",
+      credential: 'user:pa55"word',
+      respond: (_url, init) =>
+        Response.json({
+          echoed: new Headers(init?.headers).get("authorization"),
+          error: 'bad password pa55"word',
+          raw: 'user:pa55"word',
+        }),
+    });
+    const text = await (await h.request("/http/tickets/items")).text();
+    expect(text).not.toContain(Buffer.from('user:pa55"word').toString("base64"));
+    expect(text).not.toContain("pa55");
+  });
+
+  it("answers a 204 as the upstream did, not as a heel error", async () => {
+    const h = setUp(ALLOW_ALL, { respond: () => new Response(null, { status: 204 }) });
+    const response = await h.request("/http/tickets/tickets/42", { method: "DELETE" });
+    expect(response.status).toBe(204);
+    expect(response.headers.get("heel-decision")).toBe("allow");
+  });
+
+  it.each([
+    ["a byte-order mark", '﻿{"to":"attacker"}', "application/json"],
+    ["a trailing comma", '{"to":"attacker",}', "application/json"],
+    ["a charset that isn't UTF-8", '{"to":"attacker"}', "application/json; charset=utf-16le"],
+  ])("refuses a JSON body with %s instead of sending it unread", async (_label, body, type) => {
+    const h = setUp(ALLOW_ALL);
+    const response = await h.request("/http/tickets/tickets", {
+      method: "POST",
+      headers: { "content-type": type },
+      body,
+    });
+    expect(response.status).toBe(403);
+    expect(h.seen).toEqual([]);
+  });
+
+  it("sends the body rules saw, so a duplicate key means one thing", async () => {
+    const h = setUp(`rules:
+  - match: { account: tickets, body.to: { equals: ok } }
+    then: allow
+`);
+    const response = await h.request("/http/tickets/tickets", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: '{"to":"attacker","to":"ok"}',
+    });
+    expect(response.status).toBe(201);
+    expect(h.seen[0]?.body).toBe('{"to":"ok"}');
+  });
+
+  it("drops an agent's copy of the query-auth parameter in any case", async () => {
+    const h = setUp(ALLOW_ALL, { auth: "query:api_key" });
+    await h.request("/http/tickets/items?API_KEY=mine&q=1");
+    const sent = new URL(h.seen[0]?.url ?? "");
+    expect(sent.searchParams.get("API_KEY")).toBeNull();
+    expect(sent.searchParams.get("api_key")).toBe(TOKEN);
+    expect(sent.searchParams.get("q")).toBe("1");
+  });
+
+  it("reads an alias that doesn't decode as unknown", async () => {
+    const h = setUp(ALLOW_ALL);
+    expect((await h.request("/http/%zz/items")).status).toBe(404);
+  });
+
+  it("prefers the template whose literal comes first, whatever the file order", () => {
+    const ops = parseOpenApi(`openapi: 3.0.0
+paths:
+  /a/{x}/c: { get: { operationId: second } }
+  /a/b/{y}: { get: { operationId: first } }
+`);
+    expect(matchOperation(ops, "GET", "/a/b/c")?.operationId).toBe("first");
+  });
+
+  it("refuses a framing header as the auth header", () => {
+    expect(() => setUp(ALLOW_ALL, { auth: "header:content-length" })).toThrow(ConnectError);
   });
 });
