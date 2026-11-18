@@ -1,3 +1,4 @@
+import { isAbsolute, resolve } from "node:path";
 import { and, eq } from "drizzle-orm";
 import type { HeelDb, HeelTx } from "../store/db.ts";
 import { newId } from "../store/ids.ts";
@@ -129,4 +130,56 @@ export function listAgents(db: HeelDb, orgId: string): AgentSummary[] {
     .where(eq(agents.orgId, orgId))
     .orderBy(agents.name)
     .all();
+}
+
+/**
+ * Sets the directories an agent's `heel run` may use (D8b): absolute,
+ * normalized paths, each refused if it is `/` or a system directory. An
+ * empty list means the agent can't run commands at all.
+ */
+export function setWorkRoots(
+  db: HeelDb,
+  orgId: string,
+  name: string,
+  roots: readonly string[],
+): { name: string; workRoots: string[] } {
+  const normalized = roots.map((root) => {
+    const resolved = resolve(root);
+    if (!isAbsolute(root) || resolved !== root.replace(/\/$/, "") || SYSTEM_DIRS.has(resolved)) {
+      throw new AgentError("invalid_name", `not a usable work root: ${root}`);
+    }
+    return resolved;
+  });
+  return db.transaction((tx) => {
+    const agent = requireLiveAgent(tx, orgId, name);
+    tx.update(agents).set({ workRoots: normalized }).where(eq(agents.id, agent.id)).run();
+    return { name, workRoots: normalized };
+  });
+}
+
+/** Directories that can never be a work root: the agent would see the whole system. */
+const SYSTEM_DIRS = new Set([
+  "/",
+  "/usr",
+  "/etc",
+  "/bin",
+  "/sbin",
+  "/lib",
+  "/var",
+  "/proc",
+  "/sys",
+  "/dev",
+  "/root",
+  "/home",
+  "/tmp",
+]);
+
+/** An agent's work roots (D8b); empty for an unknown agent. */
+export function workRootsOf(db: HeelDb, agentId: string): string[] {
+  const row = db
+    .select({ workRoots: agents.workRoots })
+    .from(agents)
+    .where(eq(agents.id, agentId))
+    .get();
+  return row?.workRoots ?? [];
 }

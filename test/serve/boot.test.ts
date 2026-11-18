@@ -134,7 +134,7 @@ describe("heel serve", () => {
     const token = await addAgentToken(config, "ci-bot");
     const headers = { authorization: `Bearer ${token}` };
 
-    for (const path of ["/mcp", "/run"]) {
+    for (const path of ["/mcp"]) {
       const response = await fetch(`${agentUrl}${path}`, { method: "POST", headers });
       expect(response.status, path).toBe(501);
     }
@@ -143,6 +143,9 @@ describe("heel serve", () => {
       headers,
     });
     expect(noSuchHttpAccount.status).toBe(404);
+    // `/run` is built (D8b): a request with no command line is refused before anything runs.
+    const run = await fetch(`${agentUrl}/run`, { method: "POST", headers });
+    expect(run.status).toBe(400);
     const noSuchAccount = await fetch(`${agentUrl}/mcp/gmail-work`, { method: "POST", headers });
     expect(noSuchAccount.status).toBe(404);
     const unknown = await fetch(`${agentUrl}/elsewhere`, { headers });

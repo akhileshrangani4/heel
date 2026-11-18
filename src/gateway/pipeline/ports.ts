@@ -63,6 +63,8 @@ export const HARD_DENY_REASONS = [
   "sender_not_allowed",
   /** The definition has no such tool, or the call uses something it refuses (a CLI alias). */
   "unsupported",
+  /** A `heel run` directory outside the agent's work roots (D8b). */
+  "workdir_not_allowed",
 ] as const;
 export type HardDenyReason = (typeof HARD_DENY_REASONS)[number];
 
