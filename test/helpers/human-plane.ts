@@ -1,5 +1,10 @@
+import { randomBytes } from "node:crypto";
+import type { FetchLike } from "@modelcontextprotocol/client";
 import type { Hono } from "hono";
+import { UpstreamSignIns } from "../../src/definitions/mcp/upstream-oauth.ts";
 import { LOCAL_OWNER_NAME } from "../../src/store/install.ts";
+import { KEY_BYTES } from "../../src/vault/crypto.ts";
+import { Vault } from "../../src/vault/vault.ts";
 import { createHumanApp } from "../../src/web/app.ts";
 import { CSRF_HEADER } from "../../src/web/http.ts";
 import { createEnrollment, Passkeys, relyingPartyFor } from "../../src/web/passkeys.ts";
@@ -31,6 +36,10 @@ export interface Browser {
 
 export interface HumanPlaneHarness extends ApprovalHarness {
   app: Hono;
+  /** A vault on the harness's store. */
+  vault: Vault;
+  /** Sign-ins to OAuth upstreams in progress (D5c). */
+  signIns: UpstreamSignIns;
   /** A request from heel's own origin, carrying a browser's cookie and CSRF header if given. */
   fetch(path: string, init?: RequestInit & { as?: Browser; csrf?: boolean }): Promise<Response>;
   /** Enrolls a passkey for `userName` through `/enroll/<token>`. */
@@ -63,8 +72,15 @@ export function attribute(html: string, name: string): string {
   return match[1];
 }
 
-export function humanPlaneHarness(options: HarnessOptions = {}): HumanPlaneHarness {
+export function humanPlaneHarness(
+  options: HarnessOptions & {
+    /** Turns on sign-in to OAuth upstreams (D5c), reaching them through this `fetch`. */
+    upstreamOAuth?: { fetch: FetchLike };
+  } = {},
+): HumanPlaneHarness {
   const h = approvalHarness(options);
+  const vault = Vault.open(h.t.db, { bytes: randomBytes(KEY_BYTES), source: "test" });
+  const signIns = new UpstreamSignIns();
   const { logger } = captureLogger();
   const passkeys = new Passkeys(h.t.db, relyingPartyFor(PUBLIC_URL));
   const app = createHumanApp({
@@ -78,6 +94,10 @@ export function humanPlaneHarness(options: HarnessOptions = {}): HumanPlaneHarne
     rules: h.rules,
     vapidPublicKey: TEST_VAPID_PUBLIC_KEY,
     agentPublicUrl: AGENT_URL,
+    upstreamOAuth:
+      options.upstreamOAuth === undefined
+        ? null
+        : { signIns, vault, fetch: options.upstreamOAuth.fetch },
     now: () => h.clock.now,
   });
 
@@ -101,6 +121,8 @@ export function humanPlaneHarness(options: HarnessOptions = {}): HumanPlaneHarne
 
   return Object.assign(h, {
     app,
+    vault,
+    signIns,
     fetch: fetchAs,
 
     async enroll(userName = LOCAL_OWNER_NAME) {
