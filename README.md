@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="LICENSE"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-16181D"></a>
-  <a href="https://github.com/akhileshrangani4/heel/pull/50"><img alt="Status: building v0.1" src="https://img.shields.io/badge/status-building%20v0.1-F2A33A"></a>
+  <a href="https://www.npmjs.com/package/useheel"><img alt="npm version" src="https://img.shields.io/npm/v/useheel?color=F2A33A"></a>
 </p>
 
 <p align="center">
@@ -214,7 +214,14 @@ Gmail, Outlook, Calendar, GitHub, Slack, Linear, Notion and Stripe. Tools that l
 
 ## Status
 
-heel v0.1 is built on [`release/heel-v0.1`](https://github.com/akhileshrangani4/heel/pull/50), and `main` stays README-only until it's released. Built: the rules engine and decision pipeline, approvals, grants, modes and pause, passkeys and the approval page, MCP (direct tools and code mode), the HTTP proxy, `heel run`, Gmail, Outlook, Google Calendar, GitHub, Slack, Linear, Notion and Stripe, hiding, teams (OIDC sign-in, sharing and approvers), rule drafting, an OCI image, and the incident replays below. See [`docs/running.md`](docs/running.md).
+heel v0.1 is released on npm and as an OCI image on ghcr.io:
+
+```sh
+npm install -g useheel   # Node 26.13 or later
+docker pull ghcr.io/akhileshrangani4/heel
+```
+
+It includes the rules engine and decision pipeline, approvals, grants, modes and pause, passkeys and the approval page, MCP (direct tools and code mode), the HTTP proxy, `heel run`, Gmail, Outlook, Google Calendar, GitHub, Slack, Linear, Notion and Stripe, hiding, teams (OIDC sign-in, sharing and approvers), rule drafting, and the incident replays below. See [`docs/running.md`](docs/running.md) to start it, and [`docs/releasing.md`](docs/releasing.md) for how releases are made.
 
 ## Incidents heel would have stopped
 

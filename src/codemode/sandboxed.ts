@@ -1,6 +1,7 @@
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { SandboxHost, SandboxProcess } from "../runner/index.ts";
 import { startSandboxed } from "../runner/index.ts";
 import { lineReader, parseFromWorker, type ToWorker, type WireStep } from "./protocol.ts";
@@ -37,8 +38,46 @@ const WALL_BACKSTOP_MS = 10 * 60 * 1000;
 const WALL_SLACK_MS = 10_000;
 /** Everything the worker writes: protocol lines and output. heel caps stdout itself. */
 const OUTPUT_CEILING = 64 * 1024 * 1024;
-/** What the worker needs of heel's install. */
-const INSTALL_PARTS = ["bin", "src", "node_modules", "package.json"] as const;
+/** What the worker needs of heel's install: `src` from source, `dist` in the npm package. */
+const INSTALL_PARTS = ["bin", "src", "dist", "node_modules", "package.json"] as const;
+
+/** Where Monty's entry point resolves: the worker needs it and what sits beside it. */
+function resolvedDependency(): string | null {
+  try {
+    return fileURLToPath(import.meta.resolve("@pydantic/monty"));
+  } catch {
+    return null;
+  }
+}
+
+/** True when `path` is `dir` or below it. */
+function within(dir: string, path: string): boolean {
+  const rel = relative(dir, path);
+  return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
+}
+
+/**
+ * The `node_modules` holding heel's dependencies when they aren't inside the
+ * install, or null when they are (a checkout, the OCI image, `npm install -g`).
+ *
+ * A local or npx install puts heel at `<dir>/node_modules/useheel` and
+ * hoists its dependencies beside it; pnpm keeps them in
+ * `<dir>/node_modules/.pnpm`. Either way the outermost `node_modules` above
+ * the install holds them all, so that's what's mounted (read-only), and only
+ * when Monty actually resolves inside it.
+ */
+export function hoistedDependencies(
+  install: string,
+  entry: string | null = resolvedDependency(),
+): string | null {
+  if (entry === null || within(install, entry)) return null;
+  const parts = install.split(sep);
+  const at = parts.indexOf("node_modules");
+  if (at < 0) return null;
+  const dir = parts.slice(0, at + 1).join(sep);
+  return within(dir, entry) ? dir : null;
+}
+
 /** The sandbox's memory ceiling: Node and Monty's worker on top of the script's budget. */
 const MEMORY_CEILING = 1024 * 1024 * 1024;
 
@@ -71,9 +110,10 @@ export class SandboxedCodeWorker implements CodeWorker {
         args: [join(install, "bin", "heel.js"), "codemode-worker"],
         workRoot,
         cwd: workRoot,
-        readOnlyPaths: INSTALL_PARTS.map((part) => join(install, part)).filter((p) =>
-          existsSync(p),
-        ),
+        readOnlyPaths: [
+          ...INSTALL_PARTS.map((part) => join(install, part)),
+          ...[hoistedDependencies(install)].filter((p) => p !== null),
+        ].filter((p) => existsSync(p)),
         network: { kind: "none" },
         stdin: "pipe",
         limits: {

@@ -6,6 +6,7 @@
  * own environment can't redirect them.
  */
 import { accessSync, constants, lstatSync, readlinkSync, realpathSync } from "node:fs";
+import { extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { SandboxHost, SystemDir } from "./plan.ts";
 import { type SeccompArch, seccompArch } from "./seccomp.ts";
@@ -108,7 +109,10 @@ function readHostFacts(): HostFacts {
     systemDir: readSystemDir,
     // Real paths, because bwrap binds a file at the path the plan names.
     node: realpathSync(process.execPath),
-    relay: realpathSync(fileURLToPath(new URL("./relay.ts", import.meta.url))),
+    // relay.ts from source, relay.js in the compiled npm package.
+    relay: realpathSync(
+      fileURLToPath(new URL(`./relay${extname(fileURLToPath(import.meta.url))}`, import.meta.url)),
+    ),
   };
 }
 
