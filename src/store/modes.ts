@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { type Mode, strictest } from "../core/modes.ts";
 import type { HeelDb, HeelTx } from "./db.ts";
 import { modeChanges, modes } from "./schema.ts";
@@ -13,17 +13,16 @@ import { modeChanges, modes } from "./schema.ts";
 /** The org-wide default's `owner_id`. */
 export const ORG_DEFAULT = "";
 
-/** The mode for one owner's calls: the strictest row that applies, else `fallback`. */
+/**
+ * The mode for one owner's calls: the strictest of the org default and the
+ * owner's own row, where a missing org default is `fallback` (`enforce`, or
+ * `shadow` under `--watch`). So an owner's row can only tighten what the org
+ * runs at, whether or not the org row was ever stored.
+ */
 export function modeFor(db: HeelDb | HeelTx, orgId: string, ownerId: string, fallback: Mode): Mode {
-  const rows = db
-    .select({ mode: modes.mode })
-    .from(modes)
-    .where(and(eq(modes.orgId, orgId), inArray(modes.ownerId, [ORG_DEFAULT, ownerId])))
-    .all();
-  return strictest(
-    rows.map((row) => row.mode),
-    fallback,
-  );
+  const org = storedMode(db, orgId, ORG_DEFAULT) ?? fallback;
+  const own = ownerId === ORG_DEFAULT ? null : storedMode(db, orgId, ownerId);
+  return strictest(own === null ? [org] : [org, own], fallback);
 }
 
 /** The stored mode of one row (the org default, or one owner's), or null when unset. */
@@ -42,7 +41,7 @@ export function listModes(db: HeelDb, orgId: string) {
   return db.select().from(modes).where(eq(modes.orgId, orgId)).all();
 }
 
-/** Sets a row's mode and records the switch. Unset rows count as `enforce`. */
+/** Sets a row's mode and records the switch; `from` is the row's stored mode, `enforce` when unset. */
 export function setMode(
   db: HeelDb,
   input: { orgId: string; ownerId: string; mode: Mode; by: string; at: Date },

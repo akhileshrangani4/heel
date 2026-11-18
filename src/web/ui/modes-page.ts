@@ -15,6 +15,8 @@ export interface ModeRow {
   label: string;
   /** Null when nothing is stored (the default applies). */
   mode: Mode | null;
+  /** What actually applies: for a person, the stricter of the org default and their own row. */
+  effective: Mode;
 }
 
 export type ModesOutcome = { kind: "none" } | { kind: "switched"; label: string; mode: Mode };
@@ -23,7 +25,7 @@ const DESCRIPTION: Record<Mode, string> = {
   enforce: "heel decides every call.",
   shadow:
     "Owner rules and the default deny are logged as would-deny or would-ask, then the call runs.",
-  record: "Calls run without owner rules; heel only records them. Org rules still apply.",
+  record: "Decides as shadow does; marks a rollout that is only recording traffic so far.",
 };
 
 function tone(mode: Mode | null) {
@@ -59,11 +61,10 @@ export function modesPage(props: {
   /** `heel serve --watch`: unset rows behave as shadow. */
   watchFallback: boolean;
 }): Html {
-  const fallback: Mode = props.watchFallback ? "shadow" : "enforce";
   return html`<h1>Modes</h1>
     <p class="muted">
-      When several apply, the strictest wins: enforce, then shadow, then record. Pause, org rules,
-      hiding and fail-closed denies hold in every mode. Loosening a mode needs your passkey.
+      A person's own mode can only tighten the org default. Pause, org rules, hiding and fail-closed
+      denies hold in every mode. Loosening a mode needs your passkey.
     </p>
     ${
       props.outcome.kind === "switched"
@@ -82,10 +83,16 @@ export function modesPage(props: {
       </thead>
       <tbody>
         ${props.rows.map((row) => {
-          const shown = row.mode ?? fallback;
+          const shown = row.effective;
+          const note =
+            row.mode === null
+              ? " (default)"
+              : row.mode !== shown
+                ? ` (set to ${row.mode}; the org default is stricter)`
+                : "";
           return html`<tr>
             <th scope="row">${row.label}</th>
-            <td>${badge(row.mode === null ? `${shown} (default)` : shown, tone(shown))}</td>
+            <td>${badge(`${shown}${note}`, tone(shown))}</td>
             <td class="muted">${DESCRIPTION[shown]}</td>
             <td>${controls(row, props.tighten)}</td>
           </tr>`;

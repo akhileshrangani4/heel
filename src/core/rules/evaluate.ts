@@ -127,9 +127,11 @@ export function evaluate(set: RuleSet | null, ctx: EvalContext): Evaluation {
     return done({ decision: "deny", rule: null, reason: "address_unparseable" });
   }
 
-  // Record mode evaluates the org's rules only: it records traffic for an
-  // owner who has no rules yet, and the org ceiling still holds.
-  const rules = ctx.mode === "record" ? (set.org?.rules ?? []) : rulesFor(set, ctx.owner);
+  // Every mode evaluates the same rules: record and shadow differ only in
+  // how their traffic is presented, never in what runs. Skipping owner rules
+  // in record would also skip their fail-closed denies (a state check that
+  // couldn't run), which `--watch` keeps (I-71).
+  const rules = rulesFor(set, ctx.owner);
   if (facts.persistence === true && !rules.some((rule) => !rule.watch && names(rule, facts))) {
     return done({ decision: "deny", rule: null, reason: "persistence_unnamed" });
   }
