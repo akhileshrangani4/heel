@@ -171,7 +171,7 @@ rules:
 `,
     });
     const standing = standingFor("sends");
-    const evaluation = run(set, send("spy@rival.com"), { standing, watch: true });
+    const evaluation = run(set, send("spy@rival.com"), { standing, mode: "shadow" });
     expect(evaluation.verdict).toMatchObject({
       decision: "deny",
       reason: "rule",

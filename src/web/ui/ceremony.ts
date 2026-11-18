@@ -25,7 +25,8 @@ export type CeremonyIntent =
   | "resume"
   | "sign-in"
   | "enroll"
-  | "connect";
+  | "connect"
+  | "mode";
 
 export interface CeremonyButtonProps {
   callback: CeremonyCallback;

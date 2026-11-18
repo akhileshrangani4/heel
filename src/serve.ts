@@ -290,6 +290,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         vapidPublicKey: notify.vapidPublicKey,
         agentPublicUrl: config.agentPublicUrl,
         upstreamOAuth: vault === null ? null : { signIns: upstreamSignIns, vault },
+        watchFallback: watch,
         googleClient,
         now,
       });

@@ -1,3 +1,4 @@
+import type { Mode } from "../modes.ts";
 import { normalizeAddress } from "./address.ts";
 import type { CompiledHideEntry, CompiledRule, CompiledRulesFile, StateCheck } from "./compile.ts";
 import { type RuleFacts, resolveField } from "./facts.ts";
@@ -39,8 +40,12 @@ export interface EvalContext {
   /** The agent owner's user name; their rules file applies. */
   owner: string;
   facts: RuleFacts;
-  /** `heel serve --watch` (I-71 as amended). */
-  watch: boolean;
+  /**
+   * The rollout mode for this call (A3). `shadow` and `record` relax only
+   * what `heel serve --watch` relaxes (I-71); `record` also skips the
+   * owner's rules entirely.
+   */
+  mode: Mode;
   /** A state check's result for this call, under the rule that names it. */
   state(check: StateCheck, rule: CompiledRule): StateOutcome;
   /**
@@ -88,6 +93,8 @@ export interface Evaluation {
   relaxed: boolean;
   /** `watch: true` rules that matched on the way, in order. They never decide (I-72). */
   watched: readonly WatchedRule[];
+  /** The mode this call was evaluated in. */
+  mode: Mode;
 }
 
 /** What heel does with the call. */
@@ -109,8 +116,9 @@ export function evaluate(set: RuleSet | null, ctx: EvalContext): Evaluation {
   const watched: WatchedRule[] = [];
   const done = (verdict: Verdict): Evaluation => ({
     verdict,
-    relaxed: ctx.watch && relaxable(verdict),
+    relaxed: ctx.mode !== "enforce" && relaxable(verdict),
     watched,
+    mode: ctx.mode,
   });
 
   if (set === null) return done({ decision: "deny", rule: null, reason: "rules_unavailable" });
@@ -119,7 +127,9 @@ export function evaluate(set: RuleSet | null, ctx: EvalContext): Evaluation {
     return done({ decision: "deny", rule: null, reason: "address_unparseable" });
   }
 
-  const rules = rulesFor(set, ctx.owner);
+  // Record mode evaluates the org's rules only: it records traffic for an
+  // owner who has no rules yet, and the org ceiling still holds.
+  const rules = ctx.mode === "record" ? (set.org?.rules ?? []) : rulesFor(set, ctx.owner);
   if (facts.persistence === true && !rules.some((rule) => !rule.watch && names(rule, facts))) {
     return done({ decision: "deny", rule: null, reason: "persistence_unnamed" });
   }
@@ -163,7 +173,7 @@ function decide(rule: CompiledRule, ctx: EvalContext): Verdict {
 }
 
 /**
- * Global watch relaxes only outcomes of the owner's own rules and the
+ * Shadow and record (global watch) relax only outcomes of the owner's own rules and the
  * default deny. Org rules are the admin's ceiling, and the fail-closed
  * denies mean heel couldn't decide safely; both still hold (Q-W1).
  */

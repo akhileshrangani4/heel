@@ -56,6 +56,7 @@ async function startHumanPlane(): Promise<Running> {
     vapidPublicKey: TEST_VAPID_PUBLIC_KEY,
     agentPublicUrl: null,
     upstreamOAuth: null,
+    watchFallback: false,
     googleClient: null,
     now: () => h.clock.now,
   });

@@ -111,7 +111,7 @@ export function runCase(set: RuleSet, testCase: RulesCase, defaultUser: string |
     const evaluation = evaluate(set, {
       owner,
       facts: caseFacts(testCase.call),
-      watch: false,
+      mode: "enforce",
       state: (check, rule) => caseState(testCase, check, rule),
       counted: (_rule, per) => testCase.counts?.[per] ?? 0,
       standing: NO_STANDING_APPROVALS,

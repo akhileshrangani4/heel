@@ -52,6 +52,8 @@ export interface HumanPlaneDeps {
    * `upstreamOAuth`'s state store, vault and fetch.
    */
   googleClient: GoogleClient | null;
+  /** `heel serve --watch`: rows with no stored mode behave as shadow (A3). */
+  watchFallback: boolean;
   now: () => Date;
 }
 

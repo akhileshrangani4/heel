@@ -71,6 +71,13 @@
       "when": 1794972730901,
       "tag": "0009_oauth",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1794977797290,
+      "tag": "0010_modes",
+      "breakpoints": true
     }
   ]
 }
