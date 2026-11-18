@@ -127,12 +127,14 @@ export interface DefinitionRegistry {
 export interface PauseTarget {
   orgId: string;
   agentId: string;
+  /** The agent's owner: an `owner` pause covers every agent they own. */
+  ownerId: string;
   account: string;
   provider: string;
 }
 
 export interface PauseStore {
-  /** The scope of a pause covering this call (global, agent, account or provider), or null. */
+  /** The scope of a pause covering this call (global, owner, agent, account or provider), or null. */
   find(db: HeelQuery, target: PauseTarget): PauseScope | null;
 }
 
@@ -173,8 +175,8 @@ export interface ApprovalStore {
    * longer approved; the decision then fails closed.
    */
   consume(db: HeelQuery, approvalId: string, now: Date): void;
-  /** This agent's live standing approvals, for the evaluator. */
-  standing(db: HeelQuery, call: Call, now: Date): StandingApprovals;
+  /** This agent's live standing approvals for the call, whose hash the pipeline already holds. */
+  standing(db: HeelQuery, call: Call, callHash: string, now: Date): StandingApprovals;
 }
 
 // ── results ─────────────────────────────────────────────────────────────────

@@ -144,6 +144,7 @@ export function pauseTarget(call: Call): PauseTarget {
   return {
     orgId: call.orgId,
     agentId: call.agentId,
+    ownerId: call.ownerId,
     account: call.account,
     provider: call.provider,
   };
@@ -423,6 +424,11 @@ class DecisionPipeline implements Pipeline {
         }
         this.#trace("approval");
         const governing = approvals.governing(tx, call.orgId, hash, at);
+        if (governing?.status === "expired") {
+          // The store settled this request as expired just now. Record that
+          // whatever the rules decide below, so the transition is audited (I-55, I-73).
+          appendAudit(tx, { kind: "expired", call, callHash: hash, approvalId: governing.id }, at);
+        }
         this.#trace("decide");
         const evaluation = evaluate(input.set, {
           owner: input.owner,
@@ -434,7 +440,7 @@ class DecisionPipeline implements Pipeline {
             return outcome;
           },
           counted: countReader(tx, call, at, () => this.#trace("counts")),
-          standing: approvals.standing(tx, call, at),
+          standing: approvals.standing(tx, call, hash, at),
         });
         for (const watched of evaluation.watched) {
           appendAudit(tx, watchedEvent(call, hash, watched), at);
@@ -474,8 +480,23 @@ class DecisionPipeline implements Pipeline {
     }
     switch (verdict.decision) {
       case "allow": {
-        reserve(tx, call, facts, at);
         const { standingApprovalId } = verdict;
+        if (standingApprovalId !== null && governing?.status === "denied") {
+          // A person denied this exact call. A standing approval for the same
+          // rule doesn't overrule them while the denial lasts (Q-A5).
+          return this.#deniedByPerson(tx, input, verdict.rule, governing.id, at);
+        }
+        if (
+          standingApprovalId !== null &&
+          governing?.status === "approved" &&
+          governing.ruleHash === verdict.rule.hash
+        ) {
+          // Approved as standing: the re-send of the approved call itself runs on
+          // its one-time approval, so that approval is used up rather than left
+          // to run the same call again if the standing one is revoked (I-54).
+          return this.#runApproved(tx, input, verdict.rule, governing.id, at);
+        }
+        reserve(tx, call, facts, at);
         appendAudit(
           tx,
           {
@@ -502,6 +523,38 @@ class DecisionPipeline implements Pipeline {
     }
   }
 
+  /** Executes once (I-54): the approval is consumed in the transaction that reserves its items. */
+  #runApproved(
+    tx: HeelTx,
+    input: DecideInput,
+    rule: CompiledRule,
+    approvalId: string,
+    at: Date,
+  ): Decided {
+    const { call, hash, facts } = input;
+    this.#deps.approvals.consume(tx, approvalId, at);
+    reserve(tx, call, facts, at);
+    appendAudit(tx, { kind: "executed", call, callHash: hash, approvalId, rule: rule.ref }, at);
+    return { kind: "execute", via: { kind: "approval", rule: rule.ref, approvalId } };
+  }
+
+  /** A person denied this exact call, and its deny window hasn't ended (Q-A5). */
+  #deniedByPerson(
+    tx: HeelTx,
+    input: DecideInput,
+    rule: CompiledRule,
+    approvalId: string,
+    at: Date,
+  ): Decided {
+    const { call, hash } = input;
+    appendAudit(
+      tx,
+      { kind: "deny", call, callHash: hash, rule: rule.ref, reason: "approval_denied", approvalId },
+      at,
+    );
+    return final({ status: "denied", reason: "approval_denied", rule: rule.ref, approvalId });
+  }
+
   /**
    * An ask, given the request that governs this call hash (spec: Approvals).
    * An approval satisfies only an ask from the rule that created it; when a
@@ -514,41 +567,21 @@ class DecisionPipeline implements Pipeline {
     governing: GoverningApproval | null,
     at: Date,
   ): Decided {
-    const { call, hash, facts } = input;
+    const { call, hash } = input;
     if (governing !== null) {
       const approvalId = governing.id;
       switch (governing.status) {
         case "approved":
           if (governing.ruleHash !== rule.hash) break;
-          // Executes once (I-54): consumed in the transaction that reserves its items.
-          this.#deps.approvals.consume(tx, approvalId, at);
-          reserve(tx, call, facts, at);
-          appendAudit(
-            tx,
-            { kind: "executed", call, callHash: hash, approvalId, rule: rule.ref },
-            at,
-          );
-          return { kind: "execute", via: { kind: "approval", rule: rule.ref, approvalId } };
+          return this.#runApproved(tx, input, rule, approvalId, at);
         case "pending":
           // A repeat joins the pending request and notifies no one again (I-51).
           appendAudit(tx, { kind: "ask", call, callHash: hash, rule: rule.ref, approvalId }, at);
           return final({ status: "pending", approvalId, rule: rule.ref });
         case "denied":
-          appendAudit(
-            tx,
-            {
-              kind: "deny",
-              call,
-              callHash: hash,
-              rule: rule.ref,
-              reason: "approval_denied",
-              approvalId,
-            },
-            at,
-          );
-          return final({ status: "denied", reason: "approval_denied", rule: rule.ref, approvalId });
+          return this.#deniedByPerson(tx, input, rule, approvalId, at);
         case "expired":
-          appendAudit(tx, { kind: "expired", call, callHash: hash, approvalId }, at);
+          // Its audit row was written when the store settled it (see #decide).
           return final({ status: "expired", approvalId });
       }
     }

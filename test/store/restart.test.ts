@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url";
 import { asc } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { HeelConfigFileSchema, resolveConfig } from "../../src/config/schema.ts";
-import type { RuleRef } from "../../src/core/call.ts";
+import type { Call, RuleRef } from "../../src/core/call.ts";
 import { addAgent } from "../../src/gateway/agents.ts";
 import { createLogger } from "../../src/log.ts";
 import { startHeel } from "../../src/serve.ts";
@@ -55,11 +55,17 @@ function seedDecisionState(t: TestStore, now: Date): { agentId: string; pendingH
 
   const pendingHash = "a".repeat(64);
   const approvedId = newId("approval");
-  const send = {
+  const send: Call = {
+    orgId: t.orgId,
+    agentId,
+    ownerId: t.ownerId,
     surface: "mcp",
     account: "gmail-work",
+    provider: "gmail",
     tool: "send",
+    action: "email.send",
     args: { to: ["ceo@clientco.com"], subject: "Q3" },
+    items: 1,
   };
   t.db
     .insert(approvals)
@@ -246,7 +252,17 @@ describe("store restart", () => {
           callHash: pendingHash,
           account: "gmail-work",
           tool: "send",
-          call: {},
+          call: {
+            orgId: t.orgId,
+            agentId,
+            ownerId: t.ownerId,
+            surface: "mcp",
+            account: "gmail-work",
+            provider: "gmail",
+            tool: "send",
+            args: {},
+            items: 1,
+          },
           origin: "owner",
           rule: RULE,
           ruleHash: "r".repeat(64),

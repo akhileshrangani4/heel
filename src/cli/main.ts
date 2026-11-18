@@ -35,6 +35,15 @@ export const USAGE = `usage:
   heel agent list
   heel connect <provider> --as <alias> [--owner <user>] [--credential-stdin]
   heel account list
+  heel user enroll <user>                 print a one-time passkey enrollment link
+                                          (valid 15 minutes; also adds a device or
+                                          recovers a lost passkey)
+  heel pause --all | --agent <name> | --account <alias> | --owner <user>
+                                          stop calls in that scope at once; resuming
+                                          needs a passkey on the approval page
+  heel pause list
+  heel approvals list                     list standing approvals
+  heel approvals revoke <id>              revoke a standing approval
   heel audit export [--since <time>] [--until <time>] [--format jsonl]
                                           write audit rows as JSON Lines to stdout;
                                           <time> is ISO 8601, YYYY-MM-DD (UTC), or
@@ -49,6 +58,9 @@ const ConnectedAccountResult = z.object({
   provider: z.string(),
   status: z.string(),
 });
+const EnrollmentResult = z.object({ url: z.string(), expiresAt: z.string() });
+const PauseResult = z.object({ scope: z.string(), created: z.boolean() });
+
 const AuditExportPageResult = z.object({
   lines: z.array(z.string()),
   throughId: z.int(),
@@ -270,6 +282,121 @@ async function accountCommand(args: string[], io: CliIo): Promise<number> {
   return EXIT.ok;
 }
 
+async function userCommand(args: string[], io: CliIo): Promise<number> {
+  const { values, positionals } = parseOrUsage(() =>
+    parseArgs({ args, options: CONFIG_OPTION, allowPositionals: true, strict: true }),
+  );
+  const [subcommand, ...rest] = positionals;
+  if (subcommand !== "enroll") {
+    throw new UsageError(
+      subcommand === undefined
+        ? "missing user subcommand"
+        : `unknown user subcommand "${subcommand}"`,
+    );
+  }
+  const name = onePositional(rest, "user name");
+  const config = configFrom(io, values.config);
+  const enrollment = EnrollmentResult.parse(
+    await admin(config, { method: "user.enroll", params: { name } }),
+  );
+  io.stdout.write(
+    `Enrollment link for "${name}" (one use, valid until ${enrollment.expiresAt}):\n` +
+      `${enrollment.url}\n` +
+      "Open it on the device that will hold the passkey. A newer link replaces this one.\n",
+  );
+  return EXIT.ok;
+}
+
+/** Pure: the admin `pause` params for `heel pause`'s flags; exactly one scope must be named. */
+export function pauseParams(values: {
+  all?: boolean | undefined;
+  agent?: string | undefined;
+  account?: string | undefined;
+  owner?: string | undefined;
+}): Extract<AdminRequest, { method: "pause" }>["params"] {
+  const named = [
+    values.all === true ? ({ scope: "global" } as const) : null,
+    values.agent === undefined ? null : ({ scope: "agent", name: values.agent } as const),
+    values.account === undefined ? null : ({ scope: "account", name: values.account } as const),
+    values.owner === undefined ? null : ({ scope: "owner", name: values.owner } as const),
+  ].filter((scope) => scope !== null);
+  const [only, ...extra] = named;
+  if (only === undefined || extra.length > 0) {
+    throw new UsageError("name exactly one of --all, --agent, --account or --owner");
+  }
+  return only;
+}
+
+/**
+ * `heel pause`. One command, no passkey: pausing can only stop calls
+ * (Q-N5). There is no `heel resume`; resuming needs a passkey on the page.
+ */
+async function pauseCommand(args: string[], io: CliIo): Promise<number> {
+  const { values, positionals } = parseOrUsage(() =>
+    parseArgs({
+      args,
+      options: {
+        ...CONFIG_OPTION,
+        all: { type: "boolean" },
+        agent: { type: "string" },
+        account: { type: "string" },
+        owner: { type: "string" },
+      },
+      allowPositionals: true,
+      strict: true,
+    }),
+  );
+  const config = configFrom(io, values.config);
+  if (positionals.length > 0) {
+    if (onePositional(positionals, "pause subcommand") !== "list") {
+      throw new UsageError(`unknown pause subcommand "${positionals[0]}"`);
+    }
+    const { all, agent, account, owner } = values;
+    if (all !== undefined || [agent, account, owner].some((v) => v !== undefined)) {
+      throw new UsageError("pause list takes no scope flags");
+    }
+    io.stdout.write(`${JSON.stringify(await admin(config, { method: "pause.list" }), null, 2)}\n`);
+    return EXIT.ok;
+  }
+  const params = pauseParams(values);
+  const paused = PauseResult.parse(await admin(config, { method: "pause", params }));
+  const what = params.scope === "global" ? "everything" : `${params.scope} "${params.name}"`;
+  io.stdout.write(
+    paused.created
+      ? `Paused ${what}. Calls in scope return paused until someone resumes it with a passkey.\n`
+      : `Already paused: ${what}.\n`,
+  );
+  return EXIT.ok;
+}
+
+async function approvalsCommand(args: string[], io: CliIo): Promise<number> {
+  const { values, positionals } = parseOrUsage(() =>
+    parseArgs({ args, options: CONFIG_OPTION, allowPositionals: true, strict: true }),
+  );
+  const [subcommand, ...rest] = positionals;
+  const config = configFrom(io, values.config);
+  switch (subcommand) {
+    case "list":
+      if (rest.length > 0) throw new UsageError(`unexpected argument "${rest[0]}"`);
+      io.stdout.write(
+        `${JSON.stringify(await admin(config, { method: "standing.list" }), null, 2)}\n`,
+      );
+      return EXIT.ok;
+    case "revoke": {
+      const id = onePositional(rest, "standing approval id");
+      await admin(config, { method: "standing.revoke", params: { id } });
+      io.stdout.write(`Revoked standing approval ${id}. It stops matching on the next call.\n`);
+      return EXIT.ok;
+    }
+    default:
+      throw new UsageError(
+        subcommand === undefined
+          ? "missing approvals subcommand"
+          : `unknown approvals subcommand "${subcommand}"`,
+      );
+  }
+}
+
 /**
  * `heel audit export`. Pages through one pinned snapshot of the log and
  * streams each page to stdout, so memory stays bounded on a large log.
@@ -336,6 +463,12 @@ async function dispatch(argv: string[], io: CliIo): Promise<number> {
       return connectCommand(rest, io);
     case "account":
       return accountCommand(rest, io);
+    case "user":
+      return userCommand(rest, io);
+    case "pause":
+      return pauseCommand(rest, io);
+    case "approvals":
+      return approvalsCommand(rest, io);
     case "rules":
       return rulesCommand(rest, io);
     case "audit":

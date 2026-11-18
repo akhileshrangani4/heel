@@ -231,7 +231,13 @@ describe("audit.export admin request", () => {
   it("answers with a page of JSON Lines", async () => {
     const t = testStore();
     const ids = appendRows(t, 3);
-    const handle = createAdminHandler({ db: t.db, orgId: t.orgId, vault: null, version: "test" });
+    const handle = createAdminHandler({
+      db: t.db,
+      orgId: t.orgId,
+      vault: null,
+      version: "test",
+      publicUrl: new URL("https://heel.example.com"),
+    });
     const response = await handle({
       method: "audit.export",
       params: { afterId: 0, limit: 3, since: new Date(T0.getTime() + 1_000).toISOString() },
