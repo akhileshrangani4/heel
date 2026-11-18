@@ -255,7 +255,7 @@ export const approvals = sqliteTable(
   ],
 );
 
-export const STANDING_SCOPES = ["exact_call", "rule"] as const;
+export const STANDING_SCOPES = ["exact_call", "rule", "run"] as const;
 export type StandingScope = (typeof STANDING_SCOPES)[number];
 
 /**
@@ -279,6 +279,8 @@ export const standingApprovals = sqliteTable(
     scope: text("scope", { enum: STANDING_SCOPES }).notNull(),
     /** Set for `exact_call`: the account, tool and arguments it covers. */
     callHash: text("call_hash"),
+    /** Set for `run` (A4): the agent's run id it covers. */
+    runId: text("run_id"),
     rule: text("rule", { mode: "json" }).$type<RuleRef>().notNull(),
     ruleHash: text("rule_hash").notNull(),
     createdBy: text("created_by")

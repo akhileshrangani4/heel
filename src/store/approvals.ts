@@ -157,6 +157,7 @@ export class SqliteApprovalStore implements ApprovalStore {
             agentId: call.agentId,
             ruleHash: rule.hash,
             callHash: () => hash,
+            runId: call.runId,
           }),
         );
         return row === undefined ? null : { id: row.id };
@@ -320,6 +321,8 @@ export function decideApproval(
       const refusal = decisionRefusal({
         intent: input.intent,
         standing: input.standing !== null,
+        runScoped: input.standing?.scope === "run",
+        runId: row.runId,
         status: statusAt(row, now),
         origin: row.origin,
         paused: pauseScope !== null,
@@ -389,6 +392,10 @@ function grantStanding(
   approver: Approver,
   now: Date,
 ): string {
+  // A run grant needs the run it names; without one it would match nothing.
+  if (choice.scope === "run" && row.runId === null) {
+    throw new TypeError("a run-scoped standing approval needs a request with a run id");
+  }
   // Callers validate the choice; this keeps a bad value from writing an invalid expiry.
   if (!isStandingDuration(choice.duration)) {
     throw new TypeError(`not a standing duration: ${String(choice.duration)}`);
@@ -403,6 +410,7 @@ function grantStanding(
       approvalId: row.id,
       scope: choice.scope,
       callHash: choice.scope === "exact_call" ? row.callHash : null,
+      runId: choice.scope === "run" ? row.runId : null,
       rule: row.rule,
       ruleHash: row.ruleHash,
       createdBy: approver.userId,

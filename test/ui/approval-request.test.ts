@@ -162,7 +162,7 @@ describe("ApprovalRequest", () => {
     });
   });
 
-  it("offers 1 h, 1 day, 7 days and 30 days, exact call or rule match, capped at 90 days", () => {
+  it("offers 1 h, 1 day, 7 days and 30 days; exact call, rule match or this run; capped at 90 days", () => {
     const doc = render(PENDING_REQUEST);
     const options = [...doc.querySelectorAll("fieldset select option")].map((o) =>
       o.getAttribute("value"),
@@ -172,7 +172,15 @@ describe("ApprovalRequest", () => {
     const scopes = [...doc.querySelectorAll("fieldset input[type=radio]")].map((r) =>
       r.getAttribute("value"),
     );
-    expect(scopes).toEqual(["exact_call", "rule"]);
+    expect(scopes).toEqual(
+      PENDING_REQUEST.runId === null ? ["exact_call", "rule"] : ["exact_call", "rule", "run"],
+    );
+    const runless = render({ ...PENDING_REQUEST, runId: null });
+    expect(
+      [...runless.querySelectorAll("fieldset input[type=radio]")].map((r) =>
+        r.getAttribute("value"),
+      ),
+    ).toEqual(["exact_call", "rule"]);
     expect(doc.querySelector("fieldset input[value=exact_call]")?.hasAttribute("checked")).toBe(
       true,
     );
