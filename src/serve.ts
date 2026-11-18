@@ -18,6 +18,7 @@ import { createAgentApp } from "./gateway/app.ts";
 import { createMcpSurface } from "./gateway/mcp/server.ts";
 import { createPipeline } from "./gateway/pipeline/pipeline.ts";
 import type { Logger } from "./log.ts";
+import { defaultLooksLikeJudge, HideCounts } from "./lookslike/judge.ts";
 import { logAdminAlerts } from "./notify/admin-alerts.ts";
 import { Notifier } from "./notify/notifier.ts";
 import { notifySetup } from "./notify/setup.ts";
@@ -296,6 +297,14 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         }),
       });
       closers.push(() => upstream.close());
+      // Counted for A5's metrics export; `uncertain` is the fail-closed count (I-44).
+      const hideCounts = new HideCounts();
+      const looksLike = defaultLooksLikeJudge((error) =>
+        log.error(
+          { error },
+          "looks_like model didn't load; every message a looks_like entry covers is hidden",
+        ),
+      );
       const pipeline = createPipeline({
         db: store.db,
         rules,
@@ -307,6 +316,8 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         watch,
         now,
         onApprovalRequested: (approvalId) => notifier.approvalRequested(approvalId),
+        looksLike,
+        onHidden: (reason) => hideCounts.record(reason),
       });
       const mcp = createMcpSurface({ db: store.db, pipeline, upstream, log, version, now });
       closers.push(() => mcp.close());

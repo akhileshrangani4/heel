@@ -1,6 +1,7 @@
 import type { AdapterDenyReason } from "../../core/adapters.ts";
 import type { Call, PauseScope, RuleRef, Surface } from "../../core/call.ts";
-import type { CompiledHideEntry, StateCheck } from "../../core/rules/compile.ts";
+import type { Hiding } from "../../core/hide.ts";
+import type { StateCheck } from "../../core/rules/compile.ts";
 import type { DenyReason, StandingApprovals } from "../../core/rules/evaluate.ts";
 import type { HeelDb, HeelTx } from "../../store/db.ts";
 import type { AccountRecord } from "../../store/directory.ts";
@@ -60,8 +61,8 @@ export type Normalized = { ok: true; call: Call } | { ok: false; reason: HardDen
 
 export interface NormalizeContext {
   signal: AbortSignal;
-  /** The account's hide entries, for refusing calls aimed at a hidden message. */
-  hide: readonly CompiledHideEntry[];
+  /** The account's hiding, for refusing calls aimed at a hidden message. */
+  hide: Hiding;
 }
 
 /**
@@ -115,7 +116,7 @@ export interface Definition {
    * heel doesn't know the response shape (I-46). Throws
    * `ResponseUnparseableError` when the response can't be parsed.
    */
-  hide?(call: Call, result: unknown, entries: readonly CompiledHideEntry[]): Promise<unknown>;
+  hide?(call: Call, result: unknown, hiding: Hiding): Promise<unknown>;
 }
 
 export interface DefinitionRegistry {
