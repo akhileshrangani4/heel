@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { parseArgs } from "node:util";
 import { z } from "zod";
@@ -43,6 +43,10 @@ export const USAGE = `usage:
                                           token on stdin is sent to it as a bearer,
                                           or with --oauth its owner signs in from
                                           the Connections page
+  heel connect http --as <alias> --base-url <url> --openapi <file>
+                   --auth bearer|basic|header:<name>|query:<name> --credential-stdin
+                                          put an API behind heel's HTTP proxy at
+                                          /http/<alias>/…
   heel connect mcp --as <alias> --command <path> [--arg <a>]... [--egress <host>]...
                    [--mount <path>]... [--credential-env <NAME> --credential-stdin]
                                           run a local MCP server in heel's sandbox
@@ -266,6 +270,9 @@ async function connectCommand(args: string[], io: CliIo): Promise<number> {
         mount: { type: "string", multiple: true },
         "credential-env": { type: "string" },
         "credential-stdin": { type: "boolean" },
+        "base-url": { type: "string" },
+        auth: { type: "string" },
+        openapi: { type: "string" },
       },
       allowPositionals: true,
       strict: true,
@@ -297,6 +304,15 @@ async function connectCommand(args: string[], io: CliIo): Promise<number> {
             mounts: values.mount ?? [],
           },
         }),
+    ...(provider === "http"
+      ? {
+          http: {
+            baseUrl: values["base-url"] ?? "",
+            auth: values.auth ?? "",
+            openapi: values.openapi === undefined ? "" : readFileSync(values.openapi, "utf8"),
+          },
+        }
+      : {}),
     ...(credential ? { credential } : {}),
   };
   const account = ConnectedAccountResult.parse(

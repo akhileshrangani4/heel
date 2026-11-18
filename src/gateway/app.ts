@@ -4,6 +4,7 @@ import { approvalStatusForAgent } from "../store/approvals.ts";
 import type { HeelDb } from "../store/db.ts";
 import { findAccount } from "../store/directory.ts";
 import { requireServedHost } from "./allowed-hosts.ts";
+import { type HttpProxyDeps, handleHttpProxy } from "./http-proxy.ts";
 import type { McpSurface } from "./mcp/server.ts";
 import { type AgentPlaneEnv, requireAgent } from "./require-agent.ts";
 
@@ -13,6 +14,8 @@ export interface AgentAppDeps {
   now?: () => Date;
   /** The MCP endpoints; without it they answer 501, like any surface not built yet. */
   mcp?: McpSurface;
+  /** The HTTP proxy (D7a); absent, `/http/*` answers that it isn't available. */
+  http?: HttpProxyDeps;
   /**
    * OAuth for connectors (A2): where the agent plane is reachable and which
    * authorization server issues its tokens. Null or absent: static tokens only.
@@ -33,7 +36,7 @@ const PROTECTED_RESOURCE_PATH = "/.well-known/oauth-protected-resource";
  * built by its own deliverable: MCP and code mode (D5, D6), the HTTP proxy
  * (D7) and the CLI runner (D8).
  */
-const SURFACE_ROUTES = ["/http/*", "/run"] as const;
+const SURFACE_ROUTES = ["/run"] as const;
 
 const NOT_BUILT = { status: "denied", reason: "surface_unavailable", rule: null } as const;
 
@@ -124,6 +127,11 @@ export function createAgentApp(deps: AgentAppDeps): Hono<AgentPlaneEnv> {
     const status = approvalStatusForAgent(deps.db, agent, approvalId, now);
     if (status === null) return c.json({ status: "unknown", approvalId }, 404);
     return c.json({ status, approvalId });
+  });
+  app.all("/http/*", async (c) => {
+    const http = deps.http;
+    if (http === undefined) return c.json(NOT_BUILT, 501);
+    return handleHttpProxy(c, c.get("agent"), http);
   });
   for (const route of SURFACE_ROUTES) {
     app.all(route, (c) => c.json(NOT_BUILT, 501));

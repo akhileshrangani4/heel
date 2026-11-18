@@ -377,6 +377,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         gmail: { vault: opening.vault, fetch },
         outlook: { vault: opening.vault, fetch },
         googleCalendar: { vault: opening.vault, fetch },
+        http: { vault: opening.vault, fetch },
       });
       const pipeline = createPipeline({
         db: store.db,
@@ -407,6 +408,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
       });
       closers.push(() => mcp.close());
       const app = createAgentApp({
+        http: { db: store.db, pipeline, log },
         db: store.db,
         log,
         now,
