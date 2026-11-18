@@ -31,6 +31,13 @@ export interface CliNormalization {
   readonly persistence?: true;
   /** The command takes `--repo` (gh); heel requires it, so `repo` is always known. */
   readonly takesRepo?: true;
+  /**
+   * For `gh pr merge`: the pull request it names, when heel can read it as a
+   * number or a github.com pull request URL (which also names the repo).
+   */
+  readonly pull?: { readonly number: number; readonly repo?: string };
+  /** A bare `--` was given; heel can't add a flag after it. */
+  readonly dashDash?: true;
   /** The program would print its help and run nothing. */
   readonly help: boolean;
   readonly refusals: readonly CliRefusal[];

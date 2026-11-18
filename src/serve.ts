@@ -380,12 +380,14 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         outlook: { vault: opening.vault, fetch },
         googleCalendar: { vault: opening.vault, fetch },
         http: { vault: opening.vault, fetch },
+        github: { vault: opening.vault, fetch },
         // `heel run` (D8b): every command runs in the sandbox, so without it each is denied.
         cli: {
           vault: opening.vault,
           sandbox: sandbox.ok ? sandbox.host : null,
           start: startSandboxed,
           workRoots: (agentId) => workRootsOf(store.db, agentId),
+          fetch,
         },
       });
       const pipeline = createPipeline({
