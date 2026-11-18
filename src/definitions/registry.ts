@@ -7,6 +7,7 @@ import { type GmailDeps, gmailDefinition } from "./gmail/definition.ts";
 import { type HttpDeps, httpDefinition } from "./http/definition.ts";
 import { mcpPassthrough } from "./mcp/passthrough.ts";
 import type { UpstreamPool } from "./mcp/upstream.ts";
+import { type NotionDeps, notionDefinition } from "./notion/definition.ts";
 import { type OutlookDeps, outlookDefinition } from "./outlook/definition.ts";
 import { type SlackDeps, slackDefinition } from "./slack/definition.ts";
 
@@ -23,6 +24,8 @@ export function definitionRegistry(deps: {
   outlook?: OutlookDeps | null;
   /** The same for Google Calendar. */
   googleCalendar?: GoogleCalendarDeps | null;
+  /** Notion (D12b). */
+  notion?: NotionDeps | null;
   /** Slack (D12b). */
   slack?: SlackDeps | null;
   /** HTTP accounts (D7a). */
@@ -49,6 +52,9 @@ export function definitionRegistry(deps: {
       }
       if (account.provider === "github" && deps.github != null) {
         return githubDefinition(account, deps.github);
+      }
+      if (account.provider === "notion" && deps.notion != null) {
+        return notionDefinition(account, deps.notion);
       }
       if (account.provider === "slack" && deps.slack != null) {
         return slackDefinition(account, deps.slack);
