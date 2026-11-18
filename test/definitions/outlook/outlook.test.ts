@@ -80,6 +80,9 @@ describe("Outlook tools", () => {
       "list_folders",
       "list_rules",
       "list_send_as",
+      "list_calendars",
+      "list_events",
+      "get_event",
     ]);
   });
 });

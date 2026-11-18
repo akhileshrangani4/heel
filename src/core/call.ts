@@ -67,6 +67,8 @@ export interface Call {
   targets?: string[];
   /** "owner/name" for GitHub. */
   repo?: string;
+  /** The calendar a calendar call touches: Google's calendar id, or Outlook's calendar id. */
+  calendar?: string;
   cli?: CliFields;
   http?: HttpFields;
   /** The tool creates something that outlives revocation (I-70). */

@@ -36,7 +36,7 @@ export const BUILT_IN_PROVIDERS = [
 export type BuiltInProvider = (typeof BUILT_IN_PROVIDERS)[number];
 
 /** Built-in providers whose accounts sign in through heel's OAuth client, never with a pasted token. */
-const SIGNS_IN: ReadonlySet<string> = new Set(["gmail", "outlook"]);
+const SIGNS_IN: ReadonlySet<string> = new Set(["gmail", "google-calendar", "outlook"]);
 
 export function isBuiltInProvider(name: string): name is BuiltInProvider {
   return (BUILT_IN_PROVIDERS as readonly string[]).includes(name);

@@ -75,6 +75,12 @@ export class FakeGoogle {
         ? Response.json({ error: { code: 401 } }, { status: 401 })
         : Response.json({ emailAddress: mailbox, messagesTotal: 0 });
     }
+    if (url.toString() === "https://www.googleapis.com/calendar/v3/users/me/calendarList/primary") {
+      const mailbox = this.#mailboxFor(init);
+      return mailbox === null
+        ? Response.json({ error: { code: 401 } }, { status: 401 })
+        : Response.json({ id: mailbox, primary: true });
+    }
     return Response.json({ error: "not found" }, { status: 404 });
   };
 

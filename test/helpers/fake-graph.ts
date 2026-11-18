@@ -60,6 +60,10 @@ export class FakeGraph {
   readonly messages = new Map<string, FakeGraphMessage>();
   readonly sent: GraphSent[] = [];
   readonly rules: { id: string; [key: string]: unknown }[] = [];
+  /** Calendar events by id, with their attendees' addresses. */
+  readonly events = new Map<string, { id: string; subject: string; attendees: string[] }>();
+  /** Every calendar write, in order. */
+  readonly eventWrites: { method: string; path: string }[] = [];
   readonly requests: string[] = [];
   sendBehavior: "ok" | "refuse" | "error500" = "ok";
   /** A folder (by well-known name or id) whose reads answer 503. */
@@ -110,6 +114,18 @@ export class FakeGraph {
     };
   }
 
+  #event(e: { id: string; subject: string; attendees: string[] }) {
+    return {
+      id: e.id,
+      subject: e.subject,
+      start: { dateTime: "2026-11-20T10:00:00", timeZone: "UTC" },
+      end: { dateTime: "2026-11-20T11:00:00", timeZone: "UTC" },
+      attendees: e.attendees.map((address) => ({ emailAddress: { address }, type: "required" })),
+      organizer: { emailAddress: { address: MAILBOX } },
+      isOrganizer: true,
+    };
+  }
+
   #folderIdOf(nameOrId: string): string {
     return FOLDERS[nameOrId]?.id ?? nameOrId;
   }
@@ -133,6 +149,48 @@ export class FakeGraph {
     if (auth !== `Bearer ${GRAPH_TEST_TOKEN}`) return Response.json({}, { status: 401 });
     const notFound = () => Response.json({ error: { code: "ErrorItemNotFound" } }, { status: 404 });
 
+    if (path === "me/calendars") {
+      return Response.json({
+        value: [{ id: "cal-default", name: "Calendar", isDefaultCalendar: true }],
+      });
+    }
+    if (path === "me/calendarView") {
+      return Response.json({ value: [...this.events.values()].map((e) => this.#event(e)) });
+    }
+    const eventPath = /^me\/events(?:\/([^/]+))?$/.exec(path);
+    if (eventPath !== null) {
+      const id = eventPath[1] === undefined ? undefined : decodeURIComponent(eventPath[1]);
+      if (method !== "GET") this.eventWrites.push({ method, path });
+      if (id === undefined && method === "POST") {
+        const body = JSON.parse(String(init?.body)) as {
+          subject: string;
+          attendees: { emailAddress: { address: string } }[];
+        };
+        const event = {
+          id: `evt-${this.#nextId++}`,
+          subject: body.subject,
+          attendees: body.attendees.map((a) => a.emailAddress.address),
+        };
+        this.events.set(event.id, event);
+        return Response.json(this.#event(event), { status: 201 });
+      }
+      const event = id === undefined ? undefined : this.events.get(id);
+      if (event === undefined) return notFound();
+      if (method === "DELETE") {
+        this.events.delete(event.id);
+        return new Response(null, { status: 204 });
+      }
+      if (method === "PATCH") {
+        const body = JSON.parse(String(init?.body)) as {
+          subject?: string;
+          attendees?: { emailAddress: { address: string } }[];
+        };
+        if (body.subject !== undefined) event.subject = body.subject;
+        if (body.attendees !== undefined)
+          event.attendees = body.attendees.map((a) => a.emailAddress.address);
+      }
+      return Response.json(this.#event(event));
+    }
     if (method === "POST" && path === "me/sendMail") {
       if (this.sendBehavior === "refuse") return Response.json({ error: {} }, { status: 400 });
       if (this.sendBehavior === "error500") return Response.json({ error: {} }, { status: 500 });

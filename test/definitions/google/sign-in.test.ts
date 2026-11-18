@@ -178,3 +178,36 @@ describe("the Google refresher", () => {
     await expect(refresh(request)).rejects.toBeInstanceOf(RefreshUnavailableError);
   });
 });
+
+describe("Google Calendar sign-in", () => {
+  it("asks for the calendar scopes and records the primary calendar's id", async () => {
+    const google = new FakeGoogle();
+    google.grantedScope =
+      "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.calendarlist.readonly";
+    const h = humanPlaneHarness({
+      upstreamOAuth: { fetch: google.fetch },
+      providerClients: { google: TEST_GOOGLE_CLIENT },
+    });
+    connectAccount(
+      h.t.db,
+      h.vault,
+      { orgId: h.t.orgId, ownerId: h.t.ownerId, provider: "google-calendar", alias: "calendar" },
+      new Date(),
+    );
+    const owner = await h.signIn(await h.enroll());
+    const started = await h.fetch("/connections/sign-in", {
+      as: owner,
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ csrf: owner.csrf, alias: "calendar" }).toString(),
+    });
+    const authorize = new URL(started.headers.get("location") ?? "");
+    expect(authorize.searchParams.get("scope")).toContain("calendar.events");
+    const callback = google.consent(authorize.toString());
+    const landed = await h.fetch(callback.pathname + callback.search, { as: owner });
+    expect(landed.headers.get("location")).toContain("connected=1");
+    expect(mailboxSettings(findAccount(h.t.db, h.t.orgId, "calendar")?.settings ?? {})).toEqual({
+      mailbox: "alice@company.com",
+    });
+  });
+});
