@@ -1,40 +1,56 @@
 # Releasing heel
 
-Releases are made by merging a release PR. Nothing is published until you merge one.
+[README](../README.md) · [Running](running.md)
 
-1. **The release PR.** After CI passes on `main`, [release-please](https://github.com/googleapis/release-please) opens a PR titled `chore(main): release <version>`, or updates the one that's open. It bumps `version` in `package.json` and adds the release to `CHANGELOG.md`, using the titles of the PRs merged since the last release:
-   - `feat:` bumps the minor version (0.1.0 to 0.2.0).
-   - `fix:` bumps the patch version (0.1.0 to 0.1.1).
-   - A breaking change (`feat!:`, or a `BREAKING CHANGE:` footer) bumps the major version from 1.0.0 onwards, and the minor version before that.
-   - Other types (`docs:`, `ci:`, `chore:`, `test:`) don't release anything on their own.
-2. **Merging it is the release.** release-please tags `v<version>` and creates the GitHub release. Then [`.github/workflows/release.yml`](../.github/workflows/release.yml) publishes it:
-   - A build job with no write access installs the dependencies and runs `pnpm package:smoke`. The smoke test packs heel, installs the tarball with npm into an empty project, and checks that it starts, answers on both planes and accepts admin commands. The job then packs the tarball and builds the image.
-   - Two jobs that install nothing publish what the build job made: [`useheel`](https://www.npmjs.com/package/useheel) on npm, with provenance, and `ghcr.io/akhileshrangani4/heel:<version>`.
-   - The GitHub release gets install lines.
+A release happens when you merge a release PR. Nothing is published before that.
 
-Each publish checks whether it's already done, so a failed run can be re-run. A pre-release version (`1.2.0-rc.1`) goes to npm's `next` tag. `latest`, on npm and on ghcr.io, only ever moves to a higher version.
+## Making a release
 
-The first release is 0.1.0. The release-please manifest starts at 0.0.0, and the `feat:` commits on the v0.1 branch bump that to 0.1.0. Merge [#50](https://github.com/akhileshrangani4/heel/pull/50) with **Create a merge commit**, not squash, so release-please can see those commits. A squash commit titled "Release: heel v0.1" isn't a conventional commit, so no release PR would open.
+1. **Merge PRs with conventional titles.** PRs are squash-merged, so the PR title becomes the commit that [release-please](https://github.com/googleapis/release-please) reads:
+
+   | Title | Next version |
+   | --- | --- |
+   | `fix: …` | patch: 0.1.0 to 0.1.1 |
+   | `feat: …` | minor: 0.1.0 to 0.2.0 |
+   | `feat!: …`, or a `BREAKING CHANGE:` footer | major from 1.0.0 on; minor before that |
+   | `docs:`, `ci:`, `chore:`, `test:`, `refactor:` | no release on their own |
+
+2. **The release PR updates itself.** After CI passes on `main`, release-please opens or updates a PR titled `chore(main): release <version>`. It bumps `version` in `package.json` and adds the release to `CHANGELOG.md`. The PR is opened from the repository owner's account, so CI runs on it.
+3. **Merge the release PR.** That is the release. release-please tags `v<version>` and creates the GitHub release, then [`.github/workflows/release.yml`](../.github/workflows/release.yml) publishes it (see below).
+
+To release a version other than the one it proposes, put `Release-As: 1.0.0` in the body of a commit merged to `main`.
+
+## What the release workflow does
+
+| Job | Access | What it does |
+| --- | --- | --- |
+| `release-pr` | contents, PRs | release-please: opens or updates the release PR. After a release PR merges, it creates the tag and GitHub release. |
+| `plan` | read | Publishes only a version that has a GitHub release, and only from the commit that tag points at. For npm and ghcr.io separately, checks whether that version is already published. |
+| `build` | read only, no publish credentials | Installs, runs `pnpm package:smoke` (packs heel, installs the tarball with npm into an empty project, and checks that it starts, answers on both planes and accepts admin commands), packs the tarball and builds the image. |
+| `npm` | npm publish only | Publishes the tarball `build` made, with provenance. Installs nothing. |
+| `ghcr` | packages | Pushes the image `build` made, as `:<version>` and `:latest`. Installs nothing. |
+| `notes` | contents | Adds install lines to the GitHub release. |
+
+- **Re-running:** each publish checks whether it's already done, so if a run fails you can re-run it to finish.
+- **`latest`:** only ever moves to a higher version, on npm and on ghcr.io. A pre-release version (`1.2.0-rc.1`) goes to npm's `next` tag instead.
+- **Registry errors:** an error from npm or ghcr.io stops the run. It's never treated as "not published yet".
 
 ## The npm package
 
 The package is called `useheel`, and installing it gives you the `heel` command.
 
-- **Why it's compiled:** Node won't strip types inside `node_modules`, so the package ships `src` compiled to `dist`. `pnpm build` does this, and `prepack` runs it.
-- **Same layout:** `dist` keeps `src`'s layout, so paths relative to a module stay the same. The data files `src` reads at runtime, like the looks_like weights and the migrations, are copied beside the compiled modules.
-- **Which code runs:** `bin/heel.js` runs `src` when it's there (a checkout, the OCI image) and `dist` otherwise.
-- **Checked on every PR:** the `npm package installs and serves` CI job runs the same smoke test.
+- **Compiled:** Node won't strip types inside `node_modules`, so the package ships `src` compiled to `dist`. `pnpm build` does this, and `prepack` runs it.
+- **Same layout:** `dist` keeps `src`'s layout. The data files `src` reads at runtime, like the looks_like weights and the migrations, are copied beside the compiled modules.
+- **Which code runs:** `bin/heel.js` runs `src` when it's there (a checkout or the OCI image) and `dist` otherwise.
+- **Checked on every PR:** the `npm package installs and serves` CI job runs the smoke test.
 
-Code mode mounts heel's dependencies read-only into its sandbox. With `npm install -g` they're inside heel's own directory. With a local or npx install, npm or pnpm keeps them in the project's `node_modules`, so code mode mounts that whole directory, read-only.
+## Setup
 
-## One-time setup
+These are needed once per repository:
 
-The owner of the repository and the npm package does these once:
-
-1. **`RELEASE_TOKEN`.** Create a fine-grained GitHub token for this repository with read and write access to **Contents** and **Pull requests**. Add it as the repository secret `RELEASE_TOKEN`.
-   - With it, release PRs are opened from your account, and CI runs on them.
-   - Without it, release-please falls back to the workflow's own token. Release PRs are then opened by `github-actions[bot]`, and GitHub doesn't run CI on them.
-2. **npm trusted publishing.** On npmjs.com, add a trusted publisher to the `useheel` package: GitHub Actions, repository `akhileshrangani4/heel`, workflow `release.yml`, no environment. npm then accepts publishes from that workflow without a stored token.
-   - If npm won't let you add one before the package exists, make the first release with a token instead. Add a granular npm token that can publish as the repository secret `NPM_TOKEN`.
-   - After the first release, add the trusted publisher and delete `NPM_TOKEN`. npm prefers the OIDC token whenever trusted publishing is set up, but a leftover token would still be a long-lived credential.
-3. **The ghcr.io package's visibility.** GitHub creates a new container package as private. After the first release, make the `heel` package public in its settings, so `docker pull` works without signing in.
+| What | Where | Why |
+| --- | --- | --- |
+| `RELEASE_TOKEN` | Repository secret: a fine-grained GitHub token for this repository with read and write access to **Contents** and **Pull requests** | Release PRs are opened from your account, so CI runs on them. With the default token they're opened by `github-actions[bot]`, and CI doesn't run. |
+| npm trusted publisher | npmjs.com, `useheel` package settings: GitHub Actions, `akhileshrangani4/heel`, workflow `release.yml`, no environment | npm accepts publishes from the workflow with no stored token. |
+| `NPM_TOKEN` (first release only) | Repository secret: a granular npm token that can publish | npm doesn't allow a trusted publisher before the package exists. After the first release, add the trusted publisher, then delete this secret and revoke the token. |
+| Public image | GitHub, the `heel` container package's settings | GitHub creates container packages as private. Make it public after the first release, so `docker pull` works without signing in. |
