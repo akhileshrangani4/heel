@@ -350,6 +350,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
       const humanApp = createHumanApp({
         db: store.db,
         orgId,
+        hintAdapters: approvalAdapters.map((adapter) => adapter.name),
         log,
         publicUrl: config.publicUrl,
         passkeys: new Passkeys(store.db, relyingPartyFor(config.publicUrl)),
@@ -436,12 +437,15 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         watch,
         now,
         onApprovalRequested: (approvalId) => {
+          // Advice for the approval page: started after the agent has its
+          // answer, never awaited, and it can't change the request.
+          setImmediate(() => {
+            void runApprovalHints(
+              { db: store.db, orgId, adapters: approvalAdapters, log, now },
+              approvalId,
+            ).catch((error) => log.error({ error, approvalId }, "approval hints failed"));
+          });
           notifier.approvalRequested(approvalId);
-          // Advice for the approval page; never awaited, and it can't change the request.
-          void runApprovalHints(
-            { db: store.db, orgId, adapters: approvalAdapters, log, now },
-            approvalId,
-          ).catch((error) => log.error({ error, approvalId }, "approval hints failed"));
         },
         looksLike,
         onHidden: (reason) => hideCounts.record(reason),

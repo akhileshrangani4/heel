@@ -229,7 +229,8 @@ export const HeelConfigFileSchema = z.strictObject({
   drafting: DraftingSectionSchema.optional(),
   adapters: z
     .strictObject({
-      approval: z.array(ApprovalAdapterSchema).max(4).default([]),
+      // One for now: adapters are stored by name, and the only kind is jev.
+      approval: z.array(ApprovalAdapterSchema).max(1).default([]),
     })
     .prefault({}),
   audit: z

@@ -132,12 +132,13 @@ const RISKS: [JevQuestionId, string][] = [
 /**
  * The truth table. Each risk Jev is sure about is a warning; one it isn't
  * sure about adds nothing (no hint is better than a guess). "Looks routine"
- * needs every risk clearly absent and the call clearly like recent work.
- * With no recent calls, code says so instead of asking Jev.
+ * needs every risk clearly absent, the call clearly like recent work, and
+ * the whole of the arguments checked. With no recent calls, code says so
+ * instead of asking Jev.
  */
 export function hintsFromAnswers(
   answers: Partial<Record<JevQuestionId, number>>,
-  firstCall: boolean,
+  { firstCall, truncated }: { firstCall: boolean; truncated: boolean },
 ): ApprovalHint[] {
   const hints: ApprovalHint[] = [];
   for (const [id, text] of RISKS) {
@@ -149,8 +150,12 @@ export function hintsFromAnswers(
   } else if (like !== undefined && like < NO) {
     hints.push({ tone: "note", text: "Unlike this agent's recent calls." });
   }
+  // Jev saw only part of very long arguments: what it didn't see can't be called clear.
+  if (truncated) {
+    hints.push({ tone: "note", text: "Long arguments: only the first part was checked." });
+  }
   const risksClear = RISKS.every(([id]) => (answers[id] ?? 1) < NO);
-  if (risksClear && !firstCall && like !== undefined && like > YES) {
+  if (risksClear && !firstCall && !truncated && like !== undefined && like > YES) {
     hints.push({ tone: "ok", text: "Looks routine for this agent." });
   }
   return hints;

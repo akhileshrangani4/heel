@@ -3,11 +3,13 @@ import { JevAdapter, jevState } from "../../src/adapters/jev.ts";
 import { hintsFromAnswers, JEV_QUESTIONS, parseHints } from "../../src/core/hints.ts";
 import { runApprovalHints } from "../../src/gateway/approval-hints.ts";
 import type { ApprovalAdapter, ApprovalHintInput } from "../../src/gateway/pipeline/ports.ts";
-import { hintsFor } from "../../src/store/hints.ts";
+import { hintsFor, recentCalls } from "../../src/store/hints.ts";
 import { approvalHarness, pendingId, SEND } from "../helpers/approvals.ts";
 import { captureLogger } from "../helpers/log.ts";
 import { oneRule } from "../helpers/pipeline.ts";
 
+const OTHER = { firstCall: false, truncated: false };
+const FIRST = { firstCall: true, truncated: false };
 const CLEAR = {
   contains_secret: 0.02,
   contains_personal_data: 0.03,
@@ -17,36 +19,45 @@ const CLEAR = {
 describe("the hints truth table", () => {
   it("warns about each risk Jev is sure of", () => {
     expect(
-      hintsFromAnswers({ ...CLEAR, asks_for_money_or_access: 0.92, like_recent_calls: 0.5 }, false),
+      hintsFromAnswers({ ...CLEAR, asks_for_money_or_access: 0.92, like_recent_calls: 0.5 }, OTHER),
     ).toEqual([{ tone: "warn", text: "Asks someone for money, a payment or account access." }]);
   });
 
   it("says nothing about a risk it isn't sure of", () => {
     expect(
-      hintsFromAnswers({ ...CLEAR, contains_secret: 0.5, like_recent_calls: 0.5 }, false),
+      hintsFromAnswers({ ...CLEAR, contains_secret: 0.5, like_recent_calls: 0.5 }, OTHER),
     ).toEqual([]);
   });
 
   it("calls a call routine only when every risk is clearly absent and it's like recent work", () => {
-    expect(hintsFromAnswers({ ...CLEAR, like_recent_calls: 0.9 }, false)).toEqual([
+    expect(hintsFromAnswers({ ...CLEAR, like_recent_calls: 0.9 }, OTHER)).toEqual([
       { tone: "ok", text: "Looks routine for this agent." },
     ]);
     expect(
-      hintsFromAnswers({ ...CLEAR, contains_secret: 0.4, like_recent_calls: 0.9 }, false),
+      hintsFromAnswers({ ...CLEAR, contains_secret: 0.4, like_recent_calls: 0.9 }, OTHER),
     ).toEqual([]);
   });
 
   it("notes a call unlike recent work, and a first call without asking Jev", () => {
-    expect(hintsFromAnswers({ ...CLEAR, like_recent_calls: 0.1 }, false)).toEqual([
+    expect(hintsFromAnswers({ ...CLEAR, like_recent_calls: 0.1 }, OTHER)).toEqual([
       { tone: "note", text: "Unlike this agent's recent calls." },
     ]);
-    expect(hintsFromAnswers(CLEAR, true)).toEqual([
+    expect(hintsFromAnswers(CLEAR, FIRST)).toEqual([
       { tone: "note", text: "This agent's first call: nothing to compare it with." },
     ]);
   });
 
+  it("never calls cut arguments routine, and says only part was checked", () => {
+    expect(
+      hintsFromAnswers(
+        { ...CLEAR, like_recent_calls: 0.95 },
+        { firstCall: false, truncated: true },
+      ),
+    ).toEqual([{ tone: "note", text: "Long arguments: only the first part was checked." }]);
+  });
+
   it("treats a missing answer as unknown, never as clear", () => {
-    expect(hintsFromAnswers({ like_recent_calls: 0.95 }, false)).toEqual([]);
+    expect(hintsFromAnswers({ like_recent_calls: 0.95 }, OTHER)).toEqual([]);
   });
 });
 
@@ -206,6 +217,42 @@ describe("running approval adapters on a new request", () => {
     ]);
     expect(seen[0]?.call.action).toBe("email.send");
     expect(h.status(approvalId)).toBe("pending");
+  });
+
+  it("sends nothing for a request decided before the adapters ran", async () => {
+    const { h, approvalId } = await pending();
+    h.decide(approvalId, "deny");
+    let asked = false;
+    const adapter: ApprovalAdapter = {
+      name: "test",
+      hints: async () => {
+        asked = true;
+        return [];
+      },
+    };
+    await runApprovalHints(
+      {
+        db: h.t.db,
+        orgId: h.t.orgId,
+        adapters: [adapter],
+        log: captureLogger().logger,
+        now: () => h.clock.now,
+      },
+      approvalId,
+    );
+    expect(asked).toBe(false);
+    expect(hintsFor(h.t.db, approvalId)).toEqual([]);
+  });
+
+  it("counts each earlier call once, and leaves out only this request", async () => {
+    const h = approvalHarness({ owner: oneRule("{ action: email.send }", "ask") });
+    const first = pendingId(await h.call({ args: SEND }));
+    h.decide(first, "approve");
+    await h.call({ args: SEND }); // runs: approved, then executed
+    const second = pendingId(await h.call({ args: { ...SEND, subject: "Q4" } }));
+    const recent = recentCalls(h.t.db, h.t.orgId, h.agent.agentId, second);
+    // The first call counts once (its ask; approved and executed are follow-ups), and this ask not at all.
+    expect(recent.map((c) => c.outcome)).toEqual(["ask"]);
   });
 
   it("stores 'unavailable' when an adapter throws, times out or returns a verdict", async () => {

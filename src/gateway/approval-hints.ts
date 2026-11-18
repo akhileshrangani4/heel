@@ -27,13 +27,14 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 export async function runApprovalHints(deps: ApprovalHintDeps, approvalId: string): Promise<void> {
   if (deps.adapters.length === 0) return;
   const record = getApproval(deps.db, deps.orgId, approvalId, deps.now());
-  if (record === null) return;
+  // A request decided or expired in the meantime needs no advice, and isn't sent anywhere.
+  if (record === null || record.status !== "pending") return;
   const { call } = record.row;
   const input = {
     approvalId,
     call,
     agentName: record.agentName,
-    recentCalls: recentCalls(deps.db, deps.orgId, call.agentId, record.row.callHash),
+    recentCalls: recentCalls(deps.db, deps.orgId, call.agentId, approvalId),
   };
   await Promise.all(
     deps.adapters.map(async (adapter) => {

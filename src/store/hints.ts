@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ne } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne, or } from "drizzle-orm";
 import type { ApprovalHints } from "../core/hints.ts";
 import type { HeelDb } from "./db.ts";
 import { approvalHints, auditLog } from "./schema.ts";
@@ -53,12 +53,27 @@ export interface RecentCall {
   outcome: string;
 }
 
-/** An agent's latest calls from the audit log, newest first, leaving out one call hash. */
+/**
+ * The audit kinds that record one call attempt. An approval's follow-ups
+ * (approved, executed, expired, approval_denied) are left out, so one
+ * approved call counts once, not three times.
+ */
+const ATTEMPTS = [
+  "allow",
+  "deny",
+  "ask",
+  "paused",
+  "would_allow",
+  "would_deny",
+  "would_ask",
+] as const;
+
+/** An agent's latest call attempts from the audit log, newest first, leaving out one request's own. */
 export function recentCalls(
   db: HeelDb,
   orgId: string,
   agentId: string,
-  exceptCallHash: string,
+  exceptApprovalId: string,
   limit = 15,
 ): RecentCall[] {
   return db
@@ -73,7 +88,8 @@ export function recentCalls(
       and(
         eq(auditLog.orgId, orgId),
         eq(auditLog.agentId, agentId),
-        ne(auditLog.callHash, exceptCallHash),
+        inArray(auditLog.kind, [...ATTEMPTS]),
+        or(isNull(auditLog.approvalId), ne(auditLog.approvalId, exceptApprovalId)),
       ),
     )
     .orderBy(desc(auditLog.id))

@@ -53,6 +53,12 @@ describe("ApprovalRequest", () => {
       "Hints from jev are unavailable for this request.",
     );
     expect(render(PENDING_REQUEST).querySelector("section[aria-labelledby^='hints-']")).toBeNull();
+    expect(
+      text(
+        render({ ...PENDING_REQUEST, hints: [{ adapter: "jev", result: { status: "pending" } }] })
+          .body,
+      ),
+    ).toContain("Hints from jev are on the way.");
   });
 
   it("shows agent, run, account, action, rule, counts and expiry", () => {

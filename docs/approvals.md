@@ -39,6 +39,7 @@ Code turns the answers into hints:
 - **Every risk clearly absent and the call like recent work:** "Looks routine for this agent".
 - **The agent's first call:** heel says so itself, without asking Jev.
 - **Jev fails, times out or answers something unexpected:** the page says hints are unavailable. It never shows a guess.
+- **Jev hasn't answered yet** (it takes a second or two): the page says hints are on the way.
 
 To turn hints on, add an approval adapter to `heel.yaml`:
 
@@ -48,4 +49,9 @@ adapters:
     - jev: { model: jev-latest }   # key: HEEL_TYPESAFE_API_KEY, or $HEEL_HOME/typesafe-api-key
 ```
 
-**What leaves heel:** for each call that's waiting for a person, heel sends TypeSafe the agent's name, the account, the tool, the call's arguments (an email's recipients and body, for example), and the account, tool and outcome of the agent's last 15 calls. Allowed and denied calls are never sent, and no credentials are.
+**What leaves heel:** only for a call that's waiting for a person, heel sends TypeSafe one request with:
+- the agent's name, and the account, provider, tool and action of the call;
+- the call's arguments, as the agent sent them, such as an email's recipients and body. That includes anything sensitive the agent put there, which is what the first two questions look for. Arguments past 24,000 characters are cut, and the page then says only the first part was checked;
+- the account, tool, action and outcome (allowed, denied, asked) of the agent's last 15 calls, but not their arguments.
+
+heel's own credentials and the connected accounts' credentials are never sent. A request that's already decided or expired when hints run isn't sent at all.

@@ -58,8 +58,11 @@ export interface ApprovalRequestView {
   expiresAt: Date;
   decision: { by: string; at: Date } | null;
   executedAt: Date | null;
-  /** What each approval adapter said (core/hints.ts); empty when none are configured. */
-  hints: readonly { adapter: string; result: ApprovalHints }[];
+  /**
+   * What each approval adapter said (core/hints.ts), or `pending` while one
+   * hasn't answered yet; empty when none are configured.
+   */
+  hints: readonly { adapter: string; result: ApprovalHints | { status: "pending" } }[];
 }
 
 /** Standing approval lengths offered to the approver; 90 days is the hard cap (Q-A6). */
@@ -176,11 +179,13 @@ function hintsView(request: ApprovalRequestView): Html | "" {
     <h2 id="${id}">Hints</h2>
     <p class="muted">Advice from ${request.hints.map((h) => h.adapter).join(", ")}. It can't approve or deny anything: you decide.</p>
     ${request.hints.map(({ adapter, result }) =>
-      result.status === "unavailable"
-        ? html`<p class="muted">Hints from ${adapter} are unavailable for this request.</p>`
-        : result.hints.length === 0
-          ? html`<p class="muted">${adapter} has nothing to point out.</p>`
-          : html`<ul class="hints">
+      result.status === "pending"
+        ? html`<p class="muted">Hints from ${adapter} are on the way. Reload in a few seconds.</p>`
+        : result.status === "unavailable"
+          ? html`<p class="muted">Hints from ${adapter} are unavailable for this request.</p>`
+          : result.hints.length === 0
+            ? html`<p class="muted">${adapter} has nothing to point out.</p>`
+            : html`<ul class="hints">
               ${result.hints.map(
                 (hint) =>
                   html`<li>${badge(HINT_LABEL[hint.tone], HINT_TONE[hint.tone])} ${hint.text}</li>`,

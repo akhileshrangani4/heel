@@ -94,6 +94,16 @@ function requestView(
   };
 }
 
+/** Stored hints, plus "on the way" for a configured adapter that hasn't answered a pending request. */
+function pageHints(deps: HumanPlaneDeps, record: ApprovalRecord): ApprovalRequestView["hints"] {
+  const stored = hintsFor(deps.db, record.row.id);
+  if (record.status !== "pending") return stored;
+  const waiting = (deps.hintAdapters ?? [])
+    .filter((name) => !stored.some((s) => s.adapter === name))
+    .map((adapter) => ({ adapter, result: { status: "pending" as const } }));
+  return [...stored, ...waiting];
+}
+
 function pendingRow(deps: HumanPlaneDeps, record: ApprovalRecord): PendingRow {
   const { row } = record;
   return {
@@ -176,7 +186,7 @@ export function approvalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       pause,
       body: approvalRequest({
         now,
-        load: { ok: true, request: requestView(record, hintsFor(deps.db, record.row.id)) },
+        load: { ok: true, request: requestView(record, pageHints(deps, record)) },
         pause,
         onDecide: DECIDE_HANDLER,
       }),

@@ -29,7 +29,12 @@ export interface JevAdapterOptions {
   url?: string;
 }
 
-/** What Jev is shown: the call and the agent's recent work, no credentials. */
+/** Whether a call's arguments are too long to send whole. */
+export function argumentsCut(input: ApprovalHintInput): boolean {
+  return (JSON.stringify(input.call.args) ?? "null").length > MAX_ARGUMENTS;
+}
+
+/** What Jev is shown: the call and the agent's recent work (see docs/approvals.md, "Hints"). */
 export function jevState(input: ApprovalHintInput): JevState {
   const json = JSON.stringify(input.call.args) ?? "null";
   return {
@@ -91,6 +96,6 @@ export class JevAdapter implements ApprovalAdapter {
       }
       answers[id] = answer.noul;
     }
-    return hintsFromAnswers(answers, firstCall);
+    return hintsFromAnswers(answers, { firstCall, truncated: argumentsCut(input) });
   }
 }
