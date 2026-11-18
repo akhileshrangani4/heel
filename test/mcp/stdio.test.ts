@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, onTestFinished } from "vitest";
+import { hidingFor, UNSURE_JUDGE } from "../../src/core/hide.ts";
 import { mcpPassthrough } from "../../src/definitions/mcp/passthrough.ts";
 import type { StdioProcess } from "../../src/definitions/mcp/sandbox-transport.ts";
 import { stdioSandboxSpec, upstreamSettings } from "../../src/definitions/mcp/settings.ts";
@@ -122,7 +123,7 @@ describe("local MCP servers", () => {
     const { pool, account } = setUp({ launch: false });
     const normalized = await mcpPassthrough(account, pool).normalize(
       { ...callFor(account), tool: "echo", args: {} },
-      { signal: AbortSignal.timeout(10_000), hide: [] },
+      { signal: AbortSignal.timeout(10_000), hide: hidingFor([], UNSURE_JUDGE) },
     );
     expect(normalized).toEqual({ ok: false, reason: "lookup_unavailable" });
   });

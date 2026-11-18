@@ -1,6 +1,7 @@
 import { and, asc, eq } from "drizzle-orm";
 import { compileRulesText } from "../../src/config/rules.ts";
 import type { Call } from "../../src/core/call.ts";
+import type { HideReason, LooksLikeJudge } from "../../src/core/hide.ts";
 import { itemsFromIds, SINGLE_ITEM } from "../../src/core/items.ts";
 import type { Layer, StateCheck } from "../../src/core/rules/compile.ts";
 import {
@@ -314,6 +315,8 @@ export interface HarnessOptions {
   adapters?: readonly DecisionAdapter[];
   /** Response adapters, in chain order. */
   responseAdapters?: readonly ResponseAdapter[];
+  /** The `looks_like` judge; omitted, the pipeline's fail-closed default. */
+  looksLike?: LooksLikeJudge;
 }
 
 export interface CallInput {
@@ -346,6 +349,8 @@ export interface PipelineHarness {
   stages: PipelineStage[];
   /** Approval ids the pipeline asked to notify about. */
   notified: string[];
+  /** Why each hidden message was hidden, in order. */
+  hidden: HideReason[];
   /** Admin alerts the pipeline raised. */
   alerts: AdminAlert[];
   /** Every log line written so far, as JSON lines. */
@@ -399,6 +404,7 @@ export function pipelineHarness(options: HarnessOptions = {}): PipelineHarness {
   };
   const stages: PipelineStage[] = [];
   const notified: string[] = [];
+  const hidden: HideReason[] = [];
   const alerts: AdminAlert[] = [];
   const undefinedProviders = new Set<string>(["notion"]);
   const { logger, output } = captureLogger();
@@ -421,6 +427,8 @@ export function pipelineHarness(options: HarnessOptions = {}): PipelineHarness {
     trace: (stage) => stages.push(stage),
     ...(options.adapters !== undefined && { adapters: options.adapters }),
     ...(options.responseAdapters !== undefined && { responseAdapters: options.responseAdapters }),
+    ...(options.looksLike !== undefined && { looksLike: options.looksLike }),
+    onHidden: (reason) => hidden.push(reason),
   });
 
   return {
@@ -433,6 +441,7 @@ export function pipelineHarness(options: HarnessOptions = {}): PipelineHarness {
     clock,
     stages,
     notified,
+    hidden,
     alerts,
     logs: output,
     pipeline,

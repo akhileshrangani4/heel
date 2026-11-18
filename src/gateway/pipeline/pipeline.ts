@@ -10,8 +10,15 @@ import type { AuditEvent } from "../../core/audit.ts";
 import type { Call } from "../../core/call.ts";
 import { callHash, UNREPRESENTABLE_ARGS, UNREPRESENTABLE_CALL_HASH } from "../../core/call-hash.ts";
 import { type CountEvent, storedFacts, sumMatching } from "../../core/counts.ts";
+import {
+  type HideReason,
+  type Hiding,
+  hidingFor,
+  type LooksLikeJudge,
+  UNSURE_JUDGE,
+} from "../../core/hide.ts";
 import { isItemCount, SINGLE_ITEM } from "../../core/items.ts";
-import type { CompiledHideEntry, CompiledRule, StateCheck } from "../../core/rules/compile.ts";
+import type { CompiledRule, StateCheck } from "../../core/rules/compile.ts";
 import {
   type EvalContext,
   type Evaluation,
@@ -128,6 +135,13 @@ export interface PipelineDeps {
   adapters?: readonly DecisionAdapter[];
   /** Checks on an allowed call's result after hiding, in chain order. */
   responseAdapters?: readonly ResponseAdapter[];
+  /**
+   * Judges `looks_like` hide entries. Without one, every message such an
+   * entry covers is hidden (I-44).
+   */
+  looksLike?: LooksLikeJudge;
+  /** Called for each hidden message, with why: the fail-closed metric (I-44). */
+  onHidden?: (reason: HideReason) => void;
 }
 
 export interface Pipeline {
@@ -350,7 +364,11 @@ class DecisionPipeline implements Pipeline {
     // One rule set decides the whole call, even if a reload lands mid-call.
     const set = this.#deps.rules.set;
     if (set === null) return this.#deny(call, identityHash, "rules_unavailable");
-    const hide = hideEntriesFor(set, account.ownerName);
+    const hide = hidingFor(
+      hideEntriesFor(set, account.ownerName),
+      this.#deps.looksLike ?? UNSURE_JUDGE,
+      this.#deps.onHidden,
+    );
 
     this.#trace("normalize");
     const normalized = await this.#normalize(definition, call, hide);
@@ -461,11 +479,7 @@ class DecisionPipeline implements Pipeline {
     return parsed.kind === "valid" ? parsed.runId : undefined;
   }
 
-  async #normalize(
-    definition: Definition,
-    call: Call,
-    hide: readonly CompiledHideEntry[],
-  ): Promise<Normalized> {
+  async #normalize(definition: Definition, call: Call, hide: Hiding): Promise<Normalized> {
     try {
       return await withDeadline(this.#timeouts.upstreamMs, (signal) =>
         definition.normalize(call, { signal, hide }),

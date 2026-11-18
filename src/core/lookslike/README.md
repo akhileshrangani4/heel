@@ -60,9 +60,14 @@ Reasons never carry message content, so they are safe for audit rows and
 logs. Pattern hits stand even past the budget, because the patterns ran first.
 
 **D10b owns:** the `looks_like` key in the rules schema, calling this from the
-hide filter, the per-`(account, messageId, hide-rules hash)` verdict cache, the
-I-44 metric, and the I-43 property that `looks_like` only ever adds to the
-hidden set.
+hide filter (`src/core/hide.ts`, judged by `src/lookslike/judge.ts`), the I-44
+metric, and the I-43 property that `looks_like` only ever adds to the hidden
+set.
+
+**The Gmail definition (D9a) owns** the per-`(account, messageId, hide-rules
+hash)` verdict cache, since that is where by-id reads happen. It caches only
+the `looks_like` verdict: labels change, so plain checks always run on fresh
+metadata and a stale "visible" can never stick.
 
 ## How it decides
 
