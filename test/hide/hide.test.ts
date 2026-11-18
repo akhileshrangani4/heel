@@ -122,12 +122,6 @@ describe("hideVerdict: looks_like", () => {
     expect(judge.calls).toBe(0);
   });
 
-  it("I-44: a message with no body read is judged unreadable, so it hides", () => {
-    const { body: _, ...headersOnly } = message();
-    const verdict = hideVerdict(entries(RESETS), headersOnly, looksLikeJudge(undefined));
-    expect(verdict).toMatchObject({ hidden: true, reason: "uncertain" });
-  });
-
   it("I-43: no looks_like verdict un-hides a message another entry hides", () => {
     const set = entries(`${RESETS}${FAMILY}`);
     const family = message({ from: "sarah@example.com" });
@@ -161,6 +155,14 @@ describe("the looks_like judge", () => {
 
   it("shows an ordinary email", () => {
     expect(hideVerdict(entries(RESETS), message(), judge)).toEqual({ hidden: false });
+  });
+
+  it("I-44: a message with no body read is judged unreadable, so it hides", () => {
+    const { body: _, ...headersOnly } = message();
+    expect(hideVerdict(entries(RESETS), headersOnly, judge)).toMatchObject({
+      hidden: true,
+      reason: "uncertain",
+    });
   });
 
   it("I-44: with no model loaded, every looks_like message is hidden as uncertain", () => {
