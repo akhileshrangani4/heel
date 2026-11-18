@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { mapLimit } from "../mail/map-limit.ts";
+import { GRAPH_API_BASE } from "../microsoft/oauth.ts";
 import type { OutlookFolder, OutlookMessage, OutlookRule } from "./client.ts";
 import {
   type MessageDetail,
@@ -34,7 +35,13 @@ const search = outlookTool({
     page_token: z.string().max(4_000).optional(),
   }),
   readOnly: true,
-  prepare: async (_mailbox, args) => ({ args }),
+  async prepare(_mailbox, args) {
+    // A page token is a link Graph gave; heel follows only links back to this mailbox.
+    if (args.page_token !== undefined && !args.page_token.startsWith(`${GRAPH_API_BASE}me/`)) {
+      return { deny: "unsupported" as const };
+    }
+    return { args };
+  },
   run: (mailbox, args, signal) =>
     mailbox.client.listMessages(
       args.page_token === undefined
