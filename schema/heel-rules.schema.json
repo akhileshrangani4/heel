@@ -112,13 +112,13 @@
           "$ref": "#/$defs/BooleanCondition"
         },
         "team": {
-          "$ref": "#/$defs/TextCondition"
+          "$ref": "#/$defs/TeamCondition"
         },
         "project": {
-          "$ref": "#/$defs/TextCondition"
+          "$ref": "#/$defs/ProjectCondition"
         },
         "parent": {
-          "$ref": "#/$defs/TextCondition"
+          "$ref": "#/$defs/ParentCondition"
         },
         "amount": {
           "$ref": "#/$defs/AmountCondition"
@@ -127,7 +127,7 @@
           "$ref": "#/$defs/CurrencyCondition"
         },
         "customer": {
-          "$ref": "#/$defs/TextCondition"
+          "$ref": "#/$defs/CustomerCondition"
         }
       },
       "additionalProperties": {
@@ -445,6 +445,117 @@
         }
       ]
     },
+    "TeamCondition": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9]{1,10}$"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "equals": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9]{1,10}$"
+            },
+            "one_of": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9]{1,10}$"
+              }
+            },
+            "any_of": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9]{1,10}$"
+              }
+            },
+            "matches": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ProjectCondition": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}$"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "equals": {
+              "type": "string",
+              "pattern": "^[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}$"
+            },
+            "one_of": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}$"
+              }
+            },
+            "any_of": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}$"
+              }
+            },
+            "matches": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ParentCondition": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "(?:^[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}$)|(?:^workspace$)"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "equals": {
+              "type": "string",
+              "pattern": "(?:^[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}$)|(?:^workspace$)"
+            },
+            "one_of": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "(?:^[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}$)|(?:^workspace$)"
+              }
+            },
+            "any_of": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "(?:^[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}$)|(?:^workspace$)"
+              }
+            },
+            "matches": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
     "AmountCondition": {
       "anyOf": [
         {
@@ -498,6 +609,43 @@
               "items": {
                 "type": "string",
                 "pattern": "^[a-z]{3}$"
+              }
+            },
+            "matches": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "CustomerCondition": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^cus_[A-Za-z0-9]{6,64}$"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "equals": {
+              "type": "string",
+              "pattern": "^cus_[A-Za-z0-9]{6,64}$"
+            },
+            "one_of": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^cus_[A-Za-z0-9]{6,64}$"
+              }
+            },
+            "any_of": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^cus_[A-Za-z0-9]{6,64}$"
               }
             },
             "matches": {

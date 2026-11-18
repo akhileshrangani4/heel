@@ -58,7 +58,7 @@ export const KindCondition = condition(
  * Provider fields (D12b), each typed, so a rule value of the wrong type is a
  * load error rather than a condition that silently never matches.
  */
-const textOf = (value: z.ZodString, what: string, id: string) =>
+const textOf = (value: z.ZodType<string, string>, what: string, id: string) =>
   condition(
     value,
     z.strictObject({
@@ -69,6 +69,47 @@ const textOf = (value: z.ZodString, what: string, id: string) =>
     }),
     what,
   ).meta({ id });
+/** A Linear team key, compared upper-case as Linear shows it (`eng` and `ENG` are one team). */
+export const TeamCondition = textOf(
+  z
+    .string()
+    .regex(/^[A-Za-z0-9]{1,10}$/, "expected a Linear team key like ENG")
+    .transform((k) => k.toUpperCase()),
+  "a Linear team key",
+  "TeamCondition",
+);
+const UUID = /^[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}$/;
+/** A UUID, with or without dashes, as heel compares it: dashed and lower-case. */
+const dashedUuid = (id: string) => {
+  const hex = id.replaceAll("-", "").toLowerCase();
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+};
+/** A Linear project id (the UUID, not the slug in its URL). */
+export const ProjectCondition = textOf(
+  z
+    .string()
+    .regex(UUID, "expected a Linear project id (a UUID), not its URL slug")
+    .transform(dashedUuid),
+  "a Linear project id",
+  "ProjectCondition",
+);
+/** A Notion page or database id, with or without dashes, or `workspace`. */
+export const ParentCondition = textOf(
+  z
+    .string()
+    .regex(
+      new RegExp(`(?:${UUID.source})|(?:^workspace$)`),
+      "expected a Notion page or database id, or workspace",
+    )
+    .transform((id) => (id === "workspace" ? id : dashedUuid(id))),
+  "a Notion page or database id",
+  "ParentCondition",
+);
+export const CustomerCondition = textOf(
+  z.string().regex(/^cus_[A-Za-z0-9]{6,64}$/, "expected a Stripe customer id like cus_..."),
+  "a Stripe customer id",
+  "CustomerCondition",
+);
 export const ChannelCondition = textOf(
   z.string().regex(/^[CDG][A-Z0-9]{2,30}$/, "expected a Slack channel id like C0123ABCD"),
   "a Slack channel id",
@@ -195,12 +236,12 @@ const fixedMatchKeys = {
   // Provider fields (D12b): set by built-in definitions only.
   channel: ChannelCondition.optional(),
   external: BooleanCondition.optional(),
-  team: TextCondition.optional(),
-  project: TextCondition.optional(),
-  parent: TextCondition.optional(),
+  team: TeamCondition.optional(),
+  project: ProjectCondition.optional(),
+  parent: ParentCondition.optional(),
   amount: AmountCondition.optional(),
   currency: CurrencyCondition.optional(),
-  customer: TextCondition.optional(),
+  customer: CustomerCondition.optional(),
 };
 export type FixedMatchKey = keyof typeof fixedMatchKeys;
 export const FIXED_MATCH_KEYS = Object.keys(fixedMatchKeys) as readonly FixedMatchKey[];
