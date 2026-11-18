@@ -52,7 +52,8 @@ describe.skipIf(!probe.ok)("a local MCP server in the sandbox", () => {
     };
     const pool = new UpstreamPool({
       vault: null,
-      log: createLogger("silent"),
+      // Info level: if the server fails in the sandbox, its stderr lands in the CI log.
+      log: createLogger("info"),
       launchStdio: (_account, settings) =>
         startSandboxed(host, stdioSandboxSpec(settings, { workRoot, credential: TOKEN })),
     });
