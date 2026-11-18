@@ -7,7 +7,7 @@ import { isEnvName } from "../definitions/mcp/settings.ts";
 import { EgressConfigError, parseEgressAllow } from "../runner/egress.ts";
 import type { HeelDb } from "../store/db.ts";
 import { newId } from "../store/ids.ts";
-import { type AccountStatus, accounts } from "../store/schema.ts";
+import { type AccountStatus, accounts, users } from "../store/schema.ts";
 import type { CredentialPayload, Vault } from "./vault.ts";
 
 /**
@@ -459,6 +459,8 @@ export interface AccountSummary {
   alias: string;
   provider: string;
   ownerId: string;
+  /** The owner's user name, as rules files are named. */
+  owner: string;
   status: AccountStatus;
 }
 
@@ -469,9 +471,11 @@ export function listAccounts(db: HeelDb, orgId: string): AccountSummary[] {
       alias: accounts.alias,
       provider: accounts.provider,
       ownerId: accounts.ownerId,
+      owner: users.name,
       status: accounts.status,
     })
     .from(accounts)
+    .innerJoin(users, eq(users.id, accounts.ownerId))
     .where(eq(accounts.orgId, orgId))
     .orderBy(accounts.alias)
     .all();
