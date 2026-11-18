@@ -402,4 +402,15 @@ describe("review findings", () => {
       rule: null,
     });
   });
+
+  it("denies a move when the Sent Items lookup fails, rather than calling it a label change", async () => {
+    const h = setUp(`rules:
+  - match: { action: email.label }
+    then: allow
+`);
+    h.graph.failFolder = "sentitems";
+    expect(
+      await h.call("move", { message_ids: ["o2"], folder: h.graph.folderId("projects") }),
+    ).toEqual({ status: "denied", reason: "lookup_unavailable", rule: null });
+  });
 });

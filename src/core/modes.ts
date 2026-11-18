@@ -6,9 +6,9 @@
  * - `shadow`: owner rules and the default deny are evaluated and logged as
  *   would-deny or would-ask, then the call runs. This is `heel serve
  *   --watch`, on the same code path.
- * - `record`: the same calls run as in shadow, but owner rules aren't
- *   evaluated at all. heel records traffic for a team that has no rules
- *   yet.
+ * - `record`: decides exactly as shadow does. It marks a rollout that is
+ *   only recording traffic, for a team that has no rules yet; the Activity
+ *   page and rule suggestions read it that way.
  *
  * No mode ever allows a call that `--watch` doesn't (I-71, I-13). Org rules,
  * hard denies, pause, hiding and fail-closed denies hold in every mode.

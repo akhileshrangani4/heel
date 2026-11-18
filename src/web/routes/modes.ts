@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { isMode, type Mode } from "../../core/modes.ts";
-import { ORG_DEFAULT, setMode, storedMode } from "../../store/modes.ts";
+import { modeFor, ORG_DEFAULT, setMode, storedMode } from "../../store/modes.ts";
 import { users } from "../../store/schema.ts";
 import {
   formField,
@@ -50,16 +50,19 @@ export function modeRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       .from(users)
       .where(eq(users.orgId, deps.orgId))
       .all();
+    const fallback: Mode = deps.watchFallback ? "shadow" : "enforce";
     return [
       {
         ownerId: ORG_DEFAULT,
         label: "Everyone (org default)",
         mode: storedMode(deps.db, deps.orgId, ORG_DEFAULT),
+        effective: modeFor(deps.db, deps.orgId, ORG_DEFAULT, fallback),
       },
       ...people.map((p) => ({
         ownerId: p.id,
         label: p.name,
         mode: storedMode(deps.db, deps.orgId, p.id),
+        effective: modeFor(deps.db, deps.orgId, p.id, fallback),
       })),
     ];
   }
