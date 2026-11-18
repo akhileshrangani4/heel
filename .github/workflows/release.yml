@@ -14,7 +14,7 @@ name: release
 #   commit (docs.yml).
 #
 # Each publish checks whether it's already done, so a failed run can be
-# re-run. See docs/releasing.md.
+# re-run. See CONTRIBUTING.md, "Releases".
 on:
   workflow_run:
     workflows: [ci]

@@ -95,14 +95,3 @@ heel migrates its database when it starts. Back up `HEEL_HOME` (or the volume) a
 
 - **On a Linux host:** install `bubblewrap` and `util-linux`.
 - **In Docker:** the default seccomp profile blocks user namespaces, so heel starts with both turned off. To turn them on, run with a seccomp profile that allows `unshare` and `clone` with `CLONE_NEWUSER`, on a host kernel that allows unprivileged user namespaces.
-
-## From a checkout
-
-Node 26.13 or later and pnpm. A checkout runs the TypeScript source directly:
-
-```sh
-pnpm install
-export HEEL_HOME=~/.heel-dev
-node bin/heel.js vault init
-node bin/heel.js serve
-```

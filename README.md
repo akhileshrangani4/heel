@@ -197,7 +197,8 @@ The docs are at **[useheel.dev](https://useheel.dev)**, and in [`docs/`](docs).
 | [Why heel](docs/why.md) | The problem, intent-based access control, and where heel comes from |
 | [Incidents](docs/incidents.md) | Four real incidents, replayed against heel |
 | [How it compares](docs/comparison.md) | Other gateways and approval tools |
-| [Releasing](docs/releasing.md) | How versions are cut and published |
+
+Working on heel itself? See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

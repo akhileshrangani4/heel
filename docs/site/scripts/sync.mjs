@@ -29,7 +29,6 @@ const PAGES = [
   ["running", "running.md"],
   ["incidents", "incidents.md"],
   ["comparison", "comparison.md"],
-  ["releasing", "releasing.md"],
 ];
 
 /** Page titles by docs file, from each page's H1. */

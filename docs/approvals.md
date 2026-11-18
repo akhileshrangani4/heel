@@ -26,7 +26,7 @@ Hints are optional and off by default. heel works fully without them: every allo
 
 An approval adapter can add hints to a pending request, to help the approver notice what matters, like "asks someone for money" or "unlike this agent's recent calls". It can't approve or deny anything. Hints run after the request is already pending, they're stored next to it, and they only appear on the approval page, under the call, labeled with the adapter that gave them. The approver still reads the full arguments and decides.
 
-The built-in approval adapter is **Jev**, [TypeSafe](https://typesafe.ai)'s fast decision model. For each pending request, heel asks Jev a few yes-or-no questions. Each question and its wording is in [`src/core/hints.ts`](../src/core/hints.ts):
+The built-in approval adapter is **Jev**, [TypeSafe](https://typesafe.ai)'s fast decision model. For each pending request, heel asks Jev a few yes-or-no questions:
 
 | Question | Hint when Jev is sure (above 0.7) |
 | --- | --- |
