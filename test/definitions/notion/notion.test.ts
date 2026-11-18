@@ -20,6 +20,8 @@ const NOTE = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const NESTED = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const BLOCK = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const PRIVATE = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+const DATABASE = "12345678-1234-4234-8234-123456789012";
+const ROW = "99999999-9999-4999-8999-999999999999";
 
 const pages: Record<string, Record<string, unknown>> = {
   [WIKI]: {
@@ -41,9 +43,20 @@ const pages: Record<string, Record<string, unknown>> = {
     parent: { type: "workspace", workspace: true },
     properties: {},
   },
+  [ROW]: {
+    object: "page",
+    id: ROW,
+    parent: {
+      type: "data_source_id",
+      data_source_id: "77777777-7777-4777-8777-777777777777",
+      database_id: DATABASE,
+    },
+    properties: {},
+  },
 };
 
-function fakeNotion(options: { refuse?: number } = {}) {
+function fakeNotion(options: { refuse?: number; code?: string; moveAfterRead?: boolean } = {}) {
+  let reads = 0;
   const sent: { method: string; path: string; body: unknown; version: string | null }[] = [];
   const fetch = async (input: string | URL, init?: RequestInit): Promise<Response> => {
     const url = new URL(input.toString());
@@ -56,7 +69,11 @@ function fakeNotion(options: { refuse?: number } = {}) {
     });
     const page = /^\/v1\/pages\/([0-9a-f-]+)$/.exec(url.pathname);
     if (method === "GET" && page !== null) {
+      reads++;
       const p = pages[page[1] as string];
+      if (options.moveAfterRead === true && reads > 1 && p !== undefined) {
+        return Response.json({ ...p, parent: { type: "workspace", workspace: true } });
+      }
       return p === undefined
         ? Response.json({ object: "error", code: "object_not_found" }, { status: 404 })
         : Response.json(p);
@@ -70,7 +87,7 @@ function fakeNotion(options: { refuse?: number } = {}) {
     }
     if (method !== "GET" && options.refuse !== undefined) {
       return Response.json(
-        { object: "error", code: "validation_error" },
+        { object: "error", code: options.code ?? "validation_error" },
         { status: options.refuse },
       );
     }
@@ -190,5 +207,28 @@ describe("the Notion definition", () => {
   ])("refuses %s", async (_label, args) => {
     const h = setUp(UNDER_WIKI);
     expect(await h.call("append_paragraphs", args)).toMatchObject({ reason: "unsupported" });
+  });
+
+  it("gives a database row its database as parent", async () => {
+    const h = setUp(
+      `rules:\n  - match: { action: notion.page.delete, parent: "${DATABASE.replaceAll("-", "")}" }\n    then: deny\n  - match: {}\n    then: allow\n`,
+    );
+    expect((await h.call("trash_page", { page_id: ROW })).status).toBe("denied");
+  });
+
+  it("sends nothing when the page moved after heel checked it", async () => {
+    const h = setUp(UNDER_WIKI, fakeNotion({ moveAfterRead: true }));
+    expect(await h.call("append_paragraphs", { page_id: NOTE, paragraphs: ["x"] })).toMatchObject({
+      status: "upstream_error",
+      upstreamStatus: 409,
+    });
+    expect(writes(h.sent)).toEqual([]);
+  });
+
+  it("leaves a 4xx that isn't Notion's own error unknown", async () => {
+    const h = setUp(UNDER_WIKI, fakeNotion({ refuse: 408, code: "timeout" }));
+    expect((await h.call("append_paragraphs", { page_id: NOTE, paragraphs: ["x"] })).status).toBe(
+      "upstream_outcome_unknown",
+    );
   });
 });

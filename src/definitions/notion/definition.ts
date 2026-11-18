@@ -15,10 +15,16 @@ import { NotionClient, NotionNotFoundError, NotionRefused } from "./client.ts";
  *
  * - Actions: `notion.read`, `notion.page.create`, `notion.page.update` and
  *   `notion.page.delete` (Notion's trash: the API can't delete for good).
- * - Rules see `parent`: the id of the page, database or data source a page
- *   sits under, or `workspace`. A page under a block is followed up to its
- *   page, so a rule on a page covers what is nested inside it. Read from
- *   Notion before any rule; a failed read denies the call.
+ * - Rules see `parent`: the id of the page or database a page sits directly
+ *   under (a database row's parent is its database, even when Notion names
+ *   the data source too), or `workspace`. A page under a block (a column, a
+ *   toggle) is followed up to the page holding the block. Only that nearest
+ *   page counts: a rule on a page doesn't cover pages two levels below it.
+ *   Read from Notion before any rule; a failed read denies the call, and
+ *   every write reads it again just before sending, sending nothing if the
+ *   page moved while the call waited.
+ * - `search` has no parent: a rule keyed on `parent` doesn't limit what it
+ *   lists.
  * - Content is plain paragraphs only, so what an approver reads is what is
  *   written.
  * - heel offers no tool for sharing or publishing a page, which outlives
@@ -74,6 +80,10 @@ async function parentOf(
   for (let hop = 0; hop < MAX_HOPS; hop++) {
     const type = current?.type;
     if (type === "workspace") return "workspace";
+    // A database row names its data source and its database: rules name the database.
+    if (type === "data_source_id" && typeof current?.["database_id"] === "string") {
+      return Id.parse(current["database_id"]);
+    }
     if (type === "page_id" || type === "database_id" || type === "data_source_id") {
       const id = current?.[type];
       if (typeof id !== "string") break;
@@ -88,6 +98,12 @@ async function parentOf(
     current = block["parent"] as Parent | undefined;
   }
   throw new Error("Notion's parent for this object isn't readable");
+}
+
+/** The page's parent again, just before a write; nothing is sent if it moved. */
+async function unmoved(box: Box, pageId: string, parent: string, signal: AbortSignal) {
+  const now = await pageWithParent(box, pageId, signal);
+  if (now.parent !== parent) throw new NotionRefused(409, "moved_after_check");
 }
 
 async function pageWithParent(box: Box, pageId: string, signal: AbortSignal) {
@@ -212,12 +228,19 @@ const TOOLS: Record<string, NotionTool> = {
     readOnly: false,
     prepare: async (box, args, _h, signal) => {
       const { parent } = await pageWithParent(box, args.page_id, signal);
-      return { args, action: "notion.page.update", fields: { parent }, targets: [args.page_id] };
+      return {
+        args: { ...args, checked_parent: parent },
+        action: "notion.page.update",
+        fields: { parent },
+        targets: [args.page_id],
+      };
     },
-    run: (box, a, signal) =>
-      box.client.request("PATCH", `/v1/blocks/${a.page_id}/children`, signal, {
+    run: async (box, a, signal) => {
+      await unmoved(box, a.page_id, a.checked_parent, signal);
+      return box.client.request("PATCH", `/v1/blocks/${a.page_id}/children`, signal, {
         children: a.paragraphs.map(paragraph),
-      }),
+      });
+    },
     show: async () => ({ appended: true }),
   }),
 
@@ -227,10 +250,17 @@ const TOOLS: Record<string, NotionTool> = {
     readOnly: false,
     prepare: async (box, args, _h, signal) => {
       const { parent } = await pageWithParent(box, args.page_id, signal);
-      return { args, action: "notion.page.delete", fields: { parent }, targets: [args.page_id] };
+      return {
+        args: { ...args, checked_parent: parent },
+        action: "notion.page.delete",
+        fields: { parent },
+        targets: [args.page_id],
+      };
     },
-    run: (box, a, signal) =>
-      box.client.request("PATCH", `/v1/pages/${a.page_id}`, signal, { in_trash: true }),
+    run: async (box, a, signal) => {
+      await unmoved(box, a.page_id, a.checked_parent, signal);
+      return box.client.request("PATCH", `/v1/pages/${a.page_id}`, signal, { in_trash: true });
+    },
     show: async (_box, page: Record<string, unknown>) => shownPage(page),
   }),
 };

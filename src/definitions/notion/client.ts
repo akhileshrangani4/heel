@@ -31,6 +31,21 @@ export class NotionRefused extends Error {
   }
 }
 
+/** Error codes Notion raises before changing anything (https://developers.notion.com/reference/status-codes). */
+const REFUSED = new Set([
+  "invalid_json",
+  "invalid_request_url",
+  "invalid_request",
+  "invalid_grant",
+  "validation_error",
+  "missing_version",
+  "unauthorized",
+  "restricted_resource",
+  "object_not_found",
+  "conflict_error",
+  "rate_limited",
+]);
+
 export class NotionClient {
   readonly #fetch: FetchFn;
   readonly #token: () => Promise<string>;
@@ -75,8 +90,8 @@ export class NotionClient {
       if (response.status === 404) throw new NotionNotFoundError(`${path}: ${code}`);
       throw new Error(`Notion answered ${response.status} ${code} for ${path}`);
     }
-    if (response.status >= 400 && response.status < 500)
-      throw new NotionRefused(response.status, code);
+    // Only Notion's own error codes mean it refused before acting; anything else (a proxy's 408) is unknown.
+    if (REFUSED.has(code)) throw new NotionRefused(response.status, code);
     throw new Error(`Notion answered ${response.status} for a write; the outcome is unknown`);
   }
 }
