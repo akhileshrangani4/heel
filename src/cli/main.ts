@@ -138,7 +138,7 @@ export function parseExportTime(text: string, now: Date): string | null {
 /** Pure: the MCP URL an agent should be given, from the agent plane's listen address. */
 export function agentMcpUrl(listen: ListenAddress): string {
   const host = listen.host.includes(":") ? `[${listen.host}]` : listen.host;
-  // Code mode (bare /mcp) arrives with D6; until then agents use the direct tools.
+  // Direct tools work on every host; code mode (bare /mcp) needs the Linux sandbox.
   return `http://${host}:${listen.port}/mcp?tools=direct`;
 }
 
@@ -705,6 +705,17 @@ export async function main(argv: string[], io: CliIo): Promise<number> {
     }
     if (error instanceof RefusedError) {
       io.stderr.write(`heel: ${error.message}\n`);
+      return EXIT.failed;
+    }
+    // A file heel can't create or open: the fix is a path, not a bug report.
+    if (
+      ["EACCES", "EPERM", "ENOENT", "EROFS"].some((code) => hasErrnoCode(error, code)) &&
+      error instanceof Error &&
+      "path" in error
+    ) {
+      io.stderr.write(
+        `heel: ${error.message}\nSet HEEL_HOME to a directory you own (for example ~/.heel), or point heel.yaml at one.\n`,
+      );
       return EXIT.failed;
     }
     // Unexpected: show the stack so the fault can be found.

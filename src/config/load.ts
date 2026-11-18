@@ -1,10 +1,10 @@
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { hasErrnoCode } from "../util/errno.ts";
-import { type HeelConfig, HeelConfigFileSchema, resolveConfig } from "./schema.ts";
+import { type HeelConfig, HeelConfigFileSchema, resolveConfig, SERVER_HOME } from "./schema.ts";
 import { parseYamlStrict } from "./yaml.ts";
 
-export const DEFAULT_HEEL_HOME = "/var/lib/heel";
+export const DEFAULT_HEEL_HOME = SERVER_HOME;
 
 /** Where the config comes from; `explicit` means a person named the file. */
 export interface ConfigSource {
