@@ -8,9 +8,12 @@ Node 26.13 or later:
 
 ```sh
 npm install -g useheel
+export HEEL_HOME=~/.heel   # config, master key, database and admin socket
 heel vault init
 heel serve
 ```
+
+`HEEL_HOME` defaults to `/var/lib/heel`, a server install's home, whose admin socket is `/run/heel/admin.sock`. Any other `HEEL_HOME` keeps the admin socket inside it, so a personal install needs no root-owned directory. Every `heel` command finds the running server through `HEEL_HOME`, so set it in each shell (or your shell profile).
 
 `heel run` and code mode need Linux with bubblewrap (see [The sandbox in a container](#the-sandbox-in-a-container) for what that needs); on other hosts heel starts with both refused.
 
@@ -47,4 +50,4 @@ node bin/heel.js serve
 
 ## Rules
 
-`examples/rules/owner.yaml` is the README's example rules file, unchanged. Copy it to `$HEEL_HOME/rules/<user>.yaml` and edit it; `heel rules check` validates it and `heel rules test` runs cases against it.
+`examples/rules/owner.yaml` holds the example rules and hide entries from [rules.md](rules.md), unchanged. Copy it to `$HEEL_HOME/rules/<user>.yaml` and edit it; `heel rules check` validates it and `heel rules test` runs cases against it.
