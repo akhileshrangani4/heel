@@ -1,5 +1,5 @@
 {
-  "name": "@akhileshrangani4/heel",
+  "name": "useheel",
   "version": "0.1.0",
   "description": "A self-hosted gateway that holds every agent credential and decides each call with default-deny rules.",
   "license": "Apache-2.0",

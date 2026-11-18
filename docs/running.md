@@ -7,7 +7,7 @@ heel v0.1 runs as one process with two HTTP planes and an admin socket (spec: Ar
 Node 26.13 or later:
 
 ```sh
-npm install -g @akhileshrangani4/heel
+npm install -g useheel
 heel vault init
 heel serve
 ```

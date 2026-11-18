@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="LICENSE"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-16181D"></a>
-  <a href="https://www.npmjs.com/package/@akhileshrangani4/heel"><img alt="npm version" src="https://img.shields.io/npm/v/%40akhileshrangani4%2Fheel?color=F2A33A"></a>
+  <a href="https://www.npmjs.com/package/useheel"><img alt="npm version" src="https://img.shields.io/npm/v/useheel?color=F2A33A"></a>
 </p>
 
 <p align="center">
@@ -217,7 +217,7 @@ Gmail, Outlook, Calendar, GitHub, Slack, Linear, Notion and Stripe. Tools that l
 heel v0.1 is released on npm and as an OCI image on ghcr.io:
 
 ```sh
-npm install -g @akhileshrangani4/heel   # Node 26.13 or later
+npm install -g useheel   # Node 26.13 or later
 docker pull ghcr.io/akhileshrangani4/heel
 ```
 

@@ -1,12 +1,18 @@
 name: release
 
-# Releases heel when CI passes on main and package.json names a version that
-# hasn't been released yet. Merging to main is the release; bumping
-# `version` in a PR is how the next one is made. In order, each step skipped
-# if it's already done, so a failed run can simply be re-run:
-#   1. the npm package (trusted publishing with provenance; see docs/releasing.md),
-#   2. the OCI image on ghcr.io,
-#   3. the tag v<version> and its GitHub release.
+# Releases are made by merging a release PR (release-please):
+#
+# - After CI passes on main, release-please opens or updates the release PR:
+#   the next version, from the conventional commit titles merged since the
+#   last release, and its CHANGELOG entry.
+# - Merging that PR is the release. release-please tags v<version> and
+#   creates the GitHub release; then this workflow builds and checks the
+#   package in a job with no write access, and two jobs that install nothing
+#   publish what it built: the npm package (trusted publishing, provenance)
+#   and the image on ghcr.io.
+#
+# Each publish checks whether it's already done, so a failed run can be
+# re-run. See docs/releasing.md.
 on:
   workflow_run:
     workflows: [ci]
@@ -21,23 +27,48 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
-    name: npm, ghcr.io and GitHub release
+  release-pr:
+    name: release PR and tag
     if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
     runs-on: ubuntu-24.04
     permissions:
       contents: write # the tag and the GitHub release
-      packages: write # the image on ghcr.io
-      id-token: write # npm trusted publishing and provenance
-    env:
-      SHA: ${{ github.event.workflow_run.head_sha }}
+      pull-requests: write # the release PR
+      issues: write # its labels
+    steps:
+      # RELEASE_TOKEN (a fine-grained token of the repo owner) makes the
+      # release PR theirs and lets CI run on it; GitHub doesn't run workflows
+      # on PRs opened with the default token.
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          token: ${{ secrets.RELEASE_TOKEN || github.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          target-branch: main
+
+  plan:
+    name: what to publish
+    needs: release-pr
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      name: ${{ steps.plan.outputs.name }}
+      version: ${{ steps.plan.outputs.version }}
+      image: ${{ steps.plan.outputs.image }}
+      channel: ${{ steps.plan.outputs.channel }}
+      node: ${{ steps.plan.outputs.node }}
+      npm: ${{ steps.plan.outputs.npm }}
+      ghcr: ${{ steps.plan.outputs.ghcr }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
-          fetch-depth: 0
-      - name: What to release
-        id: plan
+          persist-credentials: false
+      - id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           name=$(jq -r .name package.json)
           version=$(jq -r .version package.json)
@@ -46,90 +77,160 @@ jobs:
             echo "name=$name"
             echo "version=$version"
             echo "image=$image"
-            # A version with a pre-release part (1.2.0-rc.1) isn't "latest".
-            if [[ "$version" == *-* ]]; then echo "channel=next"; else echo "channel=latest"; fi
+            echo "node=$(cat .node-version)"
           } >> "$GITHUB_OUTPUT"
-          if git rev-parse -q --verify "refs/tags/v$version" > /dev/null; then
-            echo "released=true" >> "$GITHUB_OUTPUT"
-            echo "v$version is already tagged: nothing to release."
-          else
-            echo "released=false" >> "$GITHUB_OUTPUT"
-            echo "Releasing $name $version from $SHA."
-          fi
-      - if: steps.plan.outputs.released == 'false'
-        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-      - if: steps.plan.outputs.released == 'false'
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .node-version
-          cache: pnpm
-          registry-url: https://registry.npmjs.org
-      - if: steps.plan.outputs.released == 'false'
-        run: pnpm install --frozen-lockfile
-      - name: The package installs and serves
-        if: steps.plan.outputs.released == 'false'
-        run: pnpm package:smoke
-      - name: Publish to npm
-        if: steps.plan.outputs.released == 'false'
-        env:
-          NAME: ${{ steps.plan.outputs.name }}
-          VERSION: ${{ steps.plan.outputs.version }}
-          CHANNEL: ${{ steps.plan.outputs.channel }}
-          # Only for a first publish before trusted publishing is set up;
-          # npm uses the OIDC token instead whenever it can.
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          if npm view "$NAME@$VERSION" version > /dev/null 2>&1; then
-            echo "$NAME@$VERSION is already on npm."
-          else
-            npm publish --tag "$CHANNEL"
-          fi
-      - name: Push the image to ghcr.io
-        if: steps.plan.outputs.released == 'false'
-        env:
-          IMAGE: ${{ steps.plan.outputs.image }}
-          VERSION: ${{ steps.plan.outputs.version }}
-          CHANNEL: ${{ steps.plan.outputs.channel }}
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
-          if docker manifest inspect "$IMAGE:$VERSION" > /dev/null 2>&1; then
-            echo "$IMAGE:$VERSION is already pushed."
+          # Publish only a version release-please has released.
+          if ! gh release view "v$version" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "v$version has no GitHub release: nothing to publish."
+            { echo "npm=false"; echo "ghcr=false"; echo "channel=none"; } >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          # A pre-release (1.2.0-rc.1) goes to `next`. Otherwise `latest`
+          # moves only forward, so an older version finishing late can't
+          # take it back.
+          latest=$(npm view "$name" dist-tags.latest 2>/dev/null || true)
+          if [[ "$version" == *-* ]]; then
+            channel=next
+          elif [ -z "$latest" ] || [ "$(printf '%s\n%s\n' "$latest" "$version" | sort -V | tail -1)" = "$version" ]; then
+            channel=latest
+          else
+            channel=previous
+          fi
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
+          if npm view "$name@$version" version > /dev/null 2>&1; then
+            echo "npm=false" >> "$GITHUB_OUTPUT"; echo "$name@$version is already on npm."
+          else
+            echo "npm=true" >> "$GITHUB_OUTPUT"
+          fi
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin > /dev/null
+          if docker manifest inspect "$image:$version" > /dev/null 2>&1; then
+            echo "ghcr=false" >> "$GITHUB_OUTPUT"; echo "$image:$version is already pushed."
+          else
+            echo "ghcr=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    # Everything that runs third-party code (installs, the build, the image
+    # build) happens here, with no write access and no publish credentials.
+    name: build and check
+    needs: plan
+    if: needs.plan.outputs.npm == 'true' || needs.plan.outputs.ghcr == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    env:
+      NAME: ${{ needs.plan.outputs.name }}
+      VERSION: ${{ needs.plan.outputs.version }}
+      IMAGE: ${{ needs.plan.outputs.image }}
+      SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+      - run: pnpm install --frozen-lockfile
+      - name: The package installs and serves
+        run: pnpm package:smoke
+      - name: Pack the tarball that's published
+        run: |
+          pnpm build
+          mkdir -p out
+          npm pack --ignore-scripts --pack-destination out
+      - name: Build the image that's pushed
+        if: needs.plan.outputs.ghcr == 'true'
+        run: |
           docker build \
             --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
             --label "org.opencontainers.image.version=$VERSION" \
             --label "org.opencontainers.image.revision=$SHA" \
             --label "org.opencontainers.image.licenses=Apache-2.0" \
             -t "$IMAGE:$VERSION" .
+          docker save "$IMAGE:$VERSION" | gzip > out/image.tar.gz
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release
+          path: out/
+          retention-days: 7
+
+  npm:
+    name: publish to npm
+    needs: [plan, build]
+    if: needs.plan.outputs.npm == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write # trusted publishing and provenance
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ needs.plan.outputs.node }}
+          registry-url: https://registry.npmjs.org
+      - env:
+          CHANNEL: ${{ needs.plan.outputs.channel }}
+          # Only for a first publish before trusted publishing is set up;
+          # npm uses the OIDC token instead whenever it can.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish ./*.tgz --ignore-scripts --provenance --access public --tag "$CHANNEL"
+
+  ghcr:
+    name: push to ghcr.io
+    needs: [plan, build]
+    if: needs.plan.outputs.ghcr == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ${{ needs.plan.outputs.image }}
+      VERSION: ${{ needs.plan.outputs.version }}
+      CHANNEL: ${{ needs.plan.outputs.channel }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gunzip -c image.tar.gz | docker load
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
           docker push "$IMAGE:$VERSION"
           if [ "$CHANNEL" = "latest" ]; then
             docker tag "$IMAGE:$VERSION" "$IMAGE:latest"
             docker push "$IMAGE:latest"
           fi
-      - name: Tag and GitHub release
-        if: steps.plan.outputs.released == 'false'
-        env:
-          NAME: ${{ steps.plan.outputs.name }}
-          IMAGE: ${{ steps.plan.outputs.image }}
-          VERSION: ${{ steps.plan.outputs.version }}
-          CHANNEL: ${{ steps.plan.outputs.channel }}
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          git tag "v$VERSION" "$SHA"
-          git push origin "v$VERSION"
-          cat > "$RUNNER_TEMP/notes.md" <<NOTES
-          ## Install
 
-          \`\`\`sh
-          npm install -g $NAME@$VERSION
-          docker pull $IMAGE:$VERSION
-          \`\`\`
-
-          See [docs/running.md](https://github.com/$GITHUB_REPOSITORY/blob/v$VERSION/docs/running.md) to start it.
-          NOTES
-          flags=()
-          if [ "$CHANNEL" = "next" ]; then flags+=(--prerelease); fi
-          gh release create "v$VERSION" --verify-tag --title "heel $VERSION" \
-            --notes-file "$RUNNER_TEMP/notes.md" --generate-notes "${flags[@]}"
+  notes:
+    # Adds install lines to the GitHub release once both are published.
+    name: install lines on the release
+    needs: [plan, npm, ghcr]
+    if: ${{ !cancelled() && !contains(needs.*.result, 'failure') && needs.plan.outputs.channel != 'none' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      NAME: ${{ needs.plan.outputs.name }}
+      VERSION: ${{ needs.plan.outputs.version }}
+      IMAGE: ${{ needs.plan.outputs.image }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - run: |
+          body=$(gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" --json body -q .body)
+          if grep -q '^## Install' <<< "$body"; then exit 0; fi
+          {
+            echo "## Install"
+            echo
+            echo '```sh'
+            echo "npm install -g $NAME@$VERSION"
+            echo "docker pull $IMAGE:$VERSION"
+            echo '```'
+            echo
+            echo "$body"
+          } > "$RUNNER_TEMP/notes.md"
+          gh release edit "v$VERSION" --repo "$GITHUB_REPOSITORY" --notes-file "$RUNNER_TEMP/notes.md"
