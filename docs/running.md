@@ -67,6 +67,7 @@ heel reads `$HEEL_HOME/heel.yaml`, or the file named by `HEEL_CONFIG` or `--conf
 | `agent_public_url` | none | Where cloud agents (Claude, ChatGPT and Grok connectors) reach the agent plane. Setting it turns on OAuth for them. |
 | `oidc` | none | Sign-in through your identity provider, for teams. |
 | `notify` | web push | Where approval requests are sent: web push, email, Slack. |
+| `adapters.approval` | none | Approval adapters that add hints to the approval page; `jev` sends pending calls to TypeSafe. See [Hints](approvals.md#hints). |
 | `log.level` | `info` | `debug`, `info`, `warn` or `error`. |
 
 [`examples/heel.yaml`](../examples/heel.yaml) is a commented starting point.

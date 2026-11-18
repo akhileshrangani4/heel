@@ -247,6 +247,28 @@ export interface ResponseAdapter {
   check(call: Call, result: unknown, signal: AbortSignal): Promise<unknown>;
 }
 
+/** What an approval adapter is told about a request that is now pending. */
+export interface ApprovalHintInput {
+  approvalId: string;
+  /** The normalized call, exactly as it will run if approved. */
+  call: Call;
+  agentName: string;
+  /** The agent's calls before this one, newest first (from the audit log). */
+  recentCalls: readonly { account: string; tool: string; action: string | null; outcome: string }[];
+}
+
+/**
+ * Advice for the person deciding a pending request (core/hints.ts). It runs
+ * after the request committed and its answer is only shown on the approval
+ * page, so it can't change any verdict: there is nothing for it to return
+ * but hints. It answers an array of `{ tone, text }`; anything else, a
+ * throw or no answer in time shows "hints unavailable".
+ */
+export interface ApprovalAdapter {
+  readonly name: string;
+  hints(input: ApprovalHintInput, signal: AbortSignal): Promise<unknown>;
+}
+
 // ── results ─────────────────────────────────────────────────────────────────
 
 /** Why the pipeline denied a call, beyond the evaluator's reasons. */

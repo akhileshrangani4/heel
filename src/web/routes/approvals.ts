@@ -7,6 +7,7 @@ import {
   getApproval,
   listApprovalsFor,
 } from "../../store/approvals.ts";
+import { hintsFor } from "../../store/hints.ts";
 import { type Decision, decisionBinding, decisionFromBinding } from "../decisions.ts";
 import {
   type HumanPlaneDeps,
@@ -61,7 +62,10 @@ function mayDecide(deps: HumanPlaneDeps, session: SessionView, record: ApprovalR
 }
 
 /** The request as the page shows it. Everything comes from the stored, normalized call. */
-function requestView(record: ApprovalRecord): ApprovalRequestView {
+function requestView(
+  record: ApprovalRecord,
+  hints: ApprovalRequestView["hints"] = [],
+): ApprovalRequestView {
   const { row } = record;
   return {
     id: row.id,
@@ -86,6 +90,7 @@ function requestView(record: ApprovalRecord): ApprovalRequestView {
     decision:
       row.decidedAt === null ? null : { by: record.decidedByName ?? "unknown", at: row.decidedAt },
     executedAt: row.executedAt,
+    hints,
   };
 }
 
@@ -171,7 +176,7 @@ export function approvalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       pause,
       body: approvalRequest({
         now,
-        load: { ok: true, request: requestView(record) },
+        load: { ok: true, request: requestView(record, hintsFor(deps.db, record.row.id)) },
         pause,
         onDecide: DECIDE_HANDLER,
       }),

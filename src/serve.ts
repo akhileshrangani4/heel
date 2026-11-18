@@ -4,6 +4,7 @@ import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getRequestListener } from "@hono/node-server";
+import { JevAdapter } from "./adapters/jev.ts";
 import { createAdminHandler } from "./admin/handlers.ts";
 import { startAdminServer } from "./admin/server.ts";
 import { SiemSink } from "./audit/siem.ts";
@@ -29,8 +30,10 @@ import {
 import { definitionRegistry } from "./definitions/registry.ts";
 import { workRootsOf } from "./gateway/agents.ts";
 import { createAgentApp } from "./gateway/app.ts";
+import { runApprovalHints } from "./gateway/approval-hints.ts";
 import { createMcpSurface } from "./gateway/mcp/server.ts";
 import { createPipeline } from "./gateway/pipeline/pipeline.ts";
+import type { ApprovalAdapter } from "./gateway/pipeline/ports.ts";
 import type { Logger } from "./log.ts";
 import { defaultLooksLikeJudge, HideCounts } from "./lookslike/judge.ts";
 import { logAdminAlerts } from "./notify/admin-alerts.ts";
@@ -120,6 +123,30 @@ function loadProviderClients(
             tenant: microsoft.tenant,
           },
   };
+}
+
+/** HEEL_TYPESAFE_API_KEY, or the key file, for the Jev approval adapter. */
+export const TYPESAFE_API_KEY_ENV = "HEEL_TYPESAFE_API_KEY";
+
+/**
+ * The approval adapters from heel.yaml (`adapters.approval`). Like a
+ * provider client, a configured adapter whose key is missing stops the boot.
+ */
+function loadApprovalAdapters(
+  config: HeelConfig,
+  env: Readonly<Record<string, string | undefined>>,
+): ApprovalAdapter[] {
+  return config.adapters.approval.map(
+    (adapter) =>
+      new JevAdapter({
+        model: adapter.model,
+        apiKey: loadSecret(
+          env,
+          TYPESAFE_API_KEY_ENV,
+          adapter.apiKeyFile ?? join(config.home, "typesafe-api-key"),
+        ).reveal(),
+      }),
+  );
 }
 
 function openVault(
@@ -260,6 +287,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
     // (D9b). A configured client whose secret is missing stops the boot,
     // rather than letting every account of that provider lapse.
     const providerClients = loadProviderClients(config, options.env);
+    const approvalAdapters = loadApprovalAdapters(config, options.env);
     const refreshers: RefresherLookup = (provider) => {
       if (
         (provider === "gmail" || provider === "google-calendar") &&
@@ -407,7 +435,14 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         alerts: logAdminAlerts(log),
         watch,
         now,
-        onApprovalRequested: (approvalId) => notifier.approvalRequested(approvalId),
+        onApprovalRequested: (approvalId) => {
+          notifier.approvalRequested(approvalId);
+          // Advice for the approval page; never awaited, and it can't change the request.
+          void runApprovalHints(
+            { db: store.db, orgId, adapters: approvalAdapters, log, now },
+            approvalId,
+          ).catch((error) => log.error({ error, approvalId }, "approval hints failed"));
+        },
         looksLike,
         onHidden: (reason) => hideCounts.record(reason),
       });

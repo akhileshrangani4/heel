@@ -92,6 +92,8 @@ p{margin:.5rem 0}
 dl.facts{display:grid;grid-template-columns:minmax(8rem,max-content) 1fr;gap:.35rem 1.5rem;margin:0}
 dl.facts dt{color:var(--muted);font-weight:600}
 dl.facts dd{margin:0;overflow-wrap:anywhere}
+ul.hints{list-style:none;padding:0;margin:.5rem 0 0;display:grid;gap:.45rem}
+ul.hints li{display:flex;align-items:baseline;gap:.6rem}
 code,pre,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem}
 pre.args,pre.body{margin:0;padding:1rem;background:var(--surface);border:1px solid var(--border);border-radius:4px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}
 .table-scroll{overflow-x:auto;max-width:100%}

@@ -50,6 +50,17 @@ describe("heel.yaml loader", () => {
     expect(loadConfig(resolveConfigSource({})).adminSocketPath).toBe("/run/heel/admin.sock");
   });
 
+  it("has no approval adapters unless heel.yaml names one", () => {
+    expect(loadConfig(resolveConfigSource({ HEEL_HOME: home })).adapters.approval).toEqual([]);
+    writeFileSync(
+      join(home, "heel.yaml"),
+      "adapters:\n  approval:\n    - jev: { api_key_file: keys/typesafe }\n",
+    );
+    expect(loadConfig(resolveConfigSource({ HEEL_HOME: home })).adapters.approval).toEqual([
+      { kind: "jev", model: "jev-latest", apiKeyFile: join(home, "keys/typesafe") },
+    ]);
+  });
+
   it("refuses a config file that was named but does not exist", () => {
     const source = resolveConfigSource({ HEEL_HOME: home }, join(home, "missing.yaml"));
     expect(() => loadConfig(source)).toThrow(/ENOENT/);

@@ -72,6 +72,19 @@ const DraftingSectionSchema = z.strictObject({
   api_key_file: z.string().min(1).optional(),
 });
 
+/**
+ * `adapters.approval`: approval adapters, which add advisory hints to the
+ * approval page for a pending request (core/hints.ts). They can't change a
+ * verdict. Off by default; `jev` sends pending calls to TypeSafe.
+ */
+const ApprovalAdapterSchema = z.strictObject({
+  jev: z.strictObject({
+    model: z.string().min(1).max(100).default("jev-latest"),
+    /** HEEL_TYPESAFE_API_KEY in the environment takes precedence. Relative to $HEEL_HOME. */
+    api_key_file: z.string().min(1).optional(),
+  }),
+});
+
 const OidcSectionSchema = z.strictObject({
   issuer: secureUrl,
   client_id: z.string().min(1),
@@ -214,6 +227,11 @@ export const HeelConfigFileSchema = z.strictObject({
     .prefault({}),
   oidc: OidcSectionSchema.optional(),
   drafting: DraftingSectionSchema.optional(),
+  adapters: z
+    .strictObject({
+      approval: z.array(ApprovalAdapterSchema).max(4).default([]),
+    })
+    .prefault({}),
   audit: z
     .strictObject({
       siem: SiemSectionSchema.optional(),
@@ -338,6 +356,8 @@ export interface HeelConfig {
   oidc: OidcConfig | null;
   /** Null when drafting is off (I-17). */
   drafting: { baseUrl: URL; model: string; apiKeyFile: string | null } | null;
+  /** Approval adapters, in order; empty when none are configured. */
+  adapters: { approval: { kind: "jev"; model: string; apiKeyFile: string | null }[] };
   audit: { siem: SiemConfig | null };
   notify: NotifyConfig;
   /** Null when the operator configured no Google client. */
@@ -379,6 +399,13 @@ export function resolveConfig(
             file.drafting.api_key_file === undefined ? null : fromHome(file.drafting.api_key_file),
         }
       : null,
+    adapters: {
+      approval: file.adapters.approval.map(({ jev }) => ({
+        kind: "jev" as const,
+        model: jev.model,
+        apiKeyFile: jev.api_key_file === undefined ? null : fromHome(jev.api_key_file),
+      })),
+    },
     audit: { siem: file.audit.siem ? resolveSiem(file.audit.siem, fromHome) : null },
     notify: resolveNotify(file.notify, new URL(file.public_url), fromHome),
     providers: {

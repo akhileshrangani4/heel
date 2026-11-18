@@ -12,6 +12,8 @@ import {
   DENIED_REQUEST,
   EXECUTED_REQUEST,
   EXPIRED_REQUEST,
+  HINTED_REQUEST,
+  HINTS_UNAVAILABLE_REQUEST,
   LONG_BODY,
   MANY_CC,
   NOW,
@@ -42,6 +44,17 @@ const button = (doc: UiDocument, intent: string): UiElement | null =>
   doc.querySelector(`button[data-heel-ceremony="${intent}"]`);
 
 describe("ApprovalRequest", () => {
+  it("shows approval adapters' hints as advice, and says when they're unavailable", () => {
+    const hinted = render(HINTED_REQUEST);
+    const section = text(hinted.querySelector("section[aria-labelledby^='hints-']"));
+    expect(section).toContain("Asks someone for money, a payment or account access.");
+    expect(section).toContain("It can't approve or deny anything: you decide.");
+    expect(text(render(HINTS_UNAVAILABLE_REQUEST).body)).toContain(
+      "Hints from jev are unavailable for this request.",
+    );
+    expect(render(PENDING_REQUEST).querySelector("section[aria-labelledby^='hints-']")).toBeNull();
+  });
+
   it("shows agent, run, account, action, rule, counts and expiry", () => {
     const page = text(render(PENDING_REQUEST));
     for (const fact of [
