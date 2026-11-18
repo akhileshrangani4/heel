@@ -51,6 +51,8 @@ export const AdminRequestSchema = z.discriminatedUnion("method", [
       owner: z.string().min(1).optional(),
       /** Optional now; OAuth connect flows arrive with the provider definitions. */
       credential: StaticCredentialSchema.optional(),
+      /** For an MCP passthrough (`provider: "mcp"`): the upstream server's URL. */
+      url: z.string().min(1).max(2_048).optional(),
     }),
   }),
   z.strictObject({ method: z.literal("account.list") }),

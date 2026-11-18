@@ -34,6 +34,9 @@ export const USAGE = `usage:
   heel agent revoke <name>                revoke an agent's token
   heel agent list
   heel connect <provider> --as <alias> [--owner <user>] [--credential-stdin]
+  heel connect mcp --as <alias> --url <upstream> [--credential-stdin]
+                                          put an existing MCP server behind heel; a
+                                          token on stdin is sent to it as a bearer
   heel account list
   heel user enroll <user>                 print a one-time passkey enrollment link
                                           (valid 15 minutes; also adds a device or
@@ -100,7 +103,8 @@ export function parseExportTime(text: string, now: Date): string | null {
 /** Pure: the MCP URL an agent should be given, from the agent plane's listen address. */
 export function agentMcpUrl(listen: ListenAddress): string {
   const host = listen.host.includes(":") ? `[${listen.host}]` : listen.host;
-  return `http://${host}:${listen.port}/mcp`;
+  // Code mode (bare /mcp) arrives with D6; until then agents use the direct tools.
+  return `http://${host}:${listen.port}/mcp?tools=direct`;
 }
 
 /** Sends one admin request; a refusal becomes a RefusedError carrying heel's message. */
@@ -245,6 +249,7 @@ async function connectCommand(args: string[], io: CliIo): Promise<number> {
         ...CONFIG_OPTION,
         as: { type: "string" },
         owner: { type: "string" },
+        url: { type: "string" },
         "credential-stdin": { type: "boolean" },
       },
       allowPositionals: true,
@@ -264,6 +269,7 @@ async function connectCommand(args: string[], io: CliIo): Promise<number> {
     provider,
     alias: values.as,
     ...(values.owner === undefined ? {} : { owner: values.owner }),
+    ...(values.url === undefined ? {} : { url: values.url }),
     ...(credential ? { credential } : {}),
   };
   const account = ConnectedAccountResult.parse(

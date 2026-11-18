@@ -1,4 +1,5 @@
 import { and, eq } from "drizzle-orm";
+import { isLoopbackUrl } from "../config/schema.ts";
 import type { HeelDb } from "../store/db.ts";
 import { newId } from "../store/ids.ts";
 import { type AccountStatus, accounts } from "../store/schema.ts";
@@ -7,8 +8,13 @@ import type { CredentialPayload, Vault } from "./vault.ts";
 /**
  * The skeleton behind `heel connect`: it registers an account alias and,
  * when given one, stores a static credential in the vault. OAuth consent
- * flows and passthrough (MCP, HTTP, CLI) accounts arrive with the
- * deliverables that define those providers.
+ * flows and the HTTP and CLI passthroughs arrive with the deliverables that
+ * define those providers.
+ *
+ * An MCP passthrough account (`heel connect mcp --as notes --url …`) points
+ * at someone else's MCP server. Its provider is `mcp:<alias>` (spec: Call
+ * model), its URL lives in `settings`, and its credential is optional: an
+ * upstream that needs no token is usable as soon as it's connected.
  */
 
 /**
@@ -43,9 +49,31 @@ export function isValidAlias(alias: string): boolean {
   return ALIAS.test(alias);
 }
 
+/** What `heel connect` calls an MCP passthrough account. */
+export const MCP_PASSTHROUGH = "mcp";
+
+/** The provider an MCP passthrough account is stored under (spec: Call model). */
+export function mcpProvider(alias: string): string {
+  return `${MCP_PASSTHROUGH}:${alias}`;
+}
+
+export function isMcpProvider(provider: string): boolean {
+  return provider.startsWith(`${MCP_PASSTHROUGH}:`);
+}
+
+/** Pure: why an upstream MCP URL can't be used, or null. https, or http on loopback only. */
+export function upstreamUrlProblem(text: string): string | null {
+  if (!URL.canParse(text)) return "the upstream URL doesn't parse";
+  const url = new URL(text);
+  if (url.protocol === "https:") return null;
+  if (url.protocol === "http:" && isLoopbackUrl(url)) return null;
+  return "the upstream URL must be https:// (http:// only on localhost)";
+}
+
 export type ConnectErrorCode =
   | "invalid_alias"
   | "unknown_provider"
+  | "invalid_settings"
   | "alias_taken"
   | "vault_unavailable";
 
@@ -64,6 +92,8 @@ export interface ConnectInput {
   provider: string;
   alias: string;
   credential?: CredentialPayload;
+  /** For `mcp`: the upstream server's URL. */
+  url?: string;
 }
 
 export interface ConnectedAccount {
@@ -90,10 +120,18 @@ export function connectAccount(
       "aliases are 1–64 lower-case letters, digits or '-', starting with a letter",
     );
   }
-  if (!isBuiltInProvider(input.provider)) {
+  const passthrough = input.provider === MCP_PASSTHROUGH;
+  if (passthrough) {
+    const problem =
+      input.url === undefined ? "mcp needs --url <upstream>" : upstreamUrlProblem(input.url);
+    if (problem !== null) throw new ConnectError("invalid_settings", problem);
+  } else if (input.url !== undefined) {
+    throw new ConnectError("invalid_settings", "--url is only for mcp accounts");
+  }
+  if (!passthrough && !isBuiltInProvider(input.provider)) {
     throw new ConnectError(
       "unknown_provider",
-      `unknown provider "${input.provider}"; built-in providers are ${BUILT_IN_PROVIDERS.join(", ")}`,
+      `unknown provider "${input.provider}"; use mcp, or a built-in provider: ${BUILT_IN_PROVIDERS.join(", ")}`,
     );
   }
   if (input.credential && !vault) {
@@ -118,9 +156,10 @@ export function connectAccount(
         orgId: input.orgId,
         ownerId: input.ownerId,
         alias: input.alias,
-        provider: input.provider,
-        settings: {},
-        status: "reconnect_required",
+        provider: passthrough ? mcpProvider(input.alias) : input.provider,
+        settings: passthrough ? { url: input.url } : {},
+        // A built-in provider needs its credential first; a passthrough may need none.
+        status: passthrough ? "active" : "reconnect_required",
         createdAt: now,
       })
       .run();
@@ -140,7 +179,12 @@ export function connectAccount(
     .where(eq(accounts.id, accountId))
     .get();
   if (!row) throw new Error(`account ${accountId} vanished while connecting`);
-  return { accountId, alias: input.alias, provider: input.provider, status: row.status };
+  return {
+    accountId,
+    alias: input.alias,
+    provider: passthrough ? mcpProvider(input.alias) : input.provider,
+    status: row.status,
+  };
 }
 
 export interface AccountSummary {
