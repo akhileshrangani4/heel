@@ -36,6 +36,12 @@ export const REQUIRED_INVARIANTS: Readonly<Record<string, string>> = {
   "I-51":
     "Re-sending the identical call joins its pending request: the hash is stable when keys are reordered.",
   "I-52": "A call that differs in any argument, the account or the tool is a separate request.",
+  // D5a: MCP agent plane
+  "I-01":
+    "With heel stopped, a call fails and nothing reaches the upstream; no fallback path forwards it.",
+  "I-20":
+    "`kind: read` matches only tools a built-in definition marks read-only, never an unknown server's.",
+  "I-74": "Two accounts of one provider are separate namespaces; a call names exactly one account.",
   // D8a: CLI sandbox core (D8b adds the `heel run` enforcement proofs)
   "I-30": "No shell runs a command: `sh -c …` is matched as `sh`, never as its inner command.",
   "I-31": "Every command form that prints a credential is classified as such, in any flag order.",

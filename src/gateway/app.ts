@@ -2,12 +2,16 @@ import { Hono } from "hono";
 import type { Logger } from "../log.ts";
 import { approvalStatusForAgent } from "../store/approvals.ts";
 import type { HeelDb } from "../store/db.ts";
+import { findAccount } from "../store/directory.ts";
+import type { McpSurface } from "./mcp/server.ts";
 import { type AgentPlaneEnv, requireAgent } from "./require-agent.ts";
 
 export interface AgentAppDeps {
   db: HeelDb;
   log: Logger;
   now?: () => Date;
+  /** The MCP endpoints; without it they answer 501, like any surface not built yet. */
+  mcp?: McpSurface;
 }
 
 /**
@@ -15,7 +19,9 @@ export interface AgentAppDeps {
  * built by its own deliverable: MCP and code mode (D5, D6), the HTTP proxy
  * (D7) and the CLI runner (D8).
  */
-const SURFACE_ROUTES = ["/mcp", "/mcp/*", "/http/*", "/run"] as const;
+const SURFACE_ROUTES = ["/http/*", "/run"] as const;
+
+const NOT_BUILT = { status: "denied", reason: "surface_unavailable", rule: null } as const;
 
 /**
  * The agent plane. Every request, including one for an unknown path, is
@@ -26,6 +32,35 @@ const SURFACE_ROUTES = ["/mcp", "/mcp/*", "/http/*", "/run"] as const;
 export function createAgentApp(deps: AgentAppDeps): Hono<AgentPlaneEnv> {
   const app = new Hono<AgentPlaneEnv>();
   app.use("*", requireAgent(deps));
+
+  // MCP (spec: Endpoints and tools). Bare /mcp is code mode, which arrives
+  // with D6; until then it says where the direct tools are.
+  app.all("/mcp", async (c) => {
+    const mcp = deps.mcp;
+    if (mcp === undefined) return c.json(NOT_BUILT, 501);
+    if (c.req.query("tools") === "direct") {
+      return mcp.serve(c.req.raw, c.get("agent"), { kind: "direct" });
+    }
+    return c.json(
+      {
+        ...NOT_BUILT,
+        message: "Code mode isn't available yet. Use /mcp?tools=direct, or /mcp/<account>.",
+      },
+      501,
+    );
+  });
+  app.all("/mcp/:account", async (c) => {
+    const mcp = deps.mcp;
+    if (mcp === undefined) return c.json(NOT_BUILT, 501);
+    const agent = c.get("agent");
+    const alias = c.req.param("account");
+    const account = findAccount(deps.db, agent.orgId, alias);
+    // Someone else's account reads as unknown, so aliases can't be probed.
+    if (account === null || account.ownerId !== agent.ownerId) {
+      return c.json({ status: "denied", reason: "unknown_endpoint", rule: null }, 404);
+    }
+    return mcp.serve(c.req.raw, agent, { kind: "account", alias });
+  });
 
   // Check-back (spec: Pending, joining and checking back): read-only, and only
   // for the agent that made the request. Another agent's id reads as unknown,
@@ -39,9 +74,7 @@ export function createAgentApp(deps: AgentAppDeps): Hono<AgentPlaneEnv> {
     return c.json({ status, approvalId });
   });
   for (const route of SURFACE_ROUTES) {
-    app.all(route, (c) =>
-      c.json({ status: "denied", reason: "surface_unavailable", rule: null }, 501),
-    );
+    app.all(route, (c) => c.json(NOT_BUILT, 501));
   }
   app.notFound((c) => c.json({ status: "denied", reason: "unknown_endpoint", rule: null }, 404));
   app.onError((error, c) => {
