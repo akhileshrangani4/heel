@@ -39,6 +39,8 @@ export interface Prepared<P> {
   persistence?: boolean;
   /** The calendar a calendar tool touches (spec: Calendar). */
   calendar?: string;
+  /** `owner/name` for a GitHub tool, lower-cased (D11). */
+  repo?: string;
 }
 
 export type Preparation<P> = Prepared<P> | { deny: HardDenyReason };
@@ -133,6 +135,7 @@ export function mailDefinition<M>(input: {
           ...(prepared.action === undefined ? {} : { action: prepared.action }),
           ...(prepared.persistence === undefined ? {} : { persistence: prepared.persistence }),
           ...(prepared.calendar === undefined ? {} : { calendar: prepared.calendar }),
+          ...(prepared.repo === undefined ? {} : { repo: prepared.repo }),
           ...(prepared.recipients === undefined ? {} : { recipients: prepared.recipients }),
           ...(prepared.targets === undefined ? {} : { targets: prepared.targets }),
         },
