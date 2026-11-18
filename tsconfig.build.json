@@ -1,0 +1,16 @@
+{
+  // The npm package: src compiled to dist with the same layout, so paths
+  // relative to a module (../package.json, ../../../assets) stay the same.
+  // Development and the OCI image still run src directly.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "rootDir": "src",
+    "outDir": "dist",
+    "rewriteRelativeImportExtensions": true,
+    "declaration": false,
+    "sourceMap": false,
+    "removeComments": false
+  },
+  "include": ["src"]
+}

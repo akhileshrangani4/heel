@@ -1,0 +1,1 @@
+ALTER TABLE `agents` ADD `work_roots` text DEFAULT '[]' NOT NULL;

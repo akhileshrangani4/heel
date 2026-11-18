@@ -1,0 +1,203 @@
+/**
+ * The page script that runs passkey ceremonies. `CEREMONY_SCRIPT` (in
+ * ceremony.ts) turns a click on a ceremony button into a call to one of the
+ * handlers registered here. Every handler follows the same three steps:
+ *
+ * 1. ask the server for a challenge that names exactly what is being done;
+ * 2. let the person's authenticator sign it (`navigator.credentials`);
+ * 3. post the signed answer back, then follow the server to the next page.
+ *
+ * Nothing is decided in the browser. The server reads the decision out of
+ * the challenge it issued, never out of what this script sends.
+ */
+
+/** Safe inside a `<script>`: JSON with `<` escaped, so no value can close the tag. */
+function scriptLiteral(value: unknown): string {
+  return JSON.stringify(value).replace(/</g, "\\u003c");
+}
+
+/**
+ * The script for one page. `csrfToken` is the signed-in person's token, or
+ * null on sign-in and enrollment pages, which have no session yet.
+ */
+export function clientScript(csrfToken: string | null): string {
+  return `
+(() => {
+  const CSRF = ${scriptLiteral(csrfToken)};
+
+  // ── base64url <-> bytes, for the WebAuthn JSON forms ──
+  const toBytes = (b64url) => {
+    const b64 = b64url.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(b64url.length / 4) * 4, "=");
+    return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  };
+  const toB64url = (buffer) => {
+    let text = "";
+    for (const byte of new Uint8Array(buffer)) text += String.fromCharCode(byte);
+    return btoa(text).replace(/\\+/g, "-").replace(/\\//g, "_").replace(/=+$/, "");
+  };
+
+  const requestOptions = (o) => ({
+    ...o,
+    challenge: toBytes(o.challenge),
+    allowCredentials: (o.allowCredentials || []).map((c) => ({ ...c, id: toBytes(c.id) })),
+  });
+  const creationOptions = (o) => ({
+    ...o,
+    challenge: toBytes(o.challenge),
+    user: { ...o.user, id: toBytes(o.user.id) },
+    excludeCredentials: (o.excludeCredentials || []).map((c) => ({ ...c, id: toBytes(c.id) })),
+  });
+  const assertionJson = (cred) => ({
+    id: cred.id,
+    rawId: toB64url(cred.rawId),
+    type: cred.type,
+    response: {
+      clientDataJSON: toB64url(cred.response.clientDataJSON),
+      authenticatorData: toB64url(cred.response.authenticatorData),
+      signature: toB64url(cred.response.signature),
+      ...(cred.response.userHandle ? { userHandle: toB64url(cred.response.userHandle) } : {}),
+    },
+    clientExtensionResults: cred.getClientExtensionResults(),
+  });
+  const registrationJson = (cred) => ({
+    id: cred.id,
+    rawId: toB64url(cred.rawId),
+    type: cred.type,
+    response: {
+      clientDataJSON: toB64url(cred.response.clientDataJSON),
+      attestationObject: toB64url(cred.response.attestationObject),
+      transports: cred.response.getTransports ? cred.response.getTransports() : [],
+    },
+    clientExtensionResults: cred.getClientExtensionResults(),
+  });
+
+  const post = async (url, body) => {
+    const headers = { "content-type": "application/json" };
+    if (CSRF) headers["x-heel-csrf"] = CSRF;
+    const response = await fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok || json.ok === false) throw new Error(json.message || "heel refused the request.");
+    return json;
+  };
+
+  // The three steps every ceremony shares.
+  const run = async ({ status, start, sign, finish }) => {
+    const say = (text) => { if (status) status.textContent = text; };
+    try {
+      say("Getting a passkey challenge…");
+      const issued = await post(start.url, start.body);
+      say("Waiting for your passkey…");
+      const signed = await sign(issued.options);
+      say("Checking…");
+      const result = await post(finish, { challengeId: issued.challengeId, response: signed });
+      say(result.message || "Done.");
+      if (result.next) window.location.assign(result.next);
+    } catch (error) {
+      const cancelled = error && (error.name === "NotAllowedError" || error.name === "AbortError");
+      say(cancelled ? "The passkey check was cancelled. Nothing changed." : String(error.message || error) + " Nothing changed.");
+    }
+  };
+  const getAssertion = async (options) =>
+    assertionJson(await navigator.credentials.get({ publicKey: requestOptions(options) }));
+  const createCredential = async (options) =>
+    registrationJson(await navigator.credentials.create({ publicKey: creationOptions(options) }));
+
+  const DECISIONS = {
+    "approve-once": () => ({ intent: "approve" }),
+    "approve-standing": (options) => ({ intent: "approve", standing: { scope: options.scope, duration: options.duration } }),
+    deny: () => ({ intent: "deny" }),
+  };
+
+  // ── notifications on this device (not a ceremony: it can't decide anything) ──
+  const pushButton = document.getElementById("heel-push");
+  if (pushButton) {
+    const pushStatus = document.getElementById("heel-push-status");
+    const sayPush = (text) => { if (pushStatus) pushStatus.textContent = text; };
+    const supported = "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+    if (!supported) {
+      pushButton.disabled = true;
+      sayPush("This browser can't receive notifications. On an iPhone, add heel to your Home Screen and open it from there.");
+    }
+    pushButton.addEventListener("click", async () => {
+      try {
+        sayPush("Asking this browser for permission…");
+        if ((await Notification.requestPermission()) !== "granted") {
+          sayPush("Notifications are blocked for this site. Allow them in the browser's settings.");
+          return;
+        }
+        const registration = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+        await navigator.serviceWorker.ready;
+        const subscription =
+          (await registration.pushManager.getSubscription()) ||
+          (await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: toBytes(pushButton.dataset.key),
+          }));
+        await post("/push/subscribe", subscription.toJSON());
+        sayPush("Notifications are on for this device.");
+      } catch (error) {
+        sayPush("Couldn't turn on notifications: " + String((error && error.message) || error));
+      }
+    });
+  }
+
+  window.heelCeremony = {
+    signIn: ({ binding, status }) =>
+      run({
+        status,
+        start: { url: "/sign-in/options", body: { challengeId: binding.challengeId } },
+        sign: getAssertion,
+        finish: "/sign-in",
+      }),
+    enroll: ({ binding, status }) =>
+      run({
+        status,
+        start: { url: "/enroll/" + encodeURIComponent(binding.token) + "/options", body: {} },
+        sign: createCredential,
+        finish: "/enroll/" + encodeURIComponent(binding.token),
+      }),
+    decide: ({ intent, binding, options, status }) =>
+      run({
+        status,
+        start: {
+          url: "/approvals/" + encodeURIComponent(binding.approvalId) + "/challenge",
+          body: { callHash: binding.callHash, ...DECISIONS[intent](options) },
+        },
+        sign: getAssertion,
+        finish: "/approvals/" + encodeURIComponent(binding.approvalId) + "/decide",
+      }),
+    connect: ({ binding, status }) =>
+      run({
+        status,
+        start: { url: "/oauth/authorize/challenge", body: binding },
+        sign: getAssertion,
+        finish: "/oauth/authorize/confirm",
+      }),
+    resume: ({ binding, status }) =>
+      run({
+        status,
+        start: { url: "/pause/resume/challenge", body: { scope: binding.scope, target: binding.target } },
+        sign: getAssertion,
+        finish: "/pause/resume",
+      }),
+    grant: ({ options, status }) =>
+      run({
+        status,
+        start: {
+          url: "/grants/challenge",
+          body: { agent: options.agent, task: options.task, match: options.match, duration: options.duration },
+        },
+        sign: getAssertion,
+        finish: "/grants/confirm",
+      }),
+    mode: ({ binding, status }) =>
+      run({
+        status,
+        start: { url: "/modes/challenge", body: { owner: binding.owner, mode: binding.mode } },
+        sign: getAssertion,
+        finish: "/modes/confirm",
+      }),
+  };
+})();
+`;
+}

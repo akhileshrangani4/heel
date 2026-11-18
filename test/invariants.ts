@@ -1,0 +1,73 @@
+/**
+ * The invariants (from the spec's requirements map, REQ I-xx) that must each
+ * have at least one passing test tagged with the id in its title, e.g.
+ * `it("I-03: rejects an unknown token", …)`. `pnpm test:invariants` fails
+ * when a listed id has no tagged test.
+ *
+ * Each deliverable adds the ids its acceptance criteria cite; never remove
+ * one, since a listed invariant stays a release requirement.
+ */
+export const REQUIRED_INVARIANTS: Readonly<Record<string, string>> = {
+  // D1: foundation
+  "I-02": "Credentials are encrypted at rest and never written to logs.",
+  "I-03": "A missing, unknown or revoked agent token is rejected before rules run.",
+  "I-04": "Counters, pending and standing approvals, and pause state survive a restart.",
+  "I-73": "Every decision kind writes a complete audit row.",
+  // D4a: human-plane UI (the render side; D4 adds the server-side proofs)
+  "I-56":
+    "Deciding needs a passkey assertion bound to the call hash; no control decides without one.",
+  "I-57": "The approval page shows the full arguments, never truncated.",
+  // D2: rules engine
+  "I-10": "A call that matches no rule is denied.",
+  "I-12": "An org rule with `then: allow` is a load error.",
+  "I-13": "An org deny beats every owner rule, standing approval and watch mode.",
+  "I-18": "A check on a field the call doesn't have doesn't match.",
+  "I-23": "A state check on a service with no built-in definition is a load error.",
+  "I-71":
+    "Global watch lets owner-rule and default-deny outcomes run; it never relaxes org rules or fail-closed denies.",
+  "I-72": "A `watch: true` rule never decides a call.",
+  // D10a: looks_like detector (module level; D10b proves the hide path)
+  "I-44":
+    "When the looks_like classifier errors, times out, isn't loaded or is unsure, the verdict is `uncertain` (hidden), never `no_match`.",
+  // D9a-1b: Gmail reads
+  "I-40":
+    "`hide` runs on every allowed call's response wherever the shape is known, whichever rule allowed it.",
+  "I-41":
+    "List, search and thread responses never include a hidden item's sender, subject, body or id; one placeholder gives the count.",
+  "I-42": "Fetch-by-id aimed at a hidden message is denied, the same way as a missing one.",
+  // D9a-2: Gmail sending
+  "I-19":
+    "`email.send` covers send, reply, reply-all, forward and draft send; recipients are To ∪ Cc ∪ Bcc, so a Bcc-only address trips `any_domain_in`.",
+  "I-21":
+    "`all_in_thread` fails when any recipient wasn't on a message the account sent in that thread, and always for a new message.",
+  // D9a-3: Gmail removes, labels and filters
+  "I-70":
+    "A built-in tool that outlives revoking heel (a forwarding filter) is denied unless a rule names it; a broad allow doesn't.",
+  // D6a: code mode
+  "I-27":
+    "Each call in a code-mode script is checked and counted on its own, so a loop meets the same limits as a batch.",
+  "I-59":
+    "An ask stops a code-mode script for good; try/except can't swallow it and nothing after it runs.",
+  "I-62": "A pause stops a code-mode script at its next heel call.",
+  // D10b: hide path
+  "I-43":
+    "`looks_like` can only add items to the hidden set; no verdict allows a call or un-hides an item.",
+  // D3: decision pipeline and counts
+  "I-24": "A count sums items, not calls, and includes the current call.",
+  "I-25": "A `per: hour` count ignores the run id.",
+  "I-26": "A call with no run id never matches a `per: run` condition.",
+  "I-51":
+    "Re-sending the identical call joins its pending request: the hash is stable when keys are reordered.",
+  "I-52": "A call that differs in any argument, the account or the tool is a separate request.",
+  // D5a: MCP agent plane
+  "I-01":
+    "With heel stopped, a call fails and nothing reaches the upstream; no fallback path forwards it.",
+  "I-20":
+    "`kind: read` matches only tools a built-in definition marks read-only, never an unknown server's.",
+  "I-74": "Two accounts of one provider are separate namespaces; a call names exactly one account.",
+  // D8a: CLI sandbox core (D8b adds the `heel run` enforcement proofs)
+  "I-30": "No shell runs a command: `sh -c …` is matched as `sh`, never as its inner command.",
+  "I-31": "Every command form that prints a credential is classified as such, in any flag order.",
+  "I-32": "Flags are parsed before matching, in any position.",
+  "I-34": "The agent can't swap the binary or read the credential environment.",
+};

@@ -1,0 +1,10 @@
+.git
+node_modules
+e2e
+test
+docs
+corpus
+scripts
+schema
+*.md
+dist

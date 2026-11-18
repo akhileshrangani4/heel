@@ -1,0 +1,143 @@
+/**
+ * `gh` command lines → the fields rules see (spec: CLI runner, "Parsing known
+ * CLIs"). The verb comes from cobra's own resolution against the generated
+ * table, so flags before the verb (`gh -R o/r pr merge`) and aliases (`gh pr
+ * co`) resolve as gh would; config aliases and extensions aren't in the table
+ * and come back unparseable.
+ */
+import type { CliFlagValue } from "../../core/call.ts";
+import { type ParsedArgs, parseCobraArgs } from "./cobra.ts";
+import { credentialPrintForm } from "./credential-print.ts";
+import { GH_TABLE } from "./generated/gh-table.ts";
+import {
+  GH_MERGE_BYPASS_FLAGS,
+  GH_PERSISTENCE,
+  GH_RUNS_REPO_CODE,
+  ghCommandMapping,
+} from "./gh-actions.ts";
+import { redirectingOptions, repoHost } from "./redirect.ts";
+import { cliFields, unparseable } from "./shared.ts";
+import type { CliArgv, CliNormalization, CliRefusal } from "./types.ts";
+
+export function normalizeGh(argv: CliArgv): CliNormalization {
+  const [, ...args] = argv;
+  const parsed = parseCobraArgs(GH_TABLE, args);
+  if (!parsed.ok) return unparseable(argv, parsed);
+  const { args: gh } = parsed;
+  const key = gh.path.join(" ");
+  const mapping = ghCommandMapping(gh.path);
+  const pull = mapping?.action === "github.merge" ? ghPull(gh.positionals[0]) : undefined;
+  // gh takes the repo from a pull request or issue URL and ignores -R, so the URL's repo is the
+  // one that runs; a -R naming another repo would have rules check the wrong one.
+  const flagRepo = ghRepo(gh.flags["repo"]);
+  const urlRepo = gh.positionals[0] === undefined ? undefined : ghUrlRepo(gh.positionals[0]);
+  const repo = urlRepo ?? flagRepo;
+  const mismatch = urlRepo !== undefined && flagRepo !== undefined && urlRepo !== flagRepo;
+  return {
+    cli: cliFields(argv, gh),
+    ...(mapping !== undefined && { action: mapping.action, kind: mapping.kind }),
+    ...(repo !== undefined && { repo }),
+    ...(GH_PERSISTENCE.has(key) && { persistence: true as const }),
+    ...(ghTakesRepo(gh.path) && { takesRepo: true as const }),
+    ...(pull !== undefined && { pull }),
+    ...(gh.argsLenAtDash !== undefined && { dashDash: true as const }),
+    help: gh.help,
+    refusals: [
+      ...ghRefusals(gh),
+      ...(mismatch ? [{ kind: "redirects_endpoint" as const, option: "--repo" }] : []),
+    ],
+  };
+}
+
+function ghRefusals(gh: ParsedArgs): CliRefusal[] {
+  if (gh.help) return [];
+  const refusals: CliRefusal[] = [];
+  const form = credentialPrintForm("gh", gh);
+  if (form !== undefined) refusals.push({ kind: "prints_credentials", form: form.id });
+  for (const option of redirectingOptions("gh", gh)) {
+    refusals.push({ kind: "redirects_endpoint", option });
+  }
+  const key = gh.path.join(" ");
+  if (GH_RUNS_REPO_CODE.has(key)) refusals.push({ kind: "runs_repo_code", command: `gh ${key}` });
+  return refusals;
+}
+
+/**
+ * The `owner/name` a `--repo` value names on github.com, lower-cased (GitHub
+ * names are case-insensitive, so `Acme/Web` must meet a rule on `acme/web`).
+ * A foreign host is a redirect refusal, not a repo.
+ */
+export function normalizeGhRepo(value: string): string | undefined {
+  const host = repoHost(value);
+  if (host !== undefined && host !== "github.com") return undefined;
+  let path = value;
+  if (value.includes("://")) {
+    try {
+      path = new URL(value).pathname.replace(/^\/+/, "");
+    } catch {
+      return undefined;
+    }
+  } else if (host !== undefined) {
+    path = value.slice(value.indexOf("/") + 1);
+  }
+  const [owner, name] = path.replace(/\.git$/, "").split("/");
+  if (owner === undefined || name === undefined) return undefined;
+  // GitHub's own characters only, and never a `.` or `..` that would walk the API path.
+  const part = /^[A-Za-z0-9_.-]{1,100}$/;
+  if (!part.test(owner) || !part.test(name) || [owner, name].some((p) => /^\.{1,2}$/.test(p))) {
+    return undefined;
+  }
+  return `${owner}/${name}`.toLowerCase();
+}
+
+function ghRepo(value: CliFlagValue | undefined): string | undefined {
+  if (value === undefined || value === true) return undefined;
+  // pflag keeps the last value of a repeated string flag.
+  const last = Array.isArray(value) ? value[value.length - 1] : value;
+  return last === undefined ? undefined : normalizeGhRepo(last);
+}
+
+/**
+ * Whether a gh command takes `--repo`, as a local flag or one inherited from
+ * a parent. Without `-R`, gh reads the repo from the git remotes in the
+ * agent's checkout, which a rule on `repo` can't see, so heel requires it.
+ */
+export function ghTakesRepo(path: readonly string[]): boolean {
+  for (let i = path.length; i >= 0; i--) {
+    const def = GH_TABLE.commands[path.slice(0, i).join(" ")];
+    const flags =
+      i === path.length
+        ? [...(def?.local ?? []), ...(def?.persistent ?? [])]
+        : (def?.persistent ?? []);
+    if (flags.some(([name]) => name === "repo")) return true;
+  }
+  return false;
+}
+
+/** The repo a github.com pull request or issue URL names, as gh would read it. */
+export function ghUrlRepo(arg: string): string | undefined {
+  const url =
+    /^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/(?:pull|issues)\/[0-9]+(?:[/?#].*)?$/i.exec(arg);
+  return url === null ? undefined : normalizeGhRepo(`${url[1]}/${url[2]}`);
+}
+
+/**
+ * The pull request a `gh pr merge` argument names: a number, or a
+ * `https://github.com/<owner>/<name>/pull/<n>` URL. A branch name, or no
+ * argument (the current branch's PR), is undefined: heel can't pin those.
+ */
+export function ghPull(arg: string | undefined): { number: number; repo?: string } | undefined {
+  if (arg === undefined) return undefined;
+  const plain = /^#?([1-9][0-9]{0,9})$/.exec(arg);
+  if (plain !== null) return { number: Number(plain[1]) };
+  const url = /^https:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/([1-9][0-9]{0,9})\/?$/i.exec(arg);
+  if (url === null) return undefined;
+  const repo = normalizeGhRepo(`${url[1]}/${url[2]}`);
+  return repo === undefined ? undefined : { number: Number(url[3]), repo };
+}
+
+/** The flags on a `gh pr merge` that skip required checks (denied under `checks: passing`). */
+export function ghMergeBypassFlags(normalized: CliNormalization): string[] {
+  if (normalized.action !== "github.merge") return [];
+  return GH_MERGE_BYPASS_FLAGS.filter((flag) => normalized.cli.flags[flag] === true);
+}

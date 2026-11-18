@@ -1,0 +1,50 @@
+# The README's example rules and hide entries, unchanged (README "Rules" and
+# "Hiding what the agent reads").
+rules:
+  # reads: anything a built-in definition marks as read-only
+  - match: { kind: read }
+    then: allow
+
+  # the personal account never emails clients
+  - match:
+      action: email.send
+      account: gmail-personal
+      recipients:
+        any_domain_in: [clientco.com, partner.io]
+    then: deny
+
+  # coworkers already in the thread: no need to ask
+  - match:
+      action: email.send
+      account: gmail-work
+      recipients:
+        all_in_thread: true
+        all_domain_in: [company.com]
+        max: 5
+    then: allow
+
+  # every other send, including reply-all to a customer
+  - match: { action: email.send }
+    then: ask
+
+  # trash, delete, and archive count messages, not calls
+  - match: { action: email.remove, items: { over: 20, per: run } }
+    then: ask
+  - match: { action: email.remove, items: { over: 100, per: hour } }
+    then: ask
+  - match: { action: email.remove }
+    then: allow
+
+  - match: { action: github.merge, repo: { one_of: [acme/web, acme/api] }, checks: passing }
+    then: allow
+
+  - match: { command: kubectl, verb: { one_of: [get, describe, logs] } }
+    then: allow
+  - match: { command: kubectl, verb: delete }
+    then: ask
+
+hide:
+  # mail from family never reaches the agent
+  - email: { from: { any_of: [sarah@example.com] } }
+  # neither do password resets or login codes
+  - email: { looks_like: [password_reset, login_code] }
