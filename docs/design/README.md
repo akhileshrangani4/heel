@@ -19,3 +19,15 @@ release branch).
 Each file opens with a header naming its source and the export date. The research documents are
 copied verbatim from their Markdown source; the only change is that two Obvious comment-highlight
 wrappers in the requirements map were removed, keeping their text.
+
+## Added on 2026-11-17
+
+Records from after the export, written while deciding how to continue the build:
+
+| File | What it is |
+| --- | --- |
+| [2026-11-13-v1-design.md](2026-11-13-v1-design.md) | **Enterprise v1 design.** A parallel plan from Nov 13 for companies on Google Workspace: Cedar rules, Bun and Postgres, Gmail and Calendar only, record/shadow/enforce modes, MCP OAuth for cloud connectors. Not adopted as the base; its ideas are folded into this release as new deliverables. |
+| [2026-11-17-plan-comparison.md](2026-11-17-plan-comparison.md) | **The two plans compared,** the Nov 17 Daily Strategy meeting's input (the adapter chain, a decision model, IBAC), and the decisions that settled the direction: spec-v0.1 as the base, tighten-only adapters, and grants instead of model judgment for approval fatigue. |
+| [2026-11-17-flow.html](2026-11-17-flow.html) | **The call flow as a diagram:** every pipeline stage, the outcomes returned to the agent, and the approval loop, marked built, in review or planned as of Nov 17. Open it in a browser. |
+| [../research/2026-11-13-strongdm-leash-notes.md](../research/2026-11-13-strongdm-leash-notes.md) | **StrongDM Leash notes:** what heel takes (modes, rules from traffic, structured events, a linter) and what it doesn't (kernel enforcement, deny-only MCP rules). |
+| [../research/2026-11-17-ibac-and-composio-firewall.md](../research/2026-11-17-ibac-and-composio-firewall.md) | **IBAC, Composio Firewall and WorkOS Airlock:** what a model may decide in each, and why heel's adapters only tighten. |
