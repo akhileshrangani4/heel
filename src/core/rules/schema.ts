@@ -152,6 +152,15 @@ const fixedMatchKeys = {
   verb: TextCondition.optional(),
   subcommand: TextCondition.optional(),
   argv: TextListCondition.optional(),
+  // Provider fields (D12b): set by built-in definitions only.
+  channel: ValueCondition.optional(),
+  external: ValueCondition.optional(),
+  team: ValueCondition.optional(),
+  project: ValueCondition.optional(),
+  parent: ValueCondition.optional(),
+  amount: ValueCondition.optional(),
+  currency: ValueCondition.optional(),
+  customer: ValueCondition.optional(),
 };
 export type FixedMatchKey = keyof typeof fixedMatchKeys;
 export const FIXED_MATCH_KEYS = Object.keys(fixedMatchKeys) as readonly FixedMatchKey[];

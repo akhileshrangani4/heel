@@ -1,6 +1,6 @@
 import type { Tool } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import type { Call } from "../../core/call.ts";
+import type { Call, ProviderFields } from "../../core/call.ts";
 import type { Hiding } from "../../core/hide.ts";
 import type { StateCheck } from "../../core/rules/compile.ts";
 import {
@@ -41,6 +41,8 @@ export interface Prepared<P> {
   calendar?: string;
   /** `owner/name` for a GitHub tool, lower-cased (D11). */
   repo?: string;
+  /** Provider fields rules can name (D12b). */
+  fields?: ProviderFields;
 }
 
 export type Preparation<P> = Prepared<P> | { deny: HardDenyReason };
@@ -136,6 +138,7 @@ export function mailDefinition<M>(input: {
           ...(prepared.persistence === undefined ? {} : { persistence: prepared.persistence }),
           ...(prepared.calendar === undefined ? {} : { calendar: prepared.calendar }),
           ...(prepared.repo === undefined ? {} : { repo: prepared.repo }),
+          ...(prepared.fields === undefined ? {} : { fields: prepared.fields }),
           ...(prepared.recipients === undefined ? {} : { recipients: prepared.recipients }),
           ...(prepared.targets === undefined ? {} : { targets: prepared.targets }),
         },

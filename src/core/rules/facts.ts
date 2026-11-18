@@ -1,4 +1,4 @@
-import type { Call, CliFields, HttpFields } from "../call.ts";
+import type { Call, CliFields, HttpFields, ProviderField, ProviderFields } from "../call.ts";
 
 /**
  * What a rule can see of one call: the normalized Call minus what rules never
@@ -21,6 +21,8 @@ export interface RuleFacts {
   calendar?: string;
   cli?: CliFields;
   http?: HttpFields;
+  /** Provider fields a built-in definition derived (D12b). */
+  fields?: ProviderFields;
   /** Expanded item count; 1 when unknown. */
   items: number;
   runId?: string;
@@ -43,6 +45,7 @@ export function factsOf(call: Call, agentName: string): RuleFacts {
     ...(call.calendar !== undefined && { calendar: call.calendar }),
     ...(call.cli !== undefined && { cli: call.cli }),
     ...(call.http !== undefined && { http: call.http }),
+    ...(call.fields !== undefined && { fields: call.fields }),
     ...(call.runId !== undefined && { runId: call.runId }),
     ...(call.persistence !== undefined && { persistence: call.persistence }),
   };
@@ -69,6 +72,7 @@ export type TextField = (typeof TEXT_FIELDS)[number];
 /** Where a match key reads its value from. */
 export type FieldRef =
   | { kind: "text"; name: TextField }
+  | { kind: "provider"; name: ProviderField }
   | { kind: "recipients" }
   | { kind: "argv" }
   | { kind: "path"; root: "args" | "body"; path: readonly string[] }
@@ -92,6 +96,10 @@ export function resolveField(facts: RuleFacts, field: FieldRef): FieldValue {
   switch (field.kind) {
     case "text":
       return optionalSingle(textValue(facts, field.name));
+    case "provider":
+      return facts.fields !== undefined && Object.hasOwn(facts.fields, field.name)
+        ? optionalSingle(facts.fields[field.name])
+        : ABSENT;
     case "recipients":
       return facts.recipients === undefined ? ABSENT : { kind: "list", values: facts.recipients };
     case "argv":

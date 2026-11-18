@@ -104,6 +104,30 @@
         },
         "argv": {
           "$ref": "#/$defs/TextListCondition"
+        },
+        "channel": {
+          "$ref": "#/$defs/ValueCondition"
+        },
+        "external": {
+          "$ref": "#/$defs/ValueCondition"
+        },
+        "team": {
+          "$ref": "#/$defs/ValueCondition"
+        },
+        "project": {
+          "$ref": "#/$defs/ValueCondition"
+        },
+        "parent": {
+          "$ref": "#/$defs/ValueCondition"
+        },
+        "amount": {
+          "$ref": "#/$defs/ValueCondition"
+        },
+        "currency": {
+          "$ref": "#/$defs/ValueCondition"
+        },
+        "customer": {
+          "$ref": "#/$defs/ValueCondition"
         }
       },
       "additionalProperties": {
@@ -130,7 +154,15 @@
               "command",
               "verb",
               "subcommand",
-              "argv"
+              "argv",
+              "channel",
+              "external",
+              "team",
+              "project",
+              "parent",
+              "amount",
+              "currency",
+              "customer"
             ]
           },
           {

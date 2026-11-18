@@ -1,4 +1,5 @@
 import type { CliFields, HttpFields } from "./call.ts";
+import { PROVIDER_FIELDS, type ProviderFields } from "./call.ts";
 import type { CompiledRule } from "./rules/compile.ts";
 import { plainMatch } from "./rules/evaluate.ts";
 import type { RuleFacts } from "./rules/facts.ts";
@@ -87,10 +88,34 @@ export function sumMatching(rule: CompiledRule, events: Iterable<CountEvent>): n
  * row that doesn't have their shape means the database was edited by hand or
  * is corrupt; the caller denies rather than count it as something else.
  */
+function isProviderFields(value: unknown): value is ProviderFields {
+  return (
+    isRecord(value) &&
+    Object.entries(value).every(
+      ([key, v]) =>
+        (PROVIDER_FIELDS as readonly string[]).includes(key) &&
+        (typeof v === "string" || typeof v === "number" || typeof v === "boolean"),
+    )
+  );
+}
+
 export function parseStoredFacts(value: unknown): StoredFacts | null {
   if (!isRecord(value)) return null;
-  const { agent, account, provider, tool, action, kind, recipients, repo, cli, http, persistence } =
-    value;
+  const {
+    agent,
+    account,
+    provider,
+    tool,
+    action,
+    kind,
+    recipients,
+    repo,
+    calendar,
+    cli,
+    http,
+    fields,
+    persistence,
+  } = value;
   if (typeof agent !== "string" || typeof account !== "string") return null;
   if (!optional(provider, isString) || !optional(tool, isString) || !optional(action, isString)) {
     return null;
@@ -99,6 +124,7 @@ export function parseStoredFacts(value: unknown): StoredFacts | null {
   if (!optional(recipients, isStringArray) || !optional(repo, isString)) return null;
   if (!optional(cli, isCliFields) || !optional(http, isHttpFields)) return null;
   if (!optional(persistence, (p) => typeof p === "boolean")) return null;
+  if (!optional(calendar, isString) || !optional(fields, isProviderFields)) return null;
   return {
     agent,
     account,
@@ -109,6 +135,8 @@ export function parseStoredFacts(value: unknown): StoredFacts | null {
     ...((kind === "read" || kind === "write") && { kind }),
     ...(isStringArray(recipients) && { recipients }),
     ...(typeof repo === "string" && { repo }),
+    ...(typeof calendar === "string" && { calendar }),
+    ...(isProviderFields(fields) && { fields }),
     ...(isCliFields(cli) && { cli }),
     ...(isHttpFields(http) && { http }),
     ...(typeof persistence === "boolean" && { persistence }),

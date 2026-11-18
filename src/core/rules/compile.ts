@@ -1,5 +1,6 @@
 import { RE2JS, RE2JSException } from "re2js";
 import type { RuleRef } from "../call.ts";
+import { PROVIDER_FIELDS } from "../call.ts";
 import { canonicalHash } from "../canonical.ts";
 import { normalizeAddress, parseDomainPattern } from "./address.ts";
 import { type FieldRef, TEXT_FIELDS, type TextField } from "./facts.ts";
@@ -178,6 +179,10 @@ function compileRule(
   if (match.recipients !== undefined)
     add("recipients", match.recipients, { kind: "recipients" }, true);
   if (match.argv !== undefined) add("argv", match.argv, { kind: "argv" }, false);
+  for (const name of PROVIDER_FIELDS) {
+    const raw = match[name];
+    if (raw !== undefined) add(name, raw, { kind: "provider", name }, false);
+  }
   if (match.checks !== undefined) stateChecks.push("checks");
 
   for (const [key, raw] of Object.entries(match)) {

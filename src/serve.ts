@@ -379,6 +379,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         gmail: { vault: opening.vault, fetch },
         outlook: { vault: opening.vault, fetch },
         googleCalendar: { vault: opening.vault, fetch },
+        slack: { vault: opening.vault, fetch },
         http: { vault: opening.vault, fetch },
         github: { vault: opening.vault, fetch },
         // `heel run` (D8b): every command runs in the sandbox, so without it each is denied.
