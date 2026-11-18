@@ -35,8 +35,11 @@ export const USAGE = `usage:
   heel agent list
   heel connect <provider> --as <alias> [--owner <user>] [--credential-stdin]
   heel connect mcp --as <alias> --url <upstream> [--credential-stdin]
-                                          put an existing MCP server behind heel; a
+                                          put a remote MCP server behind heel; a
                                           token on stdin is sent to it as a bearer
+  heel connect mcp --as <alias> --command <path> [--arg <a>]... [--egress <host>]...
+                   [--mount <path>]... [--credential-env <NAME> --credential-stdin]
+                                          run a local MCP server in heel's sandbox
   heel account list
   heel user enroll <user>                 print a one-time passkey enrollment link
                                           (valid 15 minutes; also adds a device or
@@ -250,6 +253,11 @@ async function connectCommand(args: string[], io: CliIo): Promise<number> {
         as: { type: "string" },
         owner: { type: "string" },
         url: { type: "string" },
+        command: { type: "string" },
+        arg: { type: "string", multiple: true },
+        egress: { type: "string", multiple: true },
+        mount: { type: "string", multiple: true },
+        "credential-env": { type: "string" },
         "credential-stdin": { type: "boolean" },
       },
       allowPositionals: true,
@@ -270,6 +278,17 @@ async function connectCommand(args: string[], io: CliIo): Promise<number> {
     alias: values.as,
     ...(values.owner === undefined ? {} : { owner: values.owner }),
     ...(values.url === undefined ? {} : { url: values.url }),
+    ...(values.command === undefined
+      ? {}
+      : {
+          stdio: {
+            command: values.command,
+            args: values.arg ?? [],
+            egress: values.egress ?? [],
+            credentialEnv: values["credential-env"] ?? null,
+            mounts: values.mount ?? [],
+          },
+        }),
     ...(credential ? { credential } : {}),
   };
   const account = ConnectedAccountResult.parse(

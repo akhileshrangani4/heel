@@ -80,6 +80,24 @@ jobs:
       - name: Held-out recall and false-positive gate
         run: pnpm eval:looks-like
 
+  mcp-conformance:
+    # D5: the MCP conformance suite against heel's /mcp/<account> endpoint.
+    # Non-blocking for now (spec: D5): most scenarios exercise resources,
+    # prompts and sampling, which heel doesn't proxy by design.
+    name: MCP conformance (non-blocking)
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Server scenarios
+        run: pnpm mcp:conformance
+
   approval-page-browser:
     # D4: the approval page's passkey ceremonies in real Chromium with a
     # virtual WebAuthn authenticator. Screenshots of each step and a WebM are kept.

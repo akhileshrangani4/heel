@@ -154,7 +154,7 @@ export async function mcpHarness(options: {
     notified,
     token,
     async connect(path, connectOptions = {}) {
-      const transport = new StreamableHTTPClientTransport(new URL(path, "http://heel.test"), {
+      const transport = new StreamableHTTPClientTransport(new URL(path, "http://localhost"), {
         fetch: appFetch,
         requestInit: { headers: { authorization: `Bearer ${connectOptions.token ?? token}` } },
       });
@@ -162,6 +162,6 @@ export async function mcpHarness(options: {
       await client.connect(transport);
       return client;
     },
-    request: (path, init) => appFetch(new URL(path, "http://heel.test"), init),
+    request: (path, init) => appFetch(new URL(path, "http://localhost"), init),
   };
 }
