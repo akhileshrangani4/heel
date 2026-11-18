@@ -53,6 +53,16 @@ export const AdminRequestSchema = z.discriminatedUnion("method", [
       credential: StaticCredentialSchema.optional(),
       /** For an MCP passthrough (`provider: "mcp"`): the upstream server's URL. */
       url: z.string().min(1).max(2_048).optional(),
+      /** For an MCP passthrough: a local server heel starts in the sandbox, instead of a URL. */
+      stdio: z
+        .strictObject({
+          command: z.string().min(1).max(4_096),
+          args: z.array(z.string().max(4_096)).max(64),
+          egress: z.array(z.string().max(255)).max(32),
+          credentialEnv: z.string().max(64).nullable(),
+          mounts: z.array(z.string().max(4_096)).max(16),
+        })
+        .optional(),
     }),
   }),
   z.strictObject({ method: z.literal("account.list") }),

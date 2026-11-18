@@ -1,5 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { isLoopbackUrl } from "../config/schema.ts";
+import { isEnvName } from "../definitions/mcp/settings.ts";
+import { EgressConfigError, parseEgressAllow } from "../runner/egress.ts";
 import type { HeelDb } from "../store/db.ts";
 import { newId } from "../store/ids.ts";
 import { type AccountStatus, accounts } from "../store/schema.ts";
@@ -61,6 +63,54 @@ export function isMcpProvider(provider: string): boolean {
   return provider.startsWith(`${MCP_PASSTHROUGH}:`);
 }
 
+/**
+ * The settings an MCP passthrough account stores: a remote server's URL, or
+ * how to start a local one. Exactly one of the two.
+ */
+function mcpSettings(input: ConnectInput): Record<string, unknown> {
+  if ((input.url === undefined) === (input.stdio === undefined)) {
+    throw new ConnectError(
+      "invalid_settings",
+      "mcp needs either --url <upstream> or --command <path>",
+    );
+  }
+  if (input.url !== undefined) {
+    const problem = upstreamUrlProblem(input.url);
+    if (problem !== null) throw new ConnectError("invalid_settings", problem);
+    return { transport: "http", url: input.url };
+  }
+  const stdio = input.stdio as NonNullable<ConnectInput["stdio"]>;
+  if (!stdio.command.startsWith("/")) {
+    throw new ConnectError(
+      "invalid_settings",
+      "--command must be an absolute path; heel never looks it up on PATH",
+    );
+  }
+  try {
+    parseEgressAllow(stdio.egress);
+  } catch (error) {
+    if (error instanceof EgressConfigError)
+      throw new ConnectError("invalid_settings", error.message);
+    throw error;
+  }
+  if (!stdio.mounts.every((path) => path.startsWith("/"))) {
+    throw new ConnectError("invalid_settings", "--mount paths must be absolute");
+  }
+  if (stdio.credentialEnv !== null && !isEnvName(stdio.credentialEnv)) {
+    throw new ConnectError(
+      "invalid_settings",
+      "--credential-env must be an environment variable name",
+    );
+  }
+  if (input.credential !== undefined && stdio.credentialEnv === null) {
+    throw new ConnectError(
+      "invalid_settings",
+      "a local server's credential needs --credential-env <NAME>",
+    );
+  }
+  return { transport: "stdio", ...stdio };
+}
+
 /** Pure: why an upstream MCP URL can't be used, or null. https, or http on loopback only. */
 export function upstreamUrlProblem(text: string): string | null {
   if (!URL.canParse(text)) return "the upstream URL doesn't parse";
@@ -92,8 +142,16 @@ export interface ConnectInput {
   provider: string;
   alias: string;
   credential?: CredentialPayload;
-  /** For `mcp`: the upstream server's URL. */
+  /** For `mcp`: the upstream server's URL (a remote server). */
   url?: string;
+  /** For `mcp`: a local server heel starts in the sandbox, instead of a URL. */
+  stdio?: {
+    command: string;
+    args: string[];
+    egress: string[];
+    credentialEnv: string | null;
+    mounts: string[];
+  };
 }
 
 export interface ConnectedAccount {
@@ -121,13 +179,10 @@ export function connectAccount(
     );
   }
   const passthrough = input.provider === MCP_PASSTHROUGH;
-  if (passthrough) {
-    const problem =
-      input.url === undefined ? "mcp needs --url <upstream>" : upstreamUrlProblem(input.url);
-    if (problem !== null) throw new ConnectError("invalid_settings", problem);
-  } else if (input.url !== undefined) {
-    throw new ConnectError("invalid_settings", "--url is only for mcp accounts");
+  if (!passthrough && (input.url !== undefined || input.stdio !== undefined)) {
+    throw new ConnectError("invalid_settings", "--url and --command are only for mcp accounts");
   }
+  const settings = passthrough ? mcpSettings(input) : {};
   if (!passthrough && !isBuiltInProvider(input.provider)) {
     throw new ConnectError(
       "unknown_provider",
@@ -157,7 +212,7 @@ export function connectAccount(
         ownerId: input.ownerId,
         alias: input.alias,
         provider: passthrough ? mcpProvider(input.alias) : input.provider,
-        settings: passthrough ? { url: input.url } : {},
+        settings,
         // A built-in provider needs its credential first; a passthrough may need none.
         status: passthrough ? "active" : "reconnect_required",
         createdAt: now,

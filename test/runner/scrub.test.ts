@@ -77,4 +77,20 @@ describe("createScrubber", () => {
       ),
     );
   });
+
+  it("releases everything up to a newline at once, so line-framed streams don't stall", () => {
+    const scrubber = createScrubber(["s3cret-token"]);
+    // A whole JSON-RPC line comes out immediately, newline included.
+    expect(scrubber.push(Buffer.from('{"id":1}\n')).toString()).toBe('{"id":1}\n');
+    // A secret split across chunks is still caught when no newline intervenes.
+    expect(scrubber.push(Buffer.from("x s3cr")).toString()).toBe("");
+    expect(scrubber.push(Buffer.from("et-token y\n")).toString()).toBe("x [redacted by heel] y\n");
+  });
+
+  it("keeps holding back across a newline when a secret itself contains one", () => {
+    const scrubber = createScrubber(["line1\nline2"]);
+    expect(scrubber.push(Buffer.from("a line1\n")).toString()).toBe("");
+    expect(scrubber.push(Buffer.from("line2 b")).toString()).toBe("a [redacted by heel]");
+    expect(scrubber.end().toString()).toBe(" b");
+  });
 });

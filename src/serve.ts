@@ -1,5 +1,7 @@
+import { mkdirSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { join } from "node:path";
 import { getRequestListener } from "@hono/node-server";
 import { createAdminHandler } from "./admin/handlers.ts";
 import { startAdminServer } from "./admin/server.ts";
@@ -9,6 +11,7 @@ import { type ReloadOutcome, RulesHolder, watchRules } from "./config/rules-relo
 import { type HeelConfig, humanPlaneUrlProblem, type ListenAddress } from "./config/schema.ts";
 import { formatYamlIssue } from "./config/yaml.ts";
 import { definitionRegistry } from "./definitions/mcp/passthrough.ts";
+import { stdioSandboxSpec } from "./definitions/mcp/settings.ts";
 import { UpstreamPool } from "./definitions/mcp/upstream.ts";
 import { createAgentApp } from "./gateway/app.ts";
 import { createMcpSurface } from "./gateway/mcp/server.ts";
@@ -17,6 +20,7 @@ import type { Logger } from "./log.ts";
 import { logAdminAlerts } from "./notify/admin-alerts.ts";
 import { Notifier } from "./notify/notifier.ts";
 import { notifySetup } from "./notify/setup.ts";
+import { probeSandbox, startSandboxed } from "./runner/index.ts";
 import { SqliteApprovalStore } from "./store/approvals.ts";
 import { type HeelDb, openStore } from "./store/db.ts";
 import { ensureInstall, ensureLocalOwner } from "./store/install.ts";
@@ -264,7 +268,26 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
       log.error({ reason: agent.reason }, "agent plane refused");
     } else {
       // The decision pipeline (D3) with the D4 stores, and the MCP surface (D5a).
-      const upstream = new UpstreamPool({ vault: opening.vault, log });
+      // Local (stdio) MCP servers run in the sandbox; without it their calls are denied.
+      const sandbox = await probeSandbox();
+      if (!sandbox.ok) {
+        log.warn({ reason: sandbox.reason }, `sandbox unavailable: ${sandbox.detail}`);
+      }
+      const upstream = new UpstreamPool({
+        vault: opening.vault,
+        log,
+        ...(sandbox.ok && {
+          launchStdio: (account, settings, credential) => {
+            // Each local server gets its own work directory, and nothing else of heel's.
+            const workRoot = join(config.home, "mcp", account.alias);
+            mkdirSync(workRoot, { recursive: true, mode: 0o700 });
+            return startSandboxed(
+              sandbox.host,
+              stdioSandboxSpec(settings, { workRoot, credential }),
+            );
+          },
+        }),
+      });
       closers.push(() => upstream.close());
       const pipeline = createPipeline({
         db: store.db,
@@ -285,6 +308,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         log,
         now,
         mcp,
+        hosts: [config.listen.agent.host],
         oauth:
           config.agentPublicUrl === null
             ? null

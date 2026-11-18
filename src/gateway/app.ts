@@ -3,6 +3,7 @@ import type { Logger } from "../log.ts";
 import { approvalStatusForAgent } from "../store/approvals.ts";
 import type { HeelDb } from "../store/db.ts";
 import { findAccount } from "../store/directory.ts";
+import { requireServedHost } from "./allowed-hosts.ts";
 import type { McpSurface } from "./mcp/server.ts";
 import { type AgentPlaneEnv, requireAgent } from "./require-agent.ts";
 
@@ -17,6 +18,11 @@ export interface AgentAppDeps {
    * authorization server issues its tokens. Null or absent: static tokens only.
    */
   oauth?: { agentPublicUrl: URL; authorizationServer: URL } | null;
+  /**
+   * Hostnames besides loopback the agent plane answers to: its listen host,
+   * and `agent_public_url`'s host (DNS-rebinding protection).
+   */
+  hosts?: readonly string[];
 }
 
 /** RFC 9728: where an MCP client learns which authorization server to use. */
@@ -39,6 +45,13 @@ const NOT_BUILT = { status: "denied", reason: "surface_unavailable", rule: null 
  */
 export function createAgentApp(deps: AgentAppDeps): Hono<AgentPlaneEnv> {
   const app = new Hono<AgentPlaneEnv>();
+  app.use(
+    "*",
+    requireServedHost([
+      ...(deps.hosts ?? []),
+      ...(deps.oauth ? [deps.oauth.agentPublicUrl.hostname] : []),
+    ]),
+  );
   const oauth = deps.oauth ?? null;
   if (oauth !== null) {
     // Before authentication: a client reads this to find out how to get a token.
