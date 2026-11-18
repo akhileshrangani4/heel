@@ -108,11 +108,11 @@ jobs:
 
   mcp-conformance:
     # D5: the MCP conformance suite against heel's /mcp/<account> endpoint.
-    # Non-blocking for now (spec: D5): most scenarios exercise resources,
-    # prompts and sampling, which heel doesn't proxy by design.
-    name: MCP conformance (non-blocking)
+    # Scenarios for features heel doesn't proxy by design are listed in
+    # scripts/mcp-conformance-baseline.yml; any other failure fails the job,
+    # and so does a listed scenario that starts passing.
+    name: MCP conformance
     runs-on: ubuntu-24.04
-    continue-on-error: true
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1

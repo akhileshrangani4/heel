@@ -1,0 +1,30 @@
+# MCP conformance scenarios heel is expected to fail, read by
+# `pnpm mcp:conformance`. A scenario not listed here must pass, and a listed
+# one that starts passing fails the job until it's removed from this list.
+server:
+  # heel proxies tools only. Resources, prompts, completions and setting a
+  # log level aren't proxied (spec: D5).
+  - logging-set-level
+  - completion-complete
+  - resources-list
+  - resources-read-text
+  - resources-read-binary
+  - resources-templates-read
+  - resources-subscribe
+  - resources-unsubscribe
+  - prompts-list
+  - prompts-get-simple
+  - prompts-get-with-args
+  - prompts-get-embedded-resource
+  - prompts-get-with-image
+  # These need the server to send requests or notifications back to the
+  # client during a tool call, which heel doesn't forward.
+  - tools-call-with-logging
+  - tools-call-with-progress
+  - tools-call-sampling
+  - tools-call-elicitation
+  - elicitation-sep1034-defaults
+  - elicitation-sep1330-enums
+  # heel's endpoint is stateless (MCP 2026-07-28) and issues no session ID,
+  # so the suite skips this one with a warning, which counts as a failure.
+  - server-sse-multiple-streams
