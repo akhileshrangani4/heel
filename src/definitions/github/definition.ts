@@ -21,10 +21,11 @@ import { GitHubClient, GitHubNotFoundError, GitHubWriteRefused } from "./client.
  *   with `sha` set to it, so GitHub refuses the merge if the head moved;
  *   `checks: passing` is read on that same commit. There is no tool for
  *   auto-merge or bypassing rules.
- * - A file write under `.github/workflows/` is its own action,
- *   `github.workflow.push`, and persistence (I-70): a workflow can run on a
- *   schedule after heel is revoked, so a rule allowing `github.push` doesn't
- *   reach it. heel offers no tool
+ * - A file write under `.github/workflows/` or `.github/actions/` is its
+ *   own action, `github.workflow.push`, and persistence (I-70): a workflow
+ *   can run on a schedule after heel is revoked, so a rule allowing
+ *   `github.push` doesn't reach it. A merge whose files include one is
+ *   `github.workflow.merge`, for the same reason. heel offers no tool
  *   for webhooks, deploy keys, collaborators, or Actions secrets and
  *   variables.
  */
@@ -53,7 +54,20 @@ const Page = z.number().int().min(1).max(1_000).default(1);
 const PerPage = z.number().int().min(1).max(100).default(30);
 const Text = z.string().max(65_536);
 const Title = z.string().min(1).max(256);
-const Ref = z.string().regex(/^[^\s~^:?*[\\]{1,255}$/, "expected a branch, tag or commit");
+/** A branch, tag or commit, by git's ref rules: no `..`, `@{`, leading `-` or `.`, `.lock` ending. */
+const Ref = z
+  .string()
+  .regex(/^[^\s~^:?*[\\]{1,255}$/, "expected a branch, tag or commit")
+  .refine(
+    (r) =>
+      !r.includes("..") &&
+      !r.includes("@{") &&
+      !r.startsWith("-") &&
+      !r.endsWith(".lock") &&
+      !r.endsWith("/") &&
+      !r.split("/").some((part) => part === "" || part.startsWith(".")),
+    "expected a branch, tag or commit",
+  );
 /** A path in the repo: no leading slash, no `.` or `..` segments. */
 const FilePath = z
   .string()
@@ -323,12 +337,17 @@ const TOOLS: Record<string, GitHubTool> = {
     readOnly: false,
     prepare: async (box, args, _hiding, signal) => {
       const head = await box.api.pullHead(args.repo, args.number, signal);
-      if (head.state !== "open") return { deny: "unsupported" };
+      if (head.state !== "open" || head.merged) return { deny: "unsupported" };
+      // Merging lands its files on the base branch: a workflow among them is persistence (I-70).
+      const files = await box.api.pullFiles(args.repo, args.number, signal);
+      const automation = files.some(isWorkflowPath);
       return {
-        args: { ...args, sha: head.sha },
+        args: { ...args, sha: head.sha, base: head.base },
         repo: args.repo,
-        action: "github.merge",
+        // Its own action, so a rule allowing ordinary merges doesn't reach it.
+        action: automation ? "github.workflow.merge" : "github.merge",
         targets: [pr(args.repo, args.number)],
+        ...(automation ? { persistence: true } : {}),
       };
     },
     run: (box, a, signal) =>
@@ -382,8 +401,18 @@ const TOOLS: Record<string, GitHubTool> = {
 };
 
 /** `.github/workflows/...`, compared the way GitHub resolves it (case-insensitively). */
+/**
+ * A path that becomes automation when it lands: workflows, and the composite
+ * actions workflows run. Compared the way GitHub resolves it (ignoring case).
+ */
 export function isWorkflowPath(path: string): boolean {
-  return path.toLowerCase().startsWith(".github/workflows/");
+  const p = path.toLowerCase();
+  return p.startsWith(".github/workflows/") || p.startsWith(".github/actions/");
+}
+
+/** `github.merge`, or a merge that lands automation (`github.workflow.merge`). */
+export function isMergeAction(action: string | undefined): boolean {
+  return action === "github.merge" || action === "github.workflow.merge";
 }
 
 export const GITHUB_TOOLS: readonly Tool[] = listedTools(TOOLS);
@@ -404,12 +433,12 @@ export function githubDefinition(account: AccountRecord, deps: GitHubDeps): Defi
         error instanceof GitHubWriteRefused ? new UpstreamError(error.status, error.body) : null,
     },
     stateCheck: async (check, b, call, signal) => {
-      if (check !== "checks" || call.action !== "github.merge" || call.repo === undefined) {
+      if (check !== "checks" || !isMergeAction(call.action) || call.repo === undefined) {
         return "fail";
       }
-      const sha = (call.args as { sha?: unknown }).sha;
-      if (typeof sha !== "string") return "fail";
-      return (await b.api.checksPass(call.repo, sha, signal)) ? "pass" : "fail";
+      const { sha, base } = call.args as { sha?: unknown; base?: unknown };
+      if (typeof sha !== "string" || typeof base !== "string") return "fail";
+      return (await b.api.checksPass(call.repo, sha, base, signal)) ? "pass" : "fail";
     },
   });
 }

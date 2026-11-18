@@ -14,6 +14,8 @@ import type { SandboxProcess, SandboxRunOptions } from "../../runner/run.ts";
 import type { AccountRecord } from "../../store/directory.ts";
 import type { Vault } from "../../vault/vault.ts";
 import { GitHubApi } from "../github/api.ts";
+import { GitHubNotFoundError } from "../github/client.ts";
+import { isMergeAction, isWorkflowPath } from "../github/definition.ts";
 import type { FetchFn } from "../sign-in.ts";
 import { GH_MERGE_BYPASS_FLAGS } from "./gh-actions.ts";
 import { normalizeCliArgv } from "./index.ts";
@@ -119,7 +121,7 @@ export function cliDefinition(account: AccountRecord, deps: CliDeps): Definition
     argv: readonly string[],
     signal: AbortSignal,
   ): Promise<
-    | { ok: true; cli: CliFields; argv: string[]; targets: string[] }
+    | { ok: true; cli: CliFields; argv: string[]; targets: string[]; persistence: boolean }
     | { ok: false; reason: HardDenyReason }
   > {
     const { pull, repo } = normalized;
@@ -127,10 +129,19 @@ export function cliDefinition(account: AccountRecord, deps: CliDeps): Definition
       return { ok: false, reason: "unsupported" };
     }
     let sha: string;
+    let persistence: boolean;
     try {
-      sha = (await new GitHubApi(credential, deps.fetch).pullHead(repo, pull.number, signal)).sha;
-    } catch {
-      return { ok: false, reason: "lookup_unavailable" };
+      const api = new GitHubApi(credential, deps.fetch);
+      const head = await api.pullHead(repo, pull.number, signal);
+      if (head.state !== "open" || head.merged) return { ok: false, reason: "unsupported" };
+      sha = head.sha;
+      // Merging lands its files on the base branch: a workflow among them is persistence (I-70).
+      persistence = (await api.pullFiles(repo, pull.number, signal)).some(isWorkflowPath);
+    } catch (error) {
+      return {
+        ok: false,
+        reason: error instanceof GitHubNotFoundError ? "not_available" : "lookup_unavailable",
+      };
     }
     const given = normalized.cli.flags["match-head-commit"];
     if (given !== undefined && given !== sha) return { ok: false, reason: "unsupported" };
@@ -144,6 +155,7 @@ export function cliDefinition(account: AccountRecord, deps: CliDeps): Definition
       },
       argv: pinned,
       targets: [`${repo}#${pull.number}`],
+      persistence,
     };
   }
 
@@ -183,10 +195,12 @@ export function cliDefinition(account: AccountRecord, deps: CliDeps): Definition
       let cli = normalized.cli;
       let runArgv = argv;
       let targets: string[] | undefined;
+      let mergePersistence = false;
       if (settings.command === "gh" && normalized.action === "github.merge") {
         const pinned = await pinMerge(normalized, argv, ctx.signal);
         if (!pinned.ok) return pinned;
         ({ cli, argv: runArgv, targets } = pinned);
+        if (pinned.persistence) mergePersistence = true;
       }
       const tool = [cli.command, cli.verb, cli.subcommand].filter((p) => p !== undefined).join(" ");
       return {
@@ -199,10 +213,15 @@ export function cliDefinition(account: AccountRecord, deps: CliDeps): Definition
           cli,
           items: 1,
           ...(targets === undefined ? {} : { targets }),
-          ...(normalized.action === undefined ? {} : { action: normalized.action }),
+          // A merge that lands automation is its own action, so a rule allowing ordinary merges doesn't reach it.
+          ...(mergePersistence
+            ? { action: "github.workflow.merge" }
+            : normalized.action === undefined
+              ? {}
+              : { action: normalized.action }),
           ...(normalized.kind === undefined ? {} : { kind: normalized.kind }),
           ...(normalized.repo === undefined ? {} : { repo: normalized.repo }),
-          ...(normalized.persistence === true ? { persistence: true } : {}),
+          ...(normalized.persistence === true || mergePersistence ? { persistence: true } : {}),
         },
       };
     },
@@ -211,15 +230,18 @@ export function cliDefinition(account: AccountRecord, deps: CliDeps): Definition
     executeTimeoutMs: DEFAULT_LIMITS.wallTimeMs + 30_000,
 
     async stateCheck(check: StateCheck, call: Call, signal: AbortSignal): Promise<"pass" | "fail"> {
-      if (check !== "checks" || settings.command !== "gh" || call.action !== "github.merge") {
+      if (check !== "checks" || settings.command !== "gh" || !isMergeAction(call.action)) {
         return "fail";
       }
       const flags = call.cli?.flags ?? {};
       if (GH_MERGE_BYPASS_FLAGS.some((flag) => flags[flag] === true)) return "fail";
       const sha = flags["match-head-commit"];
       if (typeof sha !== "string" || call.repo === undefined) return "fail";
+      const number = Number(call.targets?.[0]?.split("#")[1]);
       const api = new GitHubApi(credential, deps.fetch);
-      return (await api.checksPass(call.repo, sha, signal)) ? "pass" : "fail";
+      // The base branch decides which checks are required; the head stays the one pinned.
+      const { base } = await api.pullHead(call.repo, number, signal);
+      return (await api.checksPass(call.repo, sha, base, signal)) ? "pass" : "fail";
     },
 
     async execute(call, signal): Promise<CliResult> {

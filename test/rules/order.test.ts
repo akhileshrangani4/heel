@@ -307,12 +307,12 @@ rules:
 
   it("I-23: a state check on a rule that doesn't pin the service is a load error", () => {
     expect(loadErrors(oneRule("{ tool: merge_pull_request, checks: passing }"), "owner")).toEqual([
-      "2: checks is a state check heel has only for action github.merge; name that action in this rule (I-23)",
+      "2: checks is a state check heel has only for action github.merge, github.workflow.merge; name that action in this rule (I-23)",
     ]);
     expect(
       loadErrors(oneRule('{ action: { matches: "github\\\\..*" }, checks: passing }'), "owner"),
     ).toEqual([
-      "2: checks is a state check heel has only for action github.merge; name that action in this rule (I-23)",
+      "2: checks is a state check heel has only for action github.merge, github.workflow.merge; name that action in this rule (I-23)",
     ]);
     expect(
       loadErrors(

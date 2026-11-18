@@ -24,7 +24,9 @@ interface Sent {
   body: unknown;
 }
 
-function fakeGitHub(options: { checks?: "pass" | "fail"; mergeStatus?: number } = {}) {
+function fakeGitHub(
+  options: { checks?: "pass" | "fail"; mergeStatus?: number; files?: { filename: string }[] } = {},
+) {
   const sent: Sent[] = [];
   const fetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     const url = new URL(input.toString());
@@ -55,7 +57,17 @@ function fakeGitHub(options: { checks?: "pass" | "fail"; mergeStatus?: number } 
       });
     }
     if (method === "GET" && p.endsWith("/status")) {
-      return Response.json({ state: "pending", total_count: 0 });
+      return Response.json({ state: "pending", total_count: 0, statuses: [] });
+    }
+    if (method === "GET" && p.endsWith("/check-suites")) {
+      return Response.json({ total_count: 0, check_suites: [] });
+    }
+    if (method === "GET" && p.endsWith("/files")) {
+      const page = url.searchParams.get("page");
+      return Response.json(page === "1" ? (options.files ?? [{ filename: "src/a.ts" }]) : []);
+    }
+    if (method === "GET" && p.startsWith("/repos/acme/web/rules/branches/")) {
+      return Response.json([]);
     }
     if (method === "PUT" && p.endsWith("/merge")) {
       return Response.json(
@@ -146,6 +158,24 @@ describe("the GitHub definition", () => {
     expect(merge?.path).toBe("/repos/acme/web/pulls/12/merge");
     expect(merge?.body).toMatchObject({ sha: HEAD, merge_method: "squash" });
     expect(h.sent.map((s) => s.path)).toContain(`/repos/acme/web/commits/${HEAD}/check-runs`);
+  });
+
+  it("treats a merge that lands a workflow as persistence", async () => {
+    const h = setUp(
+      MERGE_GREEN,
+      fakeGitHub({ files: [{ filename: ".github/workflows/cron.yml" }] }),
+    );
+    const result = await h.call("merge_pull_request", { repo: "acme/web", number: 12 });
+    expect(result).toMatchObject({ status: "denied", reason: "persistence_unnamed" });
+    expect(h.sent.some((s) => s.method === "PUT")).toBe(false);
+  });
+
+  it("refuses a ref that walks the API path", async () => {
+    const h = setUp(MERGE_GREEN);
+    for (const ref of ["..", ".", "a/../b", "-x", "main.lock"]) {
+      const result = await h.call("list_check_runs", { repo: "acme/web", ref });
+      expect(result, ref).toMatchObject({ status: "denied", reason: "unsupported" });
+    }
   });
 
   it("doesn't merge when a check fails", async () => {

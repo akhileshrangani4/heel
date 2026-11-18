@@ -27,7 +27,12 @@ export function normalizeGh(argv: CliArgv): CliNormalization {
   const key = gh.path.join(" ");
   const mapping = ghCommandMapping(gh.path);
   const pull = mapping?.action === "github.merge" ? ghPull(gh.positionals[0]) : undefined;
-  const repo = ghRepo(gh.flags["repo"]) ?? pull?.repo;
+  // gh takes the repo from a pull request or issue URL and ignores -R, so the URL's repo is the
+  // one that runs; a -R naming another repo would have rules check the wrong one.
+  const flagRepo = ghRepo(gh.flags["repo"]);
+  const urlRepo = gh.positionals[0] === undefined ? undefined : ghUrlRepo(gh.positionals[0]);
+  const repo = urlRepo ?? flagRepo;
+  const mismatch = urlRepo !== undefined && flagRepo !== undefined && urlRepo !== flagRepo;
   return {
     cli: cliFields(argv, gh),
     ...(mapping !== undefined && { action: mapping.action, kind: mapping.kind }),
@@ -37,7 +42,10 @@ export function normalizeGh(argv: CliArgv): CliNormalization {
     ...(pull !== undefined && { pull }),
     ...(gh.argsLenAtDash !== undefined && { dashDash: true as const }),
     help: gh.help,
-    refusals: ghRefusals(gh),
+    refusals: [
+      ...ghRefusals(gh),
+      ...(mismatch ? [{ kind: "redirects_endpoint" as const, option: "--repo" }] : []),
+    ],
   };
 }
 
@@ -73,7 +81,12 @@ export function normalizeGhRepo(value: string): string | undefined {
     path = value.slice(value.indexOf("/") + 1);
   }
   const [owner, name] = path.replace(/\.git$/, "").split("/");
-  if (owner === undefined || name === undefined || owner === "" || name === "") return undefined;
+  if (owner === undefined || name === undefined) return undefined;
+  // GitHub's own characters only, and never a `.` or `..` that would walk the API path.
+  const part = /^[A-Za-z0-9_.-]{1,100}$/;
+  if (!part.test(owner) || !part.test(name) || [owner, name].some((p) => /^\.{1,2}$/.test(p))) {
+    return undefined;
+  }
   return `${owner}/${name}`.toLowerCase();
 }
 
@@ -99,6 +112,13 @@ export function ghTakesRepo(path: readonly string[]): boolean {
     if (flags.some(([name]) => name === "repo")) return true;
   }
   return false;
+}
+
+/** The repo a github.com pull request or issue URL names, as gh would read it. */
+export function ghUrlRepo(arg: string): string | undefined {
+  const url =
+    /^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/(?:pull|issues)\/[0-9]+(?:[/?#].*)?$/i.exec(arg);
+  return url === null ? undefined : normalizeGhRepo(`${url[1]}/${url[2]}`);
 }
 
 /**

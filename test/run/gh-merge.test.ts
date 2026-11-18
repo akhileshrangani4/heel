@@ -11,8 +11,13 @@ const HEAD = "a".repeat(40);
 
 interface FakeGitHub {
   head?: string;
-  runs?: { status: string; conclusion: string | null }[];
-  statuses?: { state: string; total: number };
+  runs?: { name?: string; status: string; conclusion: string | null }[];
+  statuses?: { context: string; state: string }[];
+  suites?: { status: string; conclusion: string | null; latest_check_runs_count: number }[];
+  /** Contexts the base branch's rules require. */
+  required?: string[];
+  files?: string[];
+  pullState?: "open" | "closed";
   fail?: boolean;
 }
 
@@ -20,18 +25,51 @@ function github(state: FakeGitHub) {
   const seen: string[] = [];
   const fetch = async (input: string | URL | Request): Promise<Response> => {
     const url = new URL(input.toString());
-    seen.push(url.pathname);
+    const p = url.pathname;
+    seen.push(p);
     if (state.fail === true) return new Response("{}", { status: 502 });
-    if (/^\/repos\/acme\/web\/pulls\/\d+$/.test(url.pathname)) {
-      return Response.json({ head: { sha: state.head ?? HEAD }, state: "open", merged: false });
+    if (/^\/repos\/acme\/web\/pulls\/\d+$/.test(p)) {
+      return Response.json({
+        head: { sha: state.head ?? HEAD },
+        base: { ref: "main" },
+        state: state.pullState ?? "open",
+        merged: false,
+      });
     }
-    if (url.pathname.endsWith("/check-runs")) {
-      const runs = state.runs ?? [{ status: "completed", conclusion: "success" }];
+    if (p.endsWith("/files")) {
+      const page = Number(url.searchParams.get("page") ?? "1");
+      const files = page === 1 ? (state.files ?? ["src/app.ts"]) : [];
+      return Response.json(files.map((filename) => ({ filename })));
+    }
+    if (p.endsWith("/check-runs")) {
+      const runs = state.runs ?? [{ name: "ci", status: "completed", conclusion: "success" }];
       return Response.json({ total_count: runs.length, check_runs: runs });
     }
-    if (url.pathname.endsWith("/status")) {
-      const s = state.statuses ?? { state: "pending", total: 0 };
-      return Response.json({ state: s.state, total_count: s.total });
+    if (p.endsWith("/check-suites")) {
+      const suites = state.suites ?? [];
+      return Response.json({ total_count: suites.length, check_suites: suites });
+    }
+    if (p.endsWith("/status")) {
+      const statuses = state.statuses ?? [];
+      const failing = statuses.some((s) => s.state !== "success");
+      return Response.json({
+        state: statuses.length === 0 ? "pending" : failing ? "failure" : "success",
+        total_count: statuses.length,
+        statuses,
+      });
+    }
+    if (p === "/repos/acme/web/rules/branches/main") {
+      const required = state.required ?? [];
+      return Response.json(
+        required.length === 0
+          ? []
+          : [
+              {
+                type: "required_status_checks",
+                parameters: { required_status_checks: required.map((context) => ({ context })) },
+              },
+            ],
+      );
     }
     return new Response("{}", { status: 404 });
   };
@@ -44,6 +82,49 @@ const MERGE_WHEN_GREEN = `rules:
 `;
 
 describe("gh pr merge", () => {
+  it("passes a required check that ran green", async () => {
+    const h = cliPipeline({ owner: MERGE_WHEN_GREEN, fetch: github({ required: ["ci"] }).fetch });
+    const answer = await h.run({
+      argv: ["gh", "pr", "merge", "12", "-R", "acme/web"],
+      cwd: h.repo,
+    });
+    expect(answer.body["status"]).toBe("ran");
+  });
+
+  it("refuses a pull request URL naming another repo than -R", async () => {
+    const h = cliPipeline({ owner: MERGE_WHEN_GREEN, fetch: github({}).fetch });
+    const answer = await h.run({
+      argv: ["gh", "pr", "merge", "https://github.com/acme/prod/pull/7", "-R", "acme/web"],
+      cwd: h.repo,
+    });
+    expect(answer).toMatchObject({ status: 403, body: { reason: "unsupported" } });
+    expect(h.started).toEqual([]);
+  });
+
+  it("treats a merge that lands a workflow as persistence", async () => {
+    const h = cliPipeline({
+      owner: MERGE_WHEN_GREEN,
+      fetch: github({ files: ["src/a.ts", ".github/workflows/cron.yml"] }).fetch,
+    });
+    const answer = await h.run({
+      argv: ["gh", "pr", "merge", "12", "-R", "acme/web"],
+      cwd: h.repo,
+    });
+    expect(answer).toMatchObject({ status: 403, body: { reason: "persistence_unnamed" } });
+  });
+
+  it("refuses a closed pull request", async () => {
+    const h = cliPipeline({
+      owner: MERGE_WHEN_GREEN,
+      fetch: github({ pullState: "closed" }).fetch,
+    });
+    const answer = await h.run({
+      argv: ["gh", "pr", "merge", "12", "-R", "acme/web"],
+      cwd: h.repo,
+    });
+    expect(answer).toMatchObject({ status: 403, body: { reason: "unsupported" } });
+  });
+
   it("adds --match-head-commit with the head heel checked, and merges when checks pass", async () => {
     const gh = github({});
     const h = cliPipeline({ owner: MERGE_WHEN_GREEN, fetch: gh.fetch });
@@ -69,6 +150,7 @@ describe("gh pr merge", () => {
     expect(ghPull("https://github.com/Acme/Web/pull/7")).toEqual({ number: 7, repo: "acme/web" });
     expect(ghPull("#7")).toEqual({ number: 7 });
     expect(ghPull("my-branch")).toBeUndefined();
+    expect(ghPull("https://github.com/../acme/pull/7")).toBeUndefined();
     const h = cliPipeline({ owner: MERGE_WHEN_GREEN, fetch: github({}).fetch });
     const answer = await h.run({
       argv: ["gh", "pr", "merge", "https://github.com/acme/web/pull/7"],
@@ -80,8 +162,23 @@ describe("gh pr merge", () => {
   it.each<[string, FakeGitHub]>([
     ["a failing check run", { runs: [{ status: "completed", conclusion: "failure" }] }],
     ["a check still running", { runs: [{ status: "in_progress", conclusion: null }] }],
-    ["no checks at all", { runs: [], statuses: { state: "pending", total: 0 } }],
-    ["a failing commit status", { statuses: { state: "failure", total: 1 } }],
+    ["no checks at all", { runs: [] }],
+    ["only skipped checks", { runs: [{ status: "completed", conclusion: "skipped" }] }],
+    ["a failing commit status", { statuses: [{ context: "deploy", state: "failure" }] }],
+    [
+      "a required check that hasn't reported, behind a green status",
+      { runs: [], statuses: [{ context: "cla", state: "success" }], required: ["ci/build"] },
+    ],
+    [
+      "a fork run waiting for approval",
+      {
+        runs: [],
+        statuses: [{ context: "cla", state: "success" }],
+        suites: [
+          { status: "completed", conclusion: "action_required", latest_check_runs_count: 0 },
+        ],
+      },
+    ],
   ])("doesn't let the rule match on %s", async (_label, state) => {
     const h = cliPipeline({ owner: MERGE_WHEN_GREEN, fetch: github(state).fetch });
     const answer = await h.run({
