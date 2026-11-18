@@ -53,6 +53,7 @@ const REFUSED: Record<Extract<DecideResult, { ok: false }>["reason"], string> = 
   paused: "A pause covers this request. Resume first; you can still deny it.",
   not_approver: "You aren't an approver for this request.",
   org_ask_cannot_stand: "An organization ask can be approved once, never as standing.",
+  no_run: "This request came without a run id, so it can't be approved for its run.",
 };
 
 function mayDecide(deps: HumanPlaneDeps, session: SessionView, record: ApprovalRecord): boolean {

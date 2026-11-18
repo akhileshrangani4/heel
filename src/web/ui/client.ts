@@ -180,6 +180,16 @@ export function clientScript(csrfToken: string | null): string {
         sign: getAssertion,
         finish: "/pause/resume",
       }),
+    grant: ({ options, status }) =>
+      run({
+        status,
+        start: {
+          url: "/grants/challenge",
+          body: { agent: options.agent, task: options.task, match: options.match, duration: options.duration },
+        },
+        sign: getAssertion,
+        finish: "/grants/confirm",
+      }),
     mode: ({ binding, status }) =>
       run({
         status,

@@ -28,6 +28,7 @@ export const NAV = [
   { id: "standing", href: "/standing", label: "Standing approvals" },
   { id: "pause", href: "/pause", label: "Pause" },
   { id: "connections", href: "/connections", label: "Connections" },
+  { id: "grants", href: "/grants", label: "Grants" },
   { id: "modes", href: "/modes", label: "Modes" },
 ] as const;
 

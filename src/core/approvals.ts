@@ -88,8 +88,10 @@ export function isStandingDuration(value: unknown): value is StandingDuration {
 
 export interface StoredStanding {
   agentId: string;
-  scope: "exact_call" | "rule";
+  scope: "exact_call" | "rule" | "run";
   callHash: string | null;
+  /** Set for `run`: the run it covers. */
+  runId: string | null;
   ruleHash: string;
   expiresAt: Date;
   revokedAt: Date | null;
@@ -119,11 +121,20 @@ export function standingState(
  * needs the same account, tool and arguments (Q-A6).
  */
 export function standingCovers(
-  row: Pick<StoredStanding, "agentId" | "scope" | "callHash" | "ruleHash">,
-  call: { agentId: string; ruleHash: string; callHash: () => string },
+  row: Pick<StoredStanding, "agentId" | "scope" | "callHash" | "ruleHash" | "runId">,
+  call: { agentId: string; ruleHash: string; callHash: () => string; runId: string | undefined },
 ): boolean {
   if (row.agentId !== call.agentId || row.ruleHash !== call.ruleHash) return false;
-  return row.scope === "rule" || row.callHash === call.callHash();
+  switch (row.scope) {
+    case "rule":
+      return true;
+    case "exact_call":
+      return row.callHash === call.callHash();
+    case "run":
+      // A4: everything this rule asks about, in this one run of this agent.
+      // A call without a run id is never in a run.
+      return row.runId !== null && call.runId !== undefined && row.runId === call.runId;
+  }
 }
 
 // ── deciding ────────────────────────────────────────────────────────────────
@@ -139,11 +150,17 @@ export type DecisionRefusal =
   /** Only the account's approvers decide its requests; org asks go to admins. */
   | "not_approver"
   /** Q-A7: an org ask is approved once and never stands. */
-  | "org_ask_cannot_stand";
+  | "org_ask_cannot_stand"
+  /** A4: "this run" needs a request that came with a run id. */
+  | "no_run";
 
 export interface DecisionInput {
   intent: DecisionIntent;
   standing: boolean;
+  /** The standing approval asked for covers one run. */
+  runScoped?: boolean;
+  /** The request's run id, if the agent sent one. */
+  runId?: string | null;
   status: ApprovalStatusView;
   origin: "org" | "owner";
   paused: boolean;
@@ -159,6 +176,7 @@ export function decisionRefusal(input: DecisionInput): DecisionRefusal | null {
   if (input.status !== "pending") return "not_pending";
   if (input.intent === "deny") return null;
   if (input.standing && input.origin === "org") return "org_ask_cannot_stand";
+  if (input.runScoped === true && (input.runId ?? null) === null) return "no_run";
   if (input.paused) return "paused";
   return null;
 }

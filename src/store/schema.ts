@@ -255,7 +255,7 @@ export const approvals = sqliteTable(
   ],
 );
 
-export const STANDING_SCOPES = ["exact_call", "rule"] as const;
+export const STANDING_SCOPES = ["exact_call", "rule", "run"] as const;
 export type StandingScope = (typeof STANDING_SCOPES)[number];
 
 /**
@@ -279,6 +279,8 @@ export const standingApprovals = sqliteTable(
     scope: text("scope", { enum: STANDING_SCOPES }).notNull(),
     /** Set for `exact_call`: the account, tool and arguments it covers. */
     callHash: text("call_hash"),
+    /** Set for `run` (A4): the agent's run id it covers. */
+    runId: text("run_id"),
     rule: text("rule", { mode: "json" }).$type<RuleRef>().notNull(),
     ruleHash: text("rule_hash").notNull(),
     createdBy: text("created_by")
@@ -290,6 +292,35 @@ export const standingApprovals = sqliteTable(
     revokedBy: text("revoked_by").references(() => users.id),
   },
   (t) => [index("standing_approvals_agent_rule").on(t.agentId, t.ruleHash)],
+);
+
+/**
+ * Intent grants (A4b): narrow allows a person signed with a passkey for one
+ * agent and one stated task, enforced like a rule above the owner's own.
+ */
+export const grants = sqliteTable(
+  "grants",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    agentId: text("agent_id")
+      .notNull()
+      .references(() => agents.id),
+    /** The task, in the owner's words. */
+    task: text("task").notNull(),
+    /** One `match` in the rules language, as signed. */
+    match: text("match").notNull(),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    revokedAt: integer("revoked_at", { mode: "timestamp_ms" }),
+    revokedBy: text("revoked_by").references(() => users.id),
+  },
+  (t) => [index("grants_agent").on(t.agentId)],
 );
 
 // ── pause ───────────────────────────────────────────────────────────────────
@@ -395,6 +426,7 @@ export const CHALLENGE_PURPOSES = [
   "resume",
   "connect",
   "mode",
+  "grant",
 ] as const;
 export type ChallengePurpose = (typeof CHALLENGE_PURPOSES)[number];
 

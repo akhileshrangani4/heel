@@ -13,6 +13,7 @@ export const ID_PREFIXES = {
   enrollment: "enr",
   delivery: "dlv",
   oauthClient: "cli",
+  grant: "grt",
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;

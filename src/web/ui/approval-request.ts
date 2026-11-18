@@ -236,6 +236,18 @@ function standingOptions(request: ApprovalRequestView, fieldsetId: string, locke
         >Everything rule ${formatRule(request.rule)} asks about, for this agent</label
       >
     </div>
+    ${
+      request.runId === null
+        ? ""
+        : html`<div class="choice">
+            <input type="radio" id="${fieldsetId}-run" name="scope" value="run" />
+            <label for="${fieldsetId}-run"
+              >Everything rule ${formatRule(request.rule)} asks about, for calls naming run
+              <span class="mono">${request.runId}</span>, for at most a day. The agent names its own
+              run, so it can reuse this id until then.</label
+            >
+          </div>`
+    }
     <div class="choice">
       <label for="${fieldsetId}-duration">Lasts</label>
       <select id="${fieldsetId}-duration" name="duration">

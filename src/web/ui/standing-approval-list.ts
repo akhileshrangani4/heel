@@ -25,7 +25,7 @@ export interface StandingRow {
   scope: StandingScope;
   /** The parent rule it sits just above. */
   rule: RuleRef;
-  /** For `exact_call`: the action or tool it covers. */
+  /** For `exact_call`: the action or tool it covers. For `run`: the run id. */
   covers: string | null;
   createdBy: string;
   createdAt: Date;
@@ -51,9 +51,14 @@ const STATE_BADGE: Record<StandingState, { label: string; tone: Tone | "muted" }
 };
 
 function scopeText(row: StandingRow): Html {
-  return row.scope === "exact_call"
-    ? html`This exact call${row.covers ? html` (<span class="mono">${row.covers}</span>)` : ""}`
-    : html`Everything the rule asks about`;
+  switch (row.scope) {
+    case "exact_call":
+      return html`This exact call${row.covers ? html` (<span class="mono">${row.covers}</span>)` : ""}`;
+    case "run":
+      return html`Everything the rule asks about, in run <span class="mono">${row.covers ?? ""}</span>`;
+    case "rule":
+      return html`Everything the rule asks about`;
+  }
 }
 
 function stateCell(row: StandingRow, now: Date): Html {

@@ -52,7 +52,12 @@ export function standingRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
         account: record.account,
         scope: record.row.scope,
         rule: record.row.rule,
-        covers: record.row.scope === "exact_call" ? record.covers : null,
+        covers:
+          record.row.scope === "exact_call"
+            ? record.covers
+            : record.row.scope === "run"
+              ? record.row.runId
+              : null,
         createdBy: record.createdByName,
         createdAt: record.row.createdAt,
         expiresAt: record.row.expiresAt,
