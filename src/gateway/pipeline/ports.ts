@@ -53,6 +53,8 @@ export const HARD_DENY_REASONS = [
   "batch_unexpandable",
   /** A read heel needed to normalize the call (recipients, items, a hide verdict) failed. */
   "lookup_unavailable",
+  /** A send names a `from` the mailbox can't send as (spec: Email, `send`). */
+  "sender_not_allowed",
   /** The definition has no such tool, or the call uses something it refuses (a CLI alias). */
   "unsupported",
 ] as const;

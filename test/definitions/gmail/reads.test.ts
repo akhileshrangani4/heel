@@ -1,20 +1,9 @@
-import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import type { LooksLikeJudge } from "../../../src/core/hide.ts";
 import { GMAIL_TOOLS } from "../../../src/definitions/gmail/definition.ts";
-import { UpstreamPool } from "../../../src/definitions/mcp/upstream.ts";
-import { definitionRegistry } from "../../../src/definitions/registry.ts";
-import { addAgent } from "../../../src/gateway/agents.ts";
 import { nativeResult } from "../../../src/gateway/mcp/results.ts";
-import { createPipeline } from "../../../src/gateway/pipeline/pipeline.ts";
-import { SqliteApprovalStore } from "../../../src/store/approvals.ts";
-import { SqlitePauseStore } from "../../../src/store/pauses.ts";
-import { KEY_BYTES } from "../../../src/vault/crypto.ts";
-import { Vault } from "../../../src/vault/vault.ts";
-import { FakeGmail, type FakeMessage, GMAIL_TEST_TOKEN } from "../../helpers/fake-gmail.ts";
-import { captureLogger } from "../../helpers/log.ts";
-import { compileRules } from "../../helpers/pipeline.ts";
-import { addAccount, testStore } from "../../helpers/store.ts";
+import type { FakeMessage } from "../../helpers/fake-gmail.ts";
+import { gmailPipeline } from "../../helpers/gmail-pipeline.ts";
 
 /**
  * Gmail's read tools (D9a-1b) through the real pipeline, against a fake
@@ -52,61 +41,29 @@ const RESET: FakeMessage = {
 };
 
 function setUp(options: { hide?: string; judge?: LooksLikeJudge } = {}) {
-  const t = testStore();
-  const gmail = new FakeGmail().add(LUNCH, MOM, RESET);
-  const accountId = addAccount(t, "gmail-work", "gmail");
-  const vault = Vault.open(t.db, { bytes: randomBytes(KEY_BYTES), source: "test" });
-  vault.put(accountId, { type: "oauth", accessToken: GMAIL_TEST_TOKEN, refreshToken: "r" });
-  const { logger } = captureLogger();
-  const hidden: string[] = [];
-  const pipeline = createPipeline({
-    db: t.db,
-    rules: {
-      set: compileRules({
-        owner: options.hide === undefined ? READS : `${READS}hide:\n${options.hide}`,
-      }),
-    },
-    definitions: definitionRegistry({
-      upstream: new UpstreamPool({ vault: null, log: logger }),
-      gmail: { vault, fetch: gmail.fetch },
-    }),
-    pauses: new SqlitePauseStore(),
-    approvals: new SqliteApprovalStore(),
-    log: logger,
-    alerts: { raise: () => {} },
-    watch: false,
-    onHidden: (reason) => hidden.push(reason),
-    ...(options.judge !== undefined && { looksLike: options.judge }),
+  const h = gmailPipeline({
+    owner: options.hide === undefined ? READS : `${READS}hide:\n${options.hide}`,
+    ...(options.judge !== undefined && { judge: options.judge }),
   });
-  const { agentId } = addAgent(
-    t.db,
-    { orgId: t.orgId, ownerId: t.ownerId, name: "inbox-bot" },
-    new Date(),
-  );
-  const agent = {
-    orgId: t.orgId,
-    agentId,
-    agentName: "inbox-bot",
-    ownerId: t.ownerId,
-    tokenId: "tok_1",
-  };
-  const call = (tool: string, args: Record<string, unknown> = {}) =>
-    pipeline.run({ agent, surface: "mcp", account: "gmail-work", tool, args });
-  return { gmail, call, hidden };
+  h.gmail.add(LUNCH, MOM, RESET);
+  return h;
 }
 
 const noMatch: LooksLikeJudge = () => "no_match";
 const matchResets: LooksLikeJudge = (m) => (m.subject.includes("Reset") ? "match" : "no_match");
 
 describe("Gmail tools", () => {
-  it("I-20: lists four tools, every one marked read-only", () => {
-    expect(GMAIL_TOOLS.map((t) => t.name)).toEqual([
+  it("I-20: marks only the read tools read-only", () => {
+    const readOnly = GMAIL_TOOLS.filter((t) => t.annotations?.readOnlyHint === true).map(
+      (t) => t.name,
+    );
+    expect(readOnly).toEqual([
       "search",
       "get_message",
       "get_thread",
       "list_labels",
+      "list_send_as",
     ]);
-    expect(GMAIL_TOOLS.every((t) => t.annotations?.readOnlyHint === true)).toBe(true);
   });
 
   it("denies arguments outside a tool's schema", async () => {
