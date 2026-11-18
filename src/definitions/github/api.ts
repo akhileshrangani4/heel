@@ -7,7 +7,9 @@ import type { FetchFn } from "../sign-in.ts";
  * plainly is an error, so the lookup is unavailable and the call is denied.
  */
 
-export const GITHUB_API = "https://api.github.com";
+import { GITHUB_API, GitHubNotFoundError } from "./client.ts";
+
+export { GITHUB_API };
 
 export class GitHubLookupError extends Error {
   override readonly name = "GitHubLookupError";
@@ -27,10 +29,10 @@ const PASSING_CONCLUSIONS = new Set(["success", "neutral", "skipped"]);
 const MAX_PAGES = 10;
 
 export class GitHubApi {
-  readonly #token: string;
+  readonly #token: () => Promise<string>;
   readonly #fetch: FetchFn;
 
-  constructor(token: string, fetch: FetchFn) {
+  constructor(token: () => Promise<string>, fetch: FetchFn) {
     this.#token = token;
     this.#fetch = fetch;
   }
@@ -38,13 +40,14 @@ export class GitHubApi {
   async #get(path: string, signal: AbortSignal): Promise<unknown> {
     const response = await this.#fetch(new URL(path, GITHUB_API), {
       headers: {
-        authorization: `Bearer ${this.#token}`,
+        authorization: `Bearer ${await this.#token()}`,
         accept: "application/vnd.github+json",
         "x-github-api-version": "2022-11-28",
       },
       redirect: "error",
       signal,
     });
+    if (response.status === 404) throw new GitHubNotFoundError(`${path} not found`);
     if (!response.ok) throw new GitHubLookupError(`GitHub answered ${response.status} for ${path}`);
     return response.json();
   }

@@ -128,9 +128,7 @@ export function cliDefinition(account: AccountRecord, deps: CliDeps): Definition
     }
     let sha: string;
     try {
-      sha = (
-        await new GitHubApi(await credential(), deps.fetch).pullHead(repo, pull.number, signal)
-      ).sha;
+      sha = (await new GitHubApi(credential, deps.fetch).pullHead(repo, pull.number, signal)).sha;
     } catch {
       return { ok: false, reason: "lookup_unavailable" };
     }
@@ -220,7 +218,7 @@ export function cliDefinition(account: AccountRecord, deps: CliDeps): Definition
       if (GH_MERGE_BYPASS_FLAGS.some((flag) => flags[flag] === true)) return "fail";
       const sha = flags["match-head-commit"];
       if (typeof sha !== "string" || call.repo === undefined) return "fail";
-      const api = new GitHubApi(await credential(), deps.fetch);
+      const api = new GitHubApi(credential, deps.fetch);
       return (await api.checksPass(call.repo, sha, signal)) ? "pass" : "fail";
     },
 
