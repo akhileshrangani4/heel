@@ -90,13 +90,15 @@ export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
     }
     // `from_` in Python is the tool's `from`. Passing both is ambiguous.
     const renamed = module.renamed.get(step.fn);
-    const args: Record<string, unknown> = {};
+    // Null prototype: a key like `__proto__` stays a key, never the prototype.
+    const named: Record<string, unknown> = Object.create(null);
     let clash: string | null = null;
     for (const [key, value] of Object.entries(step.kwargs)) {
       const name = renamed?.get(key) ?? key;
-      if (Object.hasOwn(args, name)) clash = name;
-      args[name] = value;
+      if (Object.hasOwn(named, name)) clash = name;
+      named[name] = value;
     }
+    const args = { ...named };
     if (clash !== null) {
       step = await step.raise(
         "RuntimeError",

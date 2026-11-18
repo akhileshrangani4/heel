@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { MontyWorker } from "../../src/codemode/monty.ts";
 import { runScript } from "../../src/codemode/run.ts";
 import { accountModule, moduleName, pythonType } from "../../src/codemode/stubs.ts";
+import type { CodeWorker } from "../../src/codemode/worker.ts";
 import { GMAIL_TOOLS } from "../../src/definitions/gmail/definition.ts";
 import { OUTLOOK_TOOLS } from "../../src/definitions/outlook/definition.ts";
 import { oneRule, pipelineHarness } from "../helpers/pipeline.ts";
@@ -149,14 +150,90 @@ describe("parameters named after Python reserved words", () => {
     expect(h.provider.executed[0]?.args).not.toHaveProperty("from_");
   });
 
-  it("refuse the same argument passed under both spellings", async () => {
-    const { h, run } = mailRun();
-    const result = await run(
-      `import gmail_work\ntry:\n    gmail_work.send(action="email.send", from_="a@x.com", **{"from": "b@x.com"})\nexcept RuntimeError as e:\n    print("refused:", e)`,
+  it("refuse the same argument passed under both spellings, in either order", async () => {
+    // Monty's type check rejects this before running, so a worker that sends
+    // it anyway (a compromised one) is what heel's own check is for.
+    for (const kwargs of [
+      { action: "email.send", from_: "a@x.com", from: "b@x.com" },
+      { action: "email.send", from: "b@x.com", from_: "a@x.com" },
+    ]) {
+      const { h } = mailRun();
+      const module = accountModule("gmail-work", MAIL);
+      if (module === null) throw new Error("no module");
+      const raised: string[] = [];
+      const worker: CodeWorker = {
+        start: async () => ({
+          kind: "call",
+          module: "gmail_work",
+          fn: "send",
+          kwargs,
+          positional: 0,
+          resume: async () => ({ kind: "done", output: null }),
+          raise: async (_type, message) => {
+            raised.push(message);
+            return { kind: "done", output: null };
+          },
+        }),
+        stop: async () => {},
+      };
+      await runScript({
+        code: "",
+        agent: h.agent,
+        modules: [{ ...module, account: "gmail-work" }],
+        pipeline: h.pipeline,
+        worker,
+        limits: {},
+      });
+      expect(raised).toEqual(["gmail_work.send got from twice (as from and from_)"]);
+      expect(h.provider.executed).toHaveLength(0);
+    }
+  });
+
+  it("keep a __proto__ key a key, not the prototype", async () => {
+    const { h } = mailRun();
+    const module = accountModule("gmail-work", MAIL);
+    if (module === null) throw new Error("no module");
+    const kwargs = JSON.parse(
+      '{"action":"email.send","from_":"a@x.com","__proto__":{"to":"evil"}}',
     );
-    // Monty's type check refuses it before running; heel refuses it too if one ever gets through.
-    expect(result.status === "error" || result.stdout.includes("got from twice")).toBe(true);
-    expect(h.provider.executed).toHaveLength(0);
+    const worker: CodeWorker = {
+      start: async () => ({
+        kind: "call",
+        module: "gmail_work",
+        fn: "send",
+        kwargs,
+        positional: 0,
+        resume: async () => ({ kind: "done", output: null }),
+        raise: async () => ({ kind: "done", output: null }),
+      }),
+      stop: async () => {},
+    };
+    await runScript({
+      code: "",
+      agent: h.agent,
+      modules: [{ ...module, account: "gmail-work" }],
+      pipeline: h.pipeline,
+      worker,
+      limits: {},
+    });
+    const sent = h.provider.normalized[0]?.args as Record<string, unknown> | undefined;
+    expect(sent?.["to"]).toBeUndefined();
+    expect(Object.getPrototypeOf(sent)).toBe(Object.prototype);
+  });
+
+  it("keep soft keywords (type, match, case) as they are", () => {
+    const module = accountModule("x", [
+      {
+        name: "list",
+        inputSchema: {
+          type: "object",
+          properties: { type: { type: "string" }, match: { type: "string" } },
+          required: ["type"],
+        },
+      },
+    ]);
+    expect(module?.stubs).toContain("def list(*, type: str, match: str = ...)");
+    expect(module?.renamed.size).toBe(0);
   });
 });
 

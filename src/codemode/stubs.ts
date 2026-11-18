@@ -44,9 +44,7 @@ const KEYWORDS = new Set([
   "while",
   "with",
   "yield",
-  "match",
-  "case",
-  "type",
+  // `match`, `case` and `type` are soft keywords: fine as names.
 ]);
 
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
