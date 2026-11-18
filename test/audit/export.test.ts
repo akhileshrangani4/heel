@@ -121,6 +121,7 @@ describe("audit JSONL format", () => {
       "approverId",
       "pauseScope",
       "reason",
+      "adapter",
     ]);
     expect(parsed).toMatchObject({
       id,

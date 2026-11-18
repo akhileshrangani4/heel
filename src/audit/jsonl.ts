@@ -29,6 +29,7 @@ export interface StoredAuditRow {
   approverId: string | null;
   pauseScope: PauseScope | null;
   reason: string | null;
+  adapter: string | null;
 }
 
 /**
@@ -58,6 +59,7 @@ export function auditExportRecord(row: StoredAuditRow): Record<string, unknown> 
     approverId: row.approverId,
     pauseScope: row.pauseScope,
     reason: row.reason,
+    adapter: row.adapter,
   };
 }
 

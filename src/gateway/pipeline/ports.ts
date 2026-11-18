@@ -1,3 +1,4 @@
+import type { AdapterDenyReason } from "../../core/adapters.ts";
 import type { Call, PauseScope, RuleRef, Surface } from "../../core/call.ts";
 import type { CompiledHideEntry, StateCheck } from "../../core/rules/compile.ts";
 import type { DenyReason, StandingApprovals } from "../../core/rules/evaluate.ts";
@@ -179,6 +180,50 @@ export interface ApprovalStore {
   standing(db: HeelQuery, call: Call, callHash: string, now: Date): StandingApprovals;
 }
 
+// ── decision adapters ───────────────────────────────────────────────────────
+
+/**
+ * What a decision adapter is told about a call. The rules have already
+ * decided it would run, or would wait for a person: an adapter is never
+ * consulted on a call the rules deny, so no call data leaves heel for it.
+ */
+export interface AdapterInput {
+  /** The normalized call, exactly as it will run. */
+  call: Call;
+  callHash: string;
+  /**
+   * What heel would do without the adapters: `allow` (a rule, a standing
+   * approval or global watch lets it run) or `ask` (it needs a person).
+   */
+  tentative: "allow" | "ask";
+  /** The rule behind `tentative`; null when global watch lets a default deny run. */
+  rule: RuleRef | null;
+}
+
+/**
+ * A check that runs beside the rules: a security service, OpenFGA, a model,
+ * anything. It can only tighten (see core/adapters.ts): it answers
+ * `{ decision: "pass" }` or `{ decision: "deny", reason }`. Anything else, a
+ * throw, or no answer before the deadline denies the call.
+ */
+export interface DecisionAdapter {
+  /** Matches `ADAPTER_NAME`; goes in the audit row of a call it denies. */
+  readonly name: string;
+  /** Log what it would deny without deciding, like a `watch: true` rule. */
+  readonly watch?: boolean;
+  check(input: AdapterInput, signal: AbortSignal): Promise<unknown>;
+}
+
+/**
+ * A check on what an allowed call returned, after hiding: it never sees a
+ * hidden item. It answers `{ decision: "pass" }` or `{ decision: "withhold",
+ * reason }`; anything else, a throw or no answer withholds the result.
+ */
+export interface ResponseAdapter {
+  readonly name: string;
+  check(call: Call, result: unknown, signal: AbortSignal): Promise<unknown>;
+}
+
 // ── results ─────────────────────────────────────────────────────────────────
 
 /** Why the pipeline denied a call, beyond the evaluator's reasons. */
@@ -196,7 +241,11 @@ export type PipelineDenyReason =
   /** A person denied this exact call and its TTL hasn't run out (Q-A5). */
   | "approval_denied"
   /** The upstream response couldn't be parsed on a surface whose shape heel knows. */
-  | "response_unparseable";
+  | "response_unparseable"
+  /** A decision adapter denied the call, or couldn't answer. */
+  | AdapterDenyReason
+  /** The call ran, and a response adapter kept its result from the agent. */
+  | "response_withheld";
 
 /** How an executed call got through. */
 export type AllowedVia =
@@ -213,6 +262,8 @@ export type PipelineResult =
       reason: PipelineDenyReason;
       rule: RuleRef | null;
       approvalId?: string;
+      /** The adapter that denied the call or withheld its result. */
+      adapter?: string;
     }
   | { status: "paused"; scope: PauseScope }
   | { status: "expired"; approvalId: string }
@@ -230,5 +281,9 @@ export type PipelineStage =
   | "state"
   | "counts"
   | "decide"
+  /** Decision adapters, outside the transaction; only when some are configured. */
+  | "adapters"
   | "execute"
-  | "hide";
+  | "hide"
+  /** Response adapters; only when some are configured. */
+  | "respond";

@@ -1,4 +1,11 @@
 import type { Logger } from "pino";
+import {
+  ADAPTER_NAME,
+  type AdapterOutcome,
+  combineAdapters,
+  parseAdapterVerdict,
+  parseResponseVerdict,
+} from "../../core/adapters.ts";
 import type { AuditEvent } from "../../core/audit.ts";
 import type { Call } from "../../core/call.ts";
 import { callHash, UNREPRESENTABLE_ARGS, UNREPRESENTABLE_CALL_HASH } from "../../core/call-hash.ts";
@@ -8,6 +15,7 @@ import type { CompiledHideEntry, CompiledRule, StateCheck } from "../../core/rul
 import {
   type EvalContext,
   type Evaluation,
+  effectiveDecision,
   evaluate,
   hideEntriesFor,
   type RuleSet,
@@ -24,9 +32,11 @@ import { findAccount, userName } from "../../store/directory.ts";
 import { DeadlineExceededError, withDeadline } from "../../util/deadline.ts";
 import { errorShape } from "../../util/error-shape.ts";
 import type {
+  AdapterInput,
   AllowedVia,
   ApprovalStore,
   CallRequest,
+  DecisionAdapter,
   Definition,
   DefinitionRegistry,
   GoverningApproval,
@@ -36,6 +46,7 @@ import type {
   PipelineDenyReason,
   PipelineResult,
   PipelineStage,
+  ResponseAdapter,
 } from "./ports.ts";
 import { ResponseUnparseableError, UpstreamError } from "./ports.ts";
 
@@ -54,6 +65,11 @@ import { ResponseUnparseableError, UpstreamError } from "./ports.ts";
  * 8. execute, with the credential the definition attaches;
  * 9. hide, before the result reaches the agent.
  *
+ * Decision adapters (core/adapters.ts) join step 7 when any are configured:
+ * once the rules would let a call run or ask about it, every adapter is
+ * consulted outside the transaction, and any deny stops the call. Response
+ * adapters run after step 9 and can withhold the result.
+ *
  * Every failure before execution denies (`internal` when nothing more
  * specific applies). A failure after the request may have reached the
  * upstream is `upstream_outcome_unknown`: the items stay counted and heel
@@ -69,11 +85,14 @@ export interface PipelineTimeouts {
    * upstream.
    */
   upstreamMs: number;
+  /** Each decision or response adapter's answer: 5 s, the same as a state lookup. */
+  adapterMs: number;
 }
 
 export const DEFAULT_PIPELINE_TIMEOUTS: PipelineTimeouts = {
   stateCheckMs: 5_000,
   upstreamMs: 60_000,
+  adapterMs: 5_000,
 };
 
 /** Where the rules in force come from; `RulesHolder` is one. */
@@ -105,6 +124,10 @@ export interface PipelineDeps {
   onApprovalRequested?: (approvalId: string) => void;
   /** Called as each stage starts. */
   trace?: (stage: PipelineStage) => void;
+  /** Checks beside the rules, in chain order. They can only tighten. */
+  adapters?: readonly DecisionAdapter[];
+  /** Checks on an allowed call's result after hiding, in chain order. */
+  responseAdapters?: readonly ResponseAdapter[];
 }
 
 export interface Pipeline {
@@ -178,6 +201,37 @@ class StateNeeded extends Error {
   }
 }
 
+/** What the adapters are asked about a call, beyond the call itself. */
+type AdapterQuestion = Omit<AdapterInput, "call" | "callHash">;
+
+/**
+ * Thrown out of the decision transaction when the rules would let a call run
+ * or ask about it and the adapters haven't answered for that outcome yet.
+ * Like `StateNeeded`, the transaction rolls back, the adapters run outside
+ * it, and the decision starts again.
+ */
+class AdaptersNeeded extends Error {
+  readonly key: string;
+  readonly input: AdapterQuestion;
+
+  constructor(key: string, input: AdapterQuestion) {
+    super("decision adapters have not answered for this outcome yet");
+    this.name = "AdaptersNeeded";
+    this.key = key;
+    this.input = input;
+  }
+}
+
+/** Throws unless every adapter has a valid name that no other adapter in its chain uses. */
+export function checkAdapterNames(chain: string, names: readonly string[]): void {
+  const seen = new Set<string>();
+  for (const name of names) {
+    if (!ADAPTER_NAME.test(name)) throw new Error(`${chain} adapter name is invalid: ${name}`);
+    if (seen.has(name)) throw new Error(`${chain} adapter name is used twice: ${name}`);
+    seen.add(name);
+  }
+}
+
 /** What the run knows so far, so a failure can still be audited. */
 interface Attempt {
   call: Call | null;
@@ -209,6 +263,11 @@ interface DecideInput {
   owner: string;
   /** State check results for this call only; never cached across calls. */
   states: Map<StateCheck, StateOutcome>;
+  /**
+   * The adapters' answers for this call, keyed by the outcome they were asked
+   * about. A restart that lands on a different rule or outcome asks again.
+   */
+  adapters: Map<string, AdapterOutcome[]>;
 }
 
 type Decided =
@@ -224,6 +283,14 @@ class DecisionPipeline implements Pipeline {
     this.#deps = deps;
     this.#timeouts = { ...DEFAULT_PIPELINE_TIMEOUTS, ...deps.timeouts };
     this.#now = deps.now ?? (() => new Date());
+    checkAdapterNames(
+      "decision",
+      (deps.adapters ?? []).map((adapter) => adapter.name),
+    );
+    checkAdapterNames(
+      "response",
+      (deps.responseAdapters ?? []).map((adapter) => adapter.name),
+    );
   }
 
   async run(request: CallRequest): Promise<PipelineResult> {
@@ -301,6 +368,7 @@ class DecisionPipeline implements Pipeline {
       set,
       owner,
       states: new Map(),
+      adapters: new Map(),
     });
     if (decided.kind === "final") {
       if (decided.requestedApprovalId !== undefined) {
@@ -327,14 +395,12 @@ class DecisionPipeline implements Pipeline {
       return { status: "upstream_outcome_unknown" };
     }
 
-    if (definition.hide === undefined) return { status: "allowed", result, via: decided.via };
+    if (definition.hide === undefined) return this.#respond(call, result, decided.via);
     this.#trace("hide");
     const filter = definition.hide.bind(definition);
+    let visible: unknown;
     try {
-      const visible = await withDeadline(this.#timeouts.upstreamMs, () =>
-        filter(call, result, hide),
-      );
-      return { status: "allowed", result: visible, via: decided.via };
+      visible = await withDeadline(this.#timeouts.upstreamMs, () => filter(call, result, hide));
     } catch (error) {
       // The call ran, but an unfiltered result never reaches the agent.
       const reason: PipelineDenyReason =
@@ -345,6 +411,42 @@ class DecisionPipeline implements Pipeline {
       );
       return { status: "denied", reason, rule: null };
     }
+    return this.#respond(call, visible, decided.via);
+  }
+
+  /**
+   * Response adapters, in chain order, on what would reach the agent (after
+   * hiding). The first one that doesn't pass withholds the result; the call
+   * already ran and stays counted.
+   */
+  async #respond(call: Call, result: unknown, via: AllowedVia): Promise<PipelineResult> {
+    const chain = this.#deps.responseAdapters ?? [];
+    if (chain.length === 0) return { status: "allowed", result, via };
+    this.#trace("respond");
+    for (const adapter of chain) {
+      let reason: string;
+      try {
+        const answer: unknown = await withDeadline(this.#timeouts.adapterMs, (signal) =>
+          adapter.check(call, result, signal),
+        );
+        const verdict = parseResponseVerdict(answer);
+        if (verdict.decision === "pass") continue;
+        reason = verdict.reason;
+      } catch (error) {
+        reason = `unavailable: ${errorShape(error).name}`;
+      }
+      this.#deps.log.warn(
+        { ...logContext(call), adapter: adapter.name },
+        "result withheld by a response adapter after the call ran",
+      );
+      // The adapter's reason may quote the result, so it stays out of the default log level.
+      this.#deps.log.debug(
+        { ...logContext(call), adapter: adapter.name, detail: reason },
+        "withheld",
+      );
+      return { status: "denied", reason: "response_withheld", rule: null, adapter: adapter.name };
+    }
+    return { status: "allowed", result, via };
   }
 
   #runId(request: CallRequest): string | undefined {
@@ -379,10 +481,110 @@ class DecisionPipeline implements Pipeline {
     try {
       return this.#decide(input);
     } catch (error) {
-      if (!(error instanceof StateNeeded) || input.states.has(error.check)) throw error;
-      input.states.set(error.check, await this.#stateCheck(definition, error.check, input.call));
-      return this.#decideWithState(definition, input);
+      if (error instanceof StateNeeded && !input.states.has(error.check)) {
+        input.states.set(error.check, await this.#stateCheck(definition, error.check, input.call));
+        return this.#decideWithState(definition, input);
+      }
+      if (error instanceof AdaptersNeeded && !input.adapters.has(error.key)) {
+        input.adapters.set(error.key, await this.#consultAdapters(input, error.input));
+        return this.#decideWithState(definition, input);
+      }
+      throw error;
     }
+  }
+
+  /**
+   * Asks every decision adapter at once, each under its own deadline. A
+   * throw, a timeout or an answer that isn't `pass` or `deny` is
+   * unavailable, which denies the call: never read as a pass.
+   */
+  async #consultAdapters(input: DecideInput, asked: AdapterQuestion): Promise<AdapterOutcome[]> {
+    this.#trace("adapters");
+    const { call, hash } = input;
+    const request: AdapterInput = { call, callHash: hash, ...asked };
+    return Promise.all(
+      (this.#deps.adapters ?? []).map(async (adapter): Promise<AdapterOutcome> => {
+        const watch = adapter.watch === true;
+        try {
+          const answer: unknown = await withDeadline(this.#timeouts.adapterMs, (signal) =>
+            adapter.check(request, signal),
+          );
+          const verdict = parseAdapterVerdict(answer);
+          if (verdict.decision === "unavailable") {
+            this.#deps.log.warn(
+              { ...logContext(call), adapter: adapter.name },
+              "decision adapter answered with neither pass nor deny; the call is denied",
+            );
+          }
+          return { adapter: adapter.name, watch, verdict };
+        } catch (error) {
+          this.#deps.log.warn(
+            { ...logContext(call), adapter: adapter.name, error: errorShape(error) },
+            "decision adapter unavailable; the call is denied",
+          );
+          return { adapter: adapter.name, watch, verdict: { decision: "unavailable" } };
+        }
+      }),
+    );
+  }
+
+  /**
+   * The adapters' verdict on a call the rules would let run or ask about,
+   * inside the decision transaction. Throws `AdaptersNeeded` the first time
+   * an outcome is seen; returns a final deny when an adapter denies, or null
+   * when the call goes on to settle as the rules decided.
+   */
+  #adapterVerdict(
+    tx: HeelTx,
+    input: DecideInput,
+    evaluation: Evaluation,
+    at: Date,
+  ): Decided | null {
+    if ((this.#deps.adapters ?? []).length === 0) return null;
+    const decision = effectiveDecision(evaluation);
+    // A call the rules deny is settled without them: its data never leaves heel.
+    if (decision === "deny") return null;
+    const rule = evaluation.verdict.rule?.ref ?? null;
+    const key = `${decision}:${evaluation.verdict.rule?.hash ?? "none"}`;
+    const outcomes = input.adapters.get(key);
+    if (outcomes === undefined) throw new AdaptersNeeded(key, { tentative: decision, rule });
+    const { call, hash } = input;
+    const { deny, wouldDeny } = combineAdapters(outcomes);
+    for (const would of wouldDeny) {
+      appendAudit(
+        tx,
+        {
+          kind: "would_deny",
+          call,
+          callHash: hash,
+          rule: null,
+          reason: would.reason,
+          adapter: would.adapter,
+        },
+        at,
+      );
+    }
+    if (deny === null) return null;
+    if (deny.detail !== null) {
+      // An adapter's explanation may quote the call, so it stays out of the default log level.
+      this.#deps.log.debug(
+        { ...logContext(call), adapter: deny.adapter, detail: deny.detail },
+        "decision adapter denied the call",
+      );
+    }
+    appendAudit(
+      tx,
+      {
+        kind: "deny",
+        call,
+        callHash: hash,
+        rule: null,
+        reason: deny.reason,
+        adapter: deny.adapter,
+      },
+      at,
+    );
+    return final({ status: "denied", reason: deny.reason, rule: null, adapter: deny.adapter });
   }
 
   async #stateCheck(definition: Definition, check: StateCheck, call: Call): Promise<StateOutcome> {
@@ -445,7 +647,10 @@ class DecisionPipeline implements Pipeline {
         for (const watched of evaluation.watched) {
           appendAudit(tx, watchedEvent(call, hash, watched), at);
         }
-        return this.#settle(tx, input, evaluation, governing, at);
+        return (
+          this.#adapterVerdict(tx, input, evaluation, at) ??
+          this.#settle(tx, input, evaluation, governing, at)
+        );
       },
       { behavior: "immediate" },
     );

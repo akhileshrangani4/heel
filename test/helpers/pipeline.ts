@@ -19,6 +19,7 @@ import {
   type ApprovalRequest,
   type ApprovalStore,
   type CallRequest,
+  type DecisionAdapter,
   type Definition,
   type GoverningApproval,
   type GoverningStatus,
@@ -28,6 +29,7 @@ import {
   type PauseTarget,
   type PipelineResult,
   type PipelineStage,
+  type ResponseAdapter,
   UpstreamError,
 } from "../../src/gateway/pipeline/ports.ts";
 import type { AdminAlert } from "../../src/notify/admin-alerts.ts";
@@ -308,6 +310,10 @@ export interface HarnessOptions {
    */
   pauseStore?: PauseStore;
   approvalStore?: ApprovalStore;
+  /** Decision adapters, in chain order. */
+  adapters?: readonly DecisionAdapter[];
+  /** Response adapters, in chain order. */
+  responseAdapters?: readonly ResponseAdapter[];
 }
 
 export interface CallInput {
@@ -413,6 +419,8 @@ export function pipelineHarness(options: HarnessOptions = {}): PipelineHarness {
     ...(options.timeouts !== undefined && { timeouts: options.timeouts }),
     onApprovalRequested: (id) => notified.push(id),
     trace: (stage) => stages.push(stage),
+    ...(options.adapters !== undefined && { adapters: options.adapters }),
+    ...(options.responseAdapters !== undefined && { responseAdapters: options.responseAdapters }),
   });
 
   return {
