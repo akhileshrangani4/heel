@@ -11,11 +11,14 @@ import { formatYamlIssue } from "./config/yaml.ts";
 import { createAgentApp } from "./gateway/app.ts";
 import type { Logger } from "./log.ts";
 import { logAdminAlerts } from "./notify/admin-alerts.ts";
+import { SqliteApprovalStore } from "./store/approvals.ts";
 import { type HeelDb, openStore } from "./store/db.ts";
 import { ensureInstall, ensureLocalOwner } from "./store/install.ts";
+import { SqlitePauseStore } from "./store/pauses.ts";
 import { loadMasterKey, MasterKeyError } from "./vault/key.ts";
 import { Vault, VaultError } from "./vault/vault.ts";
 import { createHumanApp } from "./web/app.ts";
+import { Passkeys, relyingPartyFor } from "./web/passkeys.ts";
 
 export type PlaneState = { state: "listening"; url: string } | { state: "refused"; reason: string };
 
@@ -215,7 +218,18 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
       human = { state: "refused", reason: urlProblem };
       log.error({ reason: urlProblem }, "human plane refused");
     } else {
-      const server = await listenHttp(createHumanApp({ log }).fetch, config.listen.human);
+      const humanApp = createHumanApp({
+        db: store.db,
+        orgId,
+        log,
+        publicUrl: config.publicUrl,
+        passkeys: new Passkeys(store.db, relyingPartyFor(config.publicUrl)),
+        approvals: new SqliteApprovalStore(),
+        pauses: new SqlitePauseStore(),
+        rules,
+        now,
+      });
+      const server = await listenHttp(humanApp.fetch, config.listen.human);
       closers.push(() => closeHttp(server));
       human = { state: "listening", url: boundUrl(server) };
       log.info({ url: human.url }, "human plane listening");
@@ -226,7 +240,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
       agent = { state: "refused", reason: `vault unavailable: ${opening.reason}` };
       log.error({ reason: agent.reason }, "agent plane refused");
     } else {
-      const app = createAgentApp({ db: store.db, log });
+      const app = createAgentApp({ db: store.db, log, now });
       const server = await listenHttp(app.fetch, config.listen.agent);
       closers.push(() => closeHttp(server));
       agent = { state: "listening", url: boundUrl(server) };

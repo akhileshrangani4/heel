@@ -6,6 +6,8 @@ import { notice } from "./layout.ts";
 export type SignInNotice =
   | { kind: "none" }
   | { kind: "signed-out" }
+  /** A passkey was just enrolled from a one-time link. */
+  | { kind: "enrolled" }
   | { kind: "session-expired" }
   | { kind: "error"; message: string };
 
@@ -36,6 +38,8 @@ function signInNotice(n: SignInNotice): Html | "" {
       return "";
     case "signed-out":
       return notice("ok", html`<p>You're signed out.</p>`);
+    case "enrolled":
+      return notice("ok", html`<p>Your passkey is enrolled. Sign in with it.</p>`);
     case "session-expired":
       return notice("info", html`<p>Your session ended. Sign in again to continue.</p>`);
     case "error":

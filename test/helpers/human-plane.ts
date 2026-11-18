@@ -1,0 +1,145 @@
+import type { Hono } from "hono";
+import { LOCAL_OWNER_NAME } from "../../src/store/install.ts";
+import { createHumanApp } from "../../src/web/app.ts";
+import { CSRF_HEADER } from "../../src/web/http.ts";
+import { createEnrollment, Passkeys, relyingPartyFor } from "../../src/web/passkeys.ts";
+import { type ApprovalHarness, approvalHarness } from "./approvals.ts";
+import { SoftAuthenticator } from "./authenticator.ts";
+import { captureLogger } from "./log.ts";
+import type { HarnessOptions } from "./pipeline.ts";
+
+/**
+ * The human plane over the same store as an approval harness, driven the
+ * way a browser drives it: real HTTP requests to the Hono app, real WebAuthn
+ * ceremonies signed by a software authenticator, and the session cookie and
+ * CSRF token carried between requests.
+ */
+
+export const PUBLIC_URL = new URL("https://heel.example.com");
+const ORIGIN = PUBLIC_URL.origin;
+
+/** One signed-in browser: its passkey, session cookie and CSRF token. */
+export interface Browser {
+  authenticator: SoftAuthenticator;
+  cookie: string;
+  csrf: string;
+}
+
+export interface HumanPlaneHarness extends ApprovalHarness {
+  app: Hono;
+  /** A request from heel's own origin, carrying a browser's cookie and CSRF header if given. */
+  fetch(path: string, init?: RequestInit & { as?: Browser; csrf?: boolean }): Promise<Response>;
+  /** Enrolls a passkey for `userName` through `/enroll/<token>`. */
+  enroll(userName?: string): Promise<SoftAuthenticator>;
+  /** Signs in through `/sign-in` and returns the signed-in browser. */
+  signIn(authenticator: SoftAuthenticator): Promise<Browser>;
+  /**
+   * Runs a passkey ceremony: posts `start` for a challenge, signs it, and
+   * posts the assertion to `finish`. Returns the finish response.
+   */
+  ceremony(as: Browser, start: { url: string; body: unknown }, finish: string): Promise<Response>;
+}
+
+/** What a challenge endpoint answers: the challenge id and the WebAuthn options to sign. */
+export interface IssuedChallenge {
+  challengeId: string;
+  // biome-ignore lint/suspicious/noExplicitAny: WebAuthn options go straight to the authenticator.
+  options: any;
+}
+
+/** A challenge endpoint's JSON answer. */
+export async function issued(response: Response): Promise<IssuedChallenge> {
+  return (await response.json()) as IssuedChallenge;
+}
+
+/** The value of one attribute in rendered HTML, e.g. `data-challenge-id`. */
+export function attribute(html: string, name: string): string {
+  const match = new RegExp(`${name}="([^"]*)"`).exec(html);
+  if (match?.[1] === undefined) throw new Error(`no ${name} in the page`);
+  return match[1];
+}
+
+export function humanPlaneHarness(options: HarnessOptions = {}): HumanPlaneHarness {
+  const h = approvalHarness(options);
+  const { logger } = captureLogger();
+  const passkeys = new Passkeys(h.t.db, relyingPartyFor(PUBLIC_URL));
+  const app = createHumanApp({
+    db: h.t.db,
+    orgId: h.t.orgId,
+    log: logger,
+    publicUrl: PUBLIC_URL,
+    passkeys,
+    approvals: h.store,
+    pauses: h.pauseStore,
+    rules: h.rules,
+    now: () => h.clock.now,
+  });
+
+  const fetchAs: HumanPlaneHarness["fetch"] = async (path, init = {}) => {
+    const { as, csrf = true, ...rest } = init;
+    const headers = new Headers(rest.headers);
+    if (!headers.has("origin")) headers.set("origin", ORIGIN);
+    if (as !== undefined) {
+      headers.set("cookie", as.cookie);
+      if (csrf) headers.set(CSRF_HEADER, as.csrf);
+    }
+    return app.request(new URL(path, PUBLIC_URL), { ...rest, headers });
+  };
+  const postJson = (path: string, body: unknown, as?: Browser) =>
+    fetchAs(path, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+      ...(as !== undefined && { as }),
+    });
+
+  return Object.assign(h, {
+    app,
+    fetch: fetchAs,
+
+    async enroll(userName = LOCAL_OWNER_NAME) {
+      const link = createEnrollment(h.t.db, {
+        orgId: h.t.orgId,
+        userName,
+        publicUrl: PUBLIC_URL,
+        now: h.clock.now,
+      });
+      const path = new URL(link.url).pathname;
+      const options = await issued(await postJson(`${path}/options`, {}));
+      const authenticator = new SoftAuthenticator();
+      const done = await postJson(path, {
+        challengeId: options.challengeId,
+        response: authenticator.register(options.options, ORIGIN),
+      });
+      if (!done.ok) throw new Error(`enrollment refused: ${await done.text()}`);
+      return authenticator;
+    },
+
+    async signIn(authenticator: SoftAuthenticator) {
+      const page = await (await fetchAs("/sign-in")).text();
+      const challengeId = attribute(page, "data-challenge-id");
+      const options = await issued(await postJson("/sign-in/options", { challengeId }));
+      const done = await postJson("/sign-in", {
+        challengeId,
+        response: authenticator.assert(options.options, ORIGIN),
+      });
+      if (!done.ok) throw new Error(`sign-in refused: ${await done.text()}`);
+      const cookie = (done.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+      const signedIn = await (await fetchAs("/pause", { headers: { cookie } })).text();
+      const csrf = /const CSRF = "([^"]+)"/.exec(signedIn)?.[1];
+      if (csrf === undefined) throw new Error("no CSRF token on the signed-in page");
+      return { authenticator, cookie, csrf };
+    },
+
+    async ceremony(as: Browser, start: { url: string; body: unknown }, finish: string) {
+      const response = await postJson(start.url, start.body, as);
+      if (!response.ok) return response;
+      const { challengeId, options } = await issued(response);
+      return postJson(
+        finish,
+        { challengeId, response: as.authenticator.assert(options, ORIGIN) },
+        as,
+      );
+    },
+  });
+}

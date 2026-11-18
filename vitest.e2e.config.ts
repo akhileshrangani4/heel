@@ -8,6 +8,8 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     include: ["e2e/**/*.test.ts"],
+    // The browser suite has its own job and script (`pnpm test:browser`).
+    exclude: ["e2e/browser/**"],
     pool: "forks",
     testTimeout: 60_000,
     hookTimeout: 60_000,

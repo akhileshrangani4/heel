@@ -19,6 +19,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "test:browser": "vitest run --config vitest.browser.config.ts",
     "test:invariants": "node ./scripts/check-invariants.ts",
     "db:generate": "drizzle-kit generate",
     "db:drift": "node ./scripts/check-migration-drift.ts",

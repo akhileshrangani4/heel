@@ -179,18 +179,26 @@ describe("heel serve", () => {
     const token = await addAgentToken(config, "ci-bot");
     const headers = { authorization: `Bearer ${token}` };
 
-    for (const path of [
-      "/mcp",
-      "/mcp/gmail-work",
-      "/http/github/repos",
-      "/run",
-      "/approvals/apr_1",
-    ]) {
+    for (const path of ["/mcp", "/mcp/gmail-work", "/http/github/repos", "/run"]) {
       const response = await fetch(`${agentUrl}${path}`, { method: "POST", headers });
       expect(response.status, path).toBe(501);
     }
     const unknown = await fetch(`${agentUrl}/elsewhere`, { headers });
     expect(unknown.status).toBe(404);
+  });
+
+  it("answers approval check-back, read-only, and reads an id it doesn't know as unknown", async () => {
+    const home = tempDir("heel-boot-");
+    const config = configIn(home);
+    const heel = await boot(config, { [MASTER_KEY_ENV]: newKey() });
+    const token = await addAgentToken(config, "ci-bot");
+
+    const response = await fetch(`${urlOf(heel.planes.agent)}/approvals/apr_1`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ status: "unknown", approvalId: "apr_1" });
   });
 
   it("serves the human plane's health check", async () => {
