@@ -1,7 +1,8 @@
 import type { DefinitionRegistry } from "../gateway/pipeline/ports.ts";
-import { isMcpProvider } from "../vault/connect.ts";
+import { isHttpProvider, isMcpProvider } from "../vault/connect.ts";
 import { type GoogleCalendarDeps, googleCalendarDefinition } from "./calendar/google.ts";
 import { type GmailDeps, gmailDefinition } from "./gmail/definition.ts";
+import { type HttpDeps, httpDefinition } from "./http/definition.ts";
 import { mcpPassthrough } from "./mcp/passthrough.ts";
 import type { UpstreamPool } from "./mcp/upstream.ts";
 import { type OutlookDeps, outlookDefinition } from "./outlook/definition.ts";
@@ -19,10 +20,15 @@ export function definitionRegistry(deps: {
   outlook?: OutlookDeps | null;
   /** The same for Google Calendar. */
   googleCalendar?: GoogleCalendarDeps | null;
+  /** HTTP accounts (D7a). */
+  http?: HttpDeps | null;
 }): DefinitionRegistry {
   return {
     forAccount(account) {
       if (isMcpProvider(account.provider)) return mcpPassthrough(account, deps.upstream);
+      if (isHttpProvider(account.provider)) {
+        return deps.http == null ? null : httpDefinition(account, deps.http);
+      }
       if (account.provider === "gmail" && deps.gmail !== null) {
         return gmailDefinition(account, deps.gmail);
       }

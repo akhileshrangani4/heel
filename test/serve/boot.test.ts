@@ -126,6 +126,7 @@ describe("heel serve", () => {
   });
 
   it("answers surfaces that aren't built with 501, and an account the agent can't use with 404", async () => {
+    // /http is built (D7a): an account the agent can't use reads as unknown.
     const home = tempDir("heel-boot-");
     const config = configIn(home);
     const heel = await boot(config, { [MASTER_KEY_ENV]: newKey() });
@@ -133,10 +134,15 @@ describe("heel serve", () => {
     const token = await addAgentToken(config, "ci-bot");
     const headers = { authorization: `Bearer ${token}` };
 
-    for (const path of ["/mcp", "/http/github/repos", "/run"]) {
+    for (const path of ["/mcp", "/run"]) {
       const response = await fetch(`${agentUrl}${path}`, { method: "POST", headers });
       expect(response.status, path).toBe(501);
     }
+    const noSuchHttpAccount = await fetch(`${agentUrl}/http/github/repos`, {
+      method: "POST",
+      headers,
+    });
+    expect(noSuchHttpAccount.status).toBe(404);
     const noSuchAccount = await fetch(`${agentUrl}/mcp/gmail-work`, { method: "POST", headers });
     expect(noSuchAccount.status).toBe(404);
     const unknown = await fetch(`${agentUrl}/elsewhere`, { headers });
