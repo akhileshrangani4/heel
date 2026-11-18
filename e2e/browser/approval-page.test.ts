@@ -54,6 +54,7 @@ async function startHumanPlane(): Promise<Running> {
     pauses: h.pauseStore,
     rules: h.rules,
     vapidPublicKey: TEST_VAPID_PUBLIC_KEY,
+    agentPublicUrl: null,
     now: () => h.clock.now,
   });
   server.on("request", getRequestListener(app.fetch));

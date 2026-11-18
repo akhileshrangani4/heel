@@ -22,7 +22,26 @@ export function queryCarriesAgentToken(url: URL): boolean {
  * learns nothing about which tokens once existed; the reason goes to the log,
  * never the token.
  */
-export function requireAgent(deps: { db: HeelDb; log: Logger }): MiddlewareHandler<AgentPlaneEnv> {
+export function requireAgent(deps: {
+  db: HeelDb;
+  log: Logger;
+  now?: () => Date;
+  /**
+   * The protected-resource metadata URL, when OAuth for connectors is on.
+   * Every 401 names it, which is how an MCP client finds where to sign in.
+   */
+  resourceMetadataUrl?: string;
+}): MiddlewareHandler<AgentPlaneEnv> {
+  const unauthorized = (): Response =>
+    new Response(null, {
+      status: 401,
+      headers: {
+        "www-authenticate":
+          deps.resourceMetadataUrl === undefined
+            ? 'Bearer realm="heel"'
+            : `Bearer realm="heel", resource_metadata="${deps.resourceMetadataUrl}"`,
+      },
+    });
   return async (c, next) => {
     const url = new URL(c.req.url);
     if (queryCarriesAgentToken(url)) {
@@ -31,7 +50,11 @@ export function requireAgent(deps: { db: HeelDb; log: Logger }): MiddlewareHandl
     }
     let result: ReturnType<typeof authenticateAgent>;
     try {
-      result = authenticateAgent(deps.db, c.req.header("authorization"));
+      result = authenticateAgent(
+        deps.db,
+        c.req.header("authorization"),
+        deps.now?.() ?? new Date(),
+      );
     } catch (error) {
       // A store failure must not let a request through (spec: Fail-closed behavior).
       deps.log.error({ err: error }, "agent authentication failed: store error");
@@ -47,11 +70,4 @@ export function requireAgent(deps: { db: HeelDb; log: Logger }): MiddlewareHandl
     c.set("agent", result.agent);
     return next();
   };
-}
-
-function unauthorized(): Response {
-  return new Response(null, {
-    status: 401,
-    headers: { "www-authenticate": 'Bearer realm="heel"' },
-  });
 }

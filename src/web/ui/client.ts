@@ -166,6 +166,13 @@ export function clientScript(csrfToken: string | null): string {
         sign: getAssertion,
         finish: "/approvals/" + encodeURIComponent(binding.approvalId) + "/decide",
       }),
+    connect: ({ binding, status }) =>
+      run({
+        status,
+        start: { url: "/oauth/authorize/challenge", body: binding },
+        sign: getAssertion,
+        finish: "/oauth/authorize/confirm",
+      }),
     resume: ({ binding, status }) =>
       run({
         status,
