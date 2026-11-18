@@ -122,6 +122,18 @@ describe("hideVerdict: looks_like", () => {
     expect(judge.calls).toBe(0);
   });
 
+  it("I-44: unreadable mail hides even when the judge says no_match", () => {
+    const judge = fixedJudge("no_match");
+    const encrypted = message({ body: { body: "", bodyFormat: "text", unreadable: "encrypted" } });
+    expect(hideVerdict(entries(RESETS), encrypted, judge)).toMatchObject({
+      hidden: true,
+      reason: "uncertain",
+    });
+    const { body: _, ...headersOnly } = message();
+    expect(hideVerdict(entries(RESETS), headersOnly, judge).hidden).toBe(true);
+    expect(judge.calls).toBe(0);
+  });
+
   it("I-43: no looks_like verdict un-hides a message another entry hides", () => {
     const set = entries(`${RESETS}${FAMILY}`);
     const family = message({ from: "sarah@example.com" });

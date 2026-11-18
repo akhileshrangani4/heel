@@ -15,10 +15,10 @@ import {
   type GoogleClient,
   googleRefresher,
 } from "./definitions/google/oauth.ts";
-import { definitionRegistry } from "./definitions/mcp/passthrough.ts";
 import { stdioSandboxSpec } from "./definitions/mcp/settings.ts";
 import { UpstreamPool } from "./definitions/mcp/upstream.ts";
 import { UpstreamSignIns } from "./definitions/mcp/upstream-oauth.ts";
+import { definitionRegistry } from "./definitions/registry.ts";
 import { createAgentApp } from "./gateway/app.ts";
 import { createMcpSurface } from "./gateway/mcp/server.ts";
 import { createPipeline } from "./gateway/pipeline/pipeline.ts";
@@ -335,7 +335,10 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
           "looks_like model didn't load; every message a looks_like entry covers is hidden",
         ),
       );
-      const definitions = definitionRegistry(upstream);
+      const definitions = definitionRegistry({
+        upstream,
+        gmail: { vault: opening.vault, fetch },
+      });
       const pipeline = createPipeline({
         db: store.db,
         rules,

@@ -1,8 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { createMcpHandler, Server, type Tool } from "@modelcontextprotocol/server";
-import { definitionRegistry } from "../../src/definitions/mcp/passthrough.ts";
 import { UpstreamPool } from "../../src/definitions/mcp/upstream.ts";
+import { definitionRegistry } from "../../src/definitions/registry.ts";
 import { addAgent } from "../../src/gateway/agents.ts";
 import { createAgentApp } from "../../src/gateway/app.ts";
 import { createMcpSurface } from "../../src/gateway/mcp/server.ts";
@@ -121,7 +121,7 @@ export async function mcpHarness(options: {
   }
   const pool = new UpstreamPool({ vault, log: logger, fetch: upstream.fetch });
   const notified: string[] = [];
-  const definitions = definitionRegistry(pool);
+  const definitions = definitionRegistry({ upstream: pool, gmail: null });
   const pipeline = createPipeline({
     db: t.db,
     rules: { set: compileRules({ owner: options.owner }) },
