@@ -20,8 +20,11 @@ import { StripeClient, StripeNotFoundError, StripeRefused } from "./client.ts";
  * - A refund always names its amount: with none given, heel reads what is
  *   left to refund and sends exactly that, so Stripe's own "the rest" default
  *   can never refund more than rules saw. More than what is left is refused.
- * - Every write carries an idempotency key from its exact parameters, so the
- *   same refund or payment sent twice within 24 hours happens once.
+ * - `list_payments` names its customer: an unfiltered list would show every
+ *   customer's payments past a rule that denies reads on one.
+ * - A customer's new email is that update's `recipients`: Stripe sends
+ *   receipts and invoices there from then on.
+ * - A payment's saved payment method must belong to its customer.
  * - heel offers no tool for webhook endpoints or API keys, which outlive
  *   revoking heel (I-70).
  *
@@ -78,9 +81,9 @@ const shownPayment = (p: Record<string, unknown>) => ({
 
 const TOOLS: Record<string, StripeTool> = {
   list_payments: tool({
-    description: "List payments (payment intents), newest first, optionally for one customer.",
+    description: "List a customer's payments (payment intents), newest first.",
     args: z.strictObject({
-      customer: Customer.optional(),
+      customer: Customer,
       limit: Limit,
       starting_after: PaymentIntent.optional(),
     }),
@@ -88,7 +91,7 @@ const TOOLS: Record<string, StripeTool> = {
     prepare: async (_box, args) => ({
       args,
       action: "stripe.read",
-      ...(args.customer === undefined ? {} : { fields: { customer: args.customer } }),
+      fields: { customer: args.customer },
     }),
     run: (box, a, signal) =>
       box.client.request(
@@ -195,6 +198,15 @@ const TOOLS: Record<string, StripeTool> = {
     prepare: async (box, args, _h, signal) => {
       if (args.confirm && args.payment_method === undefined) return { deny: "unsupported" };
       await customerExists(box, args.customer, signal);
+      if (args.payment_method !== undefined) {
+        const pm = await box.client.request(
+          "GET",
+          `/v1/payment_methods/${args.payment_method}`,
+          {},
+          signal,
+        );
+        if (customerOf(pm["customer"]) !== args.customer) return { deny: "unsupported" };
+      }
       return {
         args,
         action: "stripe.payment.create",
@@ -234,6 +246,8 @@ const TOOLS: Record<string, StripeTool> = {
         action: "stripe.customer.update",
         fields: { customer: args.customer },
         targets: [args.customer],
+        // Receipts and invoices go to the new address from now on.
+        ...(args.email === undefined ? {} : { recipients: [args.email.toLowerCase()] }),
       };
     },
     run: (box, { customer, ...change }, signal) =>
@@ -265,7 +279,9 @@ const TOOLS: Record<string, StripeTool> = {
         action: "stripe.subscription.update",
         fields: {
           customer,
-          ...(str(sub["currency"]) === null ? {} : { currency: String(sub["currency"]) }),
+          ...(str(sub["currency"]) === null
+            ? {}
+            : { currency: String(sub["currency"]).toLowerCase() }),
         },
         targets: [args.subscription],
       };
@@ -292,7 +308,7 @@ export function stripeDefinition(account: AccountRecord, deps: StripeDeps): Defi
   return mailDefinition({
     tools: TOOLS,
     listed: STRIPE_TOOLS,
-    mailbox: { client: new StripeClient(deps.fetch, token, account.id) },
+    mailbox: { client: new StripeClient(deps.fetch, token) },
     errors: {
       isNotFound: (error) => error instanceof StripeNotFoundError,
       refusal: (error) =>

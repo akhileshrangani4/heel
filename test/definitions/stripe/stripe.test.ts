@@ -22,6 +22,7 @@ interface Sent {
   path: string;
   body: string;
   idempotency: string | null;
+  version: string | null;
 }
 
 function fakeStripe(options: { status?: number; captured?: number; refunded?: number } = {}) {
@@ -35,8 +36,14 @@ function fakeStripe(options: { status?: number; captured?: number; refunded?: nu
       path: url.pathname,
       body: String(init?.body ?? ""),
       idempotency: headers.get("idempotency-key"),
+      version: headers.get("stripe-version"),
     });
     const p = url.pathname;
+    if (method === "GET" && p === "/v1/payment_methods/pm_bobscard0001") {
+      return Response.json({ id: "pm_bobscard0001", customer: "cus_bob0000001" });
+    }
+    if (method === "GET" && p === "/v1/payment_intents")
+      return Response.json({ data: [], has_more: false });
     if (method === "GET" && p === "/v1/payment_intents/pi_paid000001") {
       return Response.json({
         id: "pi_paid000001",
@@ -147,15 +154,56 @@ describe("the Stripe definition", () => {
     });
   });
 
-  it("sends the same idempotency key for the same write, and a different one otherwise", async () => {
+  it("sends a fresh idempotency key and the pinned API version on every write", async () => {
     const h = setUp(SMALL_REFUNDS);
-    await h.call("create_payment", { amount: 500, currency: "USD", customer: "cus_alice00001" });
     await h.call("create_payment", { amount: 500, currency: "usd", customer: "cus_alice00001" });
-    await h.call("create_payment", { amount: 600, currency: "usd", customer: "cus_alice00001" });
-    const keys = posts(h.sent).map((s) => s.idempotency);
-    expect(keys[0]).toMatch(/^heel-[0-9a-f]{64}$/);
-    expect(keys[1]).toBe(keys[0]);
-    expect(keys[2]).not.toBe(keys[0]);
+    await h.call("create_payment", { amount: 500, currency: "usd", customer: "cus_alice00001" });
+    const writes = posts(h.sent);
+    expect(writes[0]?.idempotency).toMatch(/^heel-[0-9a-f-]{36}$/);
+    expect(writes[1]?.idempotency).not.toBe(writes[0]?.idempotency);
+    expect(h.sent.every((s) => s.version === "2026-10-28.endive")).toBe(true);
+  });
+
+  it("leaves a 424 unknown, since Stripe may have acted", async () => {
+    const h = setUp(SMALL_REFUNDS, fakeStripe({ status: 424 }));
+    expect(
+      (await h.call("create_payment", { amount: 100, currency: "usd", customer: "cus_alice00001" }))
+        .status,
+    ).toBe("upstream_outcome_unknown");
+  });
+
+  it("lists payments only for a named customer", async () => {
+    const h = setUp("rules:\n  - match: { action: stripe.read }\n    then: allow\n");
+    expect(await h.call("list_payments", {})).toMatchObject({ reason: "unsupported" });
+    expect((await h.call("list_payments", { customer: "cus_alice00001" })).status).toBe("allowed");
+  });
+
+  it("refuses a payment method that isn't the customer's", async () => {
+    const h = setUp(SMALL_REFUNDS);
+    expect(
+      await h.call("create_payment", {
+        amount: 100,
+        currency: "usd",
+        customer: "cus_alice00001",
+        payment_method: "pm_bobscard0001",
+        confirm: true,
+      }),
+    ).toMatchObject({ reason: "unsupported" });
+    expect(posts(h.sent)).toEqual([]);
+  });
+
+  it("makes a new email the recipients of a customer update", async () => {
+    const h = setUp(
+      "rules:\n  - match: { action: stripe.customer.update, recipients: { all_domain_in: [example.com] } }\n    then: allow\n",
+    );
+    expect(
+      (await h.call("update_customer", { customer: "cus_alice00001", email: "a@example.com" }))
+        .status,
+    ).toBe("allowed");
+    expect(
+      (await h.call("update_customer", { customer: "cus_alice00001", email: "a@evil.test" }))
+        .status,
+    ).toBe("denied");
   });
 
   it("denies a payment over the rule's amount", async () => {
