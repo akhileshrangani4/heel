@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import type { HttpArgs, HttpResponse } from "../definitions/http/definition.ts";
 import { HTTP_METHODS } from "../definitions/http/openapi.ts";
+import { type RestCall, type RestRequest, restMapFor } from "../definitions/http/rest.ts";
 import type { Logger } from "../log.ts";
 import type { HeelDb } from "../store/db.ts";
 import { findAccount } from "../store/directory.ts";
@@ -114,7 +115,8 @@ function respond(c: Context, result: PipelineResult): Response {
         NULL_BODY.has(upstream.status) ? null : Buffer.from(upstream.body, "base64"),
         {
           status: upstream.status,
-          headers: { ...upstream.headers, "heel-decision": "allow" },
+          // heel's own answers from the hide step (a hidden item) carry their own decision.
+          headers: { "heel-decision": "allow", ...upstream.headers },
         },
       );
     }
@@ -159,8 +161,13 @@ export async function handleHttpProxy(
     return c.json(refuse(400, "host_override").body, 400);
   }
   const account = findAccount(deps.db, agent.orgId, target.account);
-  // Someone else's account, or one that isn't an HTTP account, reads as unknown.
-  if (account === null || account.ownerId !== agent.ownerId || !isHttpProvider(account.provider)) {
+  const restMap = account === null ? undefined : restMapFor(account.provider);
+  // Someone else's account, or one with no REST surface, reads as unknown.
+  if (
+    account === null ||
+    account.ownerId !== agent.ownerId ||
+    (!isHttpProvider(account.provider) && restMap === undefined)
+  ) {
     return c.json(refuse(404, "unknown_endpoint").body, 404);
   }
   const method = c.req.method.toUpperCase();
@@ -181,6 +188,15 @@ export async function handleHttpProxy(
       "stripped the agent's credential headers",
     );
   }
+  if (restMap !== undefined) {
+    return builtInRest(c, agent, deps, account.alias, restMap, {
+      method,
+      path: target.path,
+      query: queryOf(url),
+      contentType: c.req.header("content-type"),
+      bytes,
+    });
+  }
   const contentType = c.req.header("content-type");
   const args: HttpArgs = {
     method: method as HttpArgs["method"],
@@ -197,5 +213,58 @@ export async function handleHttpProxy(
     args,
     runId: c.req.header("heel-run-id"),
   });
+  return respond(c, result);
+}
+
+/**
+ * A built-in provider's REST path (D7b): mapped to heel's native tool, run
+ * through the pipeline as that tool, answered with the tool's result as JSON.
+ * A path heel has no mapping for, or a body that isn't the JSON it expects,
+ * is refused as unsupported.
+ */
+async function builtInRest(
+  c: Context,
+  agent: AuthenticatedAgent,
+  deps: HttpProxyDeps,
+  alias: string,
+  map: (request: RestRequest) => RestCall | null,
+  request: {
+    method: string;
+    path: string;
+    query: Record<string, string | string[]>;
+    contentType: string | undefined;
+    bytes: Buffer | null;
+  },
+): Promise<Response> {
+  let json: unknown;
+  if (request.bytes !== null && request.bytes.length > 0) {
+    const type = (request.contentType ?? "").split(";")[0]?.trim().toLowerCase();
+    if (type !== "application/json") return c.json(refuse(400, "unsupported").body, 400);
+    try {
+      json = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(request.bytes));
+    } catch {
+      return c.json(refuse(400, "unsupported").body, 400);
+    }
+  }
+  const mapped = map({ method: request.method, path: request.path, query: request.query, json });
+  if (mapped === null) {
+    return c.json({ status: "denied", reason: "unsupported", rule: null }, 403, {
+      "heel-decision": "deny",
+    });
+  }
+  const result = await deps.pipeline.run({
+    agent,
+    surface: "http",
+    account: alias,
+    tool: mapped.tool,
+    args: mapped.args,
+    runId: c.req.header("heel-run-id"),
+  });
+  if (result.status === "allowed") {
+    return c.json(result.result as object, 200, { "heel-decision": "allow" });
+  }
+  if (result.status === "upstream_error") {
+    return c.json({ status: "upstream_error", upstreamStatus: result.upstreamStatus }, 502);
+  }
   return respond(c, result);
 }

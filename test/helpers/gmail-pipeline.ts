@@ -46,7 +46,7 @@ export function gmailPipeline(options: { owner: string; org?: string; judge?: Lo
     onHidden: (reason) => hidden.push(reason),
     ...(options.judge !== undefined && { looksLike: options.judge }),
   });
-  const { agentId } = addAgent(
+  const { agentId, token } = addAgent(
     t.db,
     { orgId: t.orgId, ownerId: t.ownerId, name: "inbox-bot" },
     new Date(),
@@ -60,5 +60,5 @@ export function gmailPipeline(options: { owner: string; org?: string; judge?: Lo
   };
   const call = (tool: string, args: Record<string, unknown> = {}) =>
     pipeline.run({ agent, surface: "mcp", account: "gmail-work", tool, args });
-  return { t, gmail, call, hidden };
+  return { t, gmail, call, hidden, pipeline, agent, token, logger };
 }
