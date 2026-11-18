@@ -36,6 +36,7 @@ import {
   type UserRole,
   users,
 } from "./schema.ts";
+import { accountApproverIds } from "./sharing.ts";
 
 export type ApprovalRow = typeof approvals.$inferSelect;
 export type StandingRow = typeof standingApprovals.$inferSelect;
@@ -158,6 +159,8 @@ export class SqliteApprovalStore implements ApprovalStore {
             ruleHash: rule.hash,
             callHash: () => hash,
             runId: call.runId,
+            account: call.account,
+            repo: call.repo,
           }),
         );
         return row === undefined ? null : { id: row.id };
@@ -226,10 +229,15 @@ export function approvalStatusForAgent(
   return row === undefined ? null : statusAt(row, now);
 }
 
-/** The user ids allowed to decide a request: the account's owner, or admins for an org ask. */
+/**
+ * The user ids allowed to decide a request (D13b; spec: Teams, "Approvers"):
+ * admins for an org ask; otherwise the account's approvers for the call's
+ * repo, its general approvers, or its owner. An admin who isn't one of them
+ * can't decide an account's ask.
+ */
 export function approverIds(
   db: HeelQuery,
-  row: Pick<ApprovalRow, "orgId" | "account" | "origin">,
+  row: Pick<ApprovalRow, "orgId" | "account" | "origin"> & { call: Pick<Call, "repo"> },
 ): string[] {
   if (row.origin === "org") {
     return db
@@ -239,31 +247,37 @@ export function approverIds(
       .all()
       .map((u) => u.id);
   }
-  // D13b adds per-account and per-repo approvers; until then the owner decides (spec: Teams).
-  const account = db
-    .select({ ownerId: accounts.ownerId })
-    .from(accounts)
-    .where(and(eq(accounts.orgId, row.orgId), eq(accounts.alias, row.account)))
-    .get();
-  return account === undefined ? [] : [account.ownerId];
+  return accountApproverIds(db, row.orgId, row.account, row.call.repo);
 }
 
 /** Requests this person may decide, newest first, including ones decided in the last day. */
 export function listApprovalsFor(db: HeelQuery, approver: Approver, now: Date): ApprovalRecord[] {
+  const approversByScope = new Map<string, string[]>();
   const since = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-  return db
-    .select({
-      row: approvals,
-      agentName: agents.name,
-      decidedByName: userNameOf(approvals.decidedBy),
-    })
-    .from(approvals)
-    .innerJoin(agents, eq(agents.id, approvals.agentId))
-    .where(and(eq(approvals.orgId, approver.orgId), gt(approvals.expiresAt, since)))
-    .orderBy(desc(approvals.createdAt), desc(sql`approvals.rowid`))
-    .all()
-    .filter(({ row }) => approverIds(db, row).includes(approver.userId))
-    .map((found) => ({ ...found, status: statusAt(found.row, now) }));
+  return (
+    db
+      .select({
+        row: approvals,
+        agentName: agents.name,
+        decidedByName: userNameOf(approvals.decidedBy),
+      })
+      .from(approvals)
+      .innerJoin(agents, eq(agents.id, approvals.agentId))
+      .where(and(eq(approvals.orgId, approver.orgId), gt(approvals.expiresAt, since)))
+      .orderBy(desc(approvals.createdAt), desc(sql`approvals.rowid`))
+      .all()
+      // One approver lookup per account and repo, not per request.
+      .filter(({ row }) => {
+        const key = `${row.origin} ${row.account} ${row.call.repo ?? ""}`;
+        let ids = approversByScope.get(key);
+        if (ids === undefined) {
+          ids = approverIds(db, row);
+          approversByScope.set(key, ids);
+        }
+        return ids.includes(approver.userId);
+      })
+      .map((found) => ({ ...found, status: statusAt(found.row, now) }))
+  );
 }
 
 // ── deciding ────────────────────────────────────────────────────────────────
@@ -419,6 +433,8 @@ function grantStanding(
       scope: choice.scope,
       callHash: choice.scope === "exact_call" ? row.callHash : null,
       runId: choice.scope === "run" ? row.runId : null,
+      account: row.account,
+      repo: row.call.repo ?? null,
       rule: row.rule,
       ruleHash: row.ruleHash,
       createdBy: approver.userId,

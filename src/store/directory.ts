@@ -28,9 +28,8 @@ const ACCOUNT_RECORD = {
 };
 
 /**
- * The accounts a user owns, by alias. An agent may use only its owner's
- * accounts (until accounts can be shared, D13b), so this is also what an
- * agent may see listed.
+ * The accounts a user owns, by alias: what they manage. What their agents
+ * may use also includes accounts shared with them (`accountsUsableBy`).
  */
 export function accountsOwnedBy(
   db: HeelDb | HeelTx,

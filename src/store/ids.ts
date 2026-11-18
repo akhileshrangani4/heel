@@ -14,6 +14,8 @@ export const ID_PREFIXES = {
   delivery: "dlv",
   oauthClient: "cli",
   grant: "grt",
+  share: "shr",
+  approver: "apv",
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;

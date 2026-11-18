@@ -152,6 +152,7 @@ export function userForIdentity(
         .set({
           role,
           groups: identity.groups,
+          groupsSyncedAt: now,
           ...(existing.email === null && identity.email !== null ? { email: identity.email } : {}),
         })
         .where(eq(users.id, existing.id))
@@ -177,6 +178,7 @@ export function userForIdentity(
         role,
         email: identity.email,
         groups: identity.groups,
+        groupsSyncedAt: now,
         createdAt: now,
       })
       .run();

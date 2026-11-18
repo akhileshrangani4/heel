@@ -1,7 +1,10 @@
 import { Hono } from "hono";
 import { standingState } from "../../core/approvals.ts";
 import type { RuleSet } from "../../core/rules/evaluate.ts";
+import type { HeelQuery } from "../../gateway/pipeline/ports.ts";
 import { listStanding, revokeStanding, type StandingRecord } from "../../store/approvals.ts";
+import { findAccount } from "../../store/directory.ts";
+import { accountApproverIds } from "../../store/sharing.ts";
 import {
   formField,
   type HumanPlaneDeps,
@@ -32,8 +35,18 @@ function liveRuleHashes(set: RuleSet | null): Set<string> {
   return new Set(files.flatMap((file) => file.rules.map((rule) => rule.hash)));
 }
 
-function visibleTo(session: SessionView, record: StandingRecord): boolean {
-  return session.role === "admin" || record.ownerId === session.userId;
+/**
+ * Who sees and may revoke a standing approval: admins, the agent's owner,
+ * the person who granted it, and, on a shared account, that account's
+ * owner and approvers (D13b), since it answers asks they decide.
+ */
+function visibleTo(db: HeelQuery, session: SessionView, record: StandingRecord): boolean {
+  if (session.role === "admin" || record.ownerId === session.userId) return true;
+  if (record.row.createdBy === session.userId) return true;
+  if (findAccount(db, session.orgId, record.account)?.ownerId === session.userId) return true;
+  return accountApproverIds(db, session.orgId, record.account, record.call.repo).includes(
+    session.userId,
+  );
 }
 
 export function standingRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
@@ -45,7 +58,7 @@ export function standingRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     const now = deps.now();
     const live = liveRuleHashes(deps.rules.set);
     const rows: StandingRow[] = listStanding(deps.db, deps.orgId)
-      .filter((record) => visibleTo(session, record))
+      .filter((record) => visibleTo(deps.db, session, record))
       .map((record) => ({
         id: record.row.id,
         agent: record.agentName,
@@ -84,7 +97,7 @@ export function standingRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     const session = c.get("session");
     const id = (await formField(c, "id")) ?? "";
     const record = listStanding(deps.db, deps.orgId).find((r) => r.row.id === id);
-    if (record === undefined || !visibleTo(session, record)) {
+    if (record === undefined || !visibleTo(deps.db, session, record)) {
       return c.text("Refused: no such standing approval.", 404);
     }
     revokeStanding(deps.db, deps.orgId, id, session.userId, deps.now());

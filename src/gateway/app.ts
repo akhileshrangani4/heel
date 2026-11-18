@@ -3,6 +3,7 @@ import type { Logger } from "../log.ts";
 import { approvalStatusForAgent } from "../store/approvals.ts";
 import type { HeelDb } from "../store/db.ts";
 import { findAccount } from "../store/directory.ts";
+import { mayUseAccount } from "../store/sharing.ts";
 import { requireServedHost } from "./allowed-hosts.ts";
 import { type HttpProxyDeps, handleHttpProxy } from "./http-proxy.ts";
 import type { McpSurface } from "./mcp/server.ts";
@@ -109,7 +110,7 @@ export function createAgentApp(deps: AgentAppDeps): Hono<AgentPlaneEnv> {
     const alias = c.req.param("account");
     const account = findAccount(deps.db, agent.orgId, alias);
     // Someone else's account reads as unknown, so aliases can't be probed.
-    if (account === null || account.ownerId !== agent.ownerId) {
+    if (account === null || !mayUseAccount(deps.db, account, agent.ownerId)) {
       return c.json({ status: "denied", reason: "unknown_endpoint", rule: null }, 404);
     }
     return mcp.serve(c.req.raw, agent, { kind: "account", alias });

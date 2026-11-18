@@ -32,7 +32,13 @@ export function enqueueApprovalNotifications(
   input: { orgId: string; approvalId: string; channels: ReadonlySet<NotifyChannel>; now: Date },
 ): number {
   const approval = db
-    .select({ orgId: approvals.orgId, account: approvals.account, origin: approvals.origin })
+    .select({
+      orgId: approvals.orgId,
+      account: approvals.account,
+      origin: approvals.origin,
+      // The call decides who is asked: per-repo approvers route by its repo.
+      call: approvals.call,
+    })
     .from(approvals)
     .where(and(eq(approvals.orgId, input.orgId), eq(approvals.id, input.approvalId)))
     .get();
