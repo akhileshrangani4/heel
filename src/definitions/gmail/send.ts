@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Call } from "../../core/call.ts";
-import { normalizeAddress, parseAddressList } from "../../core/rules/address.ts";
+import { parseAddressList } from "../../core/rules/address.ts";
 import {
   Address,
   Addresses,
