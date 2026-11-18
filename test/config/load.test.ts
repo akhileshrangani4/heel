@@ -215,4 +215,47 @@ describe("oidc and audit sections", () => {
     writeConfig("audit:\n  siem:\n    url: http://siem.example.com/ingest\n");
     expect(validationIssues(load)[0]?.message).toMatch(/https/);
   });
+
+  it("turns on web push alone by default, keyed in HEEL_HOME, with the public URL as contact", () => {
+    const config = load();
+    expect(config.notify).toEqual({
+      webPush: { keyFile: join(home, "vapid.json"), subject: config.publicUrl.origin },
+      email: null,
+      slack: null,
+    });
+  });
+
+  it("resolves notify.email and notify.slack with their secret files", () => {
+    writeConfig(
+      [
+        "notify:",
+        "  web_push:",
+        "    subject: mailto:ops@example.com",
+        "  email:",
+        "    host: smtp.example.com",
+        "    username: heel",
+        "    password_file: smtp-password",
+        '    from: "heel <heel@example.com>"',
+        "  slack:",
+        "    token_file: slack-token",
+      ].join("\n"),
+    );
+    expect(load().notify).toEqual({
+      webPush: { keyFile: join(home, "vapid.json"), subject: "mailto:ops@example.com" },
+      email: {
+        host: "smtp.example.com",
+        port: 587,
+        tls: false,
+        username: "heel",
+        passwordFile: join(home, "smtp-password"),
+        from: "heel <heel@example.com>",
+      },
+      slack: { tokenFile: join(home, "slack-token") },
+    });
+  });
+
+  it("rejects a web push contact that isn't mailto: or https:", () => {
+    writeConfig("notify:\n  web_push:\n    subject: ops@example.com\n");
+    expect(validationIssues(load)[0]?.message).toMatch(/mailto/);
+  });
 });

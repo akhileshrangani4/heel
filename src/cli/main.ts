@@ -38,6 +38,9 @@ export const USAGE = `usage:
   heel user enroll <user>                 print a one-time passkey enrollment link
                                           (valid 15 minutes; also adds a device or
                                           recovers a lost passkey)
+  heel user email <user> <address>|--clear
+                                          where email and Slack notifications reach
+                                          this person
   heel pause --all | --agent <name> | --account <alias> | --owner <user>
                                           stop calls in that scope at once; resuming
                                           needs a passkey on the approval page
@@ -282,7 +285,34 @@ async function accountCommand(args: string[], io: CliIo): Promise<number> {
   return EXIT.ok;
 }
 
+/** `heel user email <user> <address>` or `heel user email <user> --clear`. */
+async function userEmailCommand(args: string[], io: CliIo): Promise<number> {
+  const { values, positionals } = parseOrUsage(() =>
+    parseArgs({
+      args,
+      options: { ...CONFIG_OPTION, clear: { type: "boolean" } },
+      allowPositionals: true,
+      strict: true,
+    }),
+  );
+  const [, name, address, ...extra] = positionals;
+  if (name === undefined) throw new UsageError("missing user name");
+  if (extra.length > 0 || (address === undefined) === (values.clear !== true)) {
+    throw new UsageError("give either an email address or --clear");
+  }
+  const config = configFrom(io, values.config);
+  await admin(config, { method: "user.email", params: { name, email: address ?? null } });
+  io.stdout.write(
+    address === undefined
+      ? `Cleared the email for "${name}".\n`
+      : `Notifications for "${name}" go to ${address} (email and Slack, when configured).\n`,
+  );
+  return EXIT.ok;
+}
+
 async function userCommand(args: string[], io: CliIo): Promise<number> {
+  // Each subcommand has its own options, so dispatch before parsing them.
+  if (args.find((arg) => !arg.startsWith("-")) === "email") return userEmailCommand(args, io);
   const { values, positionals } = parseOrUsage(() =>
     parseArgs({ args, options: CONFIG_OPTION, allowPositionals: true, strict: true }),
   );

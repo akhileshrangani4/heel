@@ -1,8 +1,9 @@
 import type { Logger } from "../log.ts";
 
 /**
- * Alerts for the install's admins (spec: Fail-closed behavior). Until the
- * notification channels land (D4b), `heel serve` writes them to the log.
+ * Alerts for the install's admins (spec: Fail-closed behavior). For now
+ * `heel serve` writes them to the log; approval notifications (notifier.ts)
+ * don't carry them yet.
  */
 export type AdminAlert =
   /** The SIEM sink is behind the audit log ("The SIEM sink is down"). */
@@ -27,7 +28,7 @@ export interface AdminAlerts {
   raise(alert: AdminAlert): void;
 }
 
-/** Admin alerts as log lines: the channel until D4b's notifications exist. */
+/** Admin alerts as log lines. */
 export function logAdminAlerts(log: Logger): AdminAlerts {
   return {
     raise: (alert) => {

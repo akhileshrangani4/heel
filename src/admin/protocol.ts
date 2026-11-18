@@ -60,6 +60,14 @@ export const AdminRequestSchema = z.discriminatedUnion("method", [
     params: z.strictObject({ name: z.string().min(1).max(128) }),
   }),
   z.strictObject({
+    /** `heel user email`: where email and Slack notifications reach a person; null clears it. */
+    method: z.literal("user.email"),
+    params: z.strictObject({
+      name: z.string().min(1).max(128),
+      email: z.email().max(320).nullable(),
+    }),
+  }),
+  z.strictObject({
     /**
      * `heel pause`. Pausing only stops calls, so the admin socket may do it.
      * There is deliberately no `resume` method: resuming needs a fresh

@@ -6,7 +6,6 @@ import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { describe, expect, it } from "vitest";
 import { appendAudit } from "../../src/store/audit.ts";
 import { MIGRATIONS_DIR, openStore } from "../../src/store/db.ts";
-import { ensureInstall, ensureLocalOwner } from "../../src/store/install.ts";
 import * as schema from "../../src/store/schema.ts";
 import { auditLog } from "../../src/store/schema.ts";
 import { tempDir } from "../helpers/store.ts";
@@ -49,11 +48,18 @@ describe("migration 0003/0004: audit_log rebuild", () => {
     const path = join(tempDir(), "heel.db");
     const old = new Database(path);
     old.pragma("foreign_keys = ON");
-    // Only the orgs and users tables are touched before the upgrade, and 0002 has both.
     const oldDb = drizzle(old, { schema });
     migrate(oldDb, { migrationsFolder: migrationsThrough("0002_siem_cursors") });
-    const { orgId } = ensureInstall(oldDb, new Date());
-    const ownerId = ensureLocalOwner(oldDb, orgId, new Date());
+    // The org and owner are written as 0002's tables had them: today's code would
+    // write columns later migrations add (such as users.email, from 0008).
+    const orgId = "org_old";
+    const ownerId = "usr_old";
+    old.prepare("INSERT INTO orgs (id, name, created_at) VALUES (?, 'default', 0)").run(orgId);
+    old
+      .prepare(
+        "INSERT INTO users (id, org_id, name, role, created_at) VALUES (?, ?, 'owner', 'admin', 0)",
+      )
+      .run(ownerId, orgId);
     for (const at of [1, 2, 3]) insertOldRow(old, orgId, ownerId, at);
     const before = old.prepare("SELECT id, at, kind FROM audit_log ORDER BY id").all();
     old.close();
