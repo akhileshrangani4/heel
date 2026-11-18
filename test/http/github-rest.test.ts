@@ -164,3 +164,69 @@ describe("GitHub's REST paths", () => {
     ).toBeNull();
   });
 });
+
+describe("github_api over MCP", () => {
+  function mcp(owner: string) {
+    const t = testStore();
+    const gh = fakeGitHub();
+    const accountId = addAccount(t, "github", "github");
+    const vault = Vault.open(t.db, { bytes: randomBytes(KEY_BYTES), source: "test" });
+    vault.put(accountId, { type: "static", value: TOKEN });
+    const { logger } = captureLogger();
+    const pipeline = createPipeline({
+      db: t.db,
+      rules: { set: compileRules({ owner }) },
+      definitions: definitionRegistry({
+        upstream: new UpstreamPool({ vault: null, log: logger }),
+        gmail: null,
+        github: { vault, fetch: gh.fetch },
+      }),
+      pauses: new SqlitePauseStore(),
+      approvals: new SqliteApprovalStore(),
+      log: logger,
+      alerts: { raise: () => {} },
+      watch: false,
+    });
+    const { agentId } = addAgent(
+      t.db,
+      { orgId: t.orgId, ownerId: t.ownerId, name: "bot" },
+      new Date(),
+    );
+    const agent = {
+      orgId: t.orgId,
+      agentId,
+      agentName: "bot",
+      ownerId: t.ownerId,
+      tokenId: "tok_1",
+    };
+    const call = (args: Record<string, unknown>) =>
+      pipeline.run({ agent, surface: "mcp", account: "github", tool: "github_api", args });
+    return { call, sent: gh.sent };
+  }
+
+  const NAMED =
+    'rules:\n  - match: { action: github.api, args.path: { matches: "/repos/acme/web/.*" } }\n    then: allow\n';
+
+  it.each([
+    "/repos/acme/web/../../../user/keys",
+    "/repos/acme/web/%2e%2e/%2e%2e/%2e%2e/graphql",
+    "/repos/acme/web//hooks",
+    "/graphql",
+    "/repositories/123/pulls/1/merge",
+    "/repos/acme/web/pulls/12/merge",
+    "/repos/acme/web/pulls/01/merge",
+    "/repos/acme/web/contents/.github/workflows/x.yml",
+  ])("refuses %s", async (path) => {
+    const h = mcp(NAMED);
+    const result = await h.call({ method: "PUT", path, query: {} });
+    expect(result).toMatchObject({ status: "denied", reason: "unsupported" });
+    expect(h.sent).toEqual([]);
+  });
+
+  it("isn't named by a rule on a tool called api", async () => {
+    const h = mcp("rules:\n  - match: { tool: api }\n    then: allow\n");
+    expect(
+      (await h.call({ method: "POST", path: "/repos/acme/web/hooks", query: {} })).status,
+    ).toBe("denied");
+  });
+});

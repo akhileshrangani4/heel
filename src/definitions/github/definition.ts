@@ -3,6 +3,7 @@ import { z } from "zod";
 import { type Definition, UpstreamError } from "../../gateway/pipeline/ports.ts";
 import type { AccountRecord } from "../../store/directory.ts";
 import type { Vault } from "../../vault/vault.ts";
+import { githubRest } from "../http/rest.ts";
 import { listedTools, type MailTool, mailDefinition } from "../mail/tool.ts";
 import type { FetchFn } from "../sign-in.ts";
 import { GitHubApi } from "./api.ts";
@@ -427,10 +428,17 @@ export function isMergeAction(action: string | undefined): boolean {
  * `github.api` (spec: GitHub, "Actions"): a REST call heel has no mapping
  * for, sent to api.github.com as it is. heel can't tell what it does, so it
  * has no `kind` or `repo`, and it is persistence: only a rule naming
- * `github.api` (or this tool) literally lets it through; a broad allow never
- * does (I-70). It isn't listed over MCP.
+ * `github.api` (or the tool `github_api`) literally lets it through; a broad
+ * allow never does (I-70). It isn't listed over MCP.
+ *
+ * - The path must be canonical (no `%`, no empty, `.` or `..` segment) and
+ *   reach GitHub unchanged, so what rules see in `args.path` is what runs.
+ * - Anything a mapped route covers (merges, contents, issues, pull requests,
+ *   check runs, in any spelling heel can recognize), `/repositories/...` and
+ *   GraphQL are refused: those have their own actions and checks, and
+ *   `github.api` must never be a way around them.
  */
-const api = tool({
+const github_api = tool({
   description: "A raw GitHub REST call.",
   args: z.strictObject({
     method: z.enum(["GET", "POST", "PATCH", "PUT", "DELETE"]),
@@ -439,7 +447,10 @@ const api = tool({
     body: z.unknown().optional(),
   }),
   readOnly: false,
-  prepare: async (_box, args) => ({ args, action: "github.api", persistence: true }),
+  prepare: async (_box, args) =>
+    rawPathProblem(args.method, args.path, args.query, args.body)
+      ? { deny: "unsupported" }
+      : { args, action: "github.api", persistence: true },
   run: (box, a, signal) =>
     box.client.request(a.method, a.path, signal, {
       query: a.query,
@@ -451,7 +462,33 @@ const api = tool({
 export const GITHUB_TOOLS: readonly Tool[] = listedTools(TOOLS);
 
 /** Every tool heel runs, including `api`, which only the REST proxy uses. */
-const ALL_TOOLS: Record<string, GitHubTool> = { ...TOOLS, api };
+const ALL_TOOLS: Record<string, GitHubTool> = { ...TOOLS, github_api };
+
+/** Paths a mapped tool or another action covers, in spellings the REST map may not recognize. */
+const COVERED = [
+  /^\/graphql(\/|$)/i,
+  /^\/repositories\//i,
+  /^\/repos\/[^/]+\/[^/]+\/(pulls|issues|contents|commits|merges|git)(\/|$)/i,
+];
+
+/** Whether a raw call can't be sent as `github.api`: not canonical, or covered elsewhere. */
+function rawPathProblem(
+  method: string,
+  path: string,
+  query: Record<string, string>,
+  body: unknown,
+): boolean {
+  if (path.includes("%") || path.includes("\\")) return true;
+  const segments = path.split("/").slice(1);
+  if (segments.some((s) => s === "" || s === "." || s === "..")) return true;
+  if (new URL(path, "https://api.github.com").pathname !== path) return true;
+  if (COVERED.some((pattern) => pattern.test(path))) return true;
+  // A path the REST map would turn into a native tool is never raw.
+  return (
+    githubRest({ method, path, query, ...(body === undefined ? {} : { json: body }) })?.tool !==
+    "github_api"
+  );
+}
 
 export function githubDefinition(account: AccountRecord, deps: GitHubDeps): Definition {
   const token = async () => (await deps.vault.accessToken(account.id)).reveal();

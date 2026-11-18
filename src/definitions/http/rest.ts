@@ -307,7 +307,7 @@ const GITHUB_ROUTES: readonly GitHubRoute[] = [
       }
       let content: string;
       try {
-        content = new TextDecoder("utf-8", { fatal: true }).decode(
+        content = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(
           Buffer.from(b["content"], "base64"),
         );
       } catch {
@@ -357,7 +357,7 @@ export function githubRest(request: RestRequest): RestCall | null {
   }
   if (!["GET", "POST", "PATCH", "PUT", "DELETE"].includes(request.method)) return null;
   return {
-    tool: "api",
+    tool: "github_api",
     args: {
       method: request.method,
       path: request.path,
