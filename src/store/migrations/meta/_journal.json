@@ -36,6 +36,20 @@
       "when": 1794609405762,
       "tag": "0004_audit_append_only_restore",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1794613190367,
+      "tag": "0005_passkeys_sessions_owner_pause",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1794613190956,
+      "tag": "0006_audit_append_only_restore_owner_pause",
+      "breakpoints": true
     }
   ]
 }

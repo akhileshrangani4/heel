@@ -55,6 +55,34 @@ export const AdminRequestSchema = z.discriminatedUnion("method", [
   }),
   z.strictObject({ method: z.literal("account.list") }),
   z.strictObject({
+    /** `heel user enroll`: a one-time passkey enrollment link (bootstrap and recovery, Q-N2). */
+    method: z.literal("user.enroll"),
+    params: z.strictObject({ name: z.string().min(1).max(128) }),
+  }),
+  z.strictObject({
+    /**
+     * `heel pause`. Pausing only stops calls, so the admin socket may do it.
+     * There is deliberately no `resume` method: resuming needs a fresh
+     * passkey assertion on the approval page (Q-N5).
+     */
+    method: z.literal("pause"),
+    params: z.discriminatedUnion("scope", [
+      z.strictObject({ scope: z.literal("global") }),
+      z.strictObject({
+        scope: z.enum(["agent", "owner", "account"]),
+        /** The agent's name, the owner's user name, or the account alias. */
+        name: z.string().min(1).max(128),
+      }),
+    ]),
+  }),
+  z.strictObject({ method: z.literal("pause.list") }),
+  z.strictObject({
+    /** `heel approvals revoke <id>`: revoking a standing approval only tightens. */
+    method: z.literal("standing.revoke"),
+    params: z.strictObject({ id: z.string().min(1).max(64) }),
+  }),
+  z.strictObject({ method: z.literal("standing.list") }),
+  z.strictObject({
     method: z.literal("audit.export"),
     params: z
       .strictObject({

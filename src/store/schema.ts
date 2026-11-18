@@ -10,7 +10,13 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 import { AUDIT_KINDS } from "../core/audit.ts";
-import { PAUSE_SCOPES, type PauseScope, type RuleRef, type Surface } from "../core/call.ts";
+import {
+  type Call,
+  PAUSE_SCOPES,
+  type PauseScope,
+  type RuleRef,
+  type Surface,
+} from "../core/call.ts";
 
 /**
  * heel's SQLite schema (spec: Architecture; Teams, "Data model"). Every row
@@ -213,7 +219,7 @@ export const approvals = sqliteTable(
     account: text("account").notNull(),
     tool: text("tool").notNull(),
     /** The normalized call, exactly as it will run if approved. */
-    call: text("call", { mode: "json" }).$type<Record<string, unknown>>().notNull(),
+    call: text("call", { mode: "json" }).$type<Call>().notNull(),
     origin: text("origin", { enum: APPROVAL_ORIGINS }).notNull(),
     rule: text("rule", { mode: "json" }).$type<RuleRef>().notNull(),
     /** Content hash of the rule that asked; a re-run is satisfied only by an ask from it. */
@@ -287,7 +293,140 @@ export const pauses = sqliteTable(
     pausedBy: text("paused_by").notNull(),
     pausedAt: integer("paused_at", { mode: "timestamp_ms" }).notNull(),
   },
-  (t) => [primaryKey({ columns: [t.orgId, t.scope, t.target] })],
+  (t) => [
+    primaryKey({ columns: [t.orgId, t.scope, t.target] }),
+    check("pauses_scope", sql`"scope" IN (${sqlList(PAUSE_SCOPES)})`),
+    // The global pause has no target; every other scope names one.
+    check("pauses_target", sql`("scope" = 'global') = ("target" = '')`),
+  ],
+);
+
+// ── passkeys and sessions ───────────────────────────────────────────────────
+
+/**
+ * Enrolled WebAuthn credentials (spec: The approval page). Enrollment runs
+ * only from a one-time link printed over the admin socket (Q-N2).
+ */
+export const passkeys = sqliteTable(
+  "passkeys",
+  {
+    /** The credential id, base64url, as the authenticator reports it. */
+    id: text("id").primaryKey(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    /** COSE public key. */
+    publicKey: blob("public_key", { mode: "buffer" }).notNull(),
+    /** Signature counter; an assertion that doesn't advance a nonzero counter is refused. */
+    counter: integer("counter").notNull(),
+    transports: text("transports", { mode: "json" }).$type<string[]>().notNull(),
+    createdAt: createdAt(),
+    lastUsedAt: integer("last_used_at", { mode: "timestamp_ms" }),
+  },
+  (t) => [index("passkeys_user").on(t.userId)],
+);
+
+export const CHALLENGE_PURPOSES = ["enroll", "sign_in", "decide", "resume"] as const;
+export type ChallengePurpose = (typeof CHALLENGE_PURPOSES)[number];
+
+/**
+ * One-time WebAuthn challenges. The challenge bytes are a hash over a random
+ * nonce and the canonical `binding`, so an assertion proves the person saw
+ * and confirmed exactly that decision (I-56). Each is used at most once.
+ */
+export const webauthnChallenges = sqliteTable(
+  "webauthn_challenges",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    /** Who must answer; null for sign-in, where the passkey names the person. */
+    userId: text("user_id").references(() => users.id),
+    purpose: text("purpose", { enum: CHALLENGE_PURPOSES }).notNull(),
+    /** base64url challenge the authenticator signs. */
+    challenge: text("challenge").notNull(),
+    /** What the assertion authorizes, e.g. `{ intent, approvalId, callHash }`. */
+    binding: text("binding", { mode: "json" }).$type<Record<string, string>>().notNull(),
+    createdAt: createdAt(),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    usedAt: integer("used_at", { mode: "timestamp_ms" }),
+  },
+  (t) => [
+    uniqueIndex("webauthn_challenges_challenge").on(t.challenge),
+    index("webauthn_challenges_expires").on(t.expiresAt),
+  ],
+);
+
+/** One-time enrollment links from `heel user enroll` (Q-N2); valid 15 minutes. */
+export const enrollments = sqliteTable(
+  "enrollments",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    /** SHA-256 of the link token; the token itself is shown once and never stored. */
+    tokenHash: text("token_hash").notNull(),
+    createdAt: createdAt(),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    usedAt: integer("used_at", { mode: "timestamp_ms" }),
+  },
+  (t) => [uniqueIndex("enrollments_token_hash").on(t.tokenHash)],
+);
+
+export const SESSION_METHODS = ["passkey", "oidc"] as const;
+export type SessionMethod = (typeof SESSION_METHODS)[number];
+
+/**
+ * Human-plane sessions, at most 12 h (spec: Teams). A session lets a person
+ * see requests, pause and revoke; it never decides anything on its own.
+ */
+export const sessions = sqliteTable(
+  "sessions",
+  {
+    /** SHA-256 of the cookie value; the cookie itself is never stored. */
+    id: text("id").primaryKey(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    method: text("method", { enum: SESSION_METHODS }).notNull(),
+    /** Echoed by every plain form post (pause, revoke). */
+    csrfToken: text("csrf_token").notNull(),
+    createdAt: createdAt(),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    endedAt: integer("ended_at", { mode: "timestamp_ms" }),
+  },
+  (t) => [index("sessions_user").on(t.userId)],
+);
+
+// ── notifications ───────────────────────────────────────────────────────────
+
+/** Web push subscriptions from the installable approval page (spec: Notifications). */
+export const pushSubscriptions = sqliteTable(
+  "push_subscriptions",
+  {
+    endpoint: text("endpoint").primaryKey(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("push_subscriptions_user").on(t.userId)],
 );
 
 // ── audit ───────────────────────────────────────────────────────────────────

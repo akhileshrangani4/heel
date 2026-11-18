@@ -9,6 +9,8 @@ export const ID_PREFIXES = {
   credential: "cred",
   approval: "apr",
   standingApproval: "sta",
+  challenge: "chl",
+  enrollment: "enr",
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;
