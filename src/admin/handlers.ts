@@ -164,7 +164,18 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
         publicUrl: deps.publicUrl,
         now,
       });
-      return adminOk({ url: enrollment.url, expiresAt: enrollment.expiresAt.toISOString() });
+      // On a team install, say whose IdP identity this name is, so the admin enrolls the right person.
+      const subject =
+        db
+          .select({ subject: users.oidcSubject })
+          .from(users)
+          .where(and(eq(users.orgId, orgId), eq(users.name, request.params.name)))
+          .get()?.subject ?? null;
+      return adminOk({
+        url: enrollment.url,
+        expiresAt: enrollment.expiresAt.toISOString(),
+        subject,
+      });
     }
     case "user.email": {
       const { name, email } = request.params;

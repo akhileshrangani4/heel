@@ -10,6 +10,7 @@ import { SiemSink } from "./audit/siem.ts";
 import { SandboxedCodeWorker } from "./codemode/sandboxed.ts";
 import { rulesPaths } from "./config/rules.ts";
 import { type ReloadOutcome, RulesHolder, watchRules } from "./config/rules-reload.ts";
+import type { OidcConfig } from "./config/schema.ts";
 import { type HeelConfig, humanPlaneUrlProblem, type ListenAddress } from "./config/schema.ts";
 import { formatYamlIssue } from "./config/yaml.ts";
 import {
@@ -40,6 +41,7 @@ import { SqliteApprovalStore } from "./store/approvals.ts";
 import { type HeelDb, openStore } from "./store/db.ts";
 import { ensureInstall, ensureLocalOwner } from "./store/install.ts";
 import { SqlitePauseStore } from "./store/pauses.ts";
+import { OidcClient, oidcSettings } from "./teams/oidc.ts";
 import { loadMasterKey, MasterKeyError } from "./vault/key.ts";
 import type { RefresherLookup } from "./vault/refresh.ts";
 import { loadSecret } from "./vault/secret-file.ts";
@@ -331,6 +333,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         upstreamOAuth: vault === null ? null : { signIns: upstreamSignIns, vault },
         watchFallback: watch,
         providerClients,
+        oidc: teamSignIn(config.oidc, options.env, now),
         hiddenCounts: () => hideCounts.snapshot(),
         now,
       });
@@ -476,4 +479,31 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
     }
     throw error;
   }
+}
+
+/**
+ * Team sign-in (D13b): the IdP client is discovered on first use, so heel
+ * starts even while the IdP is unreachable; a failed discovery is retried on
+ * the next sign-in. The client secret is read here, at boot, so a missing or
+ * loosely permissioned secret file stops `heel serve` instead of quietly
+ * signing in as a public client.
+ */
+function teamSignIn(
+  config: OidcConfig | null,
+  env: Readonly<Record<string, string | undefined>>,
+  now: () => Date,
+): { client: () => Promise<OidcClient>; name: string } | null {
+  if (config === null) return null;
+  const settings = oidcSettings(config, env);
+  let client: Promise<OidcClient> | null = null;
+  return {
+    name: config.issuer.hostname,
+    client: () => {
+      client ??= OidcClient.discover(settings, { now }).catch((error: unknown) => {
+        client = null;
+        throw error;
+      });
+      return client;
+    },
+  };
 }

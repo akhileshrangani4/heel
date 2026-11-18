@@ -9,6 +9,7 @@ import type { PauseStore } from "../gateway/pipeline/ports.ts";
 import type { Logger } from "../log.ts";
 import type { SqliteApprovalStore } from "../store/approvals.ts";
 import type { HeelDb } from "../store/db.ts";
+import type { OidcClient } from "../teams/oidc.ts";
 import type { Vault } from "../vault/vault.ts";
 import type { Passkeys } from "./passkeys.ts";
 import {
@@ -54,6 +55,11 @@ export interface HumanPlaneDeps {
    * store, vault and fetch.
    */
   providerClients: { google: GoogleClient | null; microsoft: MicrosoftClient | null };
+  /**
+   * Team sign-in (D13b): the IdP's client, discovered on first use, and the
+   * name the sign-in page shows. Null on single-user installs.
+   */
+  oidc?: { client: () => Promise<OidcClient>; name: string } | null;
   /** `heel serve --watch`: rows with no stored mode behave as shadow (A3). */
   watchFallback: boolean;
   /** Messages hidden from agents since heel started, by reason (A5, I-44); absent in tests. */
@@ -74,7 +80,11 @@ export function viewerOf(session: SessionView): Viewer {
 }
 
 /** Renders a full page. Every human-plane page goes through `page()`, so all share one layout. */
-export function renderPage(c: Context, props: PageProps, status: 200 | 404 = 200): Response {
+export function renderPage(
+  c: Context,
+  props: PageProps,
+  status: 200 | 400 | 403 | 404 | 503 = 200,
+): Response {
   return c.html(toHtmlString(page(props)), status);
 }
 
