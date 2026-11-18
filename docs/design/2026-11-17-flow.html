@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>heel call flow</title>
+<style>
+  :root {
+    --built: var(--foreground);
+    --pr: var(--warning);
+    --todo: var(--muted-foreground);
+  }
+  figure { margin: 0; }
+  svg { width: 100%; height: auto; display: block; font-family: var(--font-sans); }
+  .box { fill: var(--card); stroke-width: 1.4; }
+  .built { stroke: var(--border); }
+  .pr { stroke: var(--pr); stroke-dasharray: 6 4; }
+  .todo { stroke: var(--todo); stroke-dasharray: 2 3; fill: transparent; }
+  .tx { stroke: var(--primary); stroke-width: 1.8; }
+  .t1 { font-size: 12.5px; font-weight: 600; fill: var(--foreground); }
+  .t2 { font-size: 10.5px; fill: var(--muted-foreground); }
+  .todo-text .t1 { fill: var(--muted-foreground); }
+  .num { font-size: 10px; font-weight: 700; fill: var(--muted-foreground); }
+  .edge { stroke: var(--muted-foreground); stroke-width: 1.2; fill: none; }
+  .edge-strong { stroke: var(--info); stroke-width: 1.6; fill: none; }
+  .label { font-size: 10px; fill: var(--muted-foreground); }
+  .label-strong { font-size: 10.5px; font-weight: 600; fill: var(--info); }
+  .col { font-size: 10px; font-weight: 700; letter-spacing: .06em; fill: var(--muted-foreground); text-transform: uppercase; }
+  .pill-text { font-size: 10.5px; font-weight: 600; }
+  .deny { fill: color-mix(in srgb, var(--destructive) 14%, transparent); stroke: var(--destructive); }
+  .deny-t { fill: var(--destructive); }
+  .pause { fill: color-mix(in srgb, var(--warning) 14%, transparent); stroke: var(--warning); }
+  .pause-t { fill: var(--warning); }
+  .pend { fill: color-mix(in srgb, var(--info) 14%, transparent); stroke: var(--info); }
+  .pend-t { fill: var(--info); }
+  .ok { fill: color-mix(in srgb, var(--success) 14%, transparent); stroke: var(--success); }
+  .ok-t { fill: var(--success); }
+  .audit { fill: color-mix(in srgb, var(--primary) 10%, transparent); stroke: var(--primary); stroke-width: 1; }
+  .audit-t { font-size: 10px; font-weight: 600; fill: var(--primary); }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 12px; color: var(--muted-foreground); margin-top: 10px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .sw { width: 22px; height: 12px; border-radius: 3px; display: inline-block; }
+  .notes { font-size: 12px; color: var(--muted-foreground); margin: 8px 0 0; padding-left: 18px; line-height: 1.5; }
+</style>
+</head>
+<body>
+<figure>
+<svg id="flow" viewBox="0 0 720 790" role="img" aria-label="How one agent call moves through heel: authentication, pause, normalization, hard denies, rules, adapters, execution, hiding and response adapters, with the approval loop on the right."></svg>
+<div class="legend">
+  <span><i class="sw" style="border:1.4px solid var(--border);background:var(--card)"></i>Built and merged</span>
+  <span><i class="sw" style="border:1.4px dashed var(--warning)"></i>In an open PR (#9, #11)</span>
+  <span><i class="sw" style="border:1.4px dotted var(--muted-foreground)"></i>Not built yet</span>
+  <span><i class="sw" style="border:1.8px solid var(--primary)"></i>One database transaction</span>
+</div>
+<ul class="notes">
+  <li>Every decision writes an append-only audit row in the same transaction, so a call never runs without its record.</li>
+  <li>Pause: <code>heel pause</code> or one tap on the page stops every call in scope, including approved ones. Resuming needs a passkey.</li>
+  <li>Watch mode logs "would deny" and "would ask" and lets the call run; it never relaxes org rules, pause, hard denies, hiding or an adapter's deny.</li>
+</ul>
+</figure>
+<script>
+(() => {
+  const svg = document.getElementById("flow");
+  const NS = "http://www.w3.org/2000/svg";
+  const el = (name, attrs, parent = svg) => {
+    const node = document.createElementNS(NS, name);
+    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+    parent.appendChild(node);
+    return node;
+  };
+  const text = (x, y, str, cls, anchor = "start", parent = svg) => {
+    const t = el("text", { x, y, class: cls, "text-anchor": anchor }, parent);
+    t.textContent = str;
+    return t;
+  };
+
+  // Arrowhead markers.
+  const defs = el("defs", {});
+  for (const [id, color] of [["arr", "var(--muted-foreground)"], ["arr-info", "var(--info)"]]) {
+    const m = el("marker", { id, viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: "auto-start-reverse" }, defs);
+    el("path", { d: "M0,0 L10,5 L0,10 z", fill: color }, m);
+  }
+
+  // A two-line box. status: built | pr | todo.
+  const box = (x, y, w, h, status, title, sub, opts = {}) => {
+    const g = el("g", { class: status === "todo" ? "todo-text" : "" });
+    el("rect", { x, y, width: w, height: h, rx: 7, class: `box ${status}${opts.tx ? " tx" : ""}` }, g);
+    const lines = Array.isArray(sub) ? sub : sub ? [sub] : [];
+    const tx = opts.num ? x + 26 : x + 10;
+    const top = y + h / 2 - (lines.length * 13) / 2 + 4;
+    if (opts.num) text(x + 10, top + 1, opts.num, "num", "start", g);
+    text(tx, top, title, "t1", "start", g);
+    for (const [i, line] of lines.entries()) text(tx, top + 14 + i * 13, line, "t2", "start", g);
+    return { x, y, w, h, cx: x + w / 2, cy: y + h / 2, right: x + w, bottom: y + h };
+  };
+  const pill = (x, y, w, kind, label) => {
+    el("rect", { x, y, width: w, height: 26, rx: 13, class: kind });
+    text(x + w / 2, y + 17, label, `pill-text ${kind}-t`, "middle");
+    return { x, y, w, cy: y + 13, right: x + w };
+  };
+  const line = (points, cls = "edge", marker = "arr") =>
+    el("polyline", { points: points.map((p) => p.join(",")).join(" "), class: cls, "marker-end": `url(#${marker})` });
+
+  // Column headers.
+  text(4, 148, "Back to the agent", "col");
+  text(200, 148, "heel decision pipeline", "col");
+  text(524, 148, "A person decides", "col");
+
+  // Agent and agent plane.
+  const C = { x: 200, w: 270 };
+  const agent = box(C.x, 8, C.w, 46, "built", "Agent", "Claude Code, Codex, a script · holds only a heel token");
+  const plane = box(C.x, 80, C.w, 40, "todo", "Agent plane: /mcp · /http · /run", "each surface becomes one Call record");
+  line([[agent.cx, agent.bottom], [plane.cx, plane.y - 2]]);
+
+  // Pipeline stages.
+  const stages = [
+    ["1", "Authenticate the heel token", "unknown or revoked: rejected before anything", "built"],
+    ["2", "Pause check", "global, owner, agent, account or provider", "built"],
+    ["3", "Normalize via the provider definition", ["action, recipients, item count (Gmail etc. not built)"], "built"],
+    ["4", "Hard denies", "credential printing, hidden target, unknown batch", "built"],
+    ["5", "Rules, counts and state checks", ["org rules, then the owner's, first match wins;", "decision + count + audit row commit together"], "built", { tx: true, h: 54 }],
+    ["6", "Decision adapters (veto only)", "any adapter can deny; none can allow", "pr"],
+    ["7", "Execute with heel's credential", "the agent never holds it", "built"],
+    ["8", "Hide", "removes hidden messages from the result", "built"],
+    ["9", "Response adapters", "can withhold the result, never rewrite it", "pr"],
+  ];
+  const S = [];
+  let y = 156;
+  for (const [num, title, sub, status, opts = {}] of stages) {
+    const h = opts.h ?? 44;
+    S.push(box(C.x, y, C.w, h, status, title, sub, { num, tx: opts.tx }));
+    y += h + 14;
+  }
+  line([[plane.cx, plane.bottom], [S[0].cx, S[0].y - 2]]);
+  for (let i = 0; i < S.length - 1; i++) line([[S[i].cx, S[i].bottom], [S[i + 1].cx, S[i + 1].y - 2]]);
+
+  // Audit rail beside the pipeline.
+  const railTop = S[0].y, railBottom = S[S.length - 1].bottom;
+  el("rect", { x: 478, y: railTop, width: 14, height: railBottom - railTop, rx: 4, class: "audit" });
+  const at = text(0, 0, "audit row for every decision", "audit-t", "middle");
+  at.setAttribute("transform", `translate(489 ${(S[6].y + S[8].bottom) / 2}) rotate(-90)`);
+
+  // Outcomes returned to the agent.
+  const P = { x: 4, w: 168 };
+  const out = [
+    [0, "deny", "rejected: bad token"],
+    [1, "pause", "paused"],
+    [2, "deny", "denied: lookup failed"],
+    [3, "deny", "denied: hard deny"],
+    [4, "deny", "denied: rule or no match"],
+    [5, "deny", "denied: adapter veto"],
+    [8, "deny", "withheld (call ran)"],
+  ];
+  for (const [i, kind, label] of out) {
+    const p = pill(P.x, S[i].cy - 13, P.w, kind, label);
+    line([[S[i].x, S[i].cy], [p.right + 2, p.cy]]);
+  }
+
+  // Allowed result.
+  const ok = { x: C.x, y: S[8].bottom + 22, w: C.w, h: 30 };
+  el("rect", { x: ok.x, y: ok.y, width: ok.w, height: ok.h, rx: 15, class: "ok" });
+  text(ok.x + ok.w / 2, ok.y + 19, "allowed: the result goes back to the agent", "pill-text ok-t", "middle");
+  line([[S[8].cx, S[8].bottom], [S[8].cx, ok.y - 2]]);
+
+  // The approval loop.
+  const R = { x: 524, w: 184 };
+  const r1 = { x: R.x, y: S[4].cy - 15, w: R.w };
+  el("rect", { x: r1.x, y: r1.y, width: r1.w, height: 30, rx: 15, class: "pend" });
+  text(r1.x + r1.w / 2, r1.y + 19, "pending: returned at once", "pill-text pend-t", "middle");
+  line([[S[4].right, S[4].cy], [r1.x - 2, S[4].cy]], "edge-strong", "arr-info");
+  text(508, S[4].cy - 6, "ask", "label-strong", "middle");
+
+  const r2 = box(R.x, r1.y + 50, R.w, 50, "todo", "Notify the approver", ["web push, email or Slack DM;", "no arguments, no approve button"]);
+  const r3 = box(R.x, r2.bottom + 18, R.w, 50, "todo", "Approval page", ["agent, account, rule and line,", "the full arguments"]);
+  const r4 = box(R.x, r3.bottom + 18, R.w, 64, "pr", "Passkey decision", ["bound to the call's hash:", "approve once, standing grant,", "or deny"]);
+  const r5 = box(R.x, r4.bottom + 18, R.w, 50, "todo", "Agent checks, then re-sends", ["heel_status · GET /approvals/<id>", "re-sending is the only way it runs"]);
+  line([[r1.x + r1.w / 2, r1.y + 30], [r2.cx, r2.y - 2]]);
+  line([[r2.cx, r2.bottom], [r3.cx, r3.y - 2]]);
+  line([[r3.cx, r3.bottom], [r4.cx, r4.y - 2]]);
+  line([[r4.cx, r4.bottom], [r5.cx, r5.y - 2]]);
+
+  // The re-send goes back through the whole pipeline.
+  line([[r5.right, r5.cy], [716, r5.cy], [716, 31], [agent.right + 2, 31]], "edge-strong", "arr-info");
+  text(596, 25, "identical call re-sent: full re-check, runs once", "label-strong", "middle");
+
+  // Fit the canvas to what was drawn.
+  const bottom = Math.max(ok.y + ok.h, r5.bottom) + 6;
+  svg.setAttribute("viewBox", `0 0 720 ${bottom}`);
+})();
+</script>
+</body>
+</html>
