@@ -3,6 +3,7 @@ import type { Context, MiddlewareHandler } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { GoogleClient } from "../definitions/google/oauth.ts";
 import type { UpstreamSignIns } from "../definitions/mcp/upstream-oauth.ts";
+import type { MicrosoftClient } from "../definitions/microsoft/oauth.ts";
 import type { RulesSource } from "../gateway/pipeline/pipeline.ts";
 import type { PauseStore } from "../gateway/pipeline/ports.ts";
 import type { Logger } from "../log.ts";
@@ -47,11 +48,12 @@ export interface HumanPlaneDeps {
    */
   upstreamOAuth: { signIns: UpstreamSignIns; vault: Vault; fetch?: FetchLike } | null;
   /**
-   * The operator's Google client, for signing in Gmail accounts (D9a-1).
-   * Null when heel.yaml has no `providers.google`. Sign-ins share
-   * `upstreamOAuth`'s state store, vault and fetch.
+   * The operator's own OAuth clients, for signing in built-in mail accounts:
+   * Google for Gmail (D9a-1), Microsoft for Outlook (D9b). Each is null when
+   * heel.yaml doesn't configure it. Sign-ins share `upstreamOAuth`'s state
+   * store, vault and fetch.
    */
-  googleClient: GoogleClient | null;
+  providerClients: { google: GoogleClient | null; microsoft: MicrosoftClient | null };
   /** `heel serve --watch`: rows with no stored mode behave as shadow (A3). */
   watchFallback: boolean;
   now: () => Date;

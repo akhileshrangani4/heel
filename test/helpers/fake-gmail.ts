@@ -71,6 +71,7 @@ export function headersOf(raw: string): Record<string, string> {
 export const SYSTEM_LABELS = [
   { id: "INBOX", name: "INBOX", type: "system" },
   { id: "SENT", name: "SENT", type: "system" },
+  { id: "DRAFT", name: "DRAFT", type: "system" },
   { id: "Label_1", name: "Family", type: "user" },
 ];
 

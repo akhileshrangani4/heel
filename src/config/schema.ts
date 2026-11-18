@@ -217,6 +217,26 @@ export const HeelConfigFileSchema = z.strictObject({
           client_secret_file: z.string().min(1).default("google-client-secret"),
         })
         .optional(),
+      /**
+       * The operator's Microsoft app registration (a web platform with
+       * delegated Mail permissions), for signing in Outlook accounts. Its
+       * redirect URI is `public_url` + /oauth/microsoft/callback.
+       */
+      microsoft: z
+        .strictObject({
+          client_id: z.string().min(1),
+          /** HEEL_MICROSOFT_CLIENT_SECRET in the environment takes precedence. Relative to $HEEL_HOME. */
+          client_secret_file: z.string().min(1).default("microsoft-client-secret"),
+          /** `common`, `organizations`, `consumers`, or a tenant id or domain. */
+          tenant: z
+            .string()
+            .regex(
+              /^[A-Za-z0-9.-]{1,100}$/,
+              "expected common, organizations, consumers or a tenant",
+            )
+            .default("common"),
+        })
+        .optional(),
     })
     .prefault({}),
 });
@@ -276,6 +296,13 @@ export interface GoogleProviderConfig {
 /** Where Google sends people back after signing in a Gmail account. */
 export const GOOGLE_CALLBACK_PATH = "/oauth/google/callback";
 
+/** Where Microsoft sends people back after signing in an Outlook account. */
+export const MICROSOFT_CALLBACK_PATH = "/oauth/microsoft/callback";
+
+export interface MicrosoftProviderConfig extends GoogleProviderConfig {
+  tenant: string;
+}
+
 /** The resolved configuration every other module receives. */
 export interface HeelConfig {
   home: string;
@@ -294,7 +321,7 @@ export interface HeelConfig {
   audit: { siem: SiemConfig | null };
   notify: NotifyConfig;
   /** Null when the operator configured no Google client. */
-  providers: { google: GoogleProviderConfig | null };
+  providers: { google: GoogleProviderConfig | null; microsoft: MicrosoftProviderConfig | null };
 }
 
 /** Pure: resolves relative paths against `home` and renames to camelCase. */
@@ -323,6 +350,14 @@ export function resolveConfig(
             clientId: file.providers.google.client_id,
             clientSecretFile: fromHome(file.providers.google.client_secret_file),
             redirectUri: new URL(GOOGLE_CALLBACK_PATH, file.public_url),
+          }
+        : null,
+      microsoft: file.providers.microsoft
+        ? {
+            clientId: file.providers.microsoft.client_id,
+            clientSecretFile: fromHome(file.providers.microsoft.client_secret_file),
+            redirectUri: new URL(MICROSOFT_CALLBACK_PATH, file.public_url),
+            tenant: file.providers.microsoft.tenant,
           }
         : null,
     },
