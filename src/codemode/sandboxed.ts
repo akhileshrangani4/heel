@@ -1,6 +1,6 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import type { SandboxHost, SandboxProcess } from "../runner/index.ts";
 import { startSandboxed } from "../runner/index.ts";
 import { type FromWorker, lineReader, type ToWorker, type WireStep } from "./protocol.ts";
@@ -38,7 +38,8 @@ export class SandboxedCodeWorker implements CodeWorker {
   #waiting: ((step: WireStep) => void) | null = null;
 
   constructor(options: SandboxedWorkerOptions) {
-    this.#options = options;
+    // The runner takes only absolute, normalized paths: no trailing slash.
+    this.#options = { ...options, installDir: resolve(options.installDir) };
   }
 
   async start(
