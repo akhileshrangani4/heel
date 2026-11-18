@@ -11,6 +11,7 @@ import type { Vault } from "../../vault/vault.ts";
 import type { FetchFn } from "../google/oauth.ts";
 import { GmailClient, GmailNotFoundError, GmailWriteRefused } from "./client.ts";
 import { Mailbox } from "./mailbox.ts";
+import { ORGANIZE_TOOLS } from "./organize.ts";
 import { READ_TOOLS } from "./reads.ts";
 import { allInThread, SEND_TOOLS } from "./send.ts";
 import type { GmailTool } from "./tool.ts";
@@ -18,7 +19,8 @@ import type { GmailTool } from "./tool.ts";
 /**
  * The Gmail definition: heel's own tools, calling the Gmail API with the
  * account's credential (spec: Email, "Gmail and Outlook"). Each tool is one
- * row in `reads.ts` or `send.ts`; this file only routes a call to its row.
+ * row in `reads.ts`, `send.ts` or `organize.ts`; this file only routes a
+ * call to its row.
  *
  * - The table is the only place a Gmail tool is marked read (I-20).
  * - Unknown tools and arguments outside a tool's schema are refused before
@@ -35,7 +37,7 @@ export interface GmailDeps {
   fetch: FetchFn;
 }
 
-const TOOLS: Record<string, GmailTool> = { ...READ_TOOLS, ...SEND_TOOLS };
+const TOOLS: Record<string, GmailTool> = { ...READ_TOOLS, ...SEND_TOOLS, ...ORGANIZE_TOOLS };
 
 function toolNamed(name: string): GmailTool | null {
   return Object.hasOwn(TOOLS, name) ? (TOOLS[name] as GmailTool) : null;
@@ -78,8 +80,9 @@ export function gmailDefinition(account: AccountRecord, deps: GmailDeps): Defini
           ...base,
           args: prepared.args,
           kind: tool.readOnly ? "read" : "write",
-          items: 1,
+          items: prepared.items ?? 1,
           ...(prepared.action === undefined ? {} : { action: prepared.action }),
+          ...(prepared.persistence === undefined ? {} : { persistence: prepared.persistence }),
           ...(prepared.recipients === undefined ? {} : { recipients: prepared.recipients }),
           ...(prepared.targets === undefined ? {} : { targets: prepared.targets }),
         },
