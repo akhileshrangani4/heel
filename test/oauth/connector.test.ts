@@ -53,7 +53,13 @@ function planes(h: HumanPlaneHarness) {
     log: logger,
     // The human plane issues tokens on the harness clock; the agent plane must check them on it.
     now: () => h.clock.now,
-    mcp: createMcpSurface({ db: h.t.db, pipeline, upstream, log: logger, version: "test" }),
+    mcp: createMcpSurface({
+      db: h.t.db,
+      pipeline,
+      definitions: definitionRegistry(upstream),
+      log: logger,
+      version: "test",
+    }),
     oauth: { agentPublicUrl: AGENT_URL, authorizationServer: PUBLIC_URL },
   });
   return async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {

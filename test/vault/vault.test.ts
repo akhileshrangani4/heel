@@ -5,7 +5,11 @@ import { describe, expect, it, vi } from "vitest";
 import { accounts, credentials, vaultKeys } from "../../src/store/schema.ts";
 import { KEY_BYTES } from "../../src/vault/crypto.ts";
 import type { MasterKey } from "../../src/vault/key.ts";
-import type { OAuthRefresher, OAuthTokens } from "../../src/vault/refresh.ts";
+import {
+  type OAuthRefresher,
+  type OAuthTokens,
+  RefreshUnavailableError,
+} from "../../src/vault/refresh.ts";
 import { Vault, VaultError, type VaultErrorCode } from "../../src/vault/vault.ts";
 import { addAccount, reopen, testStore } from "../helpers/store.ts";
 
@@ -207,6 +211,27 @@ describe("Vault OAuth refresh", () => {
     expect((await vault.accessToken(accountId, { force: true })).reveal()).toBe("new-access");
     const stored = vault.get(accountId);
     expect(stored.type === "oauth" && stored.refreshToken?.reveal()).toBe(REFRESH);
+  });
+
+  it("leaves the account connected when the provider can't be reached to refresh", async () => {
+    const refresher = vi.fn<OAuthRefresher>(async () => {
+      throw new RefreshUnavailableError("503");
+    });
+    const { t, vault, accountId, onReconnectRequired } = setup(refresher);
+    vault.put(accountId, {
+      type: "oauth",
+      accessToken: ACCESS,
+      refreshToken: REFRESH,
+      expiresAt: T0.getTime() - 1,
+    });
+
+    expect(await codeOf(() => vault.accessToken(accountId))).toBe("refresh_unavailable");
+    expect(onReconnectRequired).not.toHaveBeenCalled();
+    const account = t.db.select().from(accounts).where(eq(accounts.id, accountId)).get();
+    expect(account?.status).toBe("active");
+    // The next call tries again.
+    expect(await codeOf(() => vault.accessToken(accountId))).toBe("refresh_unavailable");
+    expect(refresher).toHaveBeenCalledTimes(2);
   });
 
   it("marks the account reconnect_required when refresh fails, and stays closed", async () => {

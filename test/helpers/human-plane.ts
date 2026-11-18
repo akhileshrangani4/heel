@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { FetchLike } from "@modelcontextprotocol/client";
 import type { Hono } from "hono";
+import type { GoogleClient } from "../../src/definitions/google/oauth.ts";
 import { UpstreamSignIns } from "../../src/definitions/mcp/upstream-oauth.ts";
 import { LOCAL_OWNER_NAME } from "../../src/store/install.ts";
 import { KEY_BYTES } from "../../src/vault/crypto.ts";
@@ -76,6 +77,8 @@ export function humanPlaneHarness(
   options: HarnessOptions & {
     /** Turns on sign-in to OAuth upstreams (D5c), reaching them through this `fetch`. */
     upstreamOAuth?: { fetch: FetchLike };
+    /** Turns on Gmail sign-in (D9a-1); needs `upstreamOAuth` for its fetch. */
+    googleClient?: GoogleClient;
   } = {},
 ): HumanPlaneHarness {
   const h = approvalHarness(options);
@@ -98,6 +101,7 @@ export function humanPlaneHarness(
       options.upstreamOAuth === undefined
         ? null
         : { signIns, vault, fetch: options.upstreamOAuth.fetch },
+    googleClient: options.googleClient ?? null,
     now: () => h.clock.now,
   });
 
