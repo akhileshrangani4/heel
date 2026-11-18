@@ -60,6 +60,18 @@ const groupName = z.string().min(1);
  * install is single-user and passkey-only. `roles` maps IdP groups to heel
  * roles; at least one admin group is required, or nobody could edit org rules.
  */
+/**
+ * `drafting:` turns on `heel rules draft` (D13b): any OpenAI-compatible
+ * endpoint. Without it, drafting is off and nothing else changes (I-17).
+ */
+const DraftingSectionSchema = z.strictObject({
+  /** The API base, e.g. https://api.openai.com/v1; https, or http on localhost. */
+  base_url: secureUrl,
+  model: z.string().min(1).max(200),
+  /** HEEL_DRAFTING_API_KEY in the environment takes precedence. Relative paths resolve against $HEEL_HOME. */
+  api_key_file: z.string().min(1).optional(),
+});
+
 const OidcSectionSchema = z.strictObject({
   issuer: secureUrl,
   client_id: z.string().min(1),
@@ -196,6 +208,7 @@ export const HeelConfigFileSchema = z.strictObject({
     })
     .prefault({}),
   oidc: OidcSectionSchema.optional(),
+  drafting: DraftingSectionSchema.optional(),
   audit: z
     .strictObject({
       siem: SiemSectionSchema.optional(),
@@ -318,6 +331,8 @@ export interface HeelConfig {
   log: { level: LogLevel };
   /** Null on a single-user, passkey-only install. */
   oidc: OidcConfig | null;
+  /** Null when drafting is off (I-17). */
+  drafting: { baseUrl: URL; model: string; apiKeyFile: string | null } | null;
   audit: { siem: SiemConfig | null };
   notify: NotifyConfig;
   /** Null when the operator configured no Google client. */
@@ -342,6 +357,14 @@ export function resolveConfig(
     vault: { keyFile: fromHome(file.vault.key_file) },
     log: { level: file.log.level },
     oidc: file.oidc ? resolveOidc(file.oidc, new URL(file.public_url), fromHome) : null,
+    drafting: file.drafting
+      ? {
+          baseUrl: new URL(file.drafting.base_url),
+          model: file.drafting.model,
+          apiKeyFile:
+            file.drafting.api_key_file === undefined ? null : fromHome(file.drafting.api_key_file),
+        }
+      : null,
     audit: { siem: file.audit.siem ? resolveSiem(file.audit.siem, fromHome) : null },
     notify: resolveNotify(file.notify, new URL(file.public_url), fromHome),
     providers: {
