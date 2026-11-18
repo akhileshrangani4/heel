@@ -10,6 +10,7 @@ import type { UpstreamPool } from "./mcp/upstream.ts";
 import { type NotionDeps, notionDefinition } from "./notion/definition.ts";
 import { type OutlookDeps, outlookDefinition } from "./outlook/definition.ts";
 import { type SlackDeps, slackDefinition } from "./slack/definition.ts";
+import { type StripeDeps, stripeDefinition } from "./stripe/definition.ts";
 
 /**
  * Which definition serves an account: an MCP passthrough for `mcp:<alias>`,
@@ -26,6 +27,8 @@ export function definitionRegistry(deps: {
   googleCalendar?: GoogleCalendarDeps | null;
   /** Notion (D12b). */
   notion?: NotionDeps | null;
+  /** Stripe (D12b). */
+  stripe?: StripeDeps | null;
   /** Slack (D12b). */
   slack?: SlackDeps | null;
   /** HTTP accounts (D7a). */
@@ -55,6 +58,9 @@ export function definitionRegistry(deps: {
       }
       if (account.provider === "notion" && deps.notion != null) {
         return notionDefinition(account, deps.notion);
+      }
+      if (account.provider === "stripe" && deps.stripe != null) {
+        return stripeDefinition(account, deps.stripe);
       }
       if (account.provider === "slack" && deps.slack != null) {
         return slackDefinition(account, deps.slack);
