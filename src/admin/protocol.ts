@@ -94,6 +94,32 @@ export const AdminRequestSchema = z.discriminatedUnion("method", [
   }),
   z.strictObject({ method: z.literal("account.list") }),
   z.strictObject({
+    /** `heel account share|unshare` (D13b): who besides its owner may use an account. */
+    method: z.enum(["account.share", "account.unshare"]),
+    params: z.strictObject({
+      alias: z.string().min(1).max(64),
+      kind: z.enum(["user", "group"]),
+      name: z.string().min(1).max(256),
+    }),
+  }),
+  z.strictObject({
+    /** `heel account approvers` (D13b): who decides an account's asks, for all calls or one repo. */
+    method: z.literal("account.approvers"),
+    params: z.strictObject({
+      alias: z.string().min(1).max(64),
+      repo: z.string().max(201).nullable(),
+      approvers: z
+        .array(
+          z.strictObject({ kind: z.enum(["user", "group"]), name: z.string().min(1).max(256) }),
+        )
+        .max(64),
+    }),
+  }),
+  z.strictObject({
+    method: z.literal("account.sharing"),
+    params: z.strictObject({ alias: z.string().min(1).max(64) }),
+  }),
+  z.strictObject({
     /** `heel user enroll`: a one-time passkey enrollment link (bootstrap and recovery, Q-N2). */
     method: z.literal("user.enroll"),
     params: z.strictObject({ name: z.string().min(1).max(128) }),

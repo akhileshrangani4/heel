@@ -5,6 +5,7 @@ import { type RestCall, type RestRequest, restMapFor } from "../definitions/http
 import type { Logger } from "../log.ts";
 import type { HeelDb } from "../store/db.ts";
 import { findAccount } from "../store/directory.ts";
+import { mayUseAccount } from "../store/sharing.ts";
 import { isHttpProvider } from "../vault/connect.ts";
 import type { AuthenticatedAgent } from "./agent-tokens.ts";
 import type { Pipeline } from "./pipeline/pipeline.ts";
@@ -165,7 +166,7 @@ export async function handleHttpProxy(
   // Someone else's account, or one with no REST surface, reads as unknown.
   if (
     account === null ||
-    account.ownerId !== agent.ownerId ||
+    !mayUseAccount(deps.db, account, agent.ownerId) ||
     (!isHttpProvider(account.provider) && restMap === undefined)
   ) {
     return c.json(refuse(404, "unknown_endpoint").body, 404);

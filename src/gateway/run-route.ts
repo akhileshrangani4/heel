@@ -3,7 +3,7 @@ import type { Context } from "hono";
 import { z } from "zod";
 import type { CliResult } from "../definitions/cli/definition.ts";
 import type { HeelDb } from "../store/db.ts";
-import { accountsOwnedBy } from "../store/directory.ts";
+import { accountsUsableBy } from "../store/sharing.ts";
 import { isCliProvider } from "../vault/connect.ts";
 import type { AuthenticatedAgent } from "./agent-tokens.ts";
 import type { Pipeline } from "./pipeline/pipeline.ts";
@@ -95,7 +95,7 @@ export async function handleRun(
   // Absolute only; the definition resolves it, symlinks and all, before any check.
   if (!isAbsolute(cwd)) return deny(c, "invalid_request");
   const command = argv[0] as string;
-  const candidates = accountsOwnedBy(deps.db, agent.orgId, agent.ownerId).filter(
+  const candidates = accountsUsableBy(deps.db, agent.orgId, agent.ownerId).filter(
     (account) =>
       isCliProvider(account.provider) &&
       (parsed.data.account === undefined
