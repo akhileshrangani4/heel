@@ -136,9 +136,17 @@ export function parseExportTime(text: string, now: Date): string | null {
 }
 
 /** Pure: the MCP URL an agent should be given, from the agent plane's listen address. */
-export function agentMcpUrl(listen: ListenAddress): string {
-  const host = listen.host.includes(":") ? `[${listen.host}]` : listen.host;
+export function agentMcpUrl(listen: ListenAddress, publicUrl: URL | null = null): string {
   // Direct tools work on every host; code mode (bare /mcp) needs the Linux sandbox.
+  if (publicUrl !== null)
+    return new URL("mcp?tools=direct", publicUrl.href.replace(/\/?$/, "/")).href;
+  // A wildcard listen address (a container) is reached at localhost, not 0.0.0.0.
+  const wildcard = listen.host === "0.0.0.0" || listen.host === "::";
+  const host = wildcard
+    ? "localhost"
+    : listen.host.includes(":")
+      ? `[${listen.host}]`
+      : listen.host;
   return `http://${host}:${listen.port}/mcp?tools=direct`;
 }
 
@@ -236,7 +244,7 @@ async function agentCommand(args: string[], io: CliIo): Promise<number> {
       io.stdout.write(
         `Added agent "${issued.name}".\n` +
           `Token (shown once; heel keeps only its hash): ${issued.token}\n` +
-          `MCP URL: ${agentMcpUrl(config.listen.agent)}\n`,
+          `MCP URL: ${agentMcpUrl(config.listen.agent, config.agentPublicUrl)}\n`,
       );
       return EXIT.ok;
     }
