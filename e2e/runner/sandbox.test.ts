@@ -134,6 +134,16 @@ function allHostCommandLines(): string {
 }
 
 /** Starts the fake CLI sleeping with a unique marker and waits until its host process is visible. */
+/** Whether a path stops existing within `ms`, polling every 20 ms. */
+async function goneWithin(path: string, ms: number): Promise<boolean> {
+  const deadline = Date.now() + ms;
+  while (existsSync(path)) {
+    if (Date.now() >= deadline) return false;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  return true;
+}
+
 async function startSleeper(): Promise<{ pid: number; kill: () => Promise<void> }> {
   const marker = `heel-e2e-marker-${process.pid}-${Date.now()}`;
   const sandboxed = await startSandboxed(requireHost(), fakeCli(["sleep", "30000", marker]));
@@ -444,7 +454,9 @@ describe.skipIf(host === undefined)("sandbox runner under real bubblewrap", () =
     it("kills the whole sandbox when the caller aborts", async () => {
       const { pid, kill } = await startSleeper();
       await kill();
-      expect(existsSync(`/proc/${pid}`)).toBe(false);
+      // bwrap exits first; the kernel then tears down the rest of its pid namespace, which can
+      // take a few milliseconds. The program must be gone within that window, not merely later.
+      expect(await goneWithin(`/proc/${pid}`, 2_000)).toBe(true);
     });
   });
 });
