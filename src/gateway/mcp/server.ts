@@ -13,7 +13,7 @@ import type { CodeWorker } from "../../codemode/worker.ts";
 import type { Logger } from "../../log.ts";
 import { approvalStatusForAgent } from "../../store/approvals.ts";
 import type { HeelDb } from "../../store/db.ts";
-import type { AccountRecord } from "../../store/directory.ts";
+import { type AccountRecord, findAccount } from "../../store/directory.ts";
 import { accountsUsableBy } from "../../store/sharing.ts";
 import { errorShape } from "../../util/error-shape.ts";
 import { isMcpProvider } from "../../vault/connect.ts";
@@ -242,10 +242,9 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
       args,
       runId: params._meta?.[RUN_ID_META_KEY],
     });
-    const account = accountsUsableBy(deps.db, agent.orgId, agent.ownerId).find(
-      (a) => a.alias === target.alias,
-    );
-    const native = account !== undefined && !isMcpProvider(account.provider);
+    // The pipeline already checked the account; this only tells a native tool from a passthrough.
+    const account = findAccount(deps.db, agent.orgId, target.alias);
+    const native = account !== null && !isMcpProvider(account.provider);
     return toolResult(result, { account: target.alias, tool: target.tool, native });
   }
 

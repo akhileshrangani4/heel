@@ -113,6 +113,13 @@
       "when": 1794985803136,
       "tag": "0015_account_sharing",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1794986791085,
+      "tag": "0016_sharing_scopes",
+      "breakpoints": true
     }
   ]
 }

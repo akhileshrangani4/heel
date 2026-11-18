@@ -13,8 +13,12 @@ import { accountApprovers, accountShares, accounts, type PrincipalKind, users } 
  *   shared with. An agent may call an account only if the agent's owner may.
  * - An account's asks go to its approvers, or to its owner when it names
  *   none. A GitHub account can name approvers for one repo; a call on that
- *   repo goes to them instead. Groups mean their members as of each
- *   member's last sign-in; disabled users never decide.
+ *   repo goes to them instead. Disabled users never decide.
+ * - Groups mean their members as of each member's last sign-in, and only
+ *   for a session's maximum (12 hours) after it: agents act without anyone
+ *   signing in, so someone removed from a group in the IdP loses what it
+ *   gave them within a day, not whenever they next sign in.
+ * - A disabled owner's account can't be used by anyone.
  * - An org ask goes to admins. Being an admin doesn't make anyone an
  *   approver of an account.
  */
@@ -35,9 +39,18 @@ export class SharingError extends Error {
   }
 }
 
+/** How long groups read at a sign-in keep counting: a session's maximum, 12 h (spec: Teams). */
+export const GROUPS_FRESH_MS = 12 * 60 * 60_000;
+
+/** A user's groups, if read from the IdP recently enough to count. */
+function freshGroups(user: { groups: string[]; groupsSyncedAt: Date | null }, now: Date): string[] {
+  if (user.groupsSyncedAt === null) return [];
+  return now.getTime() - user.groupsSyncedAt.getTime() <= GROUPS_FRESH_MS ? user.groups : [];
+}
+
 function liveUser(db: HeelQuery, userId: string) {
   return db
-    .select({ id: users.id, groups: users.groups })
+    .select({ id: users.id, groups: users.groups, groupsSyncedAt: users.groupsSyncedAt })
     .from(users)
     .where(and(eq(users.id, userId), isNull(users.disabledAt)))
     .get();
@@ -48,10 +61,14 @@ export function mayUseAccount(
   db: HeelQuery,
   account: Pick<AccountRecord, "id" | "ownerId">,
   userId: string,
+  now: Date = new Date(),
 ): boolean {
+  // Nobody uses a disabled owner's account, and a disabled user uses nothing.
+  if (liveUser(db, account.ownerId) === undefined) return false;
   if (account.ownerId === userId) return true;
   const user = liveUser(db, userId);
   if (user === undefined) return false;
+  const groups = freshGroups(user, now);
   const shares = db
     .select({ kind: accountShares.kind, principal: accountShares.principal })
     .from(accountShares)
@@ -60,7 +77,7 @@ export function mayUseAccount(
   return shares.some(
     (s) =>
       (s.kind === "user" && s.principal === user.id) ||
-      (s.kind === "group" && user.groups.includes(s.principal)),
+      (s.kind === "group" && groups.includes(s.principal)),
   );
 }
 
@@ -103,8 +120,16 @@ function accountId(db: HeelQuery, orgId: string, alias: string): string {
 /** A principal as stored: a user's id, or the group name. */
 function stored(db: HeelQuery, orgId: string, principal: Principal): string {
   if (principal.kind === "group") {
-    if (principal.name.trim() === "" || principal.name.length > 256) {
-      throw new SharingError("invalid", "a group name is 1 to 256 characters");
+    // Exactly as the IdP sends it: surrounding spaces would never match.
+    if (
+      principal.name.trim() !== principal.name ||
+      principal.name === "" ||
+      principal.name.length > 256
+    ) {
+      throw new SharingError(
+        "invalid",
+        "a group name is 1 to 256 characters, with no surrounding spaces",
+      );
     }
     return principal.name;
   }
@@ -198,14 +223,19 @@ export function setApprovers(
         ),
       )
       .run();
+    const seen = new Set<string>();
     for (const approver of approvers) {
+      const principal = stored(tx, orgId, approver);
+      // SQLite's unique index treats a null repo as distinct, so repeats are dropped here.
+      if (seen.has(`${approver.kind} ${principal}`)) continue;
+      seen.add(`${approver.kind} ${principal}`);
       tx.insert(accountApprovers)
         .values({
           id: newId("approver"),
           orgId,
           accountId: id,
           kind: approver.kind,
-          principal: stored(tx, orgId, approver),
+          principal,
           repo: scope,
           createdAt: now,
         })
@@ -256,11 +286,13 @@ function expand(
   orgId: string,
   principals: readonly { kind: PrincipalKind; principal: string }[],
 ): string[] {
+  const now = new Date();
   const live = db
-    .select({ id: users.id, groups: users.groups })
+    .select({ id: users.id, groups: users.groups, groupsSyncedAt: users.groupsSyncedAt })
     .from(users)
     .where(and(eq(users.orgId, orgId), isNull(users.disabledAt)))
-    .all();
+    .all()
+    .map((u) => ({ id: u.id, groups: freshGroups(u, now) }));
   const ids = new Set<string>();
   for (const p of principals) {
     for (const user of live) {

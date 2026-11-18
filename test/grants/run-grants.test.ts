@@ -36,14 +36,30 @@ describe("run-scoped standing approvals", () => {
   });
 
   it("is pure: same agent, same rule, same run", () => {
-    const row = { agentId: "a", scope: "run" as const, callHash: null, ruleHash: "r", runId: "x" };
+    const row = {
+      agentId: "a",
+      scope: "run" as const,
+      callHash: null,
+      ruleHash: "r",
+      runId: "x",
+      account: "gmail",
+      repo: null,
+    };
     const call = (
-      over: Partial<{ agentId: string; ruleHash: string; runId: string | undefined }>,
+      over: Partial<{
+        agentId: string;
+        ruleHash: string;
+        runId: string | undefined;
+        account: string;
+        repo: string | undefined;
+      }>,
     ) => ({
       agentId: "a",
       ruleHash: "r",
       runId: "x" as string | undefined,
       callHash: () => "h",
+      account: "gmail",
+      repo: undefined as string | undefined,
       ...over,
     });
     expect(standingCovers(row, call({}))).toBe(true);
@@ -51,6 +67,10 @@ describe("run-scoped standing approvals", () => {
     expect(standingCovers(row, call({ runId: undefined }))).toBe(false);
     expect(standingCovers(row, call({ agentId: "b" }))).toBe(false);
     expect(standingCovers(row, call({ ruleHash: "s" }))).toBe(false);
+    // Only the account and repo it was granted on (D13b).
+    expect(standingCovers(row, call({ account: "other" }))).toBe(false);
+    expect(standingCovers(row, call({ repo: "acme/web" }))).toBe(false);
+    expect(standingCovers({ ...row, account: null }, call({ account: "other" }))).toBe(true);
   });
 
   it("lasts at most a day, however long the person picked", async () => {

@@ -18,6 +18,7 @@ import {
   UNSURE_JUDGE,
 } from "../../core/hide.ts";
 import { isItemCount, SINGLE_ITEM } from "../../core/items.ts";
+import { strictest } from "../../core/modes.ts";
 import type { CompiledRule, StateCheck } from "../../core/rules/compile.ts";
 import {
   type EvalContext,
@@ -39,7 +40,7 @@ import { type HeelDb, type HeelTx, sqliteErrorCode } from "../../store/db.ts";
 import { findAccount, userName } from "../../store/directory.ts";
 import { type GrantRow, liveGrants } from "../../store/grants.ts";
 import { modeFor } from "../../store/modes.ts";
-import { mayUseAccount } from "../../store/sharing.ts";
+import { accountApproverIds, mayUseAccount } from "../../store/sharing.ts";
 import { DeadlineExceededError, withDeadline } from "../../util/deadline.ts";
 import { errorShape } from "../../util/error-shape.ts";
 import type {
@@ -680,9 +681,27 @@ class DecisionPipeline implements Pipeline {
         this.#trace("decide");
         // Read once per call, beside the pause check, so a switch applies
         // from the next call on (A3).
-        const mode = modeFor(tx, call.orgId, call.ownerId, this.#deps.watch ? "shadow" : "enforce");
-        // Live intent grants for this agent (A4b), compiled once each.
+        const fallback = this.#deps.watch ? "shadow" : "enforce";
+        // On a shared account (D13b), the account owner's rollout mode counts too, strictest wins:
+        // a sharee in shadow or record mode can't make the owner's account run unchecked.
+        const accountOwner = findAccount(tx, call.orgId, call.account)?.ownerId ?? call.ownerId;
+        const mode = strictest(
+          [
+            modeFor(tx, call.orgId, call.ownerId, fallback),
+            ...(accountOwner === call.ownerId
+              ? []
+              : [modeFor(tx, call.orgId, accountOwner, fallback)]),
+          ],
+          fallback,
+        );
+        // Live intent grants for this agent (A4b), compiled once each. A grant stands in for an
+        // approval, so on someone else's account it counts only when its signer approves that account.
+        const approvers =
+          accountOwner === call.ownerId
+            ? null
+            : accountApproverIds(tx, call.orgId, call.account, call.repo);
         const grants = liveGrants(tx, call.orgId, call.agentId, at).flatMap((row) => {
+          if (approvers !== null && !approvers.includes(row.createdBy)) return [];
           const compiled = this.#grantRule(row);
           return compiled === null ? [] : [compiled];
         });

@@ -88,6 +88,9 @@ export function isStandingDuration(value: unknown): value is StandingDuration {
 
 export interface StoredStanding {
   agentId: string;
+  /** The account and repo it was granted on; null on rows from before sharing (D13b). */
+  account: string | null;
+  repo: string | null;
   scope: "exact_call" | "rule" | "run";
   callHash: string | null;
   /** Set for `run`: the run it covers. */
@@ -117,14 +120,30 @@ export function standingState(
 
 /**
  * Pure: whether a live standing approval covers a call that matched its
- * parent rule and would ask. It is scoped to one agent; `exact_call` also
- * needs the same account, tool and arguments (Q-A6).
+ * parent rule and would ask. It is scoped to one agent, and to the account
+ * and repo it was granted on, since its approver may decide for no others
+ * (D13b); `exact_call` also needs the same account, tool and arguments
+ * (Q-A6).
  */
 export function standingCovers(
-  row: Pick<StoredStanding, "agentId" | "scope" | "callHash" | "ruleHash" | "runId">,
-  call: { agentId: string; ruleHash: string; callHash: () => string; runId: string | undefined },
+  row: Pick<
+    StoredStanding,
+    "agentId" | "scope" | "callHash" | "ruleHash" | "runId" | "account" | "repo"
+  >,
+  call: {
+    agentId: string;
+    ruleHash: string;
+    callHash: () => string;
+    runId: string | undefined;
+    account: string;
+    repo: string | undefined;
+  },
 ): boolean {
   if (row.agentId !== call.agentId || row.ruleHash !== call.ruleHash) return false;
+  // Only calls its approver decides: the same account, and the same repo (or none).
+  if (row.account !== null && (row.account !== call.account || row.repo !== (call.repo ?? null))) {
+    return false;
+  }
   switch (row.scope) {
     case "rule":
       return true;

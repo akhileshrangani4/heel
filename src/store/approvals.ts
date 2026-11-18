@@ -159,6 +159,8 @@ export class SqliteApprovalStore implements ApprovalStore {
             ruleHash: rule.hash,
             callHash: () => hash,
             runId: call.runId,
+            account: call.account,
+            repo: call.repo,
           }),
         );
         return row === undefined ? null : { id: row.id };
@@ -235,7 +237,7 @@ export function approvalStatusForAgent(
  */
 export function approverIds(
   db: HeelQuery,
-  row: Pick<ApprovalRow, "orgId" | "account" | "origin"> & { call?: Pick<Call, "repo"> },
+  row: Pick<ApprovalRow, "orgId" | "account" | "origin"> & { call: Pick<Call, "repo"> },
 ): string[] {
   if (row.origin === "org") {
     return db
@@ -245,25 +247,37 @@ export function approverIds(
       .all()
       .map((u) => u.id);
   }
-  return accountApproverIds(db, row.orgId, row.account, row.call?.repo);
+  return accountApproverIds(db, row.orgId, row.account, row.call.repo);
 }
 
 /** Requests this person may decide, newest first, including ones decided in the last day. */
 export function listApprovalsFor(db: HeelQuery, approver: Approver, now: Date): ApprovalRecord[] {
+  const approversByScope = new Map<string, string[]>();
   const since = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-  return db
-    .select({
-      row: approvals,
-      agentName: agents.name,
-      decidedByName: userNameOf(approvals.decidedBy),
-    })
-    .from(approvals)
-    .innerJoin(agents, eq(agents.id, approvals.agentId))
-    .where(and(eq(approvals.orgId, approver.orgId), gt(approvals.expiresAt, since)))
-    .orderBy(desc(approvals.createdAt), desc(sql`approvals.rowid`))
-    .all()
-    .filter(({ row }) => approverIds(db, row).includes(approver.userId))
-    .map((found) => ({ ...found, status: statusAt(found.row, now) }));
+  return (
+    db
+      .select({
+        row: approvals,
+        agentName: agents.name,
+        decidedByName: userNameOf(approvals.decidedBy),
+      })
+      .from(approvals)
+      .innerJoin(agents, eq(agents.id, approvals.agentId))
+      .where(and(eq(approvals.orgId, approver.orgId), gt(approvals.expiresAt, since)))
+      .orderBy(desc(approvals.createdAt), desc(sql`approvals.rowid`))
+      .all()
+      // One approver lookup per account and repo, not per request.
+      .filter(({ row }) => {
+        const key = `${row.origin} ${row.account} ${row.call.repo ?? ""}`;
+        let ids = approversByScope.get(key);
+        if (ids === undefined) {
+          ids = approverIds(db, row);
+          approversByScope.set(key, ids);
+        }
+        return ids.includes(approver.userId);
+      })
+      .map((found) => ({ ...found, status: statusAt(found.row, now) }))
+  );
 }
 
 // ── deciding ────────────────────────────────────────────────────────────────
@@ -419,6 +433,8 @@ function grantStanding(
       scope: choice.scope,
       callHash: choice.scope === "exact_call" ? row.callHash : null,
       runId: choice.scope === "run" ? row.runId : null,
+      account: row.account,
+      repo: row.call.repo ?? null,
       rule: row.rule,
       ruleHash: row.ruleHash,
       createdBy: approver.userId,

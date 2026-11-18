@@ -56,6 +56,8 @@ export const users = sqliteTable(
     email: text("email"),
     /** IdP groups as of the person's last OIDC sign-in (D13b); empty on single-user installs. */
     groups: text("groups", { mode: "json" }).$type<string[]>().notNull().default([]),
+    /** When `groups` was last read from the IdP; groups older than a session's maximum don't count. */
+    groupsSyncedAt: integer("groups_synced_at", { mode: "timestamp_ms" }),
     createdAt: createdAt(),
     disabledAt: integer("disabled_at", { mode: "timestamp_ms" }),
   },
@@ -288,6 +290,14 @@ export const standingApprovals = sqliteTable(
     callHash: text("call_hash"),
     /** Set for `run` (A4): the agent's run id it covers. */
     runId: text("run_id"),
+    /**
+     * The account and GitHub repo of the approved call (D13b). A standing
+     * approval covers calls on that account and repo only: its approver
+     * decides for them, and maybe for nothing else. Null on rows from before
+     * sharing, when the owner decided every call.
+     */
+    account: text("account"),
+    repo: text("repo"),
     rule: text("rule", { mode: "json" }).$type<RuleRef>().notNull(),
     ruleHash: text("rule_hash").notNull(),
     createdBy: text("created_by")
@@ -560,7 +570,10 @@ export const accountApprovers = sqliteTable(
     repo: text("repo"),
     createdAt: createdAt(),
   },
-  (t) => [index("account_approvers_account").on(t.accountId)],
+  (t) => [
+    index("account_approvers_account").on(t.accountId),
+    uniqueIndex("account_approvers_unique").on(t.accountId, t.kind, t.principal, t.repo),
+  ],
 );
 
 /**
