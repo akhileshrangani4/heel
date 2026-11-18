@@ -14,6 +14,10 @@ on:
     secrets:
       VERCEL_TOKEN:
         required: true
+      VERCEL_ORG_ID:
+        required: true
+      VERCEL_PROJECT_ID:
+        required: true
   workflow_dispatch:
     inputs:
       ref:
@@ -35,8 +39,8 @@ jobs:
     env:
       # The Vercel project (Root Directory: docs/site) is identified by these;
       # the token is a team-scoped Vercel token.
-      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       REF: ${{ inputs.ref }}
     steps:
@@ -62,4 +66,9 @@ jobs:
           url=$(npx --yes vercel@62.2.0 deploy --prod --yes --token "$VERCEL_TOKEN" \
             --build-env HEEL_RELEASE_DEPLOY=1)
           echo "Deployed $url"
-          npx --yes vercel@62.2.0 alias set "$url" useheel.dev --token "$VERCEL_TOKEN"
+          # Point the domain at it through the API: the CLI's `alias` looks up a
+          # user first, and a team-scoped token has none.
+          api() { curl -fsS -H "Authorization: Bearer $VERCEL_TOKEN" "$@"; }
+          id=$(api "https://api.vercel.com/v13/deployments/${url#https://}?teamId=$VERCEL_ORG_ID" | jq -r .id)
+          api -X POST -H 'content-type: application/json' -d '{"alias":"useheel.dev"}' \
+            "https://api.vercel.com/v2/deployments/$id/aliases?teamId=$VERCEL_ORG_ID" | jq -r '"useheel.dev -> " + .alias'

@@ -241,6 +241,8 @@ jobs:
       ref: ${{ needs.plan.outputs.sha }}
     secrets:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
   notes:
     # Adds install lines to the GitHub release once both are published.
