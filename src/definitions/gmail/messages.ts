@@ -99,6 +99,46 @@ export function messageBody(message: GmailMessage): MessageBody {
 }
 
 /**
+ * Everything a reader could see in a message, for an approver: the plain
+ * text, the HTML (which a mail client shows instead of the text, so it can
+ * say something else), and the attachments' names. A part heel can't
+ * decode is marked, never skipped.
+ */
+export interface MessageContent {
+  text: string;
+  html: string | null;
+  attachments: string[];
+}
+
+export function messageContent(message: GmailMessage): MessageContent {
+  const parts: GmailPart[] = [];
+  walk(message.payload, (part) => parts.push(part));
+  const inline = parts.filter((part) => part.filename === undefined || part.filename === "");
+  const read = (type: string): string | null => {
+    const found = inline.filter((part) => part.mimeType.toLowerCase() === type);
+    if (found.length === 0) return null;
+    return found
+      .map((part) => {
+        const data = part.body?.data;
+        if (data === undefined) return part.body?.size ? "[heel couldn't read this part]" : "";
+        return decode(data) ?? "[heel couldn't read this part]";
+      })
+      .join("\n");
+  };
+  const unreadable = messageBody(message).unreadable;
+  return {
+    text:
+      unreadable === undefined
+        ? (read("text/plain") ?? "")
+        : `[heel couldn't read this body: ${unreadable}]`,
+    html: read("text/html"),
+    attachments: parts
+      .filter((part) => part.filename !== undefined && part.filename !== "")
+      .map((part) => `${part.filename} (${part.mimeType})`),
+  };
+}
+
+/**
  * What hiding judges for one message. Pass `body` only when the message was
  * read in `full` and an entry uses `looks_like`. Null when heel can't name
  * its labels, which the caller treats as hidden.

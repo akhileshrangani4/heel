@@ -45,6 +45,8 @@ export interface FakeDraft {
   threadId: string;
   /** The draft's current message id; Gmail issues a new one on every update. */
   messageId?: string;
+  /** An HTML part, served in `full` beside the text, as a multipart draft would be. */
+  html?: string;
   /** RFC 5322 text. */
   raw: string;
 }
@@ -155,6 +157,7 @@ export class FakeGmail {
       labelIds: ["DRAFT"],
       raw: draft.raw,
       text: body,
+      ...(draft.html === undefined ? {} : { html: draft.html }),
       ...(headers["from"] === undefined ? {} : { from: headers["from"] }),
       ...(headers["to"] === undefined ? {} : { to: headers["to"] }),
       ...(headers["cc"] === undefined ? {} : { cc: headers["cc"] }),

@@ -29,6 +29,10 @@ export function normalizeDomain(text: string): string | null {
 export function normalizeAddress(text: string): string | null {
   const angle = ANGLE_ADDR.exec(text);
   const spec = (angle?.[1] ?? text).trim();
+  // An RFC 2047 encoded word inside an address is read differently by
+  // different mail parsers (some decode `=?…?=` and find another mailbox in
+  // it), so heel refuses it rather than guess which one delivers.
+  if (spec.includes("=?")) return null;
   const at = spec.lastIndexOf("@");
   if (at <= 0 || at === spec.length - 1) return null;
   let local = spec.slice(0, at);

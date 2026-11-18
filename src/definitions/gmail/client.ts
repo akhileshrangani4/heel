@@ -174,8 +174,8 @@ export class GmailClient {
 
   /**
    * A write: sent once, never retried, since a send that timed out may have
-   * gone. A refusal (any non-2xx answer) throws `GmailWriteRefused`; a
-   * network failure throws as it is, and the outcome is unknown.
+   * gone. A 4xx answer is a refusal (`GmailWriteRefused`): nothing happened.
+   * A 5xx, a 408 or a network failure leaves the outcome unknown.
    */
   async #write<T>(
     method: "POST" | "PUT" | "DELETE",

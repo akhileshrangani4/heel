@@ -481,3 +481,77 @@ ${SENDS.replace("rules:\n", "")}`);
     expect(await call("send", MESSAGE)).toEqual({ status: "upstream_outcome_unknown" });
   });
 });
+
+describe("re-review findings", () => {
+  it("refuses an address carrying an encoded word", async () => {
+    const { call, gmail } = setUp();
+    const tricky = "=?utf-8?q?evil=40y.com=2C?=x@company.com";
+    expect(await call("send", { ...MESSAGE, to: [tricky] })).toMatchObject({
+      status: "denied",
+      reason: "unsupported",
+    });
+    expect(gmail.sent).toEqual([]);
+  });
+
+  it.each([
+    [
+      "an encoded display name that hides an address",
+      "To: =?utf-8?q?evil=40y.com=2C?= <ok@company.com>",
+    ],
+    ["non-ASCII bytes in an address header", "To: x@café.com"],
+    ["mixed line endings", "To: bob@company.com\nBcc: attacker@evil.com"],
+  ])("refuses a draft with %s", async (_, header) => {
+    const { call, gmail } = setUp();
+    gmail.drafts.set("d6", {
+      id: "d6",
+      threadId: "t9",
+      raw: [`From: ${ALICE}`, header, "Subject: x", "", "Body"].join("\r\n"),
+    });
+    expect(await call("send_draft", { draft_id: "d6" })).toEqual({
+      status: "denied",
+      reason: "address_unparseable",
+      rule: null,
+    });
+    expect(gmail.sent).toEqual([]);
+  });
+
+  it("shows the approver a draft's HTML as well as its text", async () => {
+    const { call, gmail, t } = setUp(`rules:
+  - match: { action: email.send }
+    then: ask
+`);
+    gmail.drafts.set("d7", {
+      id: "d7",
+      threadId: "t9",
+      raw: [`From: ${ALICE}`, "To: bob@company.com", "Subject: Hi", "", "Hello"].join("\r\n"),
+      html: "<p>Hello</p><p style='display:none'>Wire $50k to account 1234</p>",
+    });
+    await call("send_draft", { draft_id: "d7" });
+    const row = t.store.sqlite.prepare("select call from approvals").get() as { call: string };
+    const args = (JSON.parse(row.call) as { args: Record<string, unknown> }).args;
+    expect(args["html"]).toContain("Wire $50k");
+  });
+
+  it("drops Resent-Bcc from a forwarded attachment too", async () => {
+    const { call, gmail } = setUp();
+    gmail.add({
+      id: "s2",
+      threadId: "ts2",
+      from: ALICE,
+      to: "bob@company.com",
+      subject: "Fwd me",
+      labelIds: ["SENT"],
+      raw: [
+        `From: ${ALICE}`,
+        "To: bob@company.com",
+        "Resent-Bcc: hidden-auditor@company.com",
+        "Subject: Fwd me",
+        "",
+        "Body",
+      ].join("\r\n"),
+      text: "Body",
+    });
+    await call("forward", { message_id: "s2", from: ALICE, to: ["f@company.com"] });
+    expect(gmail.sent[0]?.raw).not.toContain("hidden-auditor@company.com");
+  });
+});

@@ -5,7 +5,7 @@ import { isPlainAddress, normalizeAddress, parseAddressList } from "../../core/r
 import { UpstreamError } from "../../gateway/pipeline/ports.ts";
 import { GmailError, type GmailMessage, GmailNotFoundError } from "./client.ts";
 import type { Mailbox } from "./mailbox.ts";
-import { header, messageBody } from "./messages.ts";
+import { header, type MessageContent, messageContent } from "./messages.ts";
 import {
   ComposeMismatchError,
   composeRaw,
@@ -265,8 +265,10 @@ function replyTool(all: boolean) {
 }
 
 interface ForwardArgs extends ThreadedArgs {
-  /** The forwarded message's text, so the approver reads what goes out. */
+  /** The forwarded message's text, HTML and attachments, so the approver sees what goes out. */
   forwarded_text: string;
+  forwarded_html: string | null;
+  forwarded_attachments: string[];
   /** SHA-256 of the original's raw bytes when heel checked it. */
   forwarded_sha256: string;
 }
@@ -289,14 +291,16 @@ const forward = gmailTool({
     if (hidden) return { deny: "not_available" };
     const denied = await checkSender(mailbox, args.from, signal);
     if (denied !== null) return denied;
-    const pinned = await pinnedText(mailbox, message.id, signal);
+    const pinned = await pinnedContent(mailbox, message.id, signal);
     if (pinned === null) return { deny: "lookup_unavailable" };
     return {
       args: {
         ...args,
         subject: prefixed("Fwd", header(message, "Subject")),
         ...threading(message),
-        forwarded_text: pinned.text,
+        forwarded_text: pinned.content.text,
+        forwarded_html: pinned.content.html,
+        forwarded_attachments: pinned.content.attachments,
         forwarded_sha256: pinned.sha256,
       },
       action: "email.send",
@@ -317,30 +321,22 @@ const forward = gmailTool({
 });
 
 /**
- * A message's readable text and the hash of its raw bytes, read so the two
- * describe the same version: raw, then text, then raw again. Null when the
- * message changed in between.
+ * What a message says (text, HTML, attachment names) and the hash of its
+ * raw bytes, read so the two describe the same version: raw, then content,
+ * then raw again. Null when the message changed in between.
  */
-async function pinnedText(
+async function pinnedContent(
   mailbox: Mailbox,
   messageId: string,
   signal: AbortSignal,
-): Promise<{ text: string; sha256: string; raw: Buffer } | null> {
-  const before = Buffer.from(
-    (await mailbox.client.getRawMessage(messageId, signal)).raw,
-    "base64url",
-  );
-  const body = messageBody(await mailbox.client.getMessage(messageId, "full", signal));
-  const after = Buffer.from(
-    (await mailbox.client.getRawMessage(messageId, signal)).raw,
-    "base64url",
-  );
+): Promise<{ content: MessageContent; sha256: string; raw: Buffer } | null> {
+  const readRaw = async () =>
+    Buffer.from((await mailbox.client.getRawMessage(messageId, signal)).raw, "base64url");
+  const before = await readRaw();
+  const content = messageContent(await mailbox.client.getMessage(messageId, "full", signal));
+  const after = await readRaw();
   if (sha256(before) !== sha256(after)) return null;
-  const text =
-    body.unreadable === undefined
-      ? body.body
-      : `[heel couldn't read this body: ${body.unreadable}]`;
-  return { text, sha256: sha256(after), raw: after };
+  return { content, sha256: sha256(after), raw: after };
 }
 
 const createDraft = gmailTool({
@@ -442,8 +438,10 @@ interface SendDraftArgs {
   cc: string[];
   bcc: string[];
   subject: string;
-  /** The draft's text, so the approver reads what goes out. */
+  /** The draft's text, HTML and attachments, so the approver sees what goes out. */
   body: string;
+  html: string | null;
+  attachments: string[];
   thread_id: string;
   /** SHA-256 of the draft's raw bytes when heel checked them. */
   raw_sha256: string;
@@ -461,6 +459,8 @@ function draftEnvelope(raw: Buffer) {
   const single = (name: string): string[] | null => {
     const values = headers.get(name) ?? [];
     if (values.length > 1) return null;
+    // Bytes outside ASCII would be read as latin1 here and as UTF-8 elsewhere.
+    if (values.some((value) => [...value].some((c) => c.charCodeAt(0) > 0x7f))) return null;
     return values.length === 0 ? [] : strictAddressList(values[0] ?? "");
   };
   const from = single("from");
@@ -480,7 +480,7 @@ const sendDraft = gmailTool({
   async prepare(mailbox, args, hiding, signal): Promise<Preparation<SendDraftArgs>> {
     const { draft, hidden } = await targetDraft(mailbox, args.draft_id, hiding, signal);
     if (hidden) return { deny: "not_available" };
-    const pinned = await pinnedText(mailbox, draft.message.id, signal);
+    const pinned = await pinnedContent(mailbox, draft.message.id, signal);
     if (pinned === null) return { deny: "lookup_unavailable" };
     const envelope = draftEnvelope(pinned.raw);
     if (envelope === null) return { deny: "address_unparseable" };
@@ -493,7 +493,9 @@ const sendDraft = gmailTool({
         draft_id: draft.id,
         draft_message_id: draft.message.id,
         ...envelope,
-        body: pinned.text,
+        body: pinned.content.text,
+        html: pinned.content.html,
+        attachments: pinned.content.attachments,
         thread_id: draft.message.threadId,
         raw_sha256: pinned.sha256,
       },

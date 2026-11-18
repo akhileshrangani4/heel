@@ -94,19 +94,23 @@ function verifyEnvelope(bytes: Buffer, message: Outgoing): void {
   }
 }
 
-/** A forwarded original without its Bcc header: forwarding must not reveal who was Bcc'd. */
+/**
+ * A forwarded original without its Bcc or Resent-Bcc headers: forwarding
+ * must not reveal who was blind-copied. With no blank line ending the
+ * headers, the whole message is treated as headers, so nothing slips by.
+ */
 export function withoutBcc(raw: Buffer): Buffer {
   const text = raw.toString("latin1");
-  const end = text.search(/\r?\n\r?\n/);
-  if (end < 0) return raw;
+  const match = /\r\n\r\n|\n\n|\r\r/.exec(text);
+  const end = match === null ? text.length : match.index;
   const kept: string[] = [];
   let skipping = false;
-  for (const line of text.slice(0, end).split(/\r?\n/)) {
+  for (const line of text.slice(0, end).split(/\r\n|\n|\r/)) {
     if (/^[ \t]/.test(line)) {
       if (!skipping) kept.push(line);
       continue;
     }
-    skipping = /^bcc\s*:/i.test(line);
+    skipping = /^(?:resent-)?bcc\s*:/i.test(line);
     if (!skipping) kept.push(line);
   }
   return Buffer.from(`${kept.join("\r\n")}${text.slice(end)}`, "latin1");
@@ -120,10 +124,14 @@ export function withoutBcc(raw: Buffer): Buffer {
  */
 export function rawHeaders(raw: Buffer): Map<string, string[]> | null {
   const text = raw.toString("latin1");
-  const end = text.search(/\r?\n\r?\n/);
+  const crlf = text.indexOf("\r\n") !== -1;
+  // One line-ending style throughout the headers and their terminator, so
+  // heel and the provider end the header block in the same place.
+  const terminator = crlf ? "\r\n\r\n" : "\n\n";
+  const end = text.indexOf(terminator);
   if (end <= 0) return null;
   const block = text.slice(0, end);
-  if (/\r(?!\n)/.test(block)) return null;
+  if (crlf ? /\r(?!\n)|(?<!\r)\n/.test(block) : /\r/.test(block)) return null;
   const headers = new Map<string, string[]>();
   let current: { name: string; value: string } | null = null;
   const flush = () => {
@@ -132,7 +140,7 @@ export function rawHeaders(raw: Buffer): Map<string, string[]> | null {
     list.push(current.value.trim());
     headers.set(current.name, list);
   };
-  for (const line of block.split(/\r?\n/)) {
+  for (const line of block.split(crlf ? "\r\n" : "\n")) {
     if (/^[ \t]/.test(line)) {
       if (current === null) return null;
       current.value += ` ${line.trim()}`;
@@ -153,6 +161,33 @@ const BARE = /^([^\s<>"(),;:@]+@[^\s<>"(),;:@]+)$/;
 const NAMED =
   /^(?:"(?:[^"\\<>@\r\n]|\\[^<>@\r\n])*"|[^"<>@,;:\r\n]*)\s*<([^\s<>"(),;:@]+@[^\s<>"(),;:@]+)>$/;
 
+const ENCODED_WORD = /=\?([^?\s]+)\?([bBqQ])\?([^?\s]*)\?=/g;
+
+/**
+ * Whether decoding an RFC 2047 encoded word in a display name could yield
+ * address syntax (`<`, `>`, `@`, `,`, `;`, `:`, `"`), as a decoding parser
+ * would read it. Undecodable words count as yes.
+ */
+function encodedWordHidesAddress(part: string): boolean {
+  for (const [, , encoding, data] of part.matchAll(ENCODED_WORD)) {
+    let decoded: string;
+    try {
+      decoded =
+        encoding?.toLowerCase() === "b"
+          ? Buffer.from(data ?? "", "base64").toString("latin1")
+          : (data ?? "")
+              .replaceAll("_", " ")
+              .replace(/=([0-9A-Fa-f]{2})/g, (_, hex: string) =>
+                String.fromCharCode(Number.parseInt(hex, 16)),
+              );
+    } catch {
+      return true;
+    }
+    if (/[<>@,;:"]/.test(decoded)) return true;
+  }
+  return false;
+}
+
 /**
  * An address header as plain addr-specs, or null when any part is not one
  * plain mailbox. Stricter than `parseAddressList` on purpose: it is used
@@ -164,6 +199,7 @@ export function strictAddressList(value: string): string[] | null {
     .filter((part) => part !== "");
   const addresses: string[] = [];
   for (const part of parts) {
+    if (encodedWordHidesAddress(part)) return null;
     const spec = BARE.exec(part)?.[1] ?? NAMED.exec(part)?.[1];
     const address = spec === undefined ? null : normalizeAddress(spec);
     if (address === null || !isPlainAddress(address)) return null;
