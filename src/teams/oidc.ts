@@ -265,7 +265,8 @@ export class OidcClient {
       issuer: claims.iss,
       subject: claims.sub,
       name: displayName(claims, claims.sub),
-      email: stringClaim(claims, "email"),
+      // An address the IdP hasn't verified could be anyone's; notifications would go there.
+      email: claims["email_verified"] === true ? stringClaim(claims, "email") : null,
       groups,
       role: roleForGroups(groups, this.#settings.roles),
     };

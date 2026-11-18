@@ -1,8 +1,8 @@
 import { createHash, randomBytes } from "node:crypto";
-import { and, eq, lt } from "drizzle-orm";
+import { and, count, eq, gt, isNull, lt } from "drizzle-orm";
 import type { HeelDb } from "../store/db.ts";
 import { newId } from "../store/ids.ts";
-import { oidcSignIns, users } from "../store/schema.ts";
+import { oidcSignIns, sessions, users } from "../store/schema.ts";
 import type { OidcIdentity, PendingSignIn } from "./oidc.ts";
 
 /**
@@ -13,9 +13,23 @@ import type { OidcIdentity, PendingSignIn } from "./oidc.ts";
  *   browser that started it, so the callback completes only in that browser,
  *   and it is used once.
  * - People are matched by their IdP issuer and subject, never by name.
- *   Their role and groups are read again at every sign-in, so someone moved
- *   out of every mapped group can no longer sign in.
+ *   Their role and groups are read again at every sign-in. Someone moved out
+ *   of every mapped group can't sign in, loses any admin role and groups, and
+ *   their sessions end.
+ * - A new person's heel name comes from the IdP, normalized (lower case,
+ *   letters, digits, `.`, `_`, `-`). If another user already has it, the
+ *   sign-in is refused and an admin decides: names are how admin commands
+ *   (`heel user enroll`) find people, so one person must never get another's
+ *   by signing in first.
+ * - At most MAX_PENDING sign-ins are in progress at once, so unauthenticated
+ *   requests can't grow the table without bound.
  */
+
+export const MAX_PENDING = 1_000;
+
+export class TooManySignIns extends Error {
+  override readonly name = "TooManySignIns";
+}
 
 export function hashBinding(cookie: string): string {
   return createHash("sha256").update(cookie, "utf8").digest("hex");
@@ -26,6 +40,8 @@ export function savePending(db: HeelDb, pending: PendingSignIn, next: string, no
   const cookie = randomBytes(32).toString("base64url");
   db.transaction((tx) => {
     tx.delete(oidcSignIns).where(lt(oidcSignIns.expiresAt, now)).run();
+    const live = tx.select({ n: count() }).from(oidcSignIns).get()?.n ?? 0;
+    if (live >= MAX_PENDING) throw new TooManySignIns("too many sign-ins in progress");
     tx.insert(oidcSignIns)
       .values({
         id: hashBinding(cookie),
@@ -67,7 +83,21 @@ export type SignInRefusal =
   /** None of the person's groups is mapped to a role. */
   | "no_role"
   /** The heel user for this identity is disabled. */
-  | "disabled";
+  | "disabled"
+  /** The IdP's name for a new person is another user's, or isn't usable as a name. */
+  | "name_unavailable";
+
+/** A heel user name from an IdP name: NFKC, lower case, `[a-z0-9._-]`, 1 to 64 characters; null if none is left. */
+export function userNameFrom(raw: string): string | null {
+  const name = raw
+    .normalize("NFKC")
+    .toLowerCase()
+    .replace(/@.*$/, "")
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^[-.]+|[-.]+$/g, "")
+    .slice(0, 64);
+  return name === "" ? null : name;
+}
 
 /** The subject heel stores: issuer and subject together, so two IdPs never share a person. */
 export function subjectKey(identity: Pick<OidcIdentity, "issuer" | "subject">): string {
@@ -85,9 +115,31 @@ export function userForIdentity(
   identity: OidcIdentity,
   now: Date,
 ): { ok: true; userId: string } | { ok: false; reason: SignInRefusal } {
-  if (identity.role === null) return { ok: false, reason: "no_role" };
-  const role = identity.role;
   const key = subjectKey(identity);
+  if (identity.role === null) {
+    // Out of every mapped group: no admin role, no groups, and no live session left.
+    db.transaction((tx) => {
+      const existing = tx
+        .select({ id: users.id })
+        .from(users)
+        .where(and(eq(users.orgId, orgId), eq(users.oidcSubject, key)))
+        .get();
+      if (existing === undefined) return;
+      tx.update(users).set({ role: "member", groups: [] }).where(eq(users.id, existing.id)).run();
+      tx.update(sessions)
+        .set({ endedAt: now })
+        .where(
+          and(
+            eq(sessions.userId, existing.id),
+            isNull(sessions.endedAt),
+            gt(sessions.expiresAt, now),
+          ),
+        )
+        .run();
+    });
+    return { ok: false, reason: "no_role" };
+  }
+  const role = identity.role;
   return db.transaction((tx) => {
     const existing = tx
       .select({ id: users.id, disabledAt: users.disabledAt, email: users.email })
@@ -106,16 +158,15 @@ export function userForIdentity(
         .run();
       return { ok: true as const, userId: existing.id };
     }
-    const taken = new Set(
-      tx
-        .select({ name: users.name })
-        .from(users)
-        .where(eq(users.orgId, orgId))
-        .all()
-        .map((u) => u.name),
-    );
-    let name = identity.name;
-    for (let n = 2; taken.has(name); n++) name = `${identity.name}-${n}`;
+    const name = userNameFrom(identity.name);
+    if (name === null) return { ok: false as const, reason: "name_unavailable" as const };
+    const taken = tx
+      .select({ name: users.name })
+      .from(users)
+      .where(eq(users.orgId, orgId))
+      .all()
+      .some((u) => u.name.toLowerCase() === name);
+    if (taken) return { ok: false as const, reason: "name_unavailable" as const };
     const id = newId("user");
     tx.insert(users)
       .values({

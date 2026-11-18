@@ -32,11 +32,29 @@ import { oidcSignIn, passkeySignIn, type SignInNotice } from "../ui/sign-in.ts";
 
 const HOME = "/approvals";
 
-/** Only a path on this site, never `//host` or a full URL, so sign-in can't redirect elsewhere. */
-export function safeNext(value: string | undefined): string {
+/**
+ * Only a path on this site, so sign-in can't send anyone elsewhere: it must
+ * start with one `/`, hold no backslash or control character (browsers read
+ * a backslash or a tab after the first `/` as the start of another host), and
+ * resolve to this origin.
+ */
+export function safeNext(value: string | undefined, publicUrl?: URL): string {
   if (value === undefined || !value.startsWith("/") || value.startsWith("//")) return HOME;
-  if (value.startsWith("/sign-in")) return HOME;
-  return value;
+  if (
+    [...value].some((ch) => ch === "\\" || ch.charCodeAt(0) < 0x20 || ch.charCodeAt(0) === 0x7f)
+  ) {
+    return HOME;
+  }
+  const base = publicUrl ?? new URL("https://heel.invalid");
+  let resolved: URL;
+  try {
+    resolved = new URL(value, base);
+  } catch {
+    return HOME;
+  }
+  if (resolved.origin !== base.origin) return HOME;
+  if (resolved.pathname.startsWith("/sign-in")) return HOME;
+  return `${resolved.pathname}${resolved.search}${resolved.hash}`;
 }
 
 function noticeFrom(query: Record<string, string>): SignInNotice {
@@ -56,7 +74,7 @@ export function signInRoutes(deps: HumanPlaneDeps): Hono {
     }
     // A team install signs people in through the IdP.
     if (deps.oidc != null) {
-      const next = safeNext(c.req.query("next"));
+      const next = safeNext(c.req.query("next"), deps.publicUrl);
       return renderPage(c, {
         title: "Sign in",
         viewer: null,
@@ -89,6 +107,9 @@ export function signInRoutes(deps: HumanPlaneDeps): Hono {
   });
 
   app.post("/sign-in/options", async (c) => {
+    // A team install signs people in through the IdP only.
+    if (deps.oidc != null)
+      return c.json({ ok: false, message: "Sign in with your organization." }, 404);
     const challengeId = stringField(await jsonBody(c), "challengeId") ?? "";
     const row = openChallenge(deps.db, deps.orgId, challengeId, "sign_in", deps.now());
     if (row === null) {
@@ -98,6 +119,8 @@ export function signInRoutes(deps: HumanPlaneDeps): Hono {
   });
 
   app.post("/sign-in", async (c) => {
+    if (deps.oidc != null)
+      return c.json({ ok: false, message: "Sign in with your organization." }, 404);
     const body = await jsonBody(c);
     const now = deps.now();
     const verified = await deps.passkeys.verifyAssertion({

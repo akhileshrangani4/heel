@@ -80,7 +80,11 @@ export function viewerOf(session: SessionView): Viewer {
 }
 
 /** Renders a full page. Every human-plane page goes through `page()`, so all share one layout. */
-export function renderPage(c: Context, props: PageProps, status: 200 | 404 = 200): Response {
+export function renderPage(
+  c: Context,
+  props: PageProps,
+  status: 200 | 400 | 403 | 404 | 503 = 200,
+): Response {
   return c.html(toHtmlString(page(props)), status);
 }
 

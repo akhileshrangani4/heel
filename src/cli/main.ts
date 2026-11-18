@@ -88,7 +88,12 @@ const ConnectedAccountResult = z.object({
   provider: z.string(),
   status: z.string(),
 });
-const EnrollmentResult = z.object({ url: z.string(), expiresAt: z.string() });
+const EnrollmentResult = z.object({
+  url: z.string(),
+  expiresAt: z.string(),
+  /** The IdP identity the user signs in as, on a team install. */
+  subject: z.string().nullable().default(null),
+});
 const PauseResult = z.object({ scope: z.string(), created: z.boolean() });
 
 const AuditExportPageResult = z.object({
@@ -420,7 +425,7 @@ async function userCommand(args: string[], io: CliIo): Promise<number> {
     await admin(config, { method: "user.enroll", params: { name } }),
   );
   io.stdout.write(
-    `Enrollment link for "${name}" (one use, valid until ${enrollment.expiresAt}):\n` +
+    `Enrollment link for "${name}"${enrollment.subject === null ? "" : ` (signs in as ${enrollment.subject})`} (one use, valid until ${enrollment.expiresAt}):\n` +
       `${enrollment.url}\n` +
       "Open it on the device that will hold the passkey. A newer link replaces this one.\n",
   );
