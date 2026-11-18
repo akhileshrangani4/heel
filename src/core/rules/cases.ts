@@ -35,7 +35,7 @@ const CaseCall = z.strictObject({
   repo: z.string().min(1).optional(),
   calendar: z.string().min(1).optional(),
   fields: z
-    .record(z.enum(PROVIDER_FIELDS), z.union([z.string(), z.number(), z.boolean()]))
+    .partialRecord(z.enum(PROVIDER_FIELDS), z.union([z.string(), z.number(), z.boolean()]))
     .optional(),
   items: count.default(1),
   /** The run id the agent sent. */

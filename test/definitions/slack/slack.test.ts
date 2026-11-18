@@ -23,7 +23,14 @@ interface Sent {
   params: Record<string, unknown>;
 }
 
-function fakeSlack(options: { refuse?: string; infoFails?: boolean } = {}) {
+function fakeSlack(
+  options: {
+    refuse?: string;
+    infoFails?: boolean;
+    status?: number;
+    info?: (id: string) => Record<string, unknown>;
+  } = {},
+) {
   const sent: Sent[] = [];
   const fetch = async (input: string | URL, init?: RequestInit): Promise<Response> => {
     const url = new URL(input.toString());
@@ -33,6 +40,9 @@ function fakeSlack(options: { refuse?: string; infoFails?: boolean } = {}) {
         ? (JSON.parse(String(init.body)) as Record<string, unknown>)
         : Object.fromEntries(url.searchParams);
     sent.push({ method, params });
+    if (method === "chat.postMessage" && options.status !== undefined) {
+      return new Response("", { status: options.status });
+    }
     if (new Headers(init?.headers).get("authorization") !== `Bearer ${TOKEN}`) {
       return Response.json({ ok: false, error: "not_authed" });
     }
@@ -40,6 +50,8 @@ function fakeSlack(options: { refuse?: string; infoFails?: boolean } = {}) {
       case "conversations.info": {
         if (options.infoFails === true) return new Response("", { status: 500 });
         const id = String(params["channel"]);
+        if (options.info !== undefined)
+          return Response.json({ ok: true, channel: options.info(id) });
         if (id !== INTERNAL && id !== SHARED)
           return Response.json({ ok: false, error: "channel_not_found" });
         return Response.json({ ok: true, channel: { id, is_ext_shared: id === SHARED } });
@@ -116,7 +128,12 @@ describe("the Slack definition", () => {
     const h = setUp(INSIDE_ONLY);
     const result = await h.call("post_message", { channel: INTERNAL, text: "standup in 5" });
     expect(result.status).toBe("allowed");
-    expect(posts(h.sent)[0]?.params).toEqual({ channel: INTERNAL, text: "standup in 5" });
+    expect(posts(h.sent)[0]?.params).toEqual({
+      channel: INTERNAL,
+      text: "standup in 5",
+      unfurl_links: false,
+      unfurl_media: false,
+    });
   });
 
   it("asks before posting to a channel shared with another organization", async () => {
@@ -185,5 +202,61 @@ describe("the Slack definition", () => {
     const result = await h.call("read_channel", { channel: INTERNAL });
     expect(result).toMatchObject({ status: "allowed" });
     expect((await h.call("read_channel", { channel: SHARED })).status).toBe("denied");
+  });
+
+  it("denies when Slack doesn't say whether a channel is shared", async () => {
+    const h = setUp(INSIDE_ONLY, fakeSlack({ info: (id) => ({ id }) }));
+    expect(await h.call("post_message", { channel: INTERNAL, text: "x" })).toMatchObject({
+      reason: "lookup_unavailable",
+    });
+  });
+
+  it("counts a DM or group DM as external", async () => {
+    const h = setUp(INSIDE_ONLY, fakeSlack({ info: (id) => ({ id, is_im: true }) }));
+    expect((await h.call("post_message", { channel: "D0DIRECT1", text: "x" })).status).toBe(
+      "pending",
+    );
+    const g = setUp(
+      INSIDE_ONLY,
+      fakeSlack({ info: (id) => ({ id, is_mpim: true, is_ext_shared: false }) }),
+    );
+    expect((await g.call("post_message", { channel: "G0GROUP12", text: "x" })).status).toBe(
+      "pending",
+    );
+  });
+
+  it("escapes mentions and links, so the text is what the approver read", async () => {
+    const h = setUp(INSIDE_ONLY);
+    await h.call("post_message", {
+      channel: INTERNAL,
+      text: "<!channel> see <https://evil.example|docs> & go",
+    });
+    expect(posts(h.sent)[0]?.params["text"]).toBe(
+      "&lt;!channel&gt; see &lt;https://evil.example|docs&gt; &amp; go",
+    );
+  });
+
+  it("leaves the outcome unknown on an error Slack says may follow a partial success", async () => {
+    const h = setUp(INSIDE_ONLY, fakeSlack({ refuse: "internal_error" }));
+    expect((await h.call("post_message", { channel: INTERNAL, text: "x" })).status).toBe(
+      "upstream_outcome_unknown",
+    );
+  });
+
+  it("reports a rate limit as a refusal", async () => {
+    const h = setUp(INSIDE_ONLY, fakeSlack({ status: 429 }));
+    expect(await h.call("post_message", { channel: INTERNAL, text: "x" })).toMatchObject({
+      status: "upstream_error",
+      upstreamStatus: 429,
+    });
+  });
+
+  it.each([
+    ["external as a string", 'external: "true"'],
+    ["a channel name", 'channel: "#general"'],
+  ])("refuses a rule with %s when it loads", (_label, condition) => {
+    expect(() =>
+      setUp(`rules:\n  - match: { action: slack.post, ${condition} }\n    then: deny\n`),
+    ).toThrow();
   });
 });

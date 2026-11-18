@@ -20,11 +20,14 @@ import { SlackClient, SlackNotFoundError, SlackRefused } from "./client.ts";
  *   is shared with another organization through Slack Connect
  *   (`is_ext_shared` or `is_pending_ext_shared` from `conversations.info`),
  *   read before any rule. A failed read denies the call.
- * - Messages are plain text only: no blocks or attachments, so what an
- *   approver reads is what is posted.
+ * - Messages are plain text only: no blocks or attachments; `&`, `<` and
+ *   `>` are escaped, so no mention, broadcast or disguised link can hide in
+ *   them, and links don't unfurl. What an approver reads is what is posted.
+ * - A DM or group DM counts as `external`: Slack doesn't mark external
+ *   people on those conversations.
  * - heel offers no tool for incoming webhooks or app installs.
  *
- * Methods (https://api.slack.com/methods): conversations.list,
+ * Methods (https://docs.slack.dev/reference/methods/<name>): conversations.list,
  * conversations.info, conversations.history, conversations.replies,
  * chat.postMessage, chat.update, chat.delete, chat.scheduleMessage.
  */
@@ -49,18 +52,36 @@ const Cursor = z.string().max(500).optional();
 const Limit = z.number().int().min(1).max(200).default(50);
 const Text = z.string().min(1).max(40_000);
 
-/** The channel's id and whether it is shared with another organization. */
+/**
+ * The channel's id and whether it may reach another organization, failing
+ * closed: `is_ext_shared` must be a boolean (otherwise the read fails and the
+ * call is denied), and a DM or group DM counts as external, since Slack marks
+ * external people on the user, not on the conversation
+ * (https://docs.slack.dev/reference/objects/conversation-object).
+ */
 async function channelFields(box: Box, channel: string, signal: AbortSignal) {
   const info = await box.client.call("conversations.info", { channel }, signal);
-  const c = info["channel"] as {
-    id?: unknown;
-    is_ext_shared?: unknown;
-    is_pending_ext_shared?: unknown;
-  };
-  if (c === undefined || c.id !== channel)
+  const c = info["channel"] as Record<string, unknown> | undefined;
+  if (c === undefined || c["id"] !== channel) {
     throw new Error("conversations.info answered for another channel");
-  return { channel, external: c.is_ext_shared === true || c.is_pending_ext_shared === true };
+  }
+  const direct = c["is_im"] === true || c["is_mpim"] === true;
+  if (!direct && typeof c["is_ext_shared"] !== "boolean") {
+    throw new Error("conversations.info didn't say whether the channel is shared");
+  }
+  return {
+    channel,
+    external: direct || c["is_ext_shared"] === true || c["is_pending_ext_shared"] === true,
+  };
 }
+
+/**
+ * Text exactly as written: `&`, `<` and `>` are escaped (Slack's documented
+ * escaping, https://docs.slack.dev/messaging/formatting-message-text), so
+ * `<!channel>`, mentions and `<url|label>` links can't hide in it.
+ */
+const plain = (text: string) =>
+  text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 
 const message = (raw: unknown) => {
   const m = raw as Record<string, unknown>;
@@ -174,7 +195,13 @@ const TOOLS: Record<string, SlackTool> = {
     run: (box, a, signal) =>
       box.client.call(
         "chat.postMessage",
-        { channel: a.channel, text: a.text, thread_ts: a.thread_ts },
+        {
+          channel: a.channel,
+          text: plain(a.text),
+          thread_ts: a.thread_ts,
+          unfurl_links: false,
+          unfurl_media: false,
+        },
         signal,
         true,
       ),
@@ -195,7 +222,12 @@ const TOOLS: Record<string, SlackTool> = {
       targets: [`${args.channel}/${args.ts}`],
     }),
     run: (box, a, signal) =>
-      box.client.call("chat.update", { channel: a.channel, ts: a.ts, text: a.text }, signal, true),
+      box.client.call(
+        "chat.update",
+        { channel: a.channel, ts: a.ts, text: plain(a.text) },
+        signal,
+        true,
+      ),
     show: async (_box, body: Record<string, unknown>) => ({
       channel: body["channel"],
       ts: body["ts"],
@@ -203,7 +235,8 @@ const TOOLS: Record<string, SlackTool> = {
   }),
 
   delete_message: tool({
-    description: "Delete a message this account posted.",
+    description:
+      "Delete a message. Slack lets a token delete what its user could delete in the app.",
     args: z.strictObject({ channel: Channel, ts: Ts }),
     readOnly: false,
     prepare: async (box, args, _h, signal) => ({
@@ -239,7 +272,14 @@ const TOOLS: Record<string, SlackTool> = {
     run: (box, a, signal) =>
       box.client.call(
         "chat.scheduleMessage",
-        { channel: a.channel, text: a.text, post_at: a.post_at, thread_ts: a.thread_ts },
+        {
+          channel: a.channel,
+          text: plain(a.text),
+          post_at: a.post_at,
+          thread_ts: a.thread_ts,
+          unfurl_links: false,
+          unfurl_media: false,
+        },
         signal,
         true,
       ),
@@ -261,9 +301,11 @@ export function slackDefinition(account: AccountRecord, deps: SlackDeps): Defini
     mailbox: { client: new SlackClient(deps.fetch, token) },
     errors: {
       isNotFound: (error) => error instanceof SlackNotFoundError,
-      // Slack validates before it acts: a refusal means nothing was posted, changed or deleted.
+      // Only errors Slack raises before acting are refusals; the client leaves the rest unknown.
       refusal: (error) =>
-        error instanceof SlackRefused ? new UpstreamError(400, { error: error.error }) : null,
+        error instanceof SlackRefused
+          ? new UpstreamError(error.status, { error: error.error })
+          : null,
     },
     stateCheck: async () => "fail",
   });

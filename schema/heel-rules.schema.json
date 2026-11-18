@@ -106,28 +106,28 @@
           "$ref": "#/$defs/TextListCondition"
         },
         "channel": {
-          "$ref": "#/$defs/ValueCondition"
+          "$ref": "#/$defs/ChannelCondition"
         },
         "external": {
-          "$ref": "#/$defs/ValueCondition"
+          "$ref": "#/$defs/BooleanCondition"
         },
         "team": {
-          "$ref": "#/$defs/ValueCondition"
+          "$ref": "#/$defs/TextCondition"
         },
         "project": {
-          "$ref": "#/$defs/ValueCondition"
+          "$ref": "#/$defs/TextCondition"
         },
         "parent": {
-          "$ref": "#/$defs/ValueCondition"
+          "$ref": "#/$defs/TextCondition"
         },
         "amount": {
-          "$ref": "#/$defs/ValueCondition"
+          "$ref": "#/$defs/AmountCondition"
         },
         "currency": {
-          "$ref": "#/$defs/ValueCondition"
+          "$ref": "#/$defs/CurrencyCondition"
         },
         "customer": {
-          "$ref": "#/$defs/ValueCondition"
+          "$ref": "#/$defs/TextCondition"
         }
       },
       "additionalProperties": {
@@ -386,6 +386,122 @@
               "type": "integer",
               "minimum": 0,
               "maximum": 9007199254740991
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ChannelCondition": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[CDG][A-Z0-9]{2,30}$"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "equals": {
+              "type": "string",
+              "pattern": "^[CDG][A-Z0-9]{2,30}$"
+            },
+            "one_of": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[CDG][A-Z0-9]{2,30}$"
+              }
+            },
+            "any_of": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[CDG][A-Z0-9]{2,30}$"
+              }
+            },
+            "matches": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "BooleanCondition": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "equals": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "AmountCondition": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "equals": {
+              "type": "number"
+            },
+            "one_of": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            },
+            "max": {
+              "type": "number"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "CurrencyCondition": {
+      "anyOf": [
+        {
+          "type": "string",
+          "pattern": "^[a-z]{3}$"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "equals": {
+              "type": "string",
+              "pattern": "^[a-z]{3}$"
+            },
+            "one_of": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z]{3}$"
+              }
+            },
+            "any_of": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z]{3}$"
+              }
+            },
+            "matches": {
+              "type": "string"
             }
           },
           "additionalProperties": false

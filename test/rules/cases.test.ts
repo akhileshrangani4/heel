@@ -195,3 +195,24 @@ describe("runCase", () => {
     ).toThrow();
   });
 });
+
+describe("cases with provider fields", () => {
+  it("take only the fields they need, and match on them", () => {
+    const slack = ruleSet({
+      owner:
+        "rules:\n  - match: { action: slack.post, external: true }\n    then: deny\n  - match: { action: slack.post }\n    then: allow\n",
+    });
+    const post = (external: boolean) =>
+      caseOf({
+        call: {
+          agent: "bot",
+          account: "slack",
+          action: "slack.post",
+          fields: { channel: "C0123", external },
+        },
+        expect: { decision: external ? "deny" : "allow" },
+      });
+    expect(runCase(slack, post(true), OWNER).outcome).toBe("pass");
+    expect(runCase(slack, post(false), OWNER).outcome).toBe("pass");
+  });
+});

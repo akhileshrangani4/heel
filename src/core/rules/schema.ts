@@ -54,6 +54,46 @@ export const KindCondition = condition(
   "read or write",
 ).meta({ id: "KindCondition" });
 
+/**
+ * Provider fields (D12b), each typed, so a rule value of the wrong type is a
+ * load error rather than a condition that silently never matches.
+ */
+const textOf = (value: z.ZodString, what: string, id: string) =>
+  condition(
+    value,
+    z.strictObject({
+      equals: value.optional(),
+      one_of: nonEmpty(value).optional(),
+      any_of: nonEmpty(value).optional(),
+      matches: z.string().optional(),
+    }),
+    what,
+  ).meta({ id });
+export const ChannelCondition = textOf(
+  z.string().regex(/^[CDG][A-Z0-9]{2,30}$/, "expected a Slack channel id like C0123ABCD"),
+  "a Slack channel id",
+  "ChannelCondition",
+);
+export const CurrencyCondition = textOf(
+  z.string().regex(/^[a-z]{3}$/, "expected a lower-case three-letter currency code like usd"),
+  "a currency code",
+  "CurrencyCondition",
+);
+export const BooleanCondition = condition(
+  z.boolean(),
+  z.strictObject({ equals: z.boolean().optional() }),
+  "true or false",
+).meta({ id: "BooleanCondition" });
+export const AmountCondition = condition(
+  z.number(),
+  z.strictObject({
+    equals: z.number().optional(),
+    one_of: nonEmpty(z.number()).optional(),
+    max: z.number().optional(),
+  }),
+  "a number",
+).meta({ id: "AmountCondition" });
+
 /** Lists of text: `argv`, and `labels` in hide entries. */
 export const TextListCondition = condition(
   z.string(),
@@ -153,14 +193,14 @@ const fixedMatchKeys = {
   subcommand: TextCondition.optional(),
   argv: TextListCondition.optional(),
   // Provider fields (D12b): set by built-in definitions only.
-  channel: ValueCondition.optional(),
-  external: ValueCondition.optional(),
-  team: ValueCondition.optional(),
-  project: ValueCondition.optional(),
-  parent: ValueCondition.optional(),
-  amount: ValueCondition.optional(),
-  currency: ValueCondition.optional(),
-  customer: ValueCondition.optional(),
+  channel: ChannelCondition.optional(),
+  external: BooleanCondition.optional(),
+  team: TextCondition.optional(),
+  project: TextCondition.optional(),
+  parent: TextCondition.optional(),
+  amount: AmountCondition.optional(),
+  currency: CurrencyCondition.optional(),
+  customer: TextCondition.optional(),
 };
 export type FixedMatchKey = keyof typeof fixedMatchKeys;
 export const FIXED_MATCH_KEYS = Object.keys(fixedMatchKeys) as readonly FixedMatchKey[];
