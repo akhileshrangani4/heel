@@ -140,7 +140,7 @@ The agent can't approve anything itself.
 ## When it needs you
 
 1. **You get a notification** on your phone (once heel has an HTTPS address: see below), or by email or Slack. It links to heel, and replying to it approves nothing. Waiting requests are also listed on the approval page.
-2. **The request page shows exactly what will run:** the account, the rule that asked, the counts, and the full arguments (every recipient and the whole body).
+2. **The request page shows exactly what will run:** the account, the rule that asked, the counts, and the full arguments (every recipient and the whole body). With [hints](docs/approvals.md#hints) turned on, it also shows advice from Jev, TypeSafe's decision model, like "asks someone for money". The advice can't approve or deny anything.
 3. **You decide with your passkey:**
    - **Approve once:** the call runs the next time the agent sends it.
    - **Approve as standing:** also allow this exact call, or everything the rule asks about, for up to 90 days.
