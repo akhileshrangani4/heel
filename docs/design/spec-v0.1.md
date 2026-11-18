@@ -369,7 +369,7 @@ State checks run only for a rule whose plain conditions already match, in rule o
 **all_in_thread** _(email)_
 
 - **Thread.** Gmail uses `threadId`, or resolves `In-Reply-To`/`References` to a thread. Outlook uses the original message's `conversationId`.
-- **Which messages count.** Messages the account sent: Gmail `SENT` label or `From` in `sendAs.list`, Outlook `from` = mailbox.
+- **Which messages count.** Messages the account sent: Gmail `SENT` label (not `DRAFT`), Outlook the Sent Items folder. **Amended Nov 17 (D9a-2 review):** a `From` matching the mailbox doesn't count, since anyone can write it on mail to you and drafts carry it too.
 - **Allowed set.** The union of To, Cc and Bcc across those messages.
 - **Pass.** Every normalized recipient of the new call is in the allowed set.
 - **Fails.** A new message with no thread, a thread where the account never sent anything, or any read error (I-21) _[MCP §2.1, §2.2]_.

@@ -65,6 +65,30 @@ const LabelsSchema = z.object({
 });
 export type GmailLabel = z.output<typeof LabelsSchema>["labels"][number];
 
+const RawMessageSchema = z.object({ id: z.string(), threadId: z.string(), raw: z.string() });
+export type GmailRawMessage = z.output<typeof RawMessageSchema>;
+
+const DraftSchema = z.object({ id: z.string(), message: RawMessageSchema });
+export type GmailDraft = z.output<typeof DraftSchema>;
+
+const SentSchema = z.object({ id: z.string(), threadId: z.string() });
+const DraftRefSchema = z.object({
+  id: z.string(),
+  message: z.object({ id: z.string(), threadId: z.string() }),
+});
+
+const SendAsSchema = z.object({
+  sendAs: z
+    .array(
+      z.object({
+        sendAsEmail: z.string(),
+        isPrimary: z.boolean().optional(),
+        verificationStatus: z.string().optional(),
+      }),
+    )
+    .default([]),
+});
+
 /**
  * How much of a message to read. `metadata` gives headers and labels only;
  * `full` adds the body, which only `looks_like` and the message tools need.
@@ -72,7 +96,17 @@ export type GmailLabel = z.output<typeof LabelsSchema>["labels"][number];
 export type MessageFormat = "metadata" | "full";
 
 /** The headers heel reads in `metadata` format. */
-export const METADATA_HEADERS = ["From", "To", "Cc", "Bcc", "Subject", "Date"] as const;
+export const METADATA_HEADERS = [
+  "From",
+  "To",
+  "Cc",
+  "Bcc",
+  "Subject",
+  "Date",
+  "Reply-To",
+  "Message-ID",
+  "References",
+] as const;
 
 /** Gmail answered 404: the message or thread doesn't exist, or isn't this mailbox's. */
 export class GmailNotFoundError extends Error {
@@ -90,6 +124,18 @@ export class GmailError extends Error {
 }
 
 const RETRYABLE = (status: number) => status === 429 || status >= 500;
+
+/** Gmail refused a write. The write did not happen, so the call's outcome is known. */
+export class GmailWriteRefused extends Error {
+  override readonly name = "GmailWriteRefused";
+  readonly status: number;
+  readonly body: unknown;
+  constructor(status: number, body: unknown) {
+    super(`Gmail refused the write (${status})`);
+    this.status = status;
+    this.body = body;
+  }
+}
 
 export class GmailClient {
   readonly #fetch: FetchFn;
@@ -124,6 +170,130 @@ export class GmailClient {
     if (!parsed.success)
       throw new GmailError(response.status, `Gmail's answer to ${path} didn't parse`);
     return parsed.data;
+  }
+
+  /**
+   * A write: sent once, never retried, since a send that timed out may have
+   * gone. A 4xx answer is a refusal (`GmailWriteRefused`): nothing happened.
+   * A 5xx, a 408 or a network failure leaves the outcome unknown.
+   */
+  async #write<T>(
+    method: "POST" | "PUT" | "DELETE",
+    path: string,
+    body: unknown,
+    schema: z.ZodType<T> | null,
+    signal: AbortSignal,
+  ): Promise<T | null> {
+    const response = await this.#fetch(new URL(path, GMAIL_API_BASE), {
+      method,
+      headers: {
+        authorization: `Bearer ${await this.#token()}`,
+        accept: "application/json",
+        ...(body === undefined ? {} : { "content-type": "application/json" }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      signal,
+    });
+    // A 5xx or a timeout doesn't prove nothing happened: the outcome is unknown.
+    if (response.status >= 500 || response.status === 408) {
+      throw new Error(`Gmail answered ${response.status}; the write may have happened`);
+    }
+    if (!response.ok) {
+      throw new GmailWriteRefused(response.status, await response.json().catch(() => null));
+    }
+    if (schema === null) return null;
+    const parsed = schema.safeParse(await response.json());
+    if (!parsed.success)
+      throw new GmailError(response.status, `Gmail's answer to ${path} didn't parse`);
+    return parsed.data;
+  }
+
+  /** `users.settings.sendAs.list`: the addresses this mailbox may send as, verified ones only. */
+  async listSendAs(signal: AbortSignal): Promise<string[]> {
+    const { sendAs } = await this.#get("users/me/settings/sendAs", [], SendAsSchema, signal);
+    return sendAs
+      .filter((alias) => alias.isPrimary === true || alias.verificationStatus === "accepted")
+      .map((alias) => alias.sendAsEmail);
+  }
+
+  /** `users.messages.get(format=raw)`: the message's exact bytes, base64url. */
+  getRawMessage(id: string, signal: AbortSignal): Promise<GmailRawMessage> {
+    return this.#get(
+      `users/me/messages/${encodeURIComponent(id)}`,
+      [["format", "raw"]],
+      RawMessageSchema,
+      signal,
+    );
+  }
+
+  /** `users.drafts.get(format=raw)`. */
+  getDraft(id: string, signal: AbortSignal): Promise<GmailDraft> {
+    return this.#get(
+      `users/me/drafts/${encodeURIComponent(id)}`,
+      [["format", "raw"]],
+      DraftSchema,
+      signal,
+    );
+  }
+
+  /** `users.messages.send`: sends to the raw message's To, Cc and Bcc. */
+  async sendMessage(input: { raw: string; threadId?: string | undefined }, signal: AbortSignal) {
+    const message = {
+      raw: input.raw,
+      ...(input.threadId === undefined ? {} : { threadId: input.threadId }),
+    };
+    return (await this.#write(
+      "POST",
+      "users/me/messages/send",
+      message,
+      SentSchema,
+      signal,
+    )) as z.output<typeof SentSchema>;
+  }
+
+  /** `users.drafts.create`. */
+  async createDraft(input: { raw: string; threadId?: string | undefined }, signal: AbortSignal) {
+    const message = {
+      raw: input.raw,
+      ...(input.threadId === undefined ? {} : { threadId: input.threadId }),
+    };
+    return (await this.#write(
+      "POST",
+      "users/me/drafts",
+      { message },
+      DraftRefSchema,
+      signal,
+    )) as z.output<typeof DraftRefSchema>;
+  }
+
+  /** `users.drafts.update`: replaces the draft's whole message. */
+  async updateDraft(
+    id: string,
+    input: { raw: string; threadId?: string | undefined },
+    signal: AbortSignal,
+  ) {
+    const message = {
+      raw: input.raw,
+      ...(input.threadId === undefined ? {} : { threadId: input.threadId }),
+    };
+    return (await this.#write(
+      "PUT",
+      `users/me/drafts/${encodeURIComponent(id)}`,
+      { id, message },
+      DraftRefSchema,
+      signal,
+    )) as z.output<typeof DraftRefSchema>;
+  }
+
+  /** `users.drafts.delete`: permanent, but only ever a draft. */
+  async deleteDraft(id: string, signal: AbortSignal): Promise<void> {
+    await this.#write(
+      "DELETE",
+      `users/me/drafts/${encodeURIComponent(id)}`,
+      undefined,
+      null,
+      signal,
+    );
   }
 
   /** `users.messages.list`: ids only, newest first. */
