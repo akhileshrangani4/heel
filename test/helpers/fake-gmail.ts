@@ -82,6 +82,7 @@ export class FakeGmail {
   readonly messages = new Map<string, FakeMessage>();
   readonly drafts = new Map<string, FakeDraft>();
   readonly sent: SentMessage[] = [];
+  readonly filters: { id: string; criteria: unknown; action: unknown }[] = [];
   labels = [...SYSTEM_LABELS];
   sendAs = [
     { sendAsEmail: "alice@company.com", isPrimary: true },
@@ -204,6 +205,38 @@ export class FakeGmail {
       const id = `sent-${this.#nextId++}`;
       return Response.json({ id, threadId: threadId ?? id, labelIds: ["SENT"] });
     }
+    if (method === "POST" && path === "users/me/messages/batchModify") {
+      const body = this.#json(init) as {
+        ids: string[];
+        addLabelIds: string[];
+        removeLabelIds: string[];
+      };
+      for (const id of body.ids) {
+        const message = this.messages.get(id);
+        if (message === undefined) continue;
+        const labels = new Set(message.labelIds ?? ["INBOX"]);
+        for (const label of body.addLabelIds) labels.add(label);
+        for (const label of body.removeLabelIds) labels.delete(label);
+        message.labelIds = [...labels];
+      }
+      return new Response(null, { status: 204 });
+    }
+    const trashed = /^users\/me\/(messages|threads)\/([^/]+)\/trash$/.exec(path);
+    if (method === "POST" && trashed !== null) {
+      const [, kind, id] = trashed;
+      const targets = [...this.messages.values()].filter((m) =>
+        kind === "messages" ? m.id === id : m.threadId === id,
+      );
+      if (targets.length === 0) return Response.json({ error: { code: 404 } }, { status: 404 });
+      for (const m of targets) m.labelIds = ["TRASH"];
+      return Response.json({ id });
+    }
+    if (method === "POST" && path === "users/me/settings/filters") {
+      const body = this.#json(init) as { criteria: unknown; action: unknown };
+      const filter = { id: `filter-${this.#nextId++}`, ...body };
+      this.filters.push(filter);
+      return Response.json(filter);
+    }
     if (method === "POST" && path === "users/me/drafts") {
       const message = this.#json(init)["message"] as { raw: string; threadId?: string };
       const id = `draft-${this.#nextId++}`;
@@ -254,6 +287,7 @@ export class FakeGmail {
     }
     if (path === "users/me/labels") return Response.json({ labels: this.labels });
     if (path === "users/me/settings/sendAs") return Response.json({ sendAs: this.sendAs });
+    if (path === "users/me/settings/filters") return Response.json({ filter: this.filters });
     const draftRead = /^users\/me\/drafts\/([^/]+)$/.exec(path)?.[1];
     if (draftRead !== undefined) {
       const draft = this.drafts.get(draftRead);

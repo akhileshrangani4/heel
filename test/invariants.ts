@@ -40,6 +40,9 @@ export const REQUIRED_INVARIANTS: Readonly<Record<string, string>> = {
     "`email.send` covers send, reply, reply-all, forward and draft send; recipients are To ∪ Cc ∪ Bcc, so a Bcc-only address trips `any_domain_in`.",
   "I-21":
     "`all_in_thread` fails when any recipient wasn't on a message the account sent in that thread, and always for a new message.",
+  // D9a-3: Gmail removes, labels and filters
+  "I-70":
+    "A built-in tool that outlives revoking heel (a forwarding filter) is denied unless a rule names it; a broad allow doesn't.",
   // D10b: hide path
   "I-43":
     "`looks_like` can only add items to the hidden set; no verdict allows a call or un-hides an item.",
