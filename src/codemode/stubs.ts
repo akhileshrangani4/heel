@@ -44,9 +44,7 @@ const KEYWORDS = new Set([
   "while",
   "with",
   "yield",
-  "match",
-  "case",
-  "type",
+  // `match`, `case` and `type` are soft keywords: fine as names.
 ]);
 
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -65,6 +63,12 @@ export interface StubModule {
   stubs: string;
   /** Python function name → the tool it calls. */
   functions: ReadonlyMap<string, string>;
+  /**
+   * Python function name → its renamed parameters (Python name → the tool's
+   * argument name): a parameter named after a reserved word, like `from`,
+   * is `from_` in Python.
+   */
+  renamed: ReadonlyMap<string, ReadonlyMap<string, string>>;
   /** Tools left out, with why: a name that can't be a Python identifier, or a clash. */
   skipped: readonly { tool: string; reason: string }[];
 }
@@ -121,21 +125,29 @@ function docstring(text: string | undefined): string {
   return `"""${text.replaceAll("\\", "\\\\").replaceAll('"""', '\\"\\"\\"')}"""`;
 }
 
-/** One function's stub: keyword-only, required parameters first. */
-function functionStub(name: string, tool: StubTool): string | null {
+/**
+ * One function's stub: keyword-only, required parameters first. A parameter
+ * named after a reserved word gets a trailing underscore (`from` → `from_`,
+ * the usual Python spelling), recorded in `renamed` so heel passes the
+ * tool's own name on.
+ */
+function functionStub(name: string, tool: StubTool, renamed: Map<string, string>): string | null {
   const properties = (tool.inputSchema["properties"] ?? {}) as Record<string, unknown>;
   const required = new Set(
     Array.isArray(tool.inputSchema["required"]) ? (tool.inputSchema["required"] as string[]) : [],
   );
   const params: string[] = [];
   for (const [key, schema] of Object.entries(properties)) {
-    // A parameter whose name can't be a Python identifier can't be passed.
-    if (!IDENTIFIER.test(key) || KEYWORDS.has(key)) {
+    // A parameter whose name can't be a Python identifier can't be passed;
+    // neither can a reserved word whose `_` spelling is taken.
+    const python = KEYWORDS.has(key) ? `${key}_` : key;
+    if (!IDENTIFIER.test(key) || (python !== key && python in properties)) {
       if (required.has(key)) return null;
       continue;
     }
+    if (python !== key) renamed.set(python, key);
     const type = pythonType(schema);
-    params.push(required.has(key) ? `${key}: ${type}` : `${key}: ${type} = ...`);
+    params.push(required.has(key) ? `${python}: ${type}` : `${python}: ${type} = ...`);
   }
   params.sort((a, b) => Number(a.includes(" = ...")) - Number(b.includes(" = ...")));
   const signature = params.length === 0 ? "" : `*, ${params.join(", ")}`;
@@ -147,6 +159,7 @@ export function accountModule(alias: string, tools: readonly StubTool[]): StubMo
   const module = moduleName(alias);
   if (module === null) return null;
   const functions = new Map<string, string>();
+  const renamedBy = new Map<string, ReadonlyMap<string, string>>();
   const skipped: { tool: string; reason: string }[] = [];
   const bodies: string[] = [];
   for (const tool of tools) {
@@ -159,7 +172,8 @@ export function accountModule(alias: string, tools: readonly StubTool[]): StubMo
       skipped.push({ tool: tool.name, reason: `its name clashes with ${functions.get(name)}` });
       continue;
     }
-    const stub = functionStub(name, tool);
+    const renamed = new Map<string, string>();
+    const stub = functionStub(name, tool, renamed);
     if (stub === null) {
       skipped.push({
         tool: tool.name,
@@ -168,8 +182,9 @@ export function accountModule(alias: string, tools: readonly StubTool[]): StubMo
       continue;
     }
     functions.set(name, tool.name);
+    if (renamed.size > 0) renamedBy.set(name, renamed);
     bodies.push(stub);
   }
   const header = `"""heel: tools of the account ${alias}. Each call is checked by heel's rules."""\nfrom typing import Any, Literal\n\n`;
-  return { module, stubs: header + bodies.join("\n"), functions, skipped };
+  return { module, stubs: header + bodies.join("\n"), functions, renamed: renamedBy, skipped };
 }
