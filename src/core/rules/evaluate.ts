@@ -55,6 +55,11 @@ export interface EvalContext {
    */
   counted(rule: CompiledRule, per: "run" | "hour"): number;
   standing: StandingApprovals;
+  /**
+   * The agent's live intent grants (A4b), compiled as owner-layer allows.
+   * Consulted only when the rules end in an owner ask or the default deny.
+   */
+  grants?: readonly CompiledRule[];
 }
 
 export const DENY_REASONS = [
@@ -74,7 +79,13 @@ export const DENY_REASONS = [
 export type DenyReason = (typeof DENY_REASONS)[number];
 
 export type Verdict =
-  | { decision: "allow"; rule: CompiledRule; standingApprovalId: string | null }
+  | {
+      decision: "allow";
+      rule: CompiledRule;
+      standingApprovalId: string | null;
+      /** Set when an intent grant answered an ask or the default deny (A4b). */
+      grant?: true;
+    }
   | { decision: "ask"; rule: CompiledRule }
   | { decision: "deny"; rule: CompiledRule | null; reason: DenyReason };
 
@@ -135,7 +146,17 @@ export function evaluate(set: RuleSet | null, ctx: EvalContext): Evaluation {
   if (facts.persistence === true && !rules.some((rule) => !rule.watch && names(rule, facts))) {
     return done({ decision: "deny", rule: null, reason: "persistence_unnamed" });
   }
+  const verdict = ruleVerdict(rules, ctx, watched);
+  return done(grantable(verdict) ? (granted(ctx) ?? verdict) : verdict);
+}
 
+/** The first rule that decides, in order; the default deny when none does. */
+function ruleVerdict(
+  rules: readonly CompiledRule[],
+  ctx: EvalContext,
+  watched: WatchedRule[],
+): Verdict {
+  const { facts } = ctx;
   for (const rule of rules) {
     // A broad rule can deny a persistence call but never admit it (I-70).
     if (facts.persistence === true && rule.decision !== "deny" && !names(rule, facts)) continue;
@@ -148,14 +169,36 @@ export function evaluate(set: RuleSet | null, ctx: EvalContext): Evaluation {
       case "no_match":
         continue;
       case "unparseable":
-        return done({ decision: "deny", rule, reason: "address_unparseable" });
+        return { decision: "deny", rule, reason: "address_unparseable" };
       case "unavailable":
-        return done({ decision: "deny", rule, reason: "state_check_unavailable" });
+        return { decision: "deny", rule, reason: "state_check_unavailable" };
       case "match":
-        return done(decide(rule, ctx));
+        return decide(rule, ctx);
     }
   }
-  return done({ decision: "deny", rule: null, reason: "no_rule_matched" });
+  return { decision: "deny", rule: null, reason: "no_rule_matched" };
+}
+
+/**
+ * Intent grants (A4b) stand in for a person's approval, so they answer only
+ * what a person could have approved: an owner rule's ask, or a call no rule
+ * covers. They never turn a deny into an allow, nor an org ask.
+ */
+function grantable(verdict: Verdict): boolean {
+  if (verdict.decision === "ask") return verdict.rule.layer === "owner";
+  return verdict.decision === "deny" && verdict.reason === "no_rule_matched";
+}
+
+/** The first of the agent's grants that matches the call, as an allow; null when none does. */
+function granted(ctx: EvalContext): Verdict | null {
+  for (const grant of ctx.grants ?? []) {
+    // A grant admits a persistence call only if it names it (I-70).
+    if (ctx.facts.persistence === true && !names(grant, ctx.facts)) continue;
+    if (ruleOutcome(grant, ctx) === "match") {
+      return { decision: "allow", rule: grant, standingApprovalId: null, grant: true };
+    }
+  }
+  return null;
 }
 
 function decide(rule: CompiledRule, ctx: EvalContext): Verdict {
