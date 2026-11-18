@@ -12,6 +12,7 @@ export const ID_PREFIXES = {
   challenge: "chl",
   enrollment: "enr",
   delivery: "dlv",
+  oauthClient: "cli",
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;

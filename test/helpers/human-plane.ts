@@ -18,6 +18,8 @@ import type { HarnessOptions } from "./pipeline.ts";
 export const PUBLIC_URL = new URL("https://heel.example.com");
 /** A stand-in VAPID public key; the human plane only hands it to the page. */
 export const TEST_VAPID_PUBLIC_KEY = "BHeelTestVapidPublicKey";
+/** The agent plane's public URL, so the OAuth routes (A2) are on in these tests. */
+export const AGENT_URL = new URL("https://agents.heel.example.com/");
 const ORIGIN = PUBLIC_URL.origin;
 
 /** One signed-in browser: its passkey, session cookie and CSRF token. */
@@ -75,6 +77,7 @@ export function humanPlaneHarness(options: HarnessOptions = {}): HumanPlaneHarne
     pauses: h.pauseStore,
     rules: h.rules,
     vapidPublicKey: TEST_VAPID_PUBLIC_KEY,
+    agentPublicUrl: AGENT_URL,
     now: () => h.clock.now,
   });
 
