@@ -21,7 +21,8 @@ import { type FetchFn, grantedScopes, type ProviderSignIn, SignInError } from ".
  *
  * Scopes (Graph permissions reference, all delegated, no admin consent):
  * `Mail.ReadWrite` (read, drafts, move, delete), `Mail.Send`,
- * `MailboxSettings.ReadWrite` (inbox rules) and `User.Read` (the address).
+ * `MailboxSettings.ReadWrite` (inbox rules), `Calendars.ReadWrite` (D12a)
+ * and `User.Read` (the address).
  */
 
 export const GRAPH_API_BASE = "https://graph.microsoft.com/v1.0/";
@@ -33,6 +34,7 @@ export const OUTLOOK_SCOPES = [
   "Mail.ReadWrite",
   "Mail.Send",
   "MailboxSettings.ReadWrite",
+  "Calendars.ReadWrite",
 ] as const;
 
 /** Without these, no Outlook tool could run. */

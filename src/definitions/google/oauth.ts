@@ -118,13 +118,15 @@ export const CALENDAR_LIST_SCOPE = "https://www.googleapis.com/auth/calendar.cal
 
 const PrimarySchema = z.object({ id: z.string().min(1) });
 
-/** The primary calendar's id, which is the account's address. */
+/** The primary calendar's id (calendarList.get "primary"), read rather than assumed. */
 export async function primaryCalendar(
   fetch: FetchFn,
   accessToken: string,
   signal: AbortSignal,
 ): Promise<string> {
-  const response = await fetch(new URL("calendars/primary", CALENDAR_API_BASE), {
+  // calendarList/primary, not calendars/primary: `calendars.get` doesn't accept
+  // the events scope, and the primary id only "usually" matches the address.
+  const response = await fetch(new URL("users/me/calendarList/primary", CALENDAR_API_BASE), {
     headers: { authorization: `Bearer ${accessToken}`, accept: "application/json" },
     signal,
   });

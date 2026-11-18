@@ -93,6 +93,49 @@ const RuleSchema = z.object({
 export type OutlookRule = z.output<typeof RuleSchema>;
 const RuleListSchema = z.object({ value: z.array(RuleSchema).default([]) });
 
+const GraphEventSchema = z.object({
+  id: z.string(),
+  subject: z.string().nullable().optional(),
+  bodyPreview: z.string().optional(),
+  start: z.object({ dateTime: z.string(), timeZone: z.string() }).optional(),
+  end: z.object({ dateTime: z.string(), timeZone: z.string() }).optional(),
+  location: z.object({ displayName: z.string().nullable().optional() }).optional(),
+  attendees: z
+    .array(
+      z.object({
+        emailAddress: z
+          .object({
+            address: z.string().nullable().optional(),
+            name: z.string().nullable().optional(),
+          })
+          .default({}),
+        type: z.string().optional(),
+        status: z.object({ response: z.string().optional() }).optional(),
+      }),
+    )
+    .default([]),
+  organizer: RecipientSchema.nullable().optional(),
+  isOrganizer: z.boolean().optional(),
+  isCancelled: z.boolean().optional(),
+  webLink: z.string().optional(),
+});
+export type GraphEvent = z.output<typeof GraphEventSchema>;
+const GraphEventListSchema = z.object({
+  value: z.array(GraphEventSchema).default([]),
+  "@odata.nextLink": z.string().optional(),
+});
+const CalendarListSchema = z.object({
+  value: z
+    .array(
+      z.object({
+        id: z.string(),
+        name: z.string().optional(),
+        isDefaultCalendar: z.boolean().optional(),
+      }),
+    )
+    .default([]),
+});
+
 /** Graph answered 404: the item doesn't exist, or isn't this mailbox's. */
 export class OutlookNotFoundError extends Error {
   override readonly name = "OutlookNotFoundError";
@@ -342,6 +385,68 @@ export class OutlookClient {
       { json: { destinationId: destination } },
       signal,
     );
+  }
+
+  /** `GET /me/calendars`. */
+  async listCalendars(signal: AbortSignal) {
+    return (await this.#get(new URL("calendars", MAILBOX_PREFIX), CalendarListSchema, signal))
+      .value;
+  }
+
+  /** `GET /me/calendarView` (or one calendar's): occurrences between two instants. */
+  async calendarView(
+    input:
+      | { calendarId: string | null; start: string; end: string; top: number }
+      | { nextLink: string },
+    signal: AbortSignal,
+  ) {
+    let url: URL;
+    if ("nextLink" in input) {
+      url = new URL(input.nextLink);
+    } else {
+      url = new URL(
+        input.calendarId === null
+          ? "calendarView"
+          : `calendars/${encodeURIComponent(input.calendarId)}/calendarView`,
+        MAILBOX_PREFIX,
+      );
+      url.searchParams.set("startDateTime", input.start);
+      url.searchParams.set("endDateTime", input.end);
+      url.searchParams.set("$top", String(input.top));
+    }
+    const page = await this.#get(url, GraphEventListSchema, signal);
+    return { events: page.value, nextLink: page["@odata.nextLink"] };
+  }
+
+  getEvent(id: string, signal: AbortSignal): Promise<GraphEvent> {
+    return this.#get(
+      new URL(`events/${encodeURIComponent(id)}`, MAILBOX_PREFIX),
+      GraphEventSchema,
+      signal,
+    );
+  }
+
+  /** `POST /me/events` (or one calendar's): Graph sends the attendees invitations. */
+  async createEvent(
+    calendarId: string | null,
+    event: Record<string, unknown>,
+    signal: AbortSignal,
+  ) {
+    const path =
+      calendarId === null ? "events" : `calendars/${encodeURIComponent(calendarId)}/events`;
+    return GraphEventSchema.parse(await this.#write("POST", path, { json: event }, signal));
+  }
+
+  /** `PATCH /me/events/{id}`: Graph sends the attendees updates. */
+  async patchEvent(id: string, patch: Record<string, unknown>, signal: AbortSignal) {
+    return GraphEventSchema.parse(
+      await this.#write("PATCH", `events/${encodeURIComponent(id)}`, { json: patch }, signal),
+    );
+  }
+
+  /** `DELETE /me/events/{id}`: for the organizer, Graph sends the attendees a cancellation. */
+  async deleteEvent(id: string, signal: AbortSignal): Promise<void> {
+    await this.#write("DELETE", `events/${encodeURIComponent(id)}`, null, signal);
   }
 
   /** `POST /me/mailFolders/inbox/messageRules`. */

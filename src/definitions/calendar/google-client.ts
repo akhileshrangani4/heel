@@ -2,9 +2,22 @@ import { z } from "zod";
 import { CALENDAR_API_BASE, type FetchFn } from "../google/oauth.ts";
 
 /**
- * The Google Calendar API v3 calls heel needs (P-5: each cites
- * developers.google.com/workspace/calendar/api/v3/reference). GETs retry
- * once on 429 and 5xx; writes are sent once and never retried.
+ * The Google Calendar API v3 calls heel needs. GETs retry once on 429 and
+ * 5xx; writes are sent once and never retried.
+ *
+ * P-5, the reference each call was written against
+ * (https://developers.google.com/workspace/calendar/api/v3/reference):
+ * - events.list: `.../events/list`. singleEvents with orderBy=startTime;
+ *   pages can be short while nextPageToken is set.
+ * - events.get, events.insert, events.patch, events.delete: `.../events/<method>`.
+ *   insert takes sendUpdates (all | externalOnly | none; default none) and
+ *   "some emails might still be sent"; a patch's `attendees` replaces the
+ *   whole list.
+ * - calendarList.list: `.../calendarList/list` (needs the calendarlist scope;
+ *   `calendar.events` doesn't reach it).
+ * - Errors (`/workspace/calendar/api/guides/errors`): 404 for an id that never
+ *   existed or isn't accessible, 410 for one already deleted.
+ * heel offers no events.import, move or quickAdd, and no acl or watch calls.
  */
 
 const AttendeeSchema = z.object({
