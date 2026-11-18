@@ -56,8 +56,9 @@ export class LinearClient {
       signal,
     });
     if (response.status !== 200) {
-      // A 400 on a query is GraphQL rejecting the request before running it.
-      if (write && response.status === 400) throw new LinearRefused([`HTTP ${response.status}`]);
+      // Rate limited: Linear rejects before running anything
+      // (https://linear.app/developers/rate-limiting).
+      if (write && response.status === 429) throw new LinearRefused(["rate limited"]);
       throw new Error(`Linear answered ${response.status}`);
     }
     const body = (await response.json()) as {
@@ -71,7 +72,7 @@ export class LinearClient {
     if (errors.length === 0 && data !== null) return data;
     if (!write && errors.some((m) => /not found/i.test(m)))
       throw new LinearNotFoundError(errors.join("; "));
-    // A mutation that returned no data didn't happen; one that returned data alongside errors might have.
+    // A mutation whose result is null throughout was rejected; any data alongside errors leaves it unknown.
     if (write && (data === null || Object.values(data).every((v) => v === null))) {
       throw new LinearRefused(errors);
     }

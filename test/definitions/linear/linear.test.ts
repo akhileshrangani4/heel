@@ -25,7 +25,10 @@ interface Sent {
   auth: string | null;
 }
 
-function fakeLinear(options: { refuse?: boolean } = {}) {
+function fakeLinear(
+  options: { refuse?: boolean; children?: Record<string, unknown[]>; moveAfterRead?: boolean } = {},
+) {
+  let reads = 0;
   const sent: Sent[] = [];
   const issues: Record<string, unknown> = {
     [ENG_ISSUE]: {
@@ -47,7 +50,7 @@ function fakeLinear(options: { refuse?: boolean } = {}) {
       identifier: "OPS-7",
       title: "b",
       team: { id: "t2", key: "OPS" },
-      project: { id: "p1", name: "Infra" },
+      project: { id: "44444444-4444-4444-8444-444444444444", name: "Infra" },
     },
   };
   const fetch = async (_input: string | URL, init?: RequestInit): Promise<Response> => {
@@ -57,8 +60,20 @@ function fakeLinear(options: { refuse?: boolean } = {}) {
     };
     sent.push({ ...body, auth: new Headers(init?.headers).get("authorization") });
     const q = body.query;
+    if (q.startsWith("query Children(")) {
+      const nodes = options.children?.[String(body.variables["id"])] ?? [];
+      return Response.json({
+        data: { issue: { children: { nodes, pageInfo: { hasNextPage: false } } } },
+      });
+    }
     if (q.startsWith("query Issue(")) {
+      reads++;
       const issue = issues[String(body.variables["id"])];
+      if (options.moveAfterRead === true && reads > 1 && issue !== undefined) {
+        return Response.json({
+          data: { issue: { ...(issue as object), team: { id: "t9", key: "OPS" } } },
+        });
+      }
       return issue === undefined
         ? Response.json({ data: { issue: null }, errors: [{ message: "Entity not found: Issue" }] })
         : Response.json({ data: { issue } });
@@ -171,7 +186,7 @@ describe("the Linear definition", () => {
 
   it("lets a rule name the project", async () => {
     const h = setUp(
-      `rules:\n  - match: { action: linear.issue.update, project: p1 }\n    then: allow\n`,
+      `rules:\n  - match: { action: linear.issue.update, project: 44444444-4444-4444-8444-444444444444 }\n    then: allow\n`,
     );
     expect((await h.call("update_issue", { issue: OPS_ISSUE, title: "t" })).status).toBe("allowed");
     expect((await h.call("update_issue", { issue: ENG_ISSUE, title: "t" })).status).toBe("denied");
@@ -190,5 +205,44 @@ describe("the Linear definition", () => {
       status: "upstream_error",
       upstreamStatus: 400,
     });
+  });
+
+  it("refuses a delete that would trash a sub-issue in another team", async () => {
+    const h = setUp(
+      "rules:\n  - match: { action: linear.issue.delete }\n    then: allow\n",
+      fakeLinear({
+        children: { [ENG_ISSUE]: [{ id: OPS_ISSUE, team: { key: "OPS" }, project: null }] },
+      }),
+    );
+    expect(await h.call("delete_issue", { issue: "ENG-1" })).toMatchObject({
+      reason: "unsupported",
+    });
+    expect(mutations(h.sent)).toEqual([]);
+  });
+
+  it("counts sub-issues in the same team as items of the delete", async () => {
+    const child = "33333333-3333-4333-8333-333333333333";
+    const h = setUp(
+      "rules:\n  - match: { action: linear.issue.delete, items: { over: 1 } }\n    then: deny\n  - match: { action: linear.issue.delete }\n    then: allow\n",
+      fakeLinear({
+        children: { [ENG_ISSUE]: [{ id: child, team: { key: "ENG" }, project: null }] },
+      }),
+    );
+    expect((await h.call("delete_issue", { issue: "ENG-1" })).status).toBe("denied");
+  });
+
+  it("sends nothing when the issue moved after heel checked it", async () => {
+    const h = setUp(ENG_ONLY, fakeLinear({ moveAfterRead: true }));
+    expect(await h.call("add_comment", { issue: "ENG-1", body: "x" })).toMatchObject({
+      status: "upstream_error",
+    });
+    expect(mutations(h.sent)).toEqual([]);
+  });
+
+  it("matches a team written in lower case", async () => {
+    const h = setUp(
+      "rules:\n  - match: { action: linear.comment, team: eng }\n    then: deny\n  - match: {}\n    then: allow\n",
+    );
+    expect((await h.call("add_comment", { issue: "ENG-1", body: "x" })).status).toBe("denied");
   });
 });

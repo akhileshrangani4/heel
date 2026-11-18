@@ -65,6 +65,64 @@ interface LinearIssue {
   project: { id: string } | null;
 }
 
+/**
+ * The issue again, just before a write: if its team or project changed
+ * since rules saw it (a person moved it while the call waited for approval),
+ * nothing is sent.
+ */
+async function unmoved(
+  box: Box,
+  id: string,
+  fields: { team?: unknown; project?: unknown },
+  signal: AbortSignal,
+) {
+  const now = fieldsOf(await issueOf(box, id, signal));
+  if (now.team !== fields.team || (now.project ?? null) !== (fields.project ?? null)) {
+    throw new LinearRefused(["the issue moved to another team or project after heel checked it"]);
+  }
+}
+
+/** Every sub-issue of an issue, at any depth, with its team and project. */
+async function subIssues(
+  box: Box,
+  id: string,
+  signal: AbortSignal,
+): Promise<{ id: string; team: string; project: string | undefined }[]> {
+  const found: { id: string; team: string; project: string | undefined }[] = [];
+  const queue = [id];
+  while (queue.length > 0) {
+    const parent = queue.shift() as string;
+    let after: string | null = null;
+    for (let page = 0; ; page++) {
+      if (page > 20 || found.length > 1_000) throw new Error("too many sub-issues to read");
+      const data = await box.client.request(
+        `query Children($id: String!, $after: String) { issue(id: $id) {
+          children(first: 100, after: $after) { nodes { id team { key } project { id } } pageInfo { hasNextPage endCursor } } } }`,
+        { id: parent, after },
+        signal,
+      );
+      const children = (data["issue"] as { children?: unknown } | null)?.children as
+        | {
+            nodes?: { id: string; team: { key: string }; project: { id: string } | null }[];
+            pageInfo?: { hasNextPage?: boolean; endCursor?: string };
+          }
+        | undefined;
+      if (children?.nodes === undefined) throw new Error("the sub-issues aren't readable");
+      for (const child of children.nodes) {
+        found.push({
+          id: child.id,
+          team: child.team.key.toUpperCase(),
+          project: child.project?.id,
+        });
+        queue.push(child.id);
+      }
+      if (children.pageInfo?.hasNextPage !== true) break;
+      after = children.pageInfo.endCursor ?? null;
+    }
+  }
+  return found;
+}
+
 /** One issue, read before rules: its id, team and project. */
 async function issueOf(box: Box, ref: string, signal: AbortSignal): Promise<LinearIssue> {
   const data = await box.client.request(
@@ -227,14 +285,15 @@ const TOOLS: Record<string, LinearTool> = {
     prepare: async (box, args, _h, signal) => {
       const issue = await issueOf(box, args.issue, signal);
       return {
-        args: { ...args, issue: issue.id },
+        args: { ...args, issue: issue.id, checked: fieldsOf(issue) },
         action: "linear.issue.update",
         fields: fieldsOf(issue),
         targets: [issue.id],
       };
     },
-    run: async (box, { issue, state_id, ...change }, signal) =>
-      mutated(
+    run: async (box, { issue, state_id, checked, ...change }, signal) => {
+      await unmoved(box, issue, checked, signal);
+      return mutated(
         await box.client.request(
           `mutation Update($id: String!, $input: IssueUpdateInput!) { issueUpdate(id: $id, input: $input) { success issue { ${ISSUE_FIELDS} } } }`,
           {
@@ -245,25 +304,39 @@ const TOOLS: Record<string, LinearTool> = {
           true,
         ),
         "issueUpdate",
-      ),
+      );
+    },
     show: async (_box, payload: Record<string, unknown>) => shownIssue(payload["issue"]),
   }),
 
   delete_issue: tool({
-    description: "Move an issue to Linear's trash.",
+    description:
+      "Move an issue to Linear's trash, with its sub-issues. Refused when a sub-issue is in another team or project.",
     args: z.strictObject({ issue: IssueRef }),
     readOnly: false,
     prepare: async (box, args, _h, signal) => {
       const issue = await issueOf(box, args.issue, signal);
+      const fields = fieldsOf(issue);
+      // issueDelete also trashes the issue's sub-issues: each must sit where rules looked.
+      const children = await subIssues(box, issue.id, signal);
+      if (
+        children.some(
+          (c) => c.team !== fields.team || (c.project ?? null) !== (fields.project ?? null),
+        )
+      ) {
+        return { deny: "unsupported" };
+      }
       return {
-        args: { issue: issue.id },
+        args: { issue: issue.id, checked: fields },
         action: "linear.issue.delete",
-        fields: fieldsOf(issue),
-        targets: [issue.id],
+        fields,
+        targets: [issue.id, ...children.map((c) => c.id)],
+        items: 1 + children.length,
       };
     },
-    run: async (box, a, signal) =>
-      mutated(
+    run: async (box, a, signal) => {
+      await unmoved(box, a.issue, a.checked, signal);
+      return mutated(
         await box.client.request(
           `mutation Delete($id: String!) { issueDelete(id: $id) { success } }`,
           { id: a.issue },
@@ -271,7 +344,8 @@ const TOOLS: Record<string, LinearTool> = {
           true,
         ),
         "issueDelete",
-      ),
+      );
+    },
     show: async () => ({ deleted: true }),
   }),
 
@@ -282,14 +356,15 @@ const TOOLS: Record<string, LinearTool> = {
     prepare: async (box, args, _h, signal) => {
       const issue = await issueOf(box, args.issue, signal);
       return {
-        args: { ...args, issue: issue.id },
+        args: { ...args, issue: issue.id, checked: fieldsOf(issue) },
         action: "linear.comment",
         fields: fieldsOf(issue),
         targets: [issue.id],
       };
     },
-    run: async (box, a, signal) =>
-      mutated(
+    run: async (box, a, signal) => {
+      await unmoved(box, a.issue, a.checked, signal);
+      return mutated(
         await box.client.request(
           `mutation Comment($input: CommentCreateInput!) { commentCreate(input: $input) { success comment { id url } } }`,
           { input: { issueId: a.issue, body: a.body } },
@@ -297,7 +372,8 @@ const TOOLS: Record<string, LinearTool> = {
           true,
         ),
         "commentCreate",
-      ),
+      );
+    },
     show: async (_box, payload: Record<string, unknown>) => {
       const c = payload["comment"] as { id?: unknown; url?: unknown } | undefined;
       return { id: c?.id ?? null, url: c?.url ?? null };
