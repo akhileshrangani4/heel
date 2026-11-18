@@ -5,6 +5,9 @@ import { pauses } from "./schema.ts";
 
 export type PauseRow = typeof pauses.$inferSelect;
 
+/** Recorded as `paused_by` for pauses made over the admin socket, which has no signed-in person. */
+export const ADMIN_SOCKET_ACTOR = "admin-socket";
+
 /** What one pause covers. `target` is "" for global, else an agent id, owner id, account alias or provider. */
 export interface PauseKey {
   scope: PauseScope;
@@ -27,24 +30,28 @@ export function broadestScope(scopes: readonly PauseScope[]): PauseScope | null 
  */
 export class SqlitePauseStore implements PauseStore {
   find(db: HeelQuery, target: PauseTarget): PauseScope | null {
-    const rows = db
-      .select({ scope: pauses.scope })
-      .from(pauses)
-      .where(
-        and(
-          eq(pauses.orgId, target.orgId),
-          or(
-            eq(pauses.scope, "global"),
-            and(eq(pauses.scope, "owner"), eq(pauses.target, target.ownerId)),
-            and(eq(pauses.scope, "agent"), eq(pauses.target, target.agentId)),
-            and(eq(pauses.scope, "account"), eq(pauses.target, target.account)),
-            and(eq(pauses.scope, "provider"), eq(pauses.target, target.provider)),
-          ),
-        ),
-      )
-      .all();
-    return broadestScope(rows.map((r) => r.scope));
+    return broadestScope(coveringPauses(db, target).map((row) => row.scope));
   }
+}
+
+/** Every pause that covers a call, so a page can say which one and since when. */
+export function coveringPauses(db: HeelQuery, target: PauseTarget): PauseRow[] {
+  return db
+    .select()
+    .from(pauses)
+    .where(
+      and(
+        eq(pauses.orgId, target.orgId),
+        or(
+          eq(pauses.scope, "global"),
+          and(eq(pauses.scope, "owner"), eq(pauses.target, target.ownerId)),
+          and(eq(pauses.scope, "agent"), eq(pauses.target, target.agentId)),
+          and(eq(pauses.scope, "account"), eq(pauses.target, target.account)),
+          and(eq(pauses.scope, "provider"), eq(pauses.target, target.provider)),
+        ),
+      ),
+    )
+    .all();
 }
 
 /**

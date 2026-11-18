@@ -18,7 +18,13 @@ export interface CeremonyCallback {
 }
 
 /** What a ceremony is for; the handler receives it as `intent`. */
-export type CeremonyIntent = "approve-once" | "approve-standing" | "deny" | "resume" | "sign-in";
+export type CeremonyIntent =
+  | "approve-once"
+  | "approve-standing"
+  | "deny"
+  | "resume"
+  | "sign-in"
+  | "enroll";
 
 export interface CeremonyButtonProps {
   callback: CeremonyCallback;

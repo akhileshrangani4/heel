@@ -424,6 +424,8 @@ export interface StandingRecord {
   createdByName: string;
   revokedByName: string | null;
   ownerId: string;
+  /** The call whose approval granted it, for pause checks. */
+  call: Call;
 }
 
 /** Every standing approval in the org, newest first; callers filter by who may see it. */
@@ -446,6 +448,7 @@ export function listStanding(db: HeelQuery, orgId: string): StandingRecord[] {
     .all()
     .map(({ call, createdByName, ...rest }) => ({
       ...rest,
+      call,
       covers: call.action ?? call.tool,
       createdByName: createdByName ?? "unknown",
     }));

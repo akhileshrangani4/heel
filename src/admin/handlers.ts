@@ -12,7 +12,7 @@ import {
 import { listStanding, revokeStanding } from "../store/approvals.ts";
 import type { HeelDb } from "../store/db.ts";
 import { LOCAL_OWNER_NAME } from "../store/install.ts";
-import { listPauses, type PauseKey, pause } from "../store/pauses.ts";
+import { ADMIN_SOCKET_ACTOR, listPauses, type PauseKey, pause } from "../store/pauses.ts";
 import { accounts, users } from "../store/schema.ts";
 import {
   ConnectError,
@@ -41,9 +41,6 @@ export interface AdminDeps {
   publicUrl: URL;
   now?: () => Date;
 }
-
-/** Recorded as `paused_by` for pauses made over the admin socket, which has no signed-in person. */
-export const ADMIN_SOCKET_ACTOR = "admin-socket";
 
 const AGENT_ERROR_CODES: Record<AgentErrorCode, AdminErrorCode> = {
   invalid_name: "invalid",
