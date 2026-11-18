@@ -1,8 +1,14 @@
-# heel
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo/heel-mark-dark.svg">
+    <img alt="" src="assets/logo/heel-mark-light.svg" width="56" align="center">
+  </picture>
+  heel
+</h1>
 
 **Your agent has the tools. heel decides what it does with them.**
 
-Open source, self-hosted access control for AI agents. heel sits between an agent and everything it touches (MCP servers, HTTP APIs, and CLIs) and checks every call against rules on the actual arguments: who an email goes to, which account it comes from, which repo, how many messages this run has deleted. It also hides what an agent shouldn't read, like mail from your partner or password reset codes. Approvals go to a signed-in person outside the agent's session, so the agent can't answer them itself, and one switch pauses any agent or all of them.
+Open source, self-hosted intent-based access control (IBAC) for AI agents. You say what an agent is for, and heel holds it to that on every call. heel sits between an agent and everything it touches (MCP servers, HTTP APIs, and CLIs) and checks every call against rules on the actual arguments: who an email goes to, which account it comes from, which repo, how many messages this run has deleted. It also hides what an agent shouldn't read, like mail from your partner or password reset codes. Approvals go to a signed-in person outside the agent's session, so the agent can't answer them itself, and one switch pauses any agent or all of them.
 
 [![heel in 38 seconds](assets/heel.gif)](assets/heel.mp4)
 
@@ -16,6 +22,18 @@ The gateways that do read arguments still leave gaps:
 - **Many approvals run inside the session.** Docker's MCP gateway docs say its approval prompt (in Docker Sandboxes) runs in the session, leaves out the tool's arguments, and can be answered in code by an autonomous client. An unattended agent can approve itself.
 - **Approval settings live in each client.** In [claude-code#99453](https://github.com/anthropics/claude-code/issues/99453), Gmail send was set to "Needs approval", but in Projects thread sessions it sent with no prompt.
 - **Stopping a run usually means revoking credentials or killing the process.**
+
+## Intent-based access control
+
+An agent is useful because it can act, and it is dangerous for the same reason: what it reads can steer it. So the question for every call isn't "may this agent use Gmail" but "is this call what its owner meant it to do". heel answers that from intent you give it, never from what the agent says about itself.
+
+Intent reaches heel three ways:
+
+- **Rules you write down.** "Send only to coworkers already in the thread," "never email a client from my personal account," "ask before deleting more than 20 messages." Rules check the call's actual arguments, and the first match decides.
+- **A person, when a call falls outside them.** The call waits for its owner, who approves or denies it with a passkey. An approval can become a grant: this exact call, everything that rule asks about, or this run, for as long as they choose.
+- **A task stated up front** (planned). Describe what a run is for, and a model proposes a narrow set of grants from your words alone, before the agent reads anything. You confirm them once, and the rules enforce them.
+
+A model never decides a live call. Whoever shapes a call, say an injected instruction in an email, could shape a model judging it too, so every decision comes from rules, grants, and people. Checks you plug in beside the rules (your own security service, an OpenFGA store, a classifier) can stop a call but never let one through.
 
 ## How it works
 
@@ -142,7 +160,7 @@ When a rule says `ask`, heel doesn't hold the agent's request open:
 - **Repeats join the same request.** The approval is tied to the exact call, so an agent that retries the same call joins the same pending request instead of creating a duplicate.
 - **The approver signs in to see it.** heel pushes a notification to their phone, Slack, or email. The notification only links to heel's approval page, where the approver signs in with a passkey and sees the tool, the account, and the full arguments. Replying to the message approves nothing, so an agent with access to the same Slack or inbox can't approve.
 - **An approved call runs once.** It runs when the agent asks for it, so a late approval never runs a call the agent has given up on. Unapproved requests expire.
-- **An approval can stand.** Instead of covering this call only, it can add a rule ("allow this for 30 days") just above the rule that asked. Widening that rule asks again.
+- **An approval can become a grant.** Instead of covering this call only, it can allow the same thing for a while ("this exact call" or "everything this rule asks about", up to 90 days), placed just above the rule that asked. Editing that rule ends the grant, so widening it asks again.
 
 ### Pause
 
@@ -174,6 +192,7 @@ Checking calls doesn't stop every prompt injection. When each call in an attack 
 
 ## How it compares
 
+- **IBAC** ([ibac.dev](https://ibac.dev), a paper by Jordan Potti) named the idea: a model reads only the user's request, turns it into OpenFGA grants before the agent runs, and OpenFGA checks every call. heel shares the principle that intent is scoped up front and a deterministic engine decides each call. It doesn't need OpenFGA, and it adds counts, thread checks, hiding, approvals tied to the exact call, and pause.
 - **WorkOS Airlock** (closed, early access) checks endpoints and arguments, can add model-judged runtime rules, and sends approvals to Slack. **Keycard** (closed) applies one policy across shell commands, MCP tools, and API calls.
 - **Overslash** (source-available, Elastic License, pre-release) is the closest in shape. It has a vault, covers MCP, REST, CLI, and HTTP, scopes each action by one argument, and sends approvals through a dashboard, email, or webhook, with "allow & remember" for a set time.
 - **airlock-dev/airlock** (MIT) covers MCP, CLI, REST, and HTTP, with approvals over Telegram, Slack, and iOS push. Its rules allow, ask, or deny by tool name, with no checks on arguments that we found.
@@ -192,6 +211,7 @@ Checking calls doesn't stop every prompt injection. When each call in an attack 
 
 What heel puts together:
 
+- intent you state as rules and grants, enforced on every call, with no model deciding a live call
 - rules on arguments with state checks and item counts
 - hiding results the agent shouldn't read
 - approvals tied to the exact call, that the agent can't answer
