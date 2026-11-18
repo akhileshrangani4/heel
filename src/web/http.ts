@@ -39,6 +39,8 @@ export interface HumanPlaneDeps {
   pauses: PauseStore;
   /** The rules in force, to tell a live standing approval from a lapsed one. */
   rules: RulesSource;
+  /** The configured approval adapters' names, so the page can say hints are on the way. */
+  hintAdapters?: readonly string[];
   /** The VAPID public key devices subscribe to approval notifications with. */
   vapidPublicKey: string;
   /** The agent plane's public URL when OAuth for connectors is on (A2); null when off. */

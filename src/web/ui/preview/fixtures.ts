@@ -75,6 +75,7 @@ export const PENDING_REQUEST: ApprovalRequestView = {
   expiresAt: hours(24 - 0.2),
   decision: null,
   executedAt: null,
+  hints: [],
 };
 
 export const APPROVED_REQUEST: ApprovalRequestView = {
@@ -310,3 +311,26 @@ export const FAILING_TESTS: readonly RuleTestResult[] = [
     actual: "allow (merge-any)",
   },
 ];
+
+/** A pending request with the Jev approval adapter's hints. */
+export const HINTED_REQUEST: ApprovalRequestView = {
+  ...PENDING_REQUEST,
+  hints: [
+    {
+      adapter: "jev",
+      result: {
+        status: "ok",
+        hints: [
+          { tone: "warn", text: "Asks someone for money, a payment or account access." },
+          { tone: "note", text: "Unlike this agent's recent calls." },
+        ],
+      },
+    },
+  ],
+};
+
+/** The same request when the adapter couldn't answer. */
+export const HINTS_UNAVAILABLE_REQUEST: ApprovalRequestView = {
+  ...PENDING_REQUEST,
+  hints: [{ adapter: "jev", result: { status: "unavailable", detail: "TypeSafe answered 503" } }],
+};
