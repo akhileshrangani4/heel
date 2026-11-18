@@ -11,8 +11,8 @@ import type { CodeWorker, ScriptLimits, Step } from "./worker.ts";
  * A `CodeWorker` that runs each script in its own `heel codemode-worker`
  * under bubblewrap (D6b; spec: Code mode, "the worker boundary"):
  *
- * - no network namespace and no credentials: the environment is empty but
- *   for a temp directory;
+ * - no network namespace and no credentials: the runner gives it a clean
+ *   environment with its own HOME and TMPDIR inside the sandbox;
  * - heel's install is mounted read-only so the worker can load its code and
  *   Monty; nothing else of the host is visible beyond the runner's base;
  * - a wall-time and memory ceiling above Monty's own limits, so a script
@@ -55,7 +55,6 @@ export class SandboxedCodeWorker implements CodeWorker {
       args: [join(this.#options.installDir, "bin", "heel.js"), "codemode-worker"],
       workRoot,
       cwd: workRoot,
-      env: { TMPDIR: workRoot, HOME: workRoot },
       readOnlyPaths: [this.#options.installDir],
       network: { kind: "none" },
       stdin: "pipe",
