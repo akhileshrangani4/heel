@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/akhileshrangani4/heel/compare/v0.1.0...v0.1.1) (2026-11-18)
+
+
+### Miscellaneous Chores
+
+* release 0.1.1 to validate npm trusted publishing ([#63](https://github.com/akhileshrangani4/heel/issues/63)) ([223db7e](https://github.com/akhileshrangani4/heel/commit/223db7e4b8925c446d8e2b413618a93686017ea2))
+
 ## 0.1.0 (2026-11-18)
 
 
