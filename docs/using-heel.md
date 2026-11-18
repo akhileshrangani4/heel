@@ -79,7 +79,7 @@ The agent never sees why a rule matched, and it can't answer an approval. Approv
 ## 4. When it needs you
 
 1. **You get a notification** on your phone (web push), or by email or Slack, if heel has an HTTPS address ([setting one up](../README.md#approve-from-your-phone)). It says which agent wants to do what, and links to heel. Replying to it approves nothing. Without notifications, waiting requests are listed on the approval page.
-2. **You open the request.** The page shows the account, the tool, the rule that asked, the counts, and the **full arguments**: every recipient and the whole body, exactly what will run. If [hints](approvals.md#hints) are on, they appear under the call ("asks someone for money", "looks routine for this agent").
+2. **You open the request.** The page shows the account, the tool, the rule that asked, the counts, and the **full arguments**: every recipient and the whole body, exactly what will run. If you've turned on the optional [hints](approvals.md#hints), they appear under the call ("asks someone for money", "looks routine for this agent"). Without them, everything else here works the same.
 3. **You decide, with your passkey:**
    - **Approve once:** this exact call runs the next time the agent sends it, once.
    - **Approve as standing:** also allow this exact call, or everything this rule asks about, for a while (an hour up to 90 days), so you aren't asked again. Standing approvals are listed on the Standing approvals page, where you can revoke them.
