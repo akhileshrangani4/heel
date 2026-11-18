@@ -1,7 +1,7 @@
-import { source } from '@/lib/source';
 import { notFound } from 'next/navigation';
-import { generateOGImage } from 'fumadocs-ui/og';
-import { appName, getPageImageUrl } from '@/lib/shared';
+import { ogCard } from '@/lib/og';
+import { getPageImageUrl } from '@/lib/shared';
+import { source } from '@/lib/source';
 
 export const revalidate = false;
 
@@ -9,12 +9,7 @@ export async function GET(_req: Request, { params }: RouteContext<'/og/docs/[...
   const { slug } = await params;
   const page = source.getPage(slug.slice(0, -1));
   if (!page) notFound();
-
-  return generateOGImage({
-    title: page.data.title,
-    description: page.data.description,
-    site: appName,
-  });
+  return ogCard({ title: page.data.title, description: page.data.description ?? '', label: 'docs' });
 }
 
 export function generateStaticParams() {

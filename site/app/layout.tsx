@@ -1,5 +1,5 @@
 import { RootProvider } from 'fumadocs-ui/provider/next';
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Geist_Mono, Inter } from 'next/font/google';
 import { siteUrl } from '@/lib/shared';
 import './global.css';
@@ -9,7 +9,7 @@ const mono = Geist_Mono({ subsets: ['latin'], variable: '--font-geist-mono' });
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: { default: 'heel: intent-based access control for AI agents', template: '%s | heel' },
+  title: { default: 'heel: access control for your AI agents', template: '%s | heel' },
   description:
     'heel sits between an agent and everything it touches, holds the credentials, and checks every call against rules on its actual arguments. Open source and self-hosted.',
   icons: {
@@ -19,7 +19,16 @@ export const metadata: Metadata = {
     ],
     apple: '/heel-icon-180.png',
   },
-  openGraph: { siteName: 'heel', images: '/heel-icon-512.png' },
+  alternates: { canonical: '/' },
+  openGraph: { type: 'website', siteName: 'heel', url: '/', locale: 'en_US' },
+  twitter: { card: 'summary_large_image' },
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#f5f5f4' },
+    { media: '(prefers-color-scheme: dark)', color: '#111111' },
+  ],
 };
 
 export default function Layout({ children }: LayoutProps<'/'>) {

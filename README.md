@@ -66,6 +66,8 @@ To run heel as a server with Docker, see [docs/running.md](docs/running.md).
 
 ## Docs
 
+The docs are at **[useheel.dev](https://useheel.dev)**, and in [`docs/`](docs).
+
 | | |
 | --- | --- |
 | [Why heel](docs/why.md) | The problem, intent-based access control, and where heel comes from |
