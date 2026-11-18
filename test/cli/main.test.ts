@@ -64,6 +64,19 @@ describe("agentMcpUrl", () => {
     );
     expect(agentMcpUrl({ host: "::1", port: 7300 })).toBe("http://[::1]:7300/mcp?tools=direct");
   });
+
+  it("names localhost for a wildcard listen address, and the public URL when there is one", () => {
+    expect(agentMcpUrl({ host: "0.0.0.0", port: 7300 })).toBe(
+      "http://localhost:7300/mcp?tools=direct",
+    );
+    expect(agentMcpUrl({ host: "::", port: 7300 })).toBe("http://localhost:7300/mcp?tools=direct");
+    expect(
+      agentMcpUrl({ host: "0.0.0.0", port: 7300 }, new URL("https://agents.example.com")),
+    ).toBe("https://agents.example.com/mcp?tools=direct");
+    expect(agentMcpUrl({ host: "0.0.0.0", port: 7300 }, new URL("https://example.com/heel"))).toBe(
+      "https://example.com/heel/mcp?tools=direct",
+    );
+  });
 });
 
 describe("heel CLI", () => {

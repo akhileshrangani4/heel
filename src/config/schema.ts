@@ -190,8 +190,13 @@ export const HeelConfigFileSchema = z.strictObject({
       human: listenAddress.default({ host: "127.0.0.1", port: 7301 }),
     })
     .prefault({}),
-  /** Unix socket for `heel connect`, `heel agent`, `heel pause`, … */
-  admin_socket: z.string().min(1).default("/run/heel/admin.sock"),
+  /**
+   * Unix socket for `heel connect`, `heel agent`, `heel pause`, … Defaults
+   * to /run/heel/admin.sock for a server install (HEEL_HOME at
+   * /var/lib/heel), and to $HEEL_HOME/admin.sock for any other home, so a
+   * personal install needs no root-owned directory.
+   */
+  admin_socket: z.string().min(1).optional(),
   vault: z
     .strictObject({
       /**
@@ -340,6 +345,10 @@ export interface HeelConfig {
 }
 
 /** Pure: resolves relative paths against `home` and renames to camelCase. */
+/** A server install's home and admin socket (spec: Architecture, "Listeners"). */
+export const SERVER_HOME = "/var/lib/heel";
+const SERVER_ADMIN_SOCKET = "/run/heel/admin.sock";
+
 export function resolveConfig(
   file: HeelConfigFile,
   home: string,
@@ -353,7 +362,12 @@ export function resolveConfig(
     publicUrl: new URL(file.public_url),
     agentPublicUrl: file.agent_public_url === undefined ? null : new URL(file.agent_public_url),
     listen: { agent: file.listen.agent, human: file.listen.human },
-    adminSocketPath: fromHome(file.admin_socket),
+    adminSocketPath:
+      file.admin_socket !== undefined
+        ? fromHome(file.admin_socket)
+        : home === SERVER_HOME
+          ? SERVER_ADMIN_SOCKET
+          : fromHome("admin.sock"),
     vault: { keyFile: fromHome(file.vault.key_file) },
     log: { level: file.log.level },
     oidc: file.oidc ? resolveOidc(file.oidc, new URL(file.public_url), fromHome) : null,

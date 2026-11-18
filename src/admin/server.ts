@@ -43,7 +43,13 @@ function ownUid(): number {
  * A missing directory is created with mode 0700.
  */
 function prepareSocketDir(dir: string): void {
-  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  try {
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+  } catch (error) {
+    throw new AdminSocketError(
+      `can't create the admin socket's directory ${dir} (${error instanceof Error && "code" in error ? String(error.code) : "error"}); set HEEL_HOME to a directory you own, or admin_socket in heel.yaml`,
+    );
+  }
   const stat = lstatSync(dir);
   if (!stat.isDirectory()) throw new AdminSocketError(`${dir} is not a directory`);
   if (stat.uid !== ownUid()) {

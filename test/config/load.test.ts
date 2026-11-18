@@ -39,9 +39,15 @@ describe("heel.yaml loader", () => {
     expect(config.databasePath).toBe(join(home, "heel.db"));
     expect(config.listen.agent).toEqual({ host: "127.0.0.1", port: 7300 });
     expect(config.listen.human).toEqual({ host: "127.0.0.1", port: 7301 });
-    expect(config.adminSocketPath).toBe("/run/heel/admin.sock");
+    expect(config.adminSocketPath).toBe(join(home, "admin.sock"));
     expect(config.vault.keyFile).toBe(join(home, "master.key"));
     expect(config.publicUrl.href).toBe("http://localhost:7301/");
+  });
+
+  it("keeps a server install's admin socket in /run/heel", () => {
+    const config = loadConfig(resolveConfigSource({ HEEL_HOME: "/var/lib/heel" }));
+    expect(config.adminSocketPath).toBe("/run/heel/admin.sock");
+    expect(loadConfig(resolveConfigSource({})).adminSocketPath).toBe("/run/heel/admin.sock");
   });
 
   it("refuses a config file that was named but does not exist", () => {
