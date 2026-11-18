@@ -1,8 +1,9 @@
 <h1>
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/logo/heel-logo-dark.svg">
-    <img alt="heel" src="assets/logo/heel-logo-light.svg" width="200">
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo/heel-mark-dark.svg">
+    <img alt="" src="assets/logo/heel-mark-light.svg" width="56" align="center">
   </picture>
+  heel
 </h1>
 
 **Your agent has the tools. heel decides what it does with them.**
