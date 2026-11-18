@@ -214,11 +214,11 @@ Gmail, Outlook, Calendar, GitHub, Slack, Linear, Notion and Stripe. Tools that l
 
 ## Status
 
-heel v0.1 is being built on [`release/heel-v0.1`](https://github.com/akhileshrangani4/heel/pull/1), and `main` stays README-only until the incident replays below pass. Done so far: the rules engine, the decision pipeline, approvals, grants, pause, passkeys and the approval page, the adapter chain, and the CLI sandbox. Next: notifications, the MCP endpoint, and Gmail.
+heel v0.1 is built on [`release/heel-v0.1`](https://github.com/akhileshrangani4/heel/pull/1), and `main` stays README-only until it's released. Built: the rules engine and decision pipeline, approvals, grants, modes and pause, passkeys and the approval page, MCP (direct tools and code mode), the HTTP proxy, `heel run`, Gmail, Outlook, Google Calendar, GitHub, Slack, Linear, Notion and Stripe, hiding, teams (OIDC sign-in, sharing and approvers), rule drafting, an OCI image, and the incident replays below. See [`docs/running.md`](docs/running.md).
 
 ## Incidents heel would have stopped
 
-We'll replay each of these against heel and publish exactly what was blocked and what got through.
+Each of these is replayed against heel in [`e2e/incidents`](e2e/incidents/incidents.test.ts), with the example rules above unchanged: the harmful call is stopped before it reaches the mailbox, and the useful part of the same story still runs.
 
 | Incident | What happened | Rule that blocks it | What it wouldn't catch |
 | --- | --- | --- | --- |

@@ -45,6 +45,12 @@ describe("README examples", () => {
     for (const block of blocks) expect(fixture).toContain(block);
   });
 
+  it("ship unchanged as the image's example rules (D14)", () => {
+    const shipped = readFileSync(join(ROOT, "examples/rules/owner.yaml"), "utf8");
+    const fixture = readFileSync(join(ROOT, "test/fixtures/rules/readme/rules/owner.yaml"), "utf8");
+    expect(shipped).toBe(fixture);
+  });
+
   it("allow reads", () => {
     expect(ruleNumber(facts({ kind: "read", account: "gmail-personal" }))).toBe(1);
   });

@@ -37,6 +37,32 @@ jobs:
       - name: Rules JSON Schema matches the Zod schema
         run: pnpm schema:drift
 
+  oci-image:
+    # D14: the image builds, starts with the example config, and answers on
+    # both planes. Only the docker CLI on the runner; no extra actions.
+    name: OCI image starts with the example config
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build
+        run: docker build -t heel:ci .
+      - name: Start with the example config
+        run: |
+          docker run -d --name heel -p 7300:7300 -p 7301:7301 \
+            -e HEEL_MASTER_KEY="$(head -c 32 /dev/urandom | base64)" heel:ci
+      - name: Both planes answer
+        run: |
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:7300/mcp || true)
+            [ "$code" = "401" ] && break
+            sleep 1
+          done
+          test "$code" = "401" || { echo "agent plane answered $code"; exit 1; }
+          curl -sf http://localhost:7301/sign-in > /dev/null
+      - name: Logs
+        if: always()
+        run: docker logs heel
+
   looks-like:
     # The looks_like release gate (spec D10 row): recall >= 0.99 per category
     # and <= 5% false positives on held-out ordinary mail. The ~440 MB Enron
