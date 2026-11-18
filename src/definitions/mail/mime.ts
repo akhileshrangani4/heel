@@ -211,3 +211,28 @@ export function strictAddressList(value: string): string[] | null {
 /** Headers that change who receives or appears to send a message; a draft with any is refused. */
 export const DELIVERY_HEADERS_REFUSED =
   /^(resent-.*|sender|return-path|apparently-to|envelope-to|x-original-to|delivered-to)$/;
+
+/**
+ * Who a draft sends to and from, read strictly from its own headers. Null
+ * when anything could be read two ways: a header heel can't parse plainly,
+ * a repeated From, To, Cc or Bcc, or a header that changes delivery.
+ */
+export function draftEnvelope(raw: Buffer) {
+  const headers = rawHeaders(raw);
+  if (headers === null) return null;
+  if ([...headers.keys()].some((name) => DELIVERY_HEADERS_REFUSED.test(name))) return null;
+  const single = (name: string): string[] | null => {
+    const values = headers.get(name) ?? [];
+    if (values.length > 1) return null;
+    // Bytes outside ASCII would be read as latin1 here and as UTF-8 elsewhere.
+    if (values.some((value) => [...value].some((c) => c.charCodeAt(0) > 0x7f))) return null;
+    return values.length === 0 ? [] : strictAddressList(values[0] ?? "");
+  };
+  const from = single("from");
+  const to = single("to");
+  const cc = single("cc");
+  const bcc = single("bcc");
+  if (from === null || from.length !== 1 || to === null || cc === null || bcc === null) return null;
+  const subject = (headers.get("subject") ?? []).join(" ");
+  return { from: from[0] as string, to, cc, bcc, subject };
+}

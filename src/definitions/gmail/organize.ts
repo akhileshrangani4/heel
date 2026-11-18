@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { normalizeAddress } from "../../core/rules/address.ts";
+import { mapLimit } from "../mail/map-limit.ts";
 import type { FilterAction, FilterCriteria, GmailFilter } from "./client.ts";
-import { type Mailbox, mapLimit } from "./mailbox.ts";
+import type { Mailbox } from "./mailbox.ts";
 import { GmailId, type GmailTool, gmailTool, type Preparation } from "./tool.ts";
 
 /**

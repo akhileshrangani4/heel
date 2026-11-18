@@ -364,6 +364,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
       const definitions = definitionRegistry({
         upstream,
         gmail: { vault: opening.vault, fetch },
+        outlook: { vault: opening.vault, fetch },
       });
       const pipeline = createPipeline({
         db: store.db,
