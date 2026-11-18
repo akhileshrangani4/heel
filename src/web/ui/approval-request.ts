@@ -1,4 +1,5 @@
 import type { RuleRef, Surface } from "../../core/call.ts";
+import type { ApprovalHints, HintTone } from "../../core/hints.ts";
 import type { ApprovalOrigin, ApprovalStatus } from "../../store/schema.ts";
 import { type CeremonyCallback, ceremonyButton } from "./ceremony.ts";
 import {
@@ -57,6 +58,11 @@ export interface ApprovalRequestView {
   expiresAt: Date;
   decision: { by: string; at: Date } | null;
   executedAt: Date | null;
+  /**
+   * What each approval adapter said (core/hints.ts), or `pending` while one
+   * hasn't answered yet; empty when none are configured.
+   */
+  hints: readonly { adapter: string; result: ApprovalHints | { status: "pending" } }[];
 }
 
 /** Standing approval lengths offered to the approver; 90 days is the hard cap (Q-A6). */
@@ -162,6 +168,33 @@ function countsView(request: ApprovalRequestView): Html {
 }
 
 /** What the request's status means for the approver, in one notice. */
+const HINT_TONE: Record<HintTone, Tone> = { warn: "warn", note: "info", ok: "ok" };
+const HINT_LABEL: Record<HintTone, string> = { warn: "check", note: "note", ok: "ok" };
+
+/** Approval adapters' advice. Shown as advice: the person still decides. */
+function hintsView(request: ApprovalRequestView): Html | "" {
+  if (request.hints.length === 0) return "";
+  const id = `hints-${request.id}`;
+  return html`<section class="card" aria-labelledby="${id}">
+    <h2 id="${id}">Hints</h2>
+    <p class="muted">Advice from ${request.hints.map((h) => h.adapter).join(", ")}. It can't approve or deny anything: you decide.</p>
+    ${request.hints.map(({ adapter, result }) =>
+      result.status === "pending"
+        ? html`<p class="muted">Hints from ${adapter} are on the way. Reload in a few seconds.</p>`
+        : result.status === "unavailable"
+          ? html`<p class="muted">Hints from ${adapter} are unavailable for this request.</p>`
+          : result.hints.length === 0
+            ? html`<p class="muted">${adapter} has nothing to point out.</p>`
+            : html`<ul class="hints">
+              ${result.hints.map(
+                (hint) =>
+                  html`<li>${badge(HINT_LABEL[hint.tone], HINT_TONE[hint.tone])} ${hint.text}</li>`,
+              )}
+            </ul>`,
+    )}
+  </section>`;
+}
+
 function statusNotice(request: ApprovalRequestView, now: Date): Html {
   const decided = request.decision;
   switch (request.status) {
@@ -373,6 +406,7 @@ export function approvalRequest(props: ApprovalRequestProps): Html {
         <dd>${time(request.expiresAt)} (${formatRelative(request.expiresAt, props.now)})</dd>
       </dl>
     </section>
+    ${hintsView(request)}
     ${request.email ? emailView(request.email, `email-${request.id}`) : ""}
     <section aria-labelledby="args-${request.id}">
       <h2 id="args-${request.id}">Full arguments</h2>

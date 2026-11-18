@@ -120,6 +120,13 @@
       "when": 1794986791085,
       "tag": "0016_sharing_scopes",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1794993731772,
+      "tag": "0017_approval_hints",
+      "breakpoints": true
     }
   ]
 }

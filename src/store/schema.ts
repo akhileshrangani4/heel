@@ -17,6 +17,7 @@ import {
   type RuleRef,
   type Surface,
 } from "../core/call.ts";
+import type { ApprovalHint } from "../core/hints.ts";
 import { MODES, type Mode } from "../core/modes.ts";
 
 /**
@@ -793,4 +794,33 @@ export const siemCursors = sqliteTable(
     updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
   },
   (t) => [primaryKey({ columns: [t.orgId, t.sink] })],
+);
+
+// ── approval hints ──────────────────────────────────────────────────────────
+
+export const HINT_STATUSES = ["ok", "unavailable"] as const;
+
+/**
+ * What each approval adapter said about a pending request (core/hints.ts):
+ * advisory hints the approval page shows beside the call. Written after the
+ * request committed, so a hint can never change a verdict.
+ */
+export const approvalHints = sqliteTable(
+  "approval_hints",
+  {
+    approvalId: text("approval_id")
+      .notNull()
+      .references(() => approvals.id),
+    /** The adapter's configured name, e.g. "jev". */
+    adapter: text("adapter").notNull(),
+    status: text("status", { enum: HINT_STATUSES }).notNull(),
+    hints: text("hints", { mode: "json" }).$type<ApprovalHint[]>().notNull(),
+    /** Why the adapter couldn't answer; null when it did. Never shown to agents. */
+    detail: text("detail"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.approvalId, t.adapter] }),
+    check("approval_hints_status", sql`"status" IN (${sqlList(HINT_STATUSES)})`),
+  ],
 );

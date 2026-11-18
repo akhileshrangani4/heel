@@ -29,6 +29,8 @@ import {
   EXPIRED_ROWS,
   EXPIRED_STANDING,
   FAILING_TESTS,
+  HINTED_REQUEST,
+  HINTS_UNAVAILABLE_REQUEST,
   NOW,
   ORG_REQUEST,
   PASSING_TESTS,
@@ -270,6 +272,11 @@ export const STORIES: readonly Story[] = [
     { ok: true, request: PENDING_REQUEST },
     AGENT_PAUSE,
   ),
+  approval("hints", "With hints from an approval adapter", { ok: true, request: HINTED_REQUEST }),
+  approval("hints-unavailable", "Hints unavailable", {
+    ok: true,
+    request: HINTS_UNAVAILABLE_REQUEST,
+  }),
   approval("error", "The request couldn't be loaded", { ok: false, message: LOAD_ERROR }),
   approval("executed", "Ran once", { ok: true, request: EXECUTED_REQUEST }),
   approval(
