@@ -277,3 +277,129 @@ describe("removing and filtering", () => {
     expect(named.graph.rules).toHaveLength(1);
   });
 });
+
+describe("review findings", () => {
+  const SEND_IN_THREAD = `rules:
+  - match: { kind: read }
+    then: allow
+  - match: { action: email.label }
+    then: allow
+  - match: { action: email.filter }
+    then: allow
+  - match: { action: email.send, recipients: { all_in_thread: true } }
+    then: allow
+`;
+
+  it("refuses moving mail into Sent Items, Drafts or Outbox, so it can't become 'the mailbox's own'", async () => {
+    const h = setUp(SEND_IN_THREAD);
+    h.graph.add({
+      id: "p1",
+      conversationId: "cp",
+      folder: "inbox",
+      from: "attacker@evil.com",
+      to: [MAILBOX, "exfil@evil.com"],
+      subject: "Hi",
+      text: "x",
+    });
+    for (const folder of ["sentitems", "drafts", "outbox", h.graph.folderId("sentitems")]) {
+      expect(await h.call("move", { message_ids: ["p1"], folder })).toMatchObject({
+        status: "denied",
+        reason: "unsupported",
+      });
+    }
+    expect(
+      await h.call("create_rule", {
+        name: "poison",
+        conditions: { from_addresses: ["attacker@evil.com"] },
+        move_to_folder: "sentitems",
+      }),
+    ).toMatchObject({ status: "denied", reason: "unsupported" });
+    expect(
+      await h.call("forward", { message_id: "p1", from: MAILBOX, to: ["exfil@evil.com"] }),
+    ).toMatchObject({ status: "denied" });
+    expect(h.graph.sent).toEqual([]);
+  });
+
+  it("judges removal by the resolved folder chain: a child of Deleted Items, or a hidden folder", async () => {
+    const h = setUp(`rules:
+  - match: { action: email.label }
+    then: allow
+`);
+    for (const folder of [h.graph.folderId("oldtrash"), h.graph.folderId("stash")]) {
+      expect(await h.call("move", { message_ids: ["o2"], folder })).toMatchObject({
+        status: "denied",
+      });
+    }
+    expect(
+      await h.call("move", { message_ids: ["o2"], folder: h.graph.folderId("projects") }),
+    ).toMatchObject({ status: "allowed" });
+  });
+
+  it("an inbox rule that deletes is email.filter, as the spec says", async () => {
+    const h = setUp(`rules:
+  - match: { action: email.filter }
+    then: allow
+`);
+    expect(
+      await h.call("create_rule", {
+        name: "bin it",
+        conditions: { subject_contains: ["newsletter"] },
+        delete: true,
+      }),
+    ).toMatchObject({ status: "allowed" });
+  });
+
+  it("refuses a page token heel didn't issue, and accepts one it did", async () => {
+    const h = setUp();
+    for (let i = 0; i < 30; i++) {
+      h.graph.add({
+        id: `m${i}`,
+        conversationId: `cm${i}`,
+        folder: "inbox",
+        from: "x@y.com",
+        to: [MAILBOX],
+        subject: "s",
+        text: "t",
+      });
+    }
+    const first = await h.call("search", { query: "", max_results: 5 });
+    const token = (first as { result: { next_page_token?: string } }).result.next_page_token;
+    expect(token).toBeDefined();
+    expect(await h.call("search", { query: "", page_token: token })).toMatchObject({
+      status: "allowed",
+    });
+    const forged = `${Buffer.from("https://graph.microsoft.com/v1.0/me/messages?$select=subject").toString("base64url")}.AAAA`;
+    expect(await h.call("search", { query: "", page_token: forged })).toMatchObject({
+      status: "denied",
+      reason: "unsupported",
+    });
+  });
+
+  it("hides a message missing a field hiding needs", async () => {
+    const h = setUp(`${ALL}${FAMILY}`);
+    h.graph.selectOnly = ["id", "subject", "bodyPreview", "parentFolderId", "receivedDateTime"];
+    const result = await h.call("search", { query: "" });
+    expect(result).toMatchObject({
+      status: "allowed",
+      result: { messages: [], hidden: { count: 3 } },
+    });
+  });
+
+  it("hides by any folder on a message's path", async () => {
+    const h = setUp(`${ALL}hide:\n  - email: { labels: { any_of: [HR] } }\n`);
+    h.graph.add({
+      id: "hr1",
+      conversationId: "chr",
+      folder: "fld-hr-2026",
+      from: "hr@company.com",
+      to: [MAILBOX],
+      subject: "Offer",
+      text: "x",
+    });
+    expect(await h.call("get_message", { message_id: "hr1" })).toEqual({
+      status: "denied",
+      reason: "not_available",
+      rule: null,
+    });
+  });
+});

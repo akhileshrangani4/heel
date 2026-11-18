@@ -188,6 +188,9 @@ const modifyLabels = gmailTool({
     const remove = resolve(args.remove);
     // A name heel can't resolve is refused rather than guessed.
     if ([...add, ...remove].some((id) => id === undefined)) return { deny: "unsupported" };
+    // SENT decides which mail counts as the mailbox's own, and DRAFT marks
+    // mail about to be sent: heel never adds either.
+    if (add.some((id) => id === "SENT" || id === "DRAFT")) return { deny: "unsupported" };
     if (add.length + remove.length === 0) return { deny: "unsupported" };
     return prepareChange(
       mailbox,
@@ -246,6 +249,7 @@ const createFilter = gmailTool({
     const add = args.add_labels.map((name) => byName.get(name));
     const remove = args.remove_labels.map((name) => byName.get(name));
     if ([...add, ...remove].some((id) => id === undefined)) return { deny: "unsupported" };
+    if (add.some((id) => id === "SENT" || id === "DRAFT")) return { deny: "unsupported" };
     const forward = args.forward_to === undefined ? null : normalizeAddress(args.forward_to);
     if (args.forward_to !== undefined && forward === null) return { deny: "unsupported" };
     const criteria: FilterCriteria = {

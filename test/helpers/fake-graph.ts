@@ -37,15 +37,21 @@ export interface GraphSent {
   headers: Record<string, string>;
 }
 
-const FOLDERS: Record<string, { id: string; name: string }> = {
-  inbox: { id: "fld-inbox", name: "Inbox" },
-  sentitems: { id: "fld-sent", name: "Sent Items" },
-  deleteditems: { id: "fld-deleted", name: "Deleted Items" },
-  junkemail: { id: "fld-junk", name: "Junk Email" },
-  archive: { id: "fld-archive", name: "Archive" },
-  drafts: { id: "fld-drafts", name: "Drafts" },
-  recoverableitemsdeletions: { id: "fld-recoverable", name: "Deletions" },
-  projects: { id: "fld-projects", name: "Projects" },
+const FOLDERS: Record<string, { id: string; name: string; parent: string; hidden?: boolean }> = {
+  msgfolderroot: { id: "fld-root", name: "Top of Information Store", parent: "" },
+  inbox: { id: "fld-inbox", name: "Inbox", parent: "fld-root" },
+  sentitems: { id: "fld-sent", name: "Sent Items", parent: "fld-root" },
+  deleteditems: { id: "fld-deleted", name: "Deleted Items", parent: "fld-root" },
+  junkemail: { id: "fld-junk", name: "Junk Email", parent: "fld-root" },
+  archive: { id: "fld-archive", name: "Archive", parent: "fld-root" },
+  drafts: { id: "fld-drafts", name: "Drafts", parent: "fld-root" },
+  outbox: { id: "fld-outbox", name: "Outbox", parent: "fld-root" },
+  recoverableitemsdeletions: { id: "fld-recoverable", name: "Deletions", parent: "fld-root" },
+  projects: { id: "fld-projects", name: "Projects", parent: "fld-root" },
+  hr2026: { id: "fld-hr-2026", name: "2026", parent: "fld-hr" },
+  hr: { id: "fld-hr", name: "HR", parent: "fld-root" },
+  oldtrash: { id: "fld-old-trash", name: "Old", parent: "fld-deleted" },
+  stash: { id: "fld-stash", name: "Stash", parent: "fld-root", hidden: true },
 };
 
 const recipient = (address: string) => ({ emailAddress: { name: address, address } });
@@ -65,7 +71,7 @@ export class FakeGraph {
     return this;
   }
 
-  folderId(name: keyof typeof FOLDERS): string {
+  folderId(name: string): string {
     return (FOLDERS[name] as { id: string }).id;
   }
 
@@ -109,6 +115,9 @@ export class FakeGraph {
   #folder(nameOrId: string) {
     return Object.values(FOLDERS).find((f) => f.id === nameOrId) ?? FOLDERS[nameOrId.toLowerCase()];
   }
+
+  /** Graph's answer to a `$select`: only the named fields, as a test of what heel does without the rest. */
+  selectOnly: string[] | null = null;
 
   readonly fetch = async (input: string | URL, init?: RequestInit): Promise<Response> => {
     const url = new URL(input.toString());
@@ -214,8 +223,13 @@ export class FakeGraph {
         list = list.filter((m) => m.conversationId === conversation.replaceAll("''", "'"));
       }
       const top = Number(url.searchParams.get("$top") ?? "10");
+      const select = this.selectOnly;
+      const shape = (m: FakeGraphMessage) => {
+        const full = this.#serve(m) as Record<string, unknown>;
+        return select === null ? full : Object.fromEntries(select.map((k) => [k, full[k]]));
+      };
       return Response.json({
-        value: list.slice(0, top).map((m) => this.#serve(m)),
+        value: list.slice(0, top).map(shape),
         ...(list.length > top && {
           "@odata.nextLink": `${GRAPH_API_BASE}me/messages?$skiptoken=2`,
         }),
@@ -236,7 +250,13 @@ export class FakeGraph {
       const found = this.#folder(decodeURIComponent(folder));
       return found === undefined
         ? notFound()
-        : Response.json({ id: found.id, displayName: found.name, childFolderCount: 0 });
+        : Response.json({
+            id: found.id,
+            displayName: found.name,
+            parentFolderId: found.parent === "" ? null : found.parent,
+            childFolderCount: 0,
+            isHidden: found.hidden ?? false,
+          });
     }
     return notFound();
   };

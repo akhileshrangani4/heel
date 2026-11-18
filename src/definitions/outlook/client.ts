@@ -23,24 +23,47 @@ const RecipientSchema = z.object({
 });
 export type Recipient = z.output<typeof RecipientSchema>;
 
-export const OutlookMessageSchema = z.object({
-  id: z.string(),
-  conversationId: z.string().default(""),
-  subject: z.string().nullable().default(null),
-  bodyPreview: z.string().default(""),
-  body: z.object({ contentType: z.string(), content: z.string() }).nullable().optional(),
-  from: RecipientSchema.nullable().optional(),
-  toRecipients: z.array(RecipientSchema).default([]),
-  ccRecipients: z.array(RecipientSchema).default([]),
-  bccRecipients: z.array(RecipientSchema).default([]),
-  replyTo: z.array(RecipientSchema).default([]),
-  internetMessageId: z.string().nullable().optional(),
-  parentFolderId: z.string().default(""),
-  categories: z.array(z.string()).default([]),
-  isDraft: z.boolean().default(false),
-  hasAttachments: z.boolean().default(false),
-  receivedDateTime: z.string().nullable().optional(),
-});
+/**
+ * The fields hiding needs. Graph returns them by default; a message missing
+ * any (as a `$select` would cause) is marked incomplete, and hides.
+ */
+const FIELDS_HIDING_NEEDS = [
+  "from",
+  "toRecipients",
+  "ccRecipients",
+  "bccRecipients",
+  "categories",
+  "parentFolderId",
+  "body",
+  "hasAttachments",
+  "isDraft",
+] as const;
+
+export const OutlookMessageSchema = z.preprocess(
+  (raw) =>
+    typeof raw === "object" && raw !== null
+      ? { ...raw, complete: FIELDS_HIDING_NEEDS.every((key) => key in raw) }
+      : raw,
+  z.object({
+    id: z.string(),
+    complete: z.boolean(),
+    conversationId: z.string().default(""),
+    subject: z.string().nullable().default(null),
+    bodyPreview: z.string().default(""),
+    body: z.object({ contentType: z.string(), content: z.string() }).nullable().optional(),
+    from: RecipientSchema.nullable().optional(),
+    toRecipients: z.array(RecipientSchema).default([]),
+    ccRecipients: z.array(RecipientSchema).default([]),
+    bccRecipients: z.array(RecipientSchema).default([]),
+    replyTo: z.array(RecipientSchema).default([]),
+    internetMessageId: z.string().nullable().optional(),
+    parentFolderId: z.string().default(""),
+    categories: z.array(z.string()).default([]),
+    isDraft: z.boolean().default(false),
+    hasAttachments: z.boolean().default(false),
+    receivedDateTime: z.string().nullable().optional(),
+  }),
+);
 export type OutlookMessage = z.output<typeof OutlookMessageSchema>;
 
 const MessageListSchema = z.object({
@@ -51,7 +74,9 @@ const MessageListSchema = z.object({
 const FolderSchema = z.object({
   id: z.string(),
   displayName: z.string(),
+  parentFolderId: z.string().nullable().optional(),
   childFolderCount: z.number().default(0),
+  isHidden: z.boolean().default(false),
 });
 export type OutlookFolder = z.output<typeof FolderSchema>;
 const FolderListSchema = z.object({

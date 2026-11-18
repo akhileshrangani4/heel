@@ -1,3 +1,4 @@
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { mapLimit } from "../mail/map-limit.ts";
 import { GRAPH_API_BASE } from "../microsoft/oauth.ts";
@@ -19,6 +20,33 @@ import { OutlookId, type OutlookTool, outlookTool } from "./tool.ts";
 
 const READ_CONCURRENCY = 5;
 
+/**
+ * Paging links are sealed with a key that lives only in this process, so
+ * an agent can hand back a link Graph gave, but can't write its own (a
+ * `$select` could drop the fields hiding needs). A restart invalidates
+ * outstanding tokens; the agent searches again.
+ */
+const PAGE_KEY = randomBytes(32);
+
+function pageMac(link: string): string {
+  return createHmac("sha256", PAGE_KEY).update(link).digest("base64url");
+}
+
+export function sealPageToken(link: string): string {
+  return `${Buffer.from(link, "utf8").toString("base64url")}.${pageMac(link)}`;
+}
+
+/** The link a token seals, or null when heel didn't issue it. */
+export function openPageToken(token: string): string | null {
+  const [encoded, mac] = token.split(".");
+  if (encoded === undefined || mac === undefined) return null;
+  const link = Buffer.from(encoded, "base64url").toString("utf8");
+  const expected = Buffer.from(pageMac(link));
+  const given = Buffer.from(mac);
+  if (expected.length !== given.length || !timingSafeEqual(expected, given)) return null;
+  return link.startsWith(`${GRAPH_API_BASE}me/messages`) ? link : null;
+}
+
 export interface SearchResult {
   messages: MessageSummary[];
   next_page_token?: string;
@@ -36,17 +64,17 @@ const search = outlookTool({
   }),
   readOnly: true,
   async prepare(_mailbox, args) {
-    // A page token is a link Graph gave; heel follows only links back to this mailbox.
-    if (args.page_token !== undefined && !args.page_token.startsWith(`${GRAPH_API_BASE}me/`)) {
-      return { deny: "unsupported" as const };
-    }
-    return { args };
+    // A page token is a link heel sealed when Graph gave it; anything else,
+    // including a link an agent wrote itself, is refused.
+    if (args.page_token === undefined)
+      return { args: { query: args.query, top: args.max_results } };
+    const nextLink = openPageToken(args.page_token);
+    if (nextLink === null) return { deny: "unsupported" as const };
+    return { args: { nextLink } };
   },
-  run: (mailbox, args, signal) =>
+  run: (mailbox, args: { query: string; top: number } | { nextLink: string }, signal) =>
     mailbox.client.listMessages(
-      args.page_token === undefined
-        ? { search: args.query, top: args.max_results }
-        : { nextLink: args.page_token },
+      "nextLink" in args ? { nextLink: args.nextLink } : { search: args.query, top: args.top },
       signal,
     ),
   async show(mailbox, page, hiding, signal): Promise<SearchResult> {
@@ -58,7 +86,7 @@ const search = outlookTool({
       messages: await Promise.all(
         visible.map(async (m) => messageSummary(m, await mailbox.labels(m, signal))),
       ),
-      ...(page.nextLink === undefined ? {} : { next_page_token: page.nextLink }),
+      ...(page.nextLink === undefined ? {} : { next_page_token: sealPageToken(page.nextLink) }),
       hidden: { count: page.messages.length - visible.length },
     };
   },

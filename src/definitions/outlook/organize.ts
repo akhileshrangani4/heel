@@ -11,27 +11,22 @@ import { OutlookId, type OutlookTool, outlookTool } from "./tool.ts";
  * Email, "Gmail and Outlook").
  *
  * - `email.remove` is a delete, or a move into Deleted Items, Junk, Archive
- *   or Recoverable Items. Folders are compared by id, read from Graph's
- *   well-known names, never by display name (research §7, gap 5). Any other
- *   move, and categories, are `email.label`.
+ *   or Recoverable Items, any folder inside them, or a hidden folder. heel
+ *   resolves the destination's folder chain by id, never by display name
+ *   (research §7, gap 5), and moves to the id it resolved. Any other move,
+ *   and categories, are `email.label`.
+ * - Moves into Sent Items, Drafts or Outbox are refused: Sent Items decides
+ *   which mail counts as the mailbox's own.
  * - `items` counts messages, and a batch holding any hidden or missing id is
  *   refused whole (I-42, Q-H3).
  * - heel never offers `permanentDelete`.
- * - An inbox rule is `email.filter`. One that forwards or redirects is
- *   `email.send` and persistence, with its addresses as recipients, as for
- *   Gmail filters (I-70).
+ * - An inbox rule is `email.filter`, whatever it does to future mail. One
+ *   that forwards or redirects is `email.send` and persistence, with its
+ *   addresses as recipients, as for Gmail filters (I-70).
  */
 
 const MAX_BATCH = 100;
 const READ_CONCURRENCY = 5;
-
-/** Well-known folders a move into removes mail from view. */
-export const REMOVAL_FOLDERS = [
-  "deleteditems",
-  "junkemail",
-  "archive",
-  "recoverableitemsdeletions",
-] as const;
 
 const MessageIds = z.array(OutlookId).min(1).max(MAX_BATCH);
 
@@ -47,18 +42,6 @@ async function checkTargets(
     return target.hidden;
   });
   return hidden.some(Boolean) ? { deny: "not_available" } : null;
-}
-
-/** Whether a destination (a well-known name or a folder id) removes mail from view. */
-async function removesInto(
-  mailbox: OutlookMailbox,
-  destination: string,
-  signal: AbortSignal,
-): Promise<boolean> {
-  const lower = destination.toLowerCase();
-  if ((REMOVAL_FOLDERS as readonly string[]).includes(lower)) return true;
-  const ids = await Promise.all(REMOVAL_FOLDERS.map((name) => mailbox.wellKnownId(name, signal)));
-  return ids.includes(destination);
 }
 
 const done = async (_mailbox: OutlookMailbox, result: unknown) => result;
@@ -91,12 +74,15 @@ async function prepareMove(
   hiding: Hiding,
   signal: AbortSignal,
 ): Promise<Preparation<MoveArgs>> {
+  const destination = await mailbox.destination(args.destination, signal);
+  if (destination.kind === "refused") return { deny: "unsupported" };
   const ids = [...new Set(args.message_ids)];
   const denied = await checkTargets(mailbox, ids, hiding, signal);
   if (denied !== null) return denied;
   return {
-    args: { message_ids: ids, destination: args.destination },
-    action: (await removesInto(mailbox, args.destination, signal)) ? "email.remove" : "email.label",
+    // The resolved folder id, so the move goes where heel judged it would.
+    args: { message_ids: ids, destination: destination.id },
+    action: destination.kind === "removal" ? "email.remove" : "email.label",
     targets: ids,
     items: ids.length,
   };
@@ -189,12 +175,13 @@ const setCategories = outlookTool({
       mailbox.target(id, hiding, signal),
     );
     if (targets.some((t) => t.hidden)) return { deny: "not_available" };
+    // Keyed by the id the agent sent, which is the id the PATCH uses.
     const categories: Record<string, string[]> = {};
-    for (const { message } of targets) {
-      const next = new Set([...message.categories, ...args.add]);
+    ids.forEach((id, i) => {
+      const next = new Set([...(targets[i]?.message.categories ?? []), ...args.add]);
       for (const name of args.remove) next.delete(name);
-      categories[message.id] = [...next];
-    }
+      categories[id] = [...next];
+    });
     return {
       args: { message_ids: ids, categories },
       action: "email.label",
@@ -203,9 +190,11 @@ const setCategories = outlookTool({
     };
   },
   async run(mailbox, args, signal) {
-    const changed = await eachMessage(args.message_ids, (id) =>
-      mailbox.client.patchMessage(id, { categories: args.categories[id] ?? [] }, signal),
-    );
+    const changed = await eachMessage(args.message_ids, (id) => {
+      const categories = args.categories[id];
+      if (categories === undefined) throw new Error(`no categories prepared for ${id}`);
+      return mailbox.client.patchMessage(id, { categories }, signal);
+    });
     return { changed };
   },
   show: done,
@@ -251,8 +240,13 @@ const createRule = outlookTool({
     }
     const asRecipients = (list: (string | null)[]) =>
       (list as string[]).map((address) => ({ emailAddress: { address } }));
+    const destination =
+      args.move_to_folder === undefined
+        ? null
+        : await mailbox.destination(args.move_to_folder, signal);
+    if (destination?.kind === "refused") return { deny: "unsupported" };
     const actions: Record<string, unknown> = {
-      ...(args.move_to_folder === undefined ? {} : { moveToFolder: args.move_to_folder }),
+      ...(destination === null ? {} : { moveToFolder: destination.id }),
       ...(args.add_categories.length === 0 ? {} : { assignCategories: args.add_categories }),
       ...(args.mark_as_read === undefined ? {} : { markAsRead: args.mark_as_read }),
       ...(args.delete === true ? { delete: true } : {}),
@@ -271,15 +265,13 @@ const createRule = outlookTool({
     };
     const rule = { displayName: args.name, sequence: 1, isEnabled: true, conditions, actions };
     const outbound = [...forwardTo, ...redirectTo] as string[];
-    const removes =
-      args.delete === true ||
-      (args.move_to_folder !== undefined &&
-        (await removesInto(mailbox, args.move_to_folder, signal)));
+    // A rule is `email.filter`, whatever it does to future mail, as in the
+    // spec and for Gmail; one that sends mail out is `email.send` too.
     return {
       args: { rule },
       ...(outbound.length > 0
         ? { action: "email.send", recipients: [...new Set(outbound)], persistence: true }
-        : { action: removes ? "email.remove" : "email.filter" }),
+        : { action: "email.filter" }),
     };
   },
   async run(mailbox, args, signal) {

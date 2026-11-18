@@ -165,7 +165,7 @@ function replyTool(all: boolean) {
             to: unique([...to, ...origTo]).filter((a) => !own(a)),
             cc: unique(origCc).filter((a) => !own(a)),
           }
-        : { to: unique(to), cc: [] };
+        : { to: unique(to).filter((a) => !own(a)), cc: [] };
       const cc = everyone.cc.filter((a) => !everyone.to.includes(a));
       if (everyone.to.length === 0 && cc.length === 0) return { deny: "unsupported" };
       const prepared: ThreadedArgs = {

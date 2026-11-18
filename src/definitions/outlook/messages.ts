@@ -66,60 +66,148 @@ export function messageBody(message: OutlookMessage): OutlookBody {
   };
 }
 
-/** Folder names by id, read once per call and only when asked. */
+/** Folders a move into takes mail out of view (spec: Email, `email.remove`). */
+export const REMOVAL_FOLDERS = [
+  "deleteditems",
+  "junkemail",
+  "archive",
+  "recoverableitemsdeletions",
+] as const;
+
+/**
+ * Folders heel never moves mail into: Sent Items decides which mail counts
+ * as the mailbox's own (`all_in_thread`, replies), and Drafts and Outbox
+ * hold mail that is about to be sent.
+ */
+export const PROTECTED_FOLDERS = ["sentitems", "drafts", "outbox"] as const;
+
+/** What a move into a folder does. */
+export type Destination =
+  | { kind: "label"; id: string }
+  | { kind: "removal"; id: string }
+  | { kind: "refused" };
+
+/** One step up a folder chain. */
+interface FolderNode {
+  id: string;
+  name: string;
+  parentId: string | null;
+  hidden: boolean;
+}
+
+/** The per-call view of an Outlook mailbox: folders, read once each, and the hiding test. */
 export class OutlookMailbox {
   readonly client: OutlookClient;
   /** The account's mailbox address, from its settings. */
   readonly address: string;
-  readonly #folders = new Map<string, Promise<string | null>>();
-  readonly #wellKnown = new Map<string, Promise<string>>();
+  readonly #folders = new Map<string, Promise<FolderNode | null>>();
+  readonly #wellKnown = new Map<string, Promise<string | null>>();
 
   constructor(client: OutlookClient, address: string) {
     this.client = client;
     this.address = address;
   }
 
-  /** A folder's display name, or null when heel can't read it. */
-  folderName(id: string, signal: AbortSignal): Promise<string | null> {
-    let name = this.#folders.get(id);
-    if (name === undefined) {
-      name = this.client.getFolder(id, signal).then(
-        (folder) => folder.displayName,
+  /** One folder, by id or well-known name; null when heel can't read it. */
+  #folder(idOrName: string, signal: AbortSignal): Promise<FolderNode | null> {
+    let node = this.#folders.get(idOrName);
+    if (node === undefined) {
+      node = this.client.getFolder(idOrName, signal).then(
+        (f) => ({
+          id: f.id,
+          name: f.displayName,
+          parentId: f.parentFolderId ?? null,
+          hidden: f.isHidden,
+        }),
         () => null,
       );
-      this.#folders.set(id, name);
+      this.#folders.set(idOrName, node);
     }
-    return name;
+    return node;
   }
 
-  /** A well-known folder's id (`sentitems`, `deleteditems`, …), read once per call. */
-  wellKnownId(name: string, signal: AbortSignal): Promise<string> {
+  /**
+   * A folder and its ancestors, nearest first, up to the mailbox root. Null
+   * when any step can't be read, or the chain is implausibly deep.
+   */
+  async folderChain(idOrName: string, signal: AbortSignal): Promise<FolderNode[] | null> {
+    const root = await this.wellKnownId("msgfolderroot", signal);
+    const chain: FolderNode[] = [];
+    let next: string | null = idOrName;
+    while (next !== null && next !== root && chain.length < 20) {
+      const node: FolderNode | null = await this.#folder(next, signal);
+      if (node === null) return null;
+      chain.push(node);
+      next = node.parentId;
+    }
+    return chain.length >= 20 ? null : chain;
+  }
+
+  /** A well-known folder's id (`sentitems`, `deleteditems`, …), or null when the mailbox has none. */
+  wellKnownId(name: string, signal: AbortSignal): Promise<string | null> {
     let id = this.#wellKnown.get(name);
     if (id === undefined) {
-      id = this.client.getFolder(name, signal).then((folder) => folder.id);
+      id = this.client.getFolder(name, signal).then(
+        (folder) => folder.id,
+        () => null,
+      );
       this.#wellKnown.set(name, id);
     }
     return id;
   }
 
   /**
+   * What moving mail into a folder does, judged by the folder's resolved
+   * chain, never by the name the agent wrote: a removal if it or any
+   * ancestor is a removal folder, or it is hidden; refused if it or any
+   * ancestor is Sent Items, Drafts or Outbox, or it can't be read.
+   */
+  async destination(idOrName: string, signal: AbortSignal): Promise<Destination> {
+    const chain = await this.folderChain(idOrName, signal);
+    if (chain === null || chain.length === 0) return { kind: "refused" };
+    const ids = new Set(chain.map((f) => f.id));
+    const any = async (names: readonly string[]) =>
+      (await Promise.all(names.map((n) => this.wellKnownId(n, signal)))).some(
+        (id) => id !== null && ids.has(id),
+      );
+    if (await any(PROTECTED_FOLDERS)) return { kind: "refused" };
+    const target = chain[0] as FolderNode;
+    if ((await any(REMOVAL_FOLDERS)) || chain.some((f) => f.hidden)) {
+      return { kind: "removal", id: target.id };
+    }
+    return { kind: "label", id: target.id };
+  }
+
+  /**
    * Whether the mailbox sent this message: it sits in Sent Items and isn't a
    * draft. A From header matching the mailbox proves nothing, since anyone
-   * can write it.
+   * can write it, and heel never moves mail into Sent Items.
    */
   async sentByMailbox(message: OutlookMessage, signal: AbortSignal): Promise<boolean> {
     if (message.isDraft) return false;
-    return message.parentFolderId === (await this.wellKnownId("sentitems", signal));
+    const sent = await this.wellKnownId("sentitems", signal);
+    return sent !== null && message.parentFolderId === sent;
   }
 
-  /** What hiding judges for one message; null when heel can't name its folder. */
+  /** A message's folder path names, nearest first; null when heel can't read it. */
+  async folderNames(message: OutlookMessage, signal: AbortSignal): Promise<string[] | null> {
+    const chain = await this.folderChain(message.parentFolderId, signal);
+    return chain === null ? null : chain.map((f) => f.name);
+  }
+
+  /**
+   * What hiding judges for one message: its categories and every folder on
+   * its path are its labels. Null when heel can't judge it: a field hiding
+   * needs is missing, or its folders can't be read.
+   */
   async candidate(
     message: OutlookMessage,
     withBody: boolean,
     signal: AbortSignal,
   ): Promise<HideCandidate | null> {
-    const folder = await this.folderName(message.parentFolderId, signal);
-    if (folder === null) return null;
+    if (!message.complete) return null;
+    const folders = await this.folderNames(message, signal);
+    if (folders === null) return null;
     return {
       from: displayAddress(message.from),
       to: [
@@ -128,7 +216,7 @@ export class OutlookMailbox {
         ...recipientList(message.bccRecipients),
       ],
       subject: message.subject,
-      labels: [...message.categories, folder],
+      labels: [...message.categories, ...folders],
       ...(withBody ? { body: messageBody(message) } : {}),
     };
   }
@@ -147,8 +235,7 @@ export class OutlookMailbox {
   }
 
   async labels(message: OutlookMessage, signal: AbortSignal): Promise<string[]> {
-    const folder = await this.folderName(message.parentFolderId, signal);
-    return folder === null ? [...message.categories] : [...message.categories, folder];
+    return [...message.categories, ...((await this.folderNames(message, signal)) ?? [])];
   }
 }
 
