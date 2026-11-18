@@ -302,7 +302,7 @@ class DecisionPipeline implements Pipeline {
     let rule = this.#grantRules.get(row.id);
     if (rule === undefined) {
       try {
-        rule = compileGrant(row.match, { id: row.id });
+        rule = compileGrant(row.match, { id: row.id }).rule;
       } catch (error) {
         // Validated when signed; one that no longer compiles allows nothing.
         this.#deps.log.error({ grant: row.id, error: errorShape(error) }, "grant didn't compile");
@@ -741,9 +741,12 @@ class DecisionPipeline implements Pipeline {
     switch (verdict.decision) {
       case "allow": {
         const { standingApprovalId } = verdict;
-        if (standingApprovalId !== null && governing?.status === "denied") {
-          // A person denied this exact call. A standing approval for the same
-          // rule doesn't overrule them while the denial lasts (Q-A5).
+        if (
+          (standingApprovalId !== null || verdict.grant === true) &&
+          governing?.status === "denied"
+        ) {
+          // A person denied this exact call. A standing approval or an intent
+          // grant doesn't overrule them while the denial lasts (Q-A5).
           return this.#deniedByPerson(tx, input, verdict.rule, governing.id, at);
         }
         if (

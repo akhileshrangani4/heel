@@ -122,8 +122,9 @@ export function grantRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     if (!GRANT_DURATIONS.has(duration)) {
       return c.json({ ok: false, message: "Pick how long it lasts." }, 400);
     }
+    let canonical: string;
     try {
-      compileGrant(match, { id: "draft" });
+      canonical = compileGrant(match, { id: "draft" }).canonical;
     } catch (error) {
       if (error instanceof GrantError) return c.json({ ok: false, message: error.message }, 400);
       throw error;
@@ -132,7 +133,8 @@ export function grantRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       orgId: deps.orgId,
       purpose: "grant",
       userId: session.userId,
-      binding: { agent, task, match, duration },
+      // The canonical form is what is signed and stored, so what runs is what was signed.
+      binding: { agent, task, match: canonical, duration },
       now: deps.now(),
     });
     if (!issued.ok) return c.json({ ok: false, message: "You have no passkey enrolled." }, 400);

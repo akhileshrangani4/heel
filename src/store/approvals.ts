@@ -385,6 +385,9 @@ export function decideApproval(
   );
 }
 
+/** The longest a run-scoped standing approval lasts (A4a). */
+export const RUN_SCOPE_MAX_MS = 24 * 60 * 60_000;
+
 function grantStanding(
   tx: HeelQuery,
   row: ApprovalRow,
@@ -401,7 +404,12 @@ function grantStanding(
     throw new TypeError(`not a standing duration: ${String(choice.duration)}`);
   }
   const id = newId("standingApproval");
-  const durationMs = Math.min(STANDING_DURATIONS[choice.duration], STANDING_MAX_MS);
+  // A run id is the agent's own word, and it can reuse one; a run grant
+  // lasts at most a day however long the person picked.
+  const durationMs = Math.min(
+    STANDING_DURATIONS[choice.duration],
+    choice.scope === "run" ? RUN_SCOPE_MAX_MS : STANDING_MAX_MS,
+  );
   tx.insert(standingApprovals)
     .values({
       id,

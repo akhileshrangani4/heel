@@ -52,4 +52,12 @@ describe("run-scoped standing approvals", () => {
     expect(standingCovers(row, call({ agentId: "b" }))).toBe(false);
     expect(standingCovers(row, call({ ruleHash: "s" }))).toBe(false);
   });
+
+  it("lasts at most a day, however long the person picked", async () => {
+    const h = approvalHarness({ owner: ASK_SENDS });
+    const id = pendingId(await h.call({ args: SEND, runId: "run-1" }));
+    h.decide(id, "approve", { standing: { scope: "run", duration: "30d" } });
+    h.clock.advance(25 * 60 * 60_000);
+    expect((await h.call({ args: OTHER, runId: "run-1" })).status).toBe("pending");
+  });
 });

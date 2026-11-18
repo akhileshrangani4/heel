@@ -42,8 +42,9 @@ export function grantsPage(props: {
   return html`<h1>Grants</h1>
     <p class="muted">
       A grant lets one agent do one narrow thing for a task you describe, without asking each time.
-      It sits below your organization's rules and above your own, and ends when it expires or you
-      revoke it. You sign each one with your passkey.
+      It answers your rules' asks and calls no rule covers; it never overrides a deny, your
+      organization's rules, or a request someone denied. It ends when it expires or you revoke it, and
+      you sign each one with your passkey.
     </p>
     ${outcome}
     <form id="grant-form" class="stack" onsubmit="return false">
@@ -55,7 +56,7 @@ export function grantsPage(props: {
       <input id="grant-task" name="task" maxlength="500" placeholder="Send the Q3 numbers to the vendor" />
       <label for="grant-match">What it may do (a rule's match)</label>
       <textarea id="grant-match" name="match" rows="3" class="mono"
-        placeholder="{ action: email.send, recipients: { all_domain_in: [vendor.com] }, items: { max: 5 } }"></textarea>
+        placeholder="{ action: email.send, recipients: { all_domain_in: [vendor.com], max: 5 } }"></textarea>
       <label for="grant-duration">Lasts</label>
       <select id="grant-duration" name="duration">
         ${DURATIONS.map((d) => html`<option value="${d.value}">${d.label}</option>`)}

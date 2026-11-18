@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { compileGrant, GrantError } from "../../src/grants/compile.ts";
 import { createGrant, revokeGrant } from "../../src/store/grants.ts";
-import { approvalHarness, SEND } from "../helpers/approvals.ts";
+import { approvalHarness, pendingId, SEND } from "../helpers/approvals.ts";
 import { oneRule } from "../helpers/pipeline.ts";
 
 /**
@@ -26,7 +26,7 @@ function grant(h: ReturnType<typeof approvalHarness>, match: string, expiresInMs
 
 describe("compileGrant", () => {
   it("compiles one match into an allow named after the grant", () => {
-    const rule = compileGrant(VENDOR_ONLY, { id: "grt_1" });
+    const { rule } = compileGrant(VENDOR_ONLY, { id: "grt_1" });
     expect(rule.decision).toBe("allow");
     expect(rule.ref).toEqual({ name: "grant grt_1", file: "grants", line: 0 });
   });
@@ -36,6 +36,10 @@ describe("compileGrant", () => {
     ["a list", "[a, b]"],
     ["an unknown key", "{ colour: red }"],
     ["broken YAML", "{ action: "],
+    ["a __proto__ key that would vanish", "{ __proto__: { action: email.send } }"],
+    ["a match with no conditions", "{ items: { over: 0 } }"],
+    ["a match naming no action or tool", "{ account: { matches: '.*' } }"],
+    ["a match-all tool pattern", "{ tool: { matches: '.*' } }"],
   ])("refuses %s", (_, match) => {
     expect(() => compileGrant(match, { id: "grt_1" })).toThrow(GrantError);
   });
@@ -78,5 +82,33 @@ describe("intent grants in the pipeline", () => {
     expect(revokeGrant(h.t.db, h.t.orgId, second, h.t.ownerId, h.clock.now)).toBe(true);
     expect((await h.call({ args: { ...SEND, subject: "third" } })).status).toBe("pending");
     expect(id).not.toBe(second);
+  });
+
+  it("never overrides an owner deny", async () => {
+    const h = approvalHarness({ owner: oneRule("{ action: email.send }", "deny") });
+    grant(h, VENDOR_ONLY);
+    expect(await h.call({ args: SEND })).toMatchObject({ status: "denied" });
+  });
+
+  it("answers a call no rule covers", async () => {
+    const h = approvalHarness({ owner: "rules: []\n" });
+    grant(h, VENDOR_ONLY);
+    expect(await h.call({ args: SEND })).toMatchObject({ status: "allowed" });
+  });
+
+  it("doesn't overrule a person who denied this exact call (Q-A5)", async () => {
+    const h = approvalHarness({ owner: ASK_SENDS });
+    const id = pendingId(await h.call({ args: SEND }));
+    h.decide(id, "deny");
+    grant(h, VENDOR_ONLY);
+    expect(await h.call({ args: SEND })).toMatchObject({ status: "denied" });
+  });
+
+  it("the Grants page's example compiles", () => {
+    expect(() =>
+      compileGrant("{ action: email.send, recipients: { all_domain_in: [vendor.com], max: 5 } }", {
+        id: "x",
+      }),
+    ).not.toThrow();
   });
 });

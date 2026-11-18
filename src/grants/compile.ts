@@ -31,14 +31,25 @@ export class GrantError extends Error {
 
 const MAX_MATCH_LENGTH = 4_000;
 
+/** Keys a YAML or JSON round trip can turn into prototype changes; never part of a match. */
+const FORBIDDEN_KEYS = /(?:^|[^A-Za-z0-9_])(?:__proto__|constructor|prototype)(?:$|[^A-Za-z0-9_])/;
+
+export interface CompiledGrant {
+  rule: CompiledRule;
+  /** The match as heel reads it: what a person signs and what is stored. */
+  canonical: string;
+}
+
 /**
- * Compiles one grant into a rule the evaluator places above the owner's
- * rules. Throws `GrantError` with a message for the person when the match
- * isn't valid, or when it would match every call of the agent (a grant must
- * say what it allows).
+ * Compiles one grant into a rule the evaluator consults when the owner's
+ * rules end in an ask or the default deny. Throws `GrantError`, with a
+ * message for the person, unless the compiled rule names a literal action
+ * or tool and has at least one condition: a grant must say what it allows,
+ * judged on what heel will actually run, not on the text as written.
  */
-export function compileGrant(match: GrantMatch, ref: { id: string }): CompiledRule {
+export function compileGrant(match: GrantMatch, ref: { id: string }): CompiledGrant {
   if (match.length > MAX_MATCH_LENGTH) throw new GrantError("That match is too long.");
+  if (FORBIDDEN_KEYS.test(match)) throw new GrantError("That match uses a reserved word.");
   let parsed: unknown;
   try {
     parsed = parse(match);
@@ -48,10 +59,8 @@ export function compileGrant(match: GrantMatch, ref: { id: string }): CompiledRu
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new GrantError("A match is a mapping, such as { action: email.send }.");
   }
-  if (Object.keys(parsed).length === 0) {
-    throw new GrantError("A grant must say what it allows; an empty match allows everything.");
-  }
-  const text = `rules:\n  - match: ${JSON.stringify(parsed)}\n    then: allow\n`;
+  const canonical = JSON.stringify(parsed);
+  const text = `rules:\n  - match: ${canonical}\n    then: allow\n`;
   let rules: readonly CompiledRule[];
   try {
     rules = compileRulesText(text, `grant ${ref.id}`, "grants", "owner").file.rules;
@@ -64,5 +73,16 @@ export function compileGrant(match: GrantMatch, ref: { id: string }): CompiledRu
   const [rule] = rules;
   if (rule === undefined || rules.length !== 1)
     throw new GrantError("A grant is exactly one match.");
-  return { ...rule, ref: { name: `grant ${ref.id}`, file: "grants", line: 0 } };
+  if (rule.conditions.length === 0) {
+    throw new GrantError("A grant must say what it allows; this match allows everything.");
+  }
+  if (rule.names.actions.size + rule.names.tools.size === 0) {
+    throw new GrantError(
+      "A grant must name the action or tool it allows, such as action: email.send.",
+    );
+  }
+  return {
+    rule: { ...rule, ref: { name: `grant ${ref.id}`, file: "grants", line: 0 } },
+    canonical,
+  };
 }
