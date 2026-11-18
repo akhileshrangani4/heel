@@ -56,6 +56,8 @@ export interface HumanPlaneDeps {
   providerClients: { google: GoogleClient | null; microsoft: MicrosoftClient | null };
   /** `heel serve --watch`: rows with no stored mode behave as shadow (A3). */
   watchFallback: boolean;
+  /** Messages hidden from agents since heel started, by reason (A5, I-44); absent in tests. */
+  hiddenCounts?: () => Readonly<Record<string, number>>;
   now: () => Date;
 }
 
