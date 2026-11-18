@@ -57,6 +57,9 @@ jobs:
           node-version-file: .node-version
       - name: Deploy to production
         run: |
-          url=$(npx --yes vercel@62.2.0 deploy --prod --yes --token "$VERCEL_TOKEN")
+          # The project skips production builds without this mark, so a push
+          # to main (Vercel's GitHub app) can't publish the site; previews still build.
+          url=$(npx --yes vercel@62.2.0 deploy --prod --yes --token "$VERCEL_TOKEN" \
+            --build-env HEEL_RELEASE_DEPLOY=1)
           echo "Deployed $url"
           npx --yes vercel@62.2.0 alias set "$url" useheel.dev --token "$VERCEL_TOKEN"
