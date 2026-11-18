@@ -47,6 +47,8 @@ export type AuditEvent =
       reason: string;
       /** Set when the call re-sends a request a person denied (Q-A5). */
       approvalId?: string;
+      /** Set when a decision adapter denied the call, not the rules. */
+      adapter?: string;
     })
   | (CallEvent & { kind: "ask"; rule: RuleRef; approvalId: string })
   | (CallEvent & { kind: "paused"; pauseScope: PauseScope })
@@ -69,9 +71,11 @@ export type AuditEvent =
   | (CallEvent & { kind: "would_allow" | "would_ask"; rule: RuleRef })
   | (CallEvent & {
       kind: "would_deny";
-      /** Null for the default deny. */
+      /** Null for the default deny and for a watching adapter. */
       rule: RuleRef | null;
       reason: string;
+      /** Set when a watching decision adapter would have denied the call. */
+      adapter?: string;
     });
 
 /** The flat row shape the store appends. */
@@ -95,6 +99,8 @@ export interface AuditRecord {
   approverId: string | null;
   pauseScope: PauseScope | null;
   reason: string | null;
+  /** The decision adapter that denied, or would have denied, the call. */
+  adapter: string | null;
 }
 
 /** Flattens an event into the row the audit log stores. */
@@ -121,5 +127,6 @@ export function toAuditRecord(event: AuditEvent, at: Date): AuditRecord {
     approverId: "approverId" in event ? event.approverId : null,
     pauseScope: event.kind === "paused" ? event.pauseScope : null,
     reason: event.kind === "deny" || event.kind === "would_deny" ? event.reason : null,
+    adapter: event.kind === "deny" || event.kind === "would_deny" ? (event.adapter ?? null) : null,
   };
 }
