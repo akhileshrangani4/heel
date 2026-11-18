@@ -165,6 +165,11 @@ jobs:
     # virtual WebAuthn authenticator. Screenshots of each step and a WebM are kept.
     name: approval page in a browser
     runs-on: ubuntu-24.04
+    # Chromium and its system libraries come with Microsoft's Playwright image,
+    # so nothing is downloaded or apt-installed per run (that step took 15 s to
+    # 6+ min). The tag must match @playwright/test in pnpm-lock.yaml.
+    container:
+      image: mcr.microsoft.com/playwright:v1.65.0-noble
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
@@ -173,8 +178,14 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Install Chromium
-        run: pnpm exec playwright install --with-deps chromium
+      - name: The image's Playwright matches the lockfile's
+        run: |
+          want="$(pnpm exec playwright --version | awk '{print $2}')"
+          image="1.65.0"
+          [ "$want" = "$image" ] || {
+            echo "::error::@playwright/test is $want but the job's image is v$image: update the container tag"
+            exit 1
+          }
       - name: Approve, deny, pause and resume with a passkey
         run: pnpm test:browser
         env:
