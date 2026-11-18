@@ -14,9 +14,11 @@ hide:
   - email: { looks_like: [password_reset] }
 `;
 
+const TEXT = { body: "Hello", bodyFormat: "text" } as const;
+
 const MESSAGES: HideCandidate[] = [
-  { from: "bob@company.com", to: [], subject: "Lunch?", labels: [] },
-  { from: "carol@company.com", to: [], subject: "Notes", labels: [] },
+  { from: "bob@company.com", to: [], subject: "Lunch?", labels: [], body: TEXT },
+  { from: "carol@company.com", to: [], subject: "Notes", labels: [], body: TEXT },
 ];
 
 function harness(options: Parameters<typeof pipelineHarness>[0] = {}) {

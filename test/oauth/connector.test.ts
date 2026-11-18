@@ -6,8 +6,8 @@ import {
   UnauthorizedError,
 } from "@modelcontextprotocol/client";
 import { describe, expect, it } from "vitest";
-import { definitionRegistry } from "../../src/definitions/mcp/passthrough.ts";
 import { UpstreamPool } from "../../src/definitions/mcp/upstream.ts";
+import { definitionRegistry } from "../../src/definitions/registry.ts";
 import { createAgentApp } from "../../src/gateway/app.ts";
 import { createMcpSurface } from "../../src/gateway/mcp/server.ts";
 import { createPipeline } from "../../src/gateway/pipeline/pipeline.ts";
@@ -41,7 +41,7 @@ function planes(h: HumanPlaneHarness) {
   const pipeline = createPipeline({
     db: h.t.db,
     rules: { set: compileRules({ owner: "rules: []\n" }) },
-    definitions: definitionRegistry(upstream),
+    definitions: definitionRegistry({ upstream, gmail: null }),
     pauses: new SqlitePauseStore(),
     approvals: new SqliteApprovalStore(),
     log: logger,
@@ -56,7 +56,7 @@ function planes(h: HumanPlaneHarness) {
     mcp: createMcpSurface({
       db: h.t.db,
       pipeline,
-      definitions: definitionRegistry(upstream),
+      definitions: definitionRegistry({ upstream, gmail: null }),
       log: logger,
       version: "test",
     }),

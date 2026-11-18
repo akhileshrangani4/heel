@@ -14,6 +14,9 @@ import { allOf, evalCondition, type Outcome } from "./rules/match.ts";
  *   both satisfy it, because hiding fails closed (I-44): an unsure, slow,
  *   missing or failing classifier hides the message.
  * - It can only ever add to what is hidden (I-43): nothing here unhides.
+ * - A message with no body read, or one heel couldn't read (encrypted,
+ *   image-only, undecodable), hides under any `looks_like` entry before the
+ *   judge is asked.
  * - An address heel can't parse makes the entry undecidable, which also
  *   hides the message, the same fail-closed way.
  */
@@ -77,18 +80,16 @@ function looksLikeOutcome(
   judge: LooksLikeJudge,
 ): { outcome: Outcome; uncertain: boolean } {
   if (entry.looksLike.length === 0) return { outcome: true, uncertain: false };
-  const body = candidate.body ?? {
-    body: "",
-    bodyFormat: "text" as const,
-    unreadable: "unparseable" as const,
-  };
+  // Unreadable mail hides before any judge sees it (spec: `looks_like` step 3).
+  if (candidate.body === undefined || candidate.body.unreadable !== undefined) {
+    return { outcome: true, uncertain: true };
+  }
   const verdict = judge(
     {
       subject: candidate.subject ?? "",
       from: candidate.from ?? "",
-      body: body.body,
-      bodyFormat: body.bodyFormat,
-      ...(body.unreadable === undefined ? {} : { unreadable: body.unreadable }),
+      body: candidate.body.body,
+      bodyFormat: candidate.body.bodyFormat,
     },
     entry.looksLike,
   );

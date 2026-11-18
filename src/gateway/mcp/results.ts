@@ -31,6 +31,41 @@ export type Decision =
 export interface CallLabel {
   account: string;
   tool: string;
+  /**
+   * True for a built-in provider: its result is plain data that heel wraps.
+   * A passthrough's result is already the upstream's tool result.
+   */
+  native: boolean;
+}
+
+function hiddenCount(data: unknown): number {
+  if (typeof data !== "object" || data === null || !("hidden" in data)) return 0;
+  const { hidden } = data as { hidden: unknown };
+  if (typeof hidden !== "object" || hidden === null || !("count" in hidden)) return 0;
+  const { count } = hidden as { count: unknown };
+  return typeof count === "number" ? count : 0;
+}
+
+/**
+ * A built-in tool's data as a tool result: the object as `structuredContent`
+ * and as JSON text, plus one line saying how many items heel hid, when it
+ * hid any (spec: Hiding, "Dropped, with one count").
+ */
+export function nativeResult(data: unknown): CallToolResult {
+  const content: CallToolResult["content"] = [{ type: "text", text: JSON.stringify(data) }];
+  const hidden = hiddenCount(data);
+  if (hidden > 0) {
+    content.push({
+      type: "text",
+      text: `heel hid ${hidden} ${hidden === 1 ? "item" : "items"} from this result.`,
+    });
+  }
+  return {
+    content,
+    ...(typeof data === "object" && data !== null && !Array.isArray(data)
+      ? { structuredContent: data as Record<string, unknown> }
+      : {}),
+  };
 }
 
 export function decisionFor(
@@ -88,6 +123,8 @@ export function decisionResult(decision: Decision): CallToolResult {
 
 /** The tool result for any pipeline outcome. */
 export function toolResult(result: PipelineResult, call: CallLabel): CallToolResult {
-  if (result.status === "allowed") return result.result as CallToolResult;
+  if (result.status === "allowed") {
+    return call.native ? nativeResult(result.result) : (result.result as CallToolResult);
+  }
   return decisionResult(decisionFor(result, call));
 }

@@ -12,6 +12,7 @@ import { approvalStatusForAgent } from "../../store/approvals.ts";
 import type { HeelDb } from "../../store/db.ts";
 import { type AccountRecord, accountsOwnedBy } from "../../store/directory.ts";
 import { errorShape } from "../../util/error-shape.ts";
+import { isMcpProvider } from "../../vault/connect.ts";
 import type { AuthenticatedAgent } from "../agent-tokens.ts";
 import type { Pipeline } from "../pipeline/pipeline.ts";
 import type { Definition, DefinitionRegistry } from "../pipeline/ports.ts";
@@ -139,7 +140,11 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
       args,
       runId: params._meta?.[RUN_ID_META_KEY],
     });
-    return toolResult(result, { account: target.alias, tool: target.tool });
+    const account = accountsOwnedBy(deps.db, agent.orgId, agent.ownerId).find(
+      (a) => a.alias === target.alias,
+    );
+    const native = account !== undefined && !isMcpProvider(account.provider);
+    return toolResult(result, { account: target.alias, tool: target.tool, native });
   }
 
   const handler: McpHttpHandler = createMcpHandler(({ authInfo }) => {
