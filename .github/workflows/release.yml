@@ -10,6 +10,8 @@ name: release
 #   package in a job with no write access, and two jobs that install nothing
 #   publish what it built: the npm package (trusted publishing, provenance)
 #   and the image on ghcr.io.
+# - Once npm has the release, useheel.dev is deployed from the released
+#   commit (docs.yml).
 #
 # Each publish checks whether it's already done, so a failed run can be
 # re-run. See docs/releasing.md.
@@ -225,6 +227,20 @@ jobs:
             docker tag "$IMAGE:$VERSION" "$IMAGE:latest"
             docker push "$IMAGE:latest"
           fi
+
+  docs:
+    # useheel.dev follows releases: deployed from the released commit once
+    # npm has it, so the site never documents a version that isn't out.
+    name: deploy useheel.dev
+    needs: [plan, npm]
+    if: ${{ !cancelled() && needs.npm.result == 'success' && needs.plan.outputs.channel == 'latest' }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/docs.yml
+    with:
+      ref: ${{ needs.plan.outputs.sha }}
+    secrets:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 
   notes:
     # Adds install lines to the GitHub release once both are published.
