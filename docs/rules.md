@@ -1,6 +1,6 @@
 # Rules and hiding
 
-[README](../README.md) · [Why heel](why.md) · [How it works](how-it-works.md) · [Rules](rules.md) · [Approvals](approvals.md) · [Running](running.md)
+[README](../README.md) · [Using heel](using-heel.md) · [Why heel](why.md) · [How it works](how-it-works.md) · [Rules](rules.md) · [Approvals](approvals.md) · [Running](running.md)
 
 Rules are a file you can read, review and test. A call no rule matches is denied. They're checked in this order, and the first match decides:
 

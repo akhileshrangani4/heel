@@ -1,3 +1,4 @@
+import { Analytics } from '@vercel/analytics/next';
 import { RootProvider } from 'fumadocs-ui/provider/next';
 import type { Metadata, Viewport } from 'next';
 import { Geist_Mono, Inter } from 'next/font/google';
@@ -40,6 +41,8 @@ export default function Layout({ children }: LayoutProps<'/'>) {
     >
       <body className="flex flex-col min-h-screen">
         <RootProvider>{children}</RootProvider>
+        {/* Vercel Web Analytics: page views only, no cookies. */}
+        <Analytics />
       </body>
     </html>
   );

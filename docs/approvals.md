@@ -1,6 +1,6 @@
 # Approvals, grants and pause
 
-[README](../README.md) · [Why heel](why.md) · [How it works](how-it-works.md) · [Rules](rules.md) · [Approvals](approvals.md) · [Running](running.md)
+[README](../README.md) · [Using heel](using-heel.md) · [Why heel](why.md) · [How it works](how-it-works.md) · [Rules](rules.md) · [Approvals](approvals.md) · [Running](running.md)
 
 When a rule says `ask`:
 
@@ -22,9 +22,11 @@ Editing the rule ends its grants, so widening a rule asks again.
 
 ## Hints
 
+Hints are optional and off by default. heel works fully without them: every allow, deny and ask comes from your rules, grants and you, and nothing contacts TypeSafe unless you turn hints on.
+
 An approval adapter can add hints to a pending request, to help the approver notice what matters, like "asks someone for money" or "unlike this agent's recent calls". It can't approve or deny anything. Hints run after the request is already pending, they're stored next to it, and they only appear on the approval page, under the call, labeled with the adapter that gave them. The approver still reads the full arguments and decides.
 
-The built-in approval adapter is **Jev**, [TypeSafe](https://typesafe.ai)'s fast decision model. For each pending request, heel asks Jev a few yes-or-no questions. Each question and its wording is in [`src/core/hints.ts`](../src/core/hints.ts):
+The built-in approval adapter is **Jev**, [TypeSafe](https://typesafe.ai)'s fast decision model. For each pending request, heel asks Jev a few yes-or-no questions:
 
 | Question | Hint when Jev is sure (above 0.7) |
 | --- | --- |
@@ -41,13 +43,26 @@ Code turns the answers into hints:
 - **Jev fails, times out or answers something unexpected:** the page says hints are unavailable. It never shows a guess.
 - **Jev hasn't answered yet** (it takes a second or two): the page says hints are on the way.
 
-To turn hints on, add an approval adapter to `heel.yaml`:
+### Set up hints
 
-```yaml
-adapters:
-  approval:
-    - jev: { model: jev-latest }   # key: HEEL_TYPESAFE_API_KEY, or $HEEL_HOME/typesafe-api-key
-```
+1. **Get a TypeSafe API key.** Sign in to the [TypeSafe console](https://console.typesafe.ai) and create an API key. Each pending request costs one TypeSafe request (see TypeSafe's pricing). Allowed and denied calls cost nothing.
+2. **Give heel the key**, one of two ways:
+   - **A key file** at `$HEEL_HOME/typesafe-api-key`. This keeps the key out of your shell history: run the command, paste the key, press Enter, then Ctrl-D.
+     ```sh
+     (umask 077 && cat > "$HEEL_HOME/typesafe-api-key")
+     ```
+     The file must be readable only by you (mode `600`). heel refuses to start if anyone else can read it. To keep it somewhere else, set `api_key_file` (relative paths are under `$HEEL_HOME`).
+   - **The environment variable `HEEL_TYPESAFE_API_KEY`.** It takes precedence over the file. With Docker, pass `-e HEEL_TYPESAFE_API_KEY`, or mount the key file read-only and point `api_key_file` at it.
+3. **Turn the adapter on** in `$HEEL_HOME/heel.yaml`, then restart `heel serve`:
+   ```yaml
+   adapters:
+     approval:
+       - jev: { model: jev-latest }
+   ```
+   If the key is missing, heel won't start, and it says which variable or file to set.
+4. **Check it.** The next request that waits for you shows a **Hints** card under the call. For a second or two it says hints are on the way, then it shows Jev's hints, or "nothing to point out". If it says hints are unavailable, heel's log has the reason (`approval hints unavailable`). A `401`, for example, means the key is wrong.
+
+To turn hints off, remove the `adapters` block and restart. Requests stay exactly as they were. Hints never change a decision.
 
 **What leaves heel:** only for a call that's waiting for a person, heel sends TypeSafe one request with:
 - the agent's name, and the account, provider, tool and action of the call;
