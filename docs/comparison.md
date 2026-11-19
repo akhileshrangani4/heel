@@ -22,4 +22,4 @@
 
 None of the open source gateways documents counts across a run, thread checks, or a pause.
 
-**What heel puts together:** intent enforced on every call with no model deciding it, rules on arguments with state checks and item counts, hiding what the agent shouldn't read, approvals tied to the exact call that the agent can't answer, pause and resume, one rule file for MCP, HTTP and CLI, and an open source license.
+**What heel puts together:** intent enforced on every call by rules rather than a model (heel's one classifier can only hide a message), rules on arguments with state checks and item counts, hiding what the agent shouldn't read, approvals tied to the exact call that the agent can't answer, pause and resume, one rule file for MCP, HTTP and CLI, and an open source license.

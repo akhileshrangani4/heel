@@ -179,7 +179,7 @@ Hidden messages drop out of searches, lists and threads, and fetching, forwardin
 
 ## What heel won't do
 
-- **A model never decides a live call.** Rules, grants and people do. Whoever shapes a call (say, an injected instruction in an email) could shape a model judging it too.
+- **Rules decide every call, not a model.** Allow, deny and ask come from your rules, grants and people. Whoever shapes a call (say, an injected instruction in an email) could shape a model judging it too. A model is involved in two places, and neither can let a call through: `looks_like` can only hide a message (and hides it when unsure), and the optional [hints](docs/approvals.md#hints) are advice on the approval page.
 - **Checking calls doesn't stop every prompt injection.** When each call in an attack is allowed, nothing gets blocked. heel narrows where data can go and what an agent can destroy.
 - **heel must hold every credential.** A token you also gave the agent directly goes around it.
 - **An agent that can read heel's files isn't controlled by it.** Run heel where your agents can't reach its files: on another machine, as its own user, or in Docker.
