@@ -75,7 +75,7 @@ claude mcp add --transport http heel "http://127.0.0.1:7300/mcp?tools=direct" \
 The agent gets one MCP server with every connected account's tools, named by alias (`gmail-work__send`, `github__merge`).
 - **One account at a time:** use `/mcp/<alias>`.
 - **On Linux,** `/mcp` without `?tools=direct` is code mode: one `run_code` tool, where the agent writes a short script against typed modules, in a sandbox with no network or credentials.
-- **CLIs** run as `heel run -- gh pr merge 123`.
+- **CLIs** run as `heel run -- gh pr merge 123 -R acme/web`. heel runs the command on its own host, so the agent needs a workdir there and `HEEL_TOKEN` and `HEEL_URL` set: see [Run CLIs with heel run](docs/heel-run.md).
 - **HTTP APIs** are called at `/http/<alias>/<path>`.
 
 ## Write rules
@@ -195,6 +195,7 @@ The docs are at **[useheel.dev](https://useheel.dev)**, and in [`docs/`](docs).
 | [Using heel](docs/using-heel.md) | The full walkthrough: cloud connectors, code mode, grants, Activity and modes |
 | [Rules and hiding](docs/rules.md) | Every check, counts, state checks, `hide` |
 | [Approvals, grants and pause](docs/approvals.md) | Grants, standing approvals, hints |
+| [Run CLIs with heel run](docs/heel-run.md) | Workdirs, `HEEL_URL`, and sharing the directory with heel in Docker |
 | [Running heel](docs/running.md) | npm, Docker, configuration, upgrading, the sandbox |
 | [Set up Google sign-in](docs/google-sign-in.md) | Your own Google OAuth client, for Gmail and Calendar accounts |
 | [How it works](docs/how-it-works.md) | Surfaces, the trust boundary, teams, built-in definitions |

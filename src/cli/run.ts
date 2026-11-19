@@ -46,7 +46,10 @@ export async function runCommand(args: string[], io: CliIo, deps: RunDeps): Prom
   const token = io.env["HEEL_TOKEN"];
   const base = io.env["HEEL_URL"];
   if (token === undefined || token === "") throw new UsageError("HEEL_TOKEN isn't set");
-  if (base === undefined || !URL.canParse(base)) throw new UsageError("HEEL_URL isn't a URL");
+  // `localhost:7300` parses as a URL with the scheme `localhost:`; only http(s) reaches heel.
+  if (base === undefined || !/^https?:$/.test(URL.parse(base)?.protocol ?? "")) {
+    throw new UsageError("HEEL_URL isn't an http:// or https:// URL");
+  }
   const runId = io.env["HEEL_RUN_ID"];
   const body = {
     argv,

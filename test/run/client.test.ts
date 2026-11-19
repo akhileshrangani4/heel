@@ -100,4 +100,13 @@ describe("heel run", () => {
     const h = io({ HEEL_TOKEN: "" });
     expect(await main(["run", "--", "gh"], h.io)).toBe(64);
   });
+
+  it.each(["", "127.0.0.1:7300", "localhost:7300", "ftp://127.0.0.1:7300"])(
+    "exits 64 when HEEL_URL is %o, not an http(s) URL",
+    async (url) => {
+      const h = io({ HEEL_URL: url });
+      expect(await main(["run", "--", "gh"], h.io)).toBe(64);
+      expect(h.err()).toContain("HEEL_URL isn't an http:// or https:// URL");
+    },
+  );
 });

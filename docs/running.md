@@ -67,6 +67,7 @@ docker exec heel heel agent add my-agent
 docker exec -i heel heel connect github --as github --credential-stdin < github-token.txt
 ```
 
+- **`heel run` from the host:** mount each directory the agent works in at the same path (`-v "$HOME/code:$HOME/code"`) and add the sandbox options from [The sandbox](#the-sandbox). See [heel in Docker, agent on the host](heel-run.md#heel-in-docker-agent-on-the-host).
 - **Who can reach it:** anyone who can run `docker` on the host can run `heel` commands in the container and read its volume. Don't give agents Docker access.
 - **Data:** the `heel-data` volume holds the database, rules and admin socket (`/var/lib/heel`). Put rules in `/var/lib/heel/rules/<user>.yaml`.
 - **Config:** the image starts with [`examples/heel.yaml`](../examples/heel.yaml) at `/etc/heel/heel.yaml`. Mount your own over it, or set `HEEL_CONFIG`.
@@ -116,7 +117,8 @@ heel migrates its database when it starts. Back up `HEEL_HOME` (or the volume) a
 `heel run` and code mode run commands under bubblewrap, which needs unprivileged user namespaces.
 
 - **On a Linux host:** install `bubblewrap` and `util-linux`.
-- **In Docker:** the default seccomp profile blocks user namespaces, so heel starts with both turned off. To turn them on, run with a seccomp profile that allows `unshare` and `clone` with `CLONE_NEWUSER`, on a host kernel that allows unprivileged user namespaces.
+- **In Docker:** the default seccomp profile blocks user namespaces, and the default masked `/proc` paths stop bubblewrap mounting its own `/proc`, so heel starts with both turned off. To turn them on, run with `--security-opt seccomp=unconfined --security-opt systempaths=unconfined` (or a seccomp profile that allows `unshare` and `clone` with `CLONE_NEWUSER`), on a host kernel that allows unprivileged user namespaces.
+- **Where commands run:** on heel's host, in a directory the agent's workdirs allow, so the agent's directory must exist at the same path on heel's side. With heel in Docker, bind-mount it at the identical path. [Run CLIs with heel run](heel-run.md) has the steps.
 
 ### Credentials stay outside the sandbox
 

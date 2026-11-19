@@ -34,7 +34,10 @@ export const USAGE = `usage:
   heel serve [--watch]                    start the agent, human and admin planes
   heel vault init                         create the master key file
   heel agent add <name> [--owner <user>]  add an agent; prints its token once
-  heel agent workdir <name> [<dir>...]    the directories heel run may work in
+  heel agent workdir <name>               list the directories heel run may work in
+  heel agent workdir <name> <dir>...      set them (replaces the list); each <dir> is
+                                          an absolute path that exists on heel's host
+  heel agent workdir <name> --clear       remove them all: heel run is then refused
   heel agent rotate <name>                replace an agent's token
   heel agent revoke <name>                revoke an agent's token
   heel agent list
@@ -66,7 +69,12 @@ export const USAGE = `usage:
                                           instead, where the server can read it
   heel run [--account <alias>] [--json] -- <cmd> [args...]
                                           (agent side) ask heel to run a command;
-                                          reads HEEL_TOKEN, HEEL_URL, HEEL_RUN_ID
+                                          reads HEEL_TOKEN (the agent's token),
+                                          HEEL_URL (heel's agent plane, such as
+                                          http://127.0.0.1:7300) and HEEL_RUN_ID.
+                                          heel runs it on its own host, in this
+                                          directory, which must be under one of
+                                          the agent's workdirs on heel's host
   heel connect cli <command> --as <alias> --bin <path> [--egress <host>]...
                    [--credential-env <NAME>] --credential-stdin
                    [--credential-host <host>... [--credential-auth bearer|basic|header:<Name>]
@@ -125,6 +133,7 @@ const EnrollmentResult = z.object({
   subject: z.string().nullable().default(null),
   activeFrom: z.string().nullable().optional(),
 });
+const WorkRootsResult = z.object({ name: z.string(), workRoots: z.array(z.string()) });
 const PauseResult = z.object({ scope: z.string(), created: z.boolean() });
 const ConfiguredAccountResult = z.object({
   alias: z.string(),
@@ -259,12 +268,15 @@ async function agentCommand(args: string[], io: CliIo): Promise<number> {
   const { values, positionals } = parseOrUsage(() =>
     parseArgs({
       args,
-      options: { ...CONFIG_OPTION, owner: { type: "string" } },
+      options: { ...CONFIG_OPTION, owner: { type: "string" }, clear: { type: "boolean" } },
       allowPositionals: true,
       strict: true,
     }),
   );
   const [subcommand, ...rest] = positionals;
+  if (values.clear === true && subcommand !== "workdir") {
+    throw new UsageError("--clear is for heel agent workdir");
+  }
   const config = configFrom(io, values.config);
   switch (subcommand) {
     case "add": {
@@ -281,11 +293,20 @@ async function agentCommand(args: string[], io: CliIo): Promise<number> {
     case "workdir": {
       const [name, ...roots] = rest;
       if (name === undefined) throw new UsageError("missing agent name");
-      await admin(config, { method: "agent.workdirs", params: { name, workRoots: roots } });
+      if (values.clear === true && roots.length > 0) {
+        throw new UsageError("give either directories or --clear");
+      }
+      // No directories lists them; only --clear empties the list.
+      const request: AdminRequest =
+        values.clear === true || roots.length > 0
+          ? { method: "agent.workdirs", params: { name, workRoots: roots } }
+          : { method: "agent.workdirs.list", params: { name } };
+      const { workRoots } = WorkRootsResult.parse(await admin(config, request));
       io.stdout.write(
-        roots.length === 0
-          ? `"${name}" can no longer run commands.\n`
-          : `"${name}" may run commands in: ${roots.join(", ")}\n`,
+        workRoots.length === 0
+          ? `"${name}" has no workdirs, so heel run refuses its commands.\n` +
+              `Add one with: heel agent workdir ${name} <dir>\n`
+          : `"${name}" may run commands in:\n${workRoots.map((root) => `  ${root}\n`).join("")}`,
       );
       return EXIT.ok;
     }

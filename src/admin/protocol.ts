@@ -36,12 +36,20 @@ export const AdminRequestSchema = z.discriminatedUnion("method", [
     }),
   }),
   z.strictObject({
-    /** `heel agent workdir`: the directories `heel run` may work in (D8b); replaces the list. */
+    /**
+     * `heel agent workdir <name> <dir>...` (or `--clear`): the directories
+     * `heel run` may work in (D8b). Replaces the list; an empty one clears it.
+     */
     method: z.literal("agent.workdirs"),
     params: z.strictObject({
       name: agentName,
       workRoots: z.array(z.string().min(1).max(4_096)).max(32),
     }),
+  }),
+  z.strictObject({
+    /** `heel agent workdir <name>`: the agent's directories, without changing them. */
+    method: z.literal("agent.workdirs.list"),
+    params: z.strictObject({ name: agentName }),
   }),
   z.strictObject({
     method: z.literal("agent.rotate"),

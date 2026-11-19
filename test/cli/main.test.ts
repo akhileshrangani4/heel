@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { existsSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, onTestFinished } from "vitest";
 import { agentMcpUrl, type CliIo, EXIT, main } from "../../src/cli/main.ts";
@@ -176,6 +176,55 @@ describe("heel CLI", () => {
     const listed = await run(["agent", "list"], { HEEL_HOME: home });
     expect(listed.stdout).toContain('"inbox-bot"');
     expect(listed.stdout).not.toContain(token);
+  });
+
+  it("agent workdir lists with no directories, sets them, and clears only with --clear", async () => {
+    const home = heelHome();
+    await serveIn(home);
+    const env = { HEEL_HOME: home };
+    await run(["agent", "add", "coder"], env);
+    // Outside heel's home, which can't be a work root; stored resolved (macOS's /tmp is a link).
+    const a = realpathSync(tempDir("heel-root-"));
+    const b = realpathSync(tempDir("heel-root-"));
+
+    const none = await run(["agent", "workdir", "coder"], env);
+    expect(none.code).toBe(EXIT.ok);
+    expect(none.stdout).toBe(
+      '"coder" has no workdirs, so heel run refuses its commands.\n' +
+        "Add one with: heel agent workdir coder <dir>\n",
+    );
+
+    const set = await run(["agent", "workdir", "coder", a, `${b}/`], env);
+    expect(set.code).toBe(EXIT.ok);
+    expect(set.stdout).toBe(`"coder" may run commands in:\n  ${a}\n  ${b}\n`);
+
+    // Listing doesn't change them.
+    const listed = await run(["agent", "workdir", "coder"], env);
+    expect(listed.stdout).toBe(`"coder" may run commands in:\n  ${a}\n  ${b}\n`);
+
+    const cleared = await run(["agent", "workdir", "coder", "--clear"], env);
+    expect(cleared.code).toBe(EXIT.ok);
+    expect(cleared.stdout).toContain('"coder" has no workdirs');
+    expect((await run(["agent", "workdir", "coder"], env)).stdout).toContain("has no workdirs");
+
+    const both = await run(["agent", "workdir", "coder", a, "--clear"], env);
+    expect(both.code).toBe(EXIT.usage);
+    expect(both.stderr).toContain("give either directories or --clear");
+    const elsewhere = await run(["agent", "rotate", "coder", "--clear"], env);
+    expect(elsewhere.code).toBe(EXIT.usage);
+
+    const unknown = await run(["agent", "workdir", "nobody"], env);
+    expect(unknown.code).toBe(EXIT.failed);
+    expect(unknown.stderr).toContain('no agent named "nobody"');
+
+    const missing = await run(["agent", "workdir", "coder", join(a, "absent")], env);
+    expect(missing.code).toBe(EXIT.failed);
+    expect(missing.stderr).toContain("it doesn't exist");
+
+    await run(["agent", "revoke", "coder"], env);
+    const revoked = await run(["agent", "workdir", "coder"], env);
+    expect(revoked.code).toBe(EXIT.failed);
+    expect(revoked.stderr).toContain('agent "coder" is revoked');
   });
 
   it("I-02: connect reads the credential from stdin and never echoes it", async () => {

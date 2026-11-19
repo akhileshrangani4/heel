@@ -707,7 +707,7 @@ Part 3
 - **Usage.** `heel run [--account <alias>] [--json] -- <cmd> [args…]` reads `HEEL_TOKEN`, `HEEL_URL` and `HEEL_RUN_ID` from the environment and posts `{argv, cwd, runId}` to `/run`. stdout and stderr stream back.
 - **stdin.** The command's stdin is `/dev/null`, so interactive commands are unsupported in v1.
 - **Same host, Linux only (N-5).**
-  - The `cwd` must sit under a work root configured for that agent (`heel agent add --workdir`). Otherwise the call is denied.
+  - The `cwd` must sit under a work root configured for that agent (`heel agent workdir <name> <dir>...`; with no directories it lists them, and `--clear` removes them all). Otherwise the call is denied.
   - If user namespaces are unavailable, `/run` refuses every call and `heel serve` logs why _[STK §3.3 item 4]_.
 - **The binary is heel's.** Each CLI is configured with an absolute path (`heel connect cli gh --bin /usr/bin/gh --account github`). `argv[0]` is only a lookup key, and an unconfigured command is denied. The agent can't swap the binary (I-34).
 
