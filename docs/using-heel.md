@@ -65,7 +65,19 @@ The agent now has one MCP server with every connected account's tools, named by 
     --egress api.notes.example --credential-env NOTES_TOKEN \
     --credential-host api.notes.example --credential-auth bearer --credential-stdin
   ```
-  `--credential-auth` is `bearer` (the default), `basic` or `header:<Name>`. A server that sends its key in the URL can't use this; leave out `--credential-host` and it gets the credential in its environment, as before, with a warning at startup.
+  `--credential-auth` is `bearer` (the default), `basic` or `header:<Name>`. A server that sends its key in the URL can't use this. If it has to hold the credential itself, say so with `--credential-delivery env` in place of `--credential-host`: it then gets the real credential in `NOTES_TOKEN`, and heel warns about the account at every start. With neither, heel refuses to connect it. See [Credentials stay outside the sandbox](running.md#credentials-stay-outside-the-sandbox).
+- **Other CLIs** work the same way. Name the hosts the CLI authenticates to, and it gets a placeholder:
+  ```sh
+  printf %s "$TF_TOKEN" | heel connect cli terraform --as terraform --bin /usr/bin/terraform \
+    --egress app.terraform.io --credential-env TF_TOKEN \
+    --credential-host app.terraform.io --credential-stdin
+  ```
+  **npm** needs only its registry. heel writes npm's config for it, with a placeholder as the registry's `_authToken`:
+  ```sh
+  printf %s "$NPM_TOKEN" | heel connect cli npm --as npm --bin "$(realpath "$(command -v npm)")" \
+    --egress registry.npmjs.org --credential-host registry.npmjs.org --credential-stdin
+  ```
+  A CLI or local server whose credential would sit in its environment is refused, with the fix in the error. The agent sees `heel: {"status":"denied","reason":"credential_delivery","rule":null,"message":"account \"terraform\" would put its credential in its CLI's environment, ..."}`, and the message names the `heel account set` commands below.
 
 ## 3. What your agent sees
 
