@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { modeFor, ORG_DEFAULT, setMode, storedMode } from "../../src/store/modes.ts";
+import { toHtmlString } from "../../src/web/ui/html.ts";
+import { modesPage } from "../../src/web/ui/modes-page.ts";
 import { humanPlaneHarness } from "../helpers/human-plane.ts";
 
 /**
@@ -80,5 +82,77 @@ describe("the Modes page", () => {
     );
     expect(response.status).toBe(403);
     expect(storedMode(h.t.db, h.t.orgId, ORG_DEFAULT)).toBeNull();
+  });
+});
+
+describe("what the Modes page says", () => {
+  const tighten = { action: "/modes/enforce", csrfToken: "t" };
+  // The words a person reads: <main> only, tags dropped, spaces collapsed.
+  const text = (html: string) =>
+    (html.match(/<main[\s\S]*<\/main>/)?.[0] ?? html)
+      .replace(/<script[\s\S]*?<\/script>/g, "")
+      .replace(/<[^>]+>/g, "")
+      .replace(/\s+/g, " ");
+
+  it("names two modes, Enforce and Watch, and explains both", async () => {
+    const h = humanPlaneHarness();
+    const admin = await h.signIn(await h.enroll());
+    setMode(h.t.db, {
+      orgId: h.t.orgId,
+      ownerId: ORG_DEFAULT,
+      mode: "record",
+      by: "x",
+      at: new Date(),
+    });
+    const page = text(await (await h.fetch("/modes", { as: admin })).text());
+    expect(page).toContain("Enforce: heel applies the rules");
+    expect(page).toContain("Watch: Calls your rules would deny");
+    // record is stored, but shown as Watch: one name.
+    expect(page).not.toMatch(/\b(shadow|record)\b/);
+    expect(page).toContain("Switch to Enforce");
+  });
+
+  it("doesn't say a person is in Watch when the org default keeps them in Enforce", async () => {
+    const h = humanPlaneHarness();
+    const admin = await h.signIn(await h.enroll());
+    setMode(h.t.db, {
+      orgId: h.t.orgId,
+      ownerId: h.t.ownerId,
+      mode: "shadow",
+      by: "x",
+      at: new Date(),
+    });
+    const page = text(
+      await (await h.fetch(`/modes?switched=shadow&owner=${h.t.ownerId}`, { as: admin })).text(),
+    );
+    expect(page).not.toContain("is now in Watch mode");
+    expect(page).toContain("own mode is set to Watch, but the org default is Enforce");
+    expect(page).toContain("Enforce (own setting Watch; the org default is stricter)");
+    // A person's own Watch can't loosen the org's Enforce, so it isn't offered.
+    expect(page).toContain("Follows the org default");
+  });
+
+  it("under --watch, the org row shows Watch and offers Enforce, not Watch again", () => {
+    const page = text(
+      toHtmlString(
+        modesPage({
+          rows: [
+            {
+              ownerId: ORG_DEFAULT,
+              label: "Everyone (org default)",
+              mode: null,
+              effective: "shadow",
+            },
+          ],
+          outcome: { kind: "none" },
+          tighten,
+          watchFallback: true,
+        }),
+      ),
+    );
+    expect(page).toContain("Watch (from --watch)");
+    expect(page).toContain("Switch to Enforce");
+    expect(page).not.toContain("Switch to Watch");
+    expect(page).toContain("heel was started with --watch");
   });
 });
