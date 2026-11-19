@@ -46,18 +46,24 @@ Then follow the [quick start](../README.md#quick-start): enroll your passkey, co
 
 ## With Docker
 
-Create the master key once and keep it. It encrypts every stored credential, and without it they can't be read:
+Create the master key once, inside heel's volume, then start heel. The key encrypts every stored credential, and without it they can't be read:
 
 ```sh
-head -c 32 /dev/urandom | base64 > heel-master.key
-chmod 600 heel-master.key
+docker run --rm -v heel-data:/var/lib/heel ghcr.io/akhileshrangani4/heel vault init
 
 docker run -d --name heel \
   -p 127.0.0.1:7300:7300 -p 127.0.0.1:7301:7301 \
   -v heel-data:/var/lib/heel \
-  -e HEEL_MASTER_KEY="$(cat heel-master.key)" \
   ghcr.io/akhileshrangani4/heel
 ```
+
+`heel vault init` writes `/var/lib/heel/master.key`, readable only by heel's user, and heel reads it from there at every start. Keep a copy somewhere safe and off this machine, such as a password manager:
+
+```sh
+docker cp heel:/var/lib/heel/master.key ./heel-master.key && chmod 600 heel-master.key
+```
+
+**Don't pass the key with `-e HEEL_MASTER_KEY=…`.** A value on the `docker run` command line is visible to every user on the host (in `ps`) while the command runs, and the container's environment shows it to `docker inspect` and to every `docker exec`.
 
 That starts heel without its sandbox, so code mode and `heel run` are off; everything else works. To turn the sandbox on, start it with two more options instead (why: [The sandbox](#the-sandbox)):
 
@@ -66,7 +72,6 @@ docker run -d --name heel \
   -p 127.0.0.1:7300:7300 -p 127.0.0.1:7301:7301 \
   --security-opt seccomp=unconfined --security-opt systempaths=unconfined \
   -v heel-data:/var/lib/heel \
-  -e HEEL_MASTER_KEY="$(cat heel-master.key)" \
   ghcr.io/akhileshrangani4/heel
 ```
 
@@ -86,7 +91,7 @@ docker exec -i heel heel connect github --as github --credential-stdin < github-
 - **Who can reach it:** anyone who can run `docker` on the host can run `heel` commands in the container and read its volume. Don't give agents Docker access.
 - **Data:** the `heel-data` volume holds the database, rules and admin socket (`/var/lib/heel`). Put rules in `/var/lib/heel/rules/<user>.yaml`.
 - **Config:** the image starts with [`examples/heel.yaml`](../examples/heel.yaml) at `/etc/heel/heel.yaml`. Mount your own over it, or set `HEEL_CONFIG`.
-- **Master key:** a key file mounted read-only (`vault.key_file`) is better than the environment, which `docker inspect` shows.
+- **Master key:** it lives in the `heel-data` volume (`/var/lib/heel/master.key`), so anyone who can read the volume, which means anyone with Docker access, can read the key. Losing the volume and your copy of the key loses every stored credential.
 - **Versions:** every release is tagged `ghcr.io/akhileshrangani4/heel:<version>`, and the newest is also tagged `latest`. To build the image yourself, run `docker build -t heel .` from a checkout.
 
 ## Configuration

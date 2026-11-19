@@ -150,10 +150,9 @@ This is the usual setup on a Mac. Mount each directory the agent works in at **t
    tar xzf gh_*_linux_arm64.tar.gz
    ```
    On Intel, write `linux_amd64` here and in step 3.
-2. **Create the master key** once, and keep it ([With Docker](running.md#with-docker) says why):
+2. **Create the master key** once, inside heel's volume, and keep a copy ([With Docker](running.md#with-docker) says why):
    ```sh
-   head -c 32 /dev/urandom | base64 > heel-master.key
-   chmod 600 heel-master.key
+   docker run --rm -v heel-data:/var/lib/heel ghcr.io/akhileshrangani4/heel vault init
    ```
 3. **Start heel:**
    ```sh
@@ -163,7 +162,6 @@ This is the usual setup on a Mac. Mount each directory the agent works in at **t
      -v heel-data:/var/lib/heel \
      -v "$HOME/code:$HOME/code" \
      -v "$(echo ~/heel-bin/gh_*_linux_arm64/bin/gh):/usr/local/bin/gh:ro" \
-     -e HEEL_MASTER_KEY="$(cat heel-master.key)" \
      ghcr.io/akhileshrangani4/heel
    ```
 4. **Set it up.** `docker exec -i` (with `-i`) is what passes a piped credential or file through:
@@ -206,7 +204,6 @@ docker run -d --name heel --network heel-net --network-alias heel \
   -p 127.0.0.1:7300:7300 -p 127.0.0.1:7301:7301 \
   -v heel-data:/var/lib/heel -v /srv/code:/srv/code \
   -v "$PWD/heel.yaml:/etc/heel/heel.yaml:ro" \
-  -e HEEL_MASTER_KEY="$(cat heel-master.key)" \
   ghcr.io/akhileshrangani4/heel
 # the agent
 docker run --network heel-net -v /srv/code:/srv/code -w /srv/code/web \
