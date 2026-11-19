@@ -89,6 +89,22 @@ export class SandboxSlots {
     return { ok: false, limit, message };
   }
 
+  /**
+   * Counts a local (stdio) MCP server against `total` while it runs, without
+   * ever refusing it: an account's calls need its server, so a full count
+   * shouldn't break that account. Scripts and commands see the room it
+   * takes, as they would another sandbox. Release once, when it stops.
+   */
+  holdServer(): () => void {
+    this.#total += 1;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.#total -= 1;
+    };
+  }
+
   /** Slots in use: `agentId`'s, or everyone's. */
   inUse(agentId?: string): number {
     return agentId === undefined ? this.#total : (this.#byAgent.get(agentId) ?? 0);

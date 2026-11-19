@@ -476,9 +476,15 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         log.warn({ reason: sandbox.reason }, `sandbox unavailable: ${sandbox.detail}`);
       }
       const pauseStore = new SqlitePauseStore();
+      // One count for code mode, `heel run` and local MCP servers: each is a sandbox.
+      const slots = new SandboxSlots({
+        perAgent: config.sandboxes.perAgent,
+        total: config.sandboxes.total ?? defaultTotalSandboxes(),
+      });
       const upstream = new UpstreamPool({
         vault: opening.vault,
         log,
+        slots,
         // A pooled server's requests between calls: covered by global, owner, account or provider pauses.
         paused: (account) =>
           pauseStore.find(store.db, {
@@ -550,11 +556,6 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         },
         looksLike,
         onHidden: (reason) => hideCounts.record(reason),
-      });
-      // One count for code mode and `heel run`: both start a sandbox per request.
-      const slots = new SandboxSlots({
-        perAgent: config.sandboxes.perAgent,
-        total: config.sandboxes.total ?? defaultTotalSandboxes(),
       });
       const mcp = createMcpSurface({
         db: store.db,
