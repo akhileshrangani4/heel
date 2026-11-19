@@ -1,6 +1,7 @@
 import type { FetchLike } from "@modelcontextprotocol/client";
 import type { Context, MiddlewareHandler } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
+import type { RulesPaths } from "../config/rules.ts";
 import type { GoogleClient } from "../definitions/google/oauth.ts";
 import type { UpstreamSignIns } from "../definitions/mcp/upstream-oauth.ts";
 import type { MicrosoftClient } from "../definitions/microsoft/oauth.ts";
@@ -62,6 +63,12 @@ export interface HumanPlaneDeps {
    * name the sign-in page shows. Null on single-user installs.
    */
   oidc?: { client: () => Promise<OidcClient>; name: string } | null;
+  /**
+   * The owner rules files, for adding the rules an agent proposed (roadmap
+   * 2.1), and a reload so they take effect at once. Absent where heel has no
+   * rules files of its own to write, which turns adding off.
+   */
+  ruleFiles?: { paths: RulesPaths; reload: () => void };
   /** `heel serve --watch`: rows with no stored mode behave as shadow (A3). */
   watchFallback: boolean;
   /** Messages hidden from agents since heel started, by reason (A5, I-44); absent in tests. */

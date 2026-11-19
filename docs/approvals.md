@@ -22,6 +22,10 @@ Editing the rule ends its grants, so widening a rule asks again.
 
 **Pause** stops one agent, one account or service, or everything, from `heel pause` or one tap on the approval page. Every call in scope returns "paused", even one already approved. Resuming needs a passkey, and nothing called during the pause is replayed.
 
+## Rule changes
+
+An agent can also propose rules for your file with `heel_propose_rules`. They wait under **Rule changes** on the Approvals page, and nothing changes until you add them with your passkey. See [Your agent can propose rules](rules.md#your-agent-can-propose-rules).
+
 ## Hints
 
 Hints are optional and off by default. heel works fully without them: every allow, deny and ask comes from your rules, grants and you, and nothing contacts TypeSafe unless you turn hints on.

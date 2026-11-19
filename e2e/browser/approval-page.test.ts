@@ -1,9 +1,13 @@
+import { mkdirSync, mkdtempSync, readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { getRequestListener } from "@hono/node-server";
 import { type Browser, type BrowserContext, chromium, type Page } from "@playwright/test";
 import { afterAll, beforeAll, describe, expect, it, onTestFinished } from "vitest";
+import { rulesPaths } from "../../src/config/rules.ts";
+import { proposeRules } from "../../src/proposals/rules.ts";
 import { createHumanApp } from "../../src/web/app.ts";
 import { createEnrollment, Passkeys, relyingPartyFor } from "../../src/web/passkeys.ts";
 import {
@@ -20,7 +24,8 @@ import { oneRule } from "../../test/helpers/pipeline.ts";
  * The approval page in a real browser (spec: D4 tests): Chromium with a
  * virtual WebAuthn authenticator runs the page's own script for every
  * ceremony. A person enrolls from a one-time link, signs in, approves a
- * request, denies another, then pauses and resumes an account.
+ * request, denies another, pauses and resumes an account, then adds the
+ * rules an agent proposed.
  *
  * Set `HEEL_E2E_ARTIFACTS_DIR` to keep a screenshot of each step and a WebM
  * of the run.
@@ -30,6 +35,7 @@ const ASK_SENDS = oneRule("{ action: email.send }", "ask");
 
 interface Running {
   h: ApprovalHarness;
+  home: string;
   server: Server;
   origin: string;
 }
@@ -37,6 +43,8 @@ interface Running {
 /** The human plane on a loopback port, over an approval harness's store. */
 async function startHumanPlane(): Promise<Running> {
   const h = approvalHarness({ owner: ASK_SENDS });
+  const home = mkdtempSync(join(tmpdir(), "heel-e2e-rules-"));
+  mkdirSync(rulesPaths(home).ownersDir);
   // The browser keeps real time (cookie expiry, WebAuthn), so the store's clock starts at now.
   h.clock.advance(Date.now() - h.clock.now.getTime());
   const server = createServer();
@@ -57,11 +65,12 @@ async function startHumanPlane(): Promise<Running> {
     agentPublicUrl: null,
     upstreamOAuth: null,
     watchFallback: false,
+    ruleFiles: { paths: rulesPaths(home), reload: () => {} },
     providerClients: { google: null, microsoft: null },
     now: () => h.clock.now,
   });
   server.on("request", getRequestListener(app.fetch));
-  return { h, server, origin: publicUrl.origin };
+  return { h, server, origin: publicUrl.origin, home };
 }
 
 /** A page whose browser has a platform passkey authenticator that always verifies the user. */
@@ -95,7 +104,7 @@ describe("the approval page in a browser", () => {
 
   it("enrolls, signs in, approves, denies, pauses and resumes with a passkey", async () => {
     // The harness's store cleans up when the test ends, so it starts inside the test.
-    const { h, server, origin } = await startHumanPlane();
+    const { h, server, origin, home } = await startHumanPlane();
     onTestFinished(() => new Promise<void>((resolve) => server.close(() => resolve())));
     const artifacts = process.env["HEEL_E2E_ARTIFACTS_DIR"];
     const context = await browser.newContext(
@@ -167,6 +176,37 @@ describe("the approval page in a browser", () => {
     await page.waitForURL(/done=resumed/);
     await shot("resumed");
     expect((await h.call({ args: { ...SEND, subject: "after resume" } })).status).toBe("pending");
+
+    // The agent proposes a rule; the owner reads it and adds it with a passkey.
+    const proposed = proposeRules(
+      h.t.db,
+      { orgId: h.t.orgId, ownerId: h.t.ownerId, agentId: h.agent.agentId },
+      {
+        rules: [
+          {
+            rule: Object.fromEntries([
+              ["name", "vendor-mail"],
+              ["match", { action: "email.send", recipients: { all_domain_in: ["vendor.com"] } }],
+              // biome-ignore lint/suspicious/noThenProperty: `then` is the rules file's key.
+              ["then", "allow"],
+            ]),
+            why: "so I can answer the vendor thread",
+          },
+        ],
+      },
+      new Date(),
+    );
+    if (!proposed.ok) throw new Error(proposed.problems.join("; "));
+    await page.goto(`${origin}/approvals`);
+    await page.getByRole("link", { name: /proposes 1 rule/ }).click();
+    await page.getByText("so I can answer the vendor thread").first().waitFor();
+    await shot("proposal");
+    await page.getByRole("button", { name: "Add these rules" }).click();
+    await page.waitForURL(/\?applied/);
+    await shot("proposal-added");
+    const written = readFileSync(join(rulesPaths(home).ownersDir, "owner.yaml"), "utf8");
+    expect(written).toContain("name: vendor-mail");
+    expect(written).toContain("# Proposed by");
 
     await context.close();
   });

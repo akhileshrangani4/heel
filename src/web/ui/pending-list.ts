@@ -31,6 +31,8 @@ export interface PendingRow {
 
 export interface PendingListProps {
   now: Date;
+  /** Rule changes waiting below the list, so an empty list doesn't say nothing is waiting. */
+  ruleChangesWaiting?: number;
   load: { ok: true; rows: readonly PendingRow[] } | { ok: false; message: string };
 }
 
@@ -72,6 +74,14 @@ export function pendingList(props: PendingListProps): Html {
   }
   const rows = props.load.rows;
   if (rows.length === 0) {
+    const changes = props.ruleChangesWaiting ?? 0;
+    if (changes > 0) {
+      return html`${heading}
+        <p class="muted req-count">
+          No calls are waiting for you. ${changes === 1 ? "A rule change is" : `${changes} rule changes are`},
+          below.
+        </p>`;
+    }
     return html`${heading}
       <div class="card req-empty">
         <p><strong>Nothing is waiting for you.</strong></p>

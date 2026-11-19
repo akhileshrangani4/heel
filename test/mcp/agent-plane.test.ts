@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { decideApproval, SqliteApprovalStore } from "../../src/store/approvals.ts";
 import { pause, SqlitePauseStore } from "../../src/store/pauses.ts";
-import { approvals, auditLog } from "../../src/store/schema.ts";
+import { approvals, auditLog, ruleProposals } from "../../src/store/schema.ts";
 import { mcpHarness } from "../helpers/mcp.ts";
+
+/** A rule object as an agent sends it; `then` is the rules file's own key. */
+const ruleOf = (fields: Record<string, unknown>, decision: string) =>
+  // biome-ignore lint/suspicious/noThenProperty: `then` is the rules file's key.
+  Object.fromEntries([...Object.entries(fields), ["then", decision]]);
 
 /**
  * The MCP agent plane (D5a), end to end with a real MCP client: what an
@@ -35,6 +40,7 @@ describe("listing tools", () => {
       "delete_note",
       "echo_auth",
       "heel_status",
+      "heel_propose_rules",
     ]);
     expect(tools.find((tool) => tool.name === "search_notes")).not.toHaveProperty("outputSchema");
     // The upstream's own heel_status is dropped; the one listed is heel's.
@@ -54,6 +60,7 @@ describe("listing tools", () => {
       "notes__delete_note",
       "notes__echo_auth",
       "heel_status",
+      "heel_propose_rules",
     ]);
   });
 
@@ -234,7 +241,7 @@ describe("calling tools", () => {
 
     const { tools } = await client.listTools();
 
-    for (const tool of tools.filter((t) => t.name !== "heel_status")) {
+    for (const tool of tools.filter((t) => !t.name.startsWith("heel_"))) {
       expect(tool.inputSchema.properties).toHaveProperty("heel_reason");
       expect(tool.inputSchema.required ?? []).not.toContain("heel_reason");
     }
@@ -310,5 +317,53 @@ describe("calling tools", () => {
     await expect(client.callTool({ name: "no-separator", arguments: {} })).rejects.toThrow(
       /Unknown tool/,
     );
+  });
+});
+
+describe("heel_propose_rules", () => {
+  const proposal = {
+    rules: [
+      {
+        rule: ruleOf({ name: "delete-notes", match: { tool: "delete_note" } }, "allow"),
+        why: "so I can tidy duplicate notes",
+      },
+    ],
+    reason: "Cleaning up the notes you asked about",
+  };
+
+  it("stores a proposal for the agent's owner and says nothing changes yet", async () => {
+    const h = await mcpHarness({ owner: READS_ALLOWED });
+    const client = await h.connect("/mcp/notes");
+    const result = await client.callTool({ name: "heel_propose_rules", arguments: proposal });
+    expect(result.isError).toBeFalsy();
+    expect(result.structuredContent).toMatchObject({ status: "proposed" });
+    const [row] = h.t.db.select().from(ruleProposals).all();
+    expect(row).toMatchObject({
+      ownerId: h.t.ownerId,
+      status: "pending",
+      reason: "Cleaning up the notes you asked about",
+    });
+    expect(row?.rules[0]?.why).toBe("so I can tidy duplicate notes");
+  });
+
+  it("answers what's wrong with an invalid rule, and stores nothing", async () => {
+    const h = await mcpHarness({ owner: READS_ALLOWED });
+    const client = await h.connect("/mcp?tools=direct");
+    const result = await client.callTool({
+      name: "heel_propose_rules",
+      arguments: { rules: [{ rule: ruleOf({ match: { tooll: "x" } }, "allow") }] },
+    });
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.structuredContent)).toContain("tooll");
+    expect(h.t.db.select().from(ruleProposals).all()).toEqual([]);
+  });
+
+  it("refuses while the agent is paused", async () => {
+    const h = await mcpHarness({ owner: READS_ALLOWED });
+    pause(h.t.db, h.t.orgId, { scope: "global", target: "" }, h.t.ownerId, new Date());
+    const client = await h.connect("/mcp/notes");
+    const result = await client.callTool({ name: "heel_propose_rules", arguments: proposal });
+    expect(result.structuredContent).toMatchObject({ status: "paused" });
+    expect(h.t.db.select().from(ruleProposals).all()).toEqual([]);
   });
 });
