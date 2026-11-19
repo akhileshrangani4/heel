@@ -95,7 +95,7 @@ heel reads `$HEEL_HOME/heel.yaml`, or the file named by `HEEL_CONFIG` or `--conf
 
 | Key | Default | What it's for |
 | --- | --- | --- |
-| `public_url` | `http://localhost:7301` | The approval page's address. Its host becomes the passkey domain, so it must be `https://` anywhere but localhost. Links in notifications use it. |
+| `public_url` | `http://localhost:` + the `listen.human` port (`7301`) | The approval page's address. Its host becomes the passkey domain, so it must be `https://` anywhere but localhost. Links in notifications use it. Left unset, it follows `listen.human`, so moving the approval page to another port moves its links too. A localhost `public_url` on a different port from `listen.human` gets a `public_url_port` warning at startup, since links and passkey sign-in would go to the wrong port. |
 | `listen.agent`, `listen.human` | `127.0.0.1:7300`, `127.0.0.1:7301` | Where each plane listens. Use `0.0.0.0:<port>` in a container. |
 | `admin_socket` | see [With npm](#with-npm) | The admin socket's path. |
 | `vault.key_file` | `master.key` | The master key file. `HEEL_MASTER_KEY` takes precedence. |
@@ -117,6 +117,20 @@ Rules live in `$HEEL_HOME/rules/<user>.yaml`, one file per user. A single-user i
 - `heel rules check` validates them.
 - `heel rules test` runs cases against them.
 - [`examples/rules/owner.yaml`](../examples/rules/owner.yaml) holds the examples from [rules.md](rules.md).
+- With no rules files, every call is denied. `heel serve` logs a `no_rules` warning at startup when that's the case.
+
+## What `heel serve` prints
+
+After its JSON log lines, `heel serve` prints where to go:
+
+```text
+heel is running.
+  Approve requests:   open http://localhost:7301
+  Agents connect to:  http://127.0.0.1:7300/mcp
+  Stop with Ctrl-C.
+```
+
+If the approval page or the agent port couldn't start, its line says `off` and why (for example a `public_url` that isn't `https://`, or no master key).
 
 ## Upgrading
 

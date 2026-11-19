@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadConfig, resolveConfigSource } from "../../src/config/load.ts";
 import { humanPlaneUrlProblem, parseListenAddress } from "../../src/config/schema.ts";
 import { YamlValidationError } from "../../src/config/yaml.ts";
+import { publicUrlPortProblem } from "../../src/serve.ts";
 
 let home: string;
 
@@ -298,5 +299,31 @@ describe("oidc and audit sections", () => {
   it("rejects a web push contact that isn't mailto: or https:", () => {
     writeConfig("notify:\n  web_push:\n    subject: ops@example.com\n");
     expect(validationIssues(load)[0]?.message).toMatch(/mailto/);
+  });
+});
+
+describe("public_url follows listen.human (T8)", () => {
+  const resolved = (yaml: string) =>
+    loadConfig(resolveConfigSource({ HEEL_HOME: home, HEEL_CONFIG: writeConfig(yaml) }));
+
+  it("is http://localhost on the approval page's port when unset", () => {
+    expect(resolved("listen:\n  human: 127.0.0.1:8301\n").publicUrl.href).toBe(
+      "http://localhost:8301/",
+    );
+    expect(resolved("{}\n").publicUrl.href).toBe("http://localhost:7301/");
+    expect(resolved("listen:\n  human: 127.0.0.1:8301\n").publicUrlSet).toBe(false);
+  });
+
+  it("keeps a public_url that is set, and warns when a loopback one names another port", () => {
+    const set = resolved("public_url: http://localhost:7301\nlisten:\n  human: 127.0.0.1:8301\n");
+    expect(set.publicUrl.href).toBe("http://localhost:7301/");
+    expect(publicUrlPortProblem(set)).toContain("approval page listens on port 8301");
+    expect(publicUrlPortProblem(resolved("listen:\n  human: 127.0.0.1:8301\n"))).toBeNull();
+    // Behind a proxy or tunnel the ports differ on purpose.
+    expect(
+      publicUrlPortProblem(
+        resolved("public_url: https://heel.example.com\nlisten:\n  human: 127.0.0.1:8301\n"),
+      ),
+    ).toBeNull();
   });
 });

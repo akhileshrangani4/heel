@@ -8,7 +8,7 @@ import { AdminSocketError } from "../admin/server.ts";
 import type { HeelConfig, ListenAddress } from "../config/schema.ts";
 import { signInSetupFor } from "../definitions/sign-in-setup.ts";
 import { createLogger } from "../log.ts";
-import { startHeel } from "../serve.ts";
+import { type RunningHeel, startHeel } from "../serve.ts";
 import { hasErrnoCode } from "../util/errno.ts";
 import { createMasterKeyFile } from "../vault/key.ts";
 import { SecretFileError } from "../vault/secret-file.ts";
@@ -241,10 +241,34 @@ async function serveCommand(args: string[], io: CliIo): Promise<number> {
     version: HEEL_VERSION,
     watch: values.watch ?? false,
   });
+  io.stderr.write(startupBanner(config.publicUrl, heel.planes));
   const signal = await waitForShutdownSignal();
   log.info({ signal }, "shutting down");
   await heel.close();
   return EXIT.ok;
+}
+
+/**
+ * Pure: the plain lines `heel serve` prints once it is up, after the JSON
+ * logs, so a person sees where to go without reading them.
+ */
+export function startupBanner(
+  publicUrl: URL,
+  planes: Pick<RunningHeel["planes"], "agent" | "human">,
+): string {
+  const lines = ["", "heel is running."];
+  if (planes.human.state === "listening") {
+    lines.push(`  Approve requests:   open ${publicUrl.origin}`);
+  } else {
+    lines.push(`  Approval page:      off (${planes.human.reason})`);
+  }
+  if (planes.agent.state === "listening") {
+    lines.push(`  Agents connect to:  ${new URL("/mcp", planes.agent.url).href}`);
+  } else {
+    lines.push(`  Agent port:         off (${planes.agent.reason})`);
+  }
+  lines.push("  Stop with Ctrl-C.", "");
+  return `${lines.join("\n")}\n`;
 }
 
 function vaultCommand(args: string[], io: CliIo): number {

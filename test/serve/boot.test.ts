@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it, onTestFinished } from "vitest";
 import { adminCall } from "../../src/admin/client.ts";
 import { AdminSocketError } from "../../src/admin/server.ts";
+import { startupBanner } from "../../src/cli/main.ts";
 import { listenerUrl, startHeel } from "../../src/serve.ts";
 import { openStore } from "../../src/store/db.ts";
 import { MASTER_KEY_ENV } from "../../src/vault/key.ts";
@@ -235,5 +236,29 @@ describe("heel serve", () => {
     await expect(fetch(`${agentUrl}/mcp`)).rejects.toThrow();
     await expect(fetch(`${humanUrl}/healthz`)).rejects.toThrow();
     expect(existsSync(config.adminSocketPath)).toBe(false);
+  });
+});
+
+describe("what heel says at startup (T8)", () => {
+  it("warns when no rules are loaded, since every call is then denied", async () => {
+    const { logger, output } = captureLogger();
+    await boot(configIn(tempDir("heel-boot-")), { [MASTER_KEY_ENV]: newKey() }, logger);
+    expect(output()).toContain('"code":"no_rules"');
+    expect(output()).toContain("every call is denied");
+  });
+
+  it("prints where to approve and where agents connect", () => {
+    const banner = startupBanner(new URL("http://localhost:7301"), {
+      agent: { state: "listening", url: "http://127.0.0.1:7300" },
+      human: { state: "listening", url: "http://127.0.0.1:7301" },
+    });
+    expect(banner).toContain("Approve requests:   open http://localhost:7301");
+    expect(banner).toContain("Agents connect to:  http://127.0.0.1:7300/mcp");
+    const refused = startupBanner(new URL("http://heel.example.com"), {
+      agent: { state: "refused", reason: "vault unavailable" },
+      human: { state: "refused", reason: "public_url must be https" },
+    });
+    expect(refused).toContain("Approval page:      off (public_url must be https)");
+    expect(refused).toContain("Agent port:         off (vault unavailable)");
   });
 });
