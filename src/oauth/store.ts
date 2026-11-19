@@ -71,6 +71,43 @@ export function findClient(db: HeelDb, orgId: string, clientId: string): ClientR
  * carry over; otherwise a new agent is named after the client ("claude",
  * then "claude-2", …).
  */
+/**
+ * The agent a connection will act as, without creating it: this client's
+ * live agent for the person if there is one (`existing`), else the first
+ * free name from what the client calls itself. The consent page shows this,
+ * so what the person approves is the agent they get.
+ */
+export function plannedAgentForClient(
+  tx: HeelTx | HeelDb,
+  input: { orgId: string; ownerId: string; client: ClientRow },
+): { name: string; existing: boolean } | null {
+  const existing = tx
+    .select({ name: agents.name })
+    .from(agents)
+    .where(
+      and(
+        eq(agents.orgId, input.orgId),
+        eq(agents.ownerId, input.ownerId),
+        eq(agents.oauthClientId, input.client.id),
+        isNull(agents.revokedAt),
+      ),
+    )
+    .get();
+  if (existing !== undefined) return { name: existing.name, existing: true };
+  const base = agentNameFor(input.client.name);
+  for (let n = 1; n < 100; n++) {
+    const name = n === 1 ? base : `${base}-${n}`;
+    if (!isValidAgentName(name)) continue;
+    const taken = tx
+      .select({ id: agents.id })
+      .from(agents)
+      .where(and(eq(agents.orgId, input.orgId), eq(agents.name, name)))
+      .get();
+    if (taken === undefined) return { name, existing: false };
+  }
+  return null;
+}
+
 export function agentForClient(
   tx: HeelTx,
   input: { orgId: string; ownerId: string; client: ClientRow; now: Date },
