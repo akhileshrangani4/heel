@@ -20,6 +20,7 @@ import { accountsUsableBy } from "../../store/sharing.ts";
 import { errorShape } from "../../util/error-shape.ts";
 import { isMcpProvider } from "../../vault/connect.ts";
 import type { AuthenticatedAgent } from "../agent-tokens.ts";
+import { TOKEN_WARNING_DAYS } from "../agents.ts";
 import type { Pipeline } from "../pipeline/pipeline.ts";
 import type { Definition, DefinitionRegistry } from "../pipeline/ports.ts";
 import { type SandboxSlots, UNLIMITED_SLOT } from "../sandbox-slots.ts";
@@ -317,7 +318,11 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     );
     server.setRequestHandler("tools/list", async () => ({ tools: await listTools(agent, scope) }));
     server.setRequestHandler("tools/call", async (request, ctx) =>
-      callTool(agent, scope, request.params, ctx.mcpReq.signal),
+      withExpiryNote(
+        await callTool(agent, scope, request.params, ctx.mcpReq.signal),
+        agent,
+        deps.now?.() ?? new Date(),
+      ),
     );
     return server;
   });
@@ -338,4 +343,25 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     },
     close: () => handler.close(),
   };
+}
+
+/**
+ * A static token close to its expiry adds one line to every tool result, so
+ * the agent can tell its person before calls start failing (roadmap 1.6).
+ * OAuth access tokens renew themselves and are left alone.
+ */
+export function withExpiryNote(
+  result: CallToolResult,
+  agent: Pick<AuthenticatedAgent, "agentName" | "tokenExpiresAt">,
+  now: Date,
+): CallToolResult {
+  const expiresAt = agent.tokenExpiresAt ?? null;
+  if (expiresAt === null) return result;
+  const days = Math.ceil((expiresAt.getTime() - now.getTime()) / 86_400_000);
+  if (days > TOKEN_WARNING_DAYS) return result;
+  const text =
+    `heel: this agent's token expires on ${expiresAt.toISOString().slice(0, 10)} ` +
+    `(in ${days} day${days === 1 ? "" : "s"}). Ask the person who runs heel to issue a new one ` +
+    `with \`heel agent rotate ${agent.agentName}\` and put it in this agent's configuration.`;
+  return { ...result, content: [...(result.content ?? []), { type: "text", text }] };
 }

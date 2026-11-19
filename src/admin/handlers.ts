@@ -149,7 +149,14 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
       return adminOk({ version: deps.version, vault: deps.vault ? "open" : "unavailable" });
     case "agent.add": {
       const ownerId = resolveOwner(db, orgId, request.params.owner);
-      return adminOk(addAgent(db, { orgId, ownerId, name: request.params.name }, now));
+      const { name, expiresInDays } = request.params;
+      return adminOk(
+        addAgent(
+          db,
+          { orgId, ownerId, name, ...(expiresInDays === undefined ? {} : { expiresInDays }) },
+          now,
+        ),
+      );
     }
     case "agent.workdirs":
       return adminOk(
@@ -164,7 +171,9 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
     case "agent.workdirs.list":
       return adminOk(workRootsByName(db, orgId, request.params.name));
     case "agent.rotate":
-      return adminOk(rotateAgentToken(db, orgId, request.params.name, now));
+      return adminOk(
+        rotateAgentToken(db, orgId, request.params.name, now, request.params.expiresInDays),
+      );
     case "agent.revoke":
       revokeAgent(db, orgId, request.params.name, now);
       return adminOk({ name: request.params.name, revoked: true });
@@ -172,6 +181,7 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
       return adminOk(
         listAgents(db, orgId).map((agent) => ({
           ...agent,
+          tokenExpiresAt: agent.tokenExpiresAt?.toISOString() ?? null,
           createdAt: agent.createdAt.toISOString(),
           revokedAt: agent.revokedAt?.toISOString() ?? null,
         })),

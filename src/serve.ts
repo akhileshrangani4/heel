@@ -29,7 +29,7 @@ import {
   microsoftRefresher,
 } from "./definitions/microsoft/oauth.ts";
 import { definitionRegistry } from "./definitions/registry.ts";
-import { workRootsOf } from "./gateway/agents.ts";
+import { expiringTokens, listAgents, workRootsOf } from "./gateway/agents.ts";
 import { createAgentApp } from "./gateway/app.ts";
 import { runApprovalHints } from "./gateway/approval-hints.ts";
 import { createMcpSurface } from "./gateway/mcp/server.ts";
@@ -349,6 +349,15 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
     ]) {
       if (warning.level === "info") log.info({ code: warning.code }, warning.message);
       else log.warn({ code: warning.code }, warning.message);
+    }
+    for (const token of expiringTokens(listAgents(store.db, orgId), now())) {
+      const when = token.expiresAt.toISOString().slice(0, 10);
+      log.warn(
+        { code: "token_expiring", agent: token.name, expiresAt: token.expiresAt.toISOString() },
+        token.expiresAt.getTime() <= now().getTime()
+          ? `agent "${token.name}"'s token expired on ${when}; its calls are refused. Issue a new one: heel agent rotate ${token.name}`
+          : `agent "${token.name}"'s token expires on ${when}. Issue a new one before then: heel agent rotate ${token.name}`,
+      );
     }
 
     const rules = startRules(options, closers);

@@ -33,6 +33,8 @@ export const AdminRequestSchema = z.discriminatedUnion("method", [
       name: agentName,
       /** The owning user's name; a single-user install defaults to its owner. */
       owner: z.string().min(1).optional(),
+      /** Days until the token expires; null never; omitted, the default (90). */
+      expiresInDays: z.number().int().min(1).max(3650).nullable().optional(),
     }),
   }),
   z.strictObject({
@@ -53,7 +55,10 @@ export const AdminRequestSchema = z.discriminatedUnion("method", [
   }),
   z.strictObject({
     method: z.literal("agent.rotate"),
-    params: z.strictObject({ name: agentName }),
+    params: z.strictObject({
+      name: agentName,
+      expiresInDays: z.number().int().min(1).max(3650).nullable().optional(),
+    }),
   }),
   z.strictObject({
     method: z.literal("agent.revoke"),

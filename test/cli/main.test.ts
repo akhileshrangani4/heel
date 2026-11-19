@@ -177,7 +177,7 @@ describe("heel CLI", () => {
     const listed = await run(["agent", "list"], { HEEL_HOME: home });
     // A table by default, with names; --json for scripts.
     expect(listed.stdout).toMatch(
-      /^NAME\s+OWNER\s+STATUS\s+ADDED \(UTC\)\ninbox-bot\s+owner\s+active\s/,
+      /^NAME\s+OWNER\s+STATUS\s+TOKEN EXPIRES \(UTC\)\s+ADDED \(UTC\)\ninbox-bot\s+owner\s+active\s+\d{4}-\d\d-\d\d /,
     );
     expect(listed.stdout).not.toContain(token);
     const json = await run(["agent", "list", "--json"], { HEEL_HOME: home });

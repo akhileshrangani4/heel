@@ -56,6 +56,8 @@ export interface AuthenticatedAgent {
   tokenId: string;
   /** The MCP client the token last connected with, self-reported; absent when unknown. */
   clientName?: string | null;
+  /** When a static token stops working; null or absent when it never does, and for OAuth tokens. */
+  tokenExpiresAt?: Date | null;
 }
 
 export type AgentAuthResult =
@@ -112,6 +114,9 @@ export function authenticateAgent(
       ownerId: row.ownerId,
       tokenId: row.tokenId,
       clientName: row.clientName,
+      // OAuth access tokens are short-lived and renew themselves; only a
+      // static token's expiry is something a person has to act on.
+      tokenExpiresAt: row.tokenKind === "static" ? row.tokenExpiresAt : null,
     },
   };
 }

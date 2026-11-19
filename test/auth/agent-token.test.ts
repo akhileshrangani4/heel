@@ -16,7 +16,7 @@ import {
   revokeAgent,
   rotateAgentToken,
 } from "../../src/gateway/agents.ts";
-import { type AgentPlaneEnv, requireAgent } from "../../src/gateway/require-agent.ts";
+import { type AgentPlaneEnv, refusalBody, requireAgent } from "../../src/gateway/require-agent.ts";
 import { createLogger } from "../../src/log.ts";
 import { agentTokens, users } from "../../src/store/schema.ts";
 import { type TestStore, testStore } from "../helpers/store.ts";
@@ -173,7 +173,8 @@ describe("agent plane authentication", () => {
       const response = await call(headers);
       expect(response.status).toBe(401);
       expect(response.headers.get("www-authenticate")).toBe('Bearer realm="heel"');
-      expect(await response.text()).toBe("");
+      // The same body for every one: a guessed token learns nothing about why.
+      expect(await response.json()).toEqual(refusalBody("unknown"));
     }
     expect(pipeline).not.toHaveBeenCalled();
   });

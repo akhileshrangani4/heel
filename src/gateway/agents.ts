@@ -1,9 +1,9 @@
 import { realpathSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import type { HeelDb, HeelTx } from "../store/db.ts";
 import { newId } from "../store/ids.ts";
-import { agents, users } from "../store/schema.ts";
+import { agents, agentTokens, users } from "../store/schema.ts";
 import { issueAgentToken, revokeAgentTokens } from "./agent-tokens.ts";
 
 /**
@@ -36,6 +36,12 @@ export interface AgentSummary {
   ownerId: string;
   /** The owner's name, for people reading `heel agent list`. */
   owner: string;
+  /**
+   * When the agent's live static token stops working: null when it never
+   * expires or there is none (`hasToken` says which).
+   */
+  tokenExpiresAt: Date | null;
+  hasToken: boolean;
   createdAt: Date;
   revokedAt: Date | null;
 }
@@ -45,6 +51,8 @@ export interface IssuedAgent {
   name: string;
   /** Shown once; heel stores only its hash. */
   token: string;
+  /** ISO time the token stops working, or null for a token that never expires. */
+  expiresAt: string | null;
 }
 
 function findAgent(tx: HeelDb | HeelTx, orgId: string, name: string) {
@@ -69,9 +77,24 @@ function requireLiveAgent(tx: HeelDb | HeelTx, orgId: string, name: string) {
   return agent;
 }
 
+/** How long a new agent token lasts unless the operator says otherwise (roadmap 1.6). */
+export const DEFAULT_TOKEN_DAYS = 90;
+/** heel warns this long before a token expires. */
+export const TOKEN_WARNING_DAYS = 14;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Pure: when a token issued `now` expires. `days` null means never, which the
+ * operator has to ask for (`--expires never`); undefined means the default.
+ */
+export function tokenExpiry(now: Date, days: number | null | undefined): Date | null {
+  const length = days === undefined ? DEFAULT_TOKEN_DAYS : days;
+  return length === null ? null : new Date(now.getTime() + length * DAY_MS);
+}
+
 export function addAgent(
   db: HeelDb,
-  input: { orgId: string; ownerId: string; name: string },
+  input: { orgId: string; ownerId: string; name: string; expiresInDays?: number | null },
   now: Date,
 ): IssuedAgent {
   if (!isValidAgentName(input.name)) {
@@ -96,18 +119,35 @@ export function addAgent(
         revokedAt: null,
       })
       .run();
-    const token = issueAgentToken(tx, { orgId: input.orgId, agentId }, now);
-    return { agentId, name: input.name, token };
+    const expiresAt = tokenExpiry(now, input.expiresInDays);
+    const token = issueAgentToken(tx, { orgId: input.orgId, agentId }, now, {
+      ...(expiresAt === null ? {} : { expiresAt }),
+    });
+    return { agentId, name: input.name, token, expiresAt: expiresAt?.toISOString() ?? null };
   });
 }
 
 /** Replaces every token of a live agent with one new token. */
-export function rotateAgentToken(db: HeelDb, orgId: string, name: string, now: Date): IssuedAgent {
+export function rotateAgentToken(
+  db: HeelDb,
+  orgId: string,
+  name: string,
+  now: Date,
+  expiresInDays?: number | null,
+): IssuedAgent {
   return db.transaction((tx) => {
     const agent = requireLiveAgent(tx, orgId, name);
     revokeAgentTokens(tx, agent.id, now);
-    const token = issueAgentToken(tx, { orgId, agentId: agent.id }, now);
-    return { agentId: agent.id, name: agent.name, token };
+    const expiresAt = tokenExpiry(now, expiresInDays);
+    const token = issueAgentToken(tx, { orgId, agentId: agent.id }, now, {
+      ...(expiresAt === null ? {} : { expiresAt }),
+    });
+    return {
+      agentId: agent.id,
+      name: agent.name,
+      token,
+      expiresAt: expiresAt?.toISOString() ?? null,
+    };
   });
 }
 
@@ -121,6 +161,28 @@ export function revokeAgent(db: HeelDb, orgId: string, name: string, now: Date):
 }
 
 export function listAgents(db: HeelDb, orgId: string): AgentSummary[] {
+  const live = new Map(
+    db
+      .select({ agentId: agentTokens.agentId, expiresAt: agentTokens.expiresAt })
+      .from(agentTokens)
+      .where(
+        and(
+          eq(agentTokens.orgId, orgId),
+          eq(agentTokens.kind, "static"),
+          isNull(agentTokens.revokedAt),
+        ),
+      )
+      .all()
+      .map((t) => [t.agentId, t.expiresAt]),
+  );
+  return listAgentRows(db, orgId).map((row) => ({
+    ...row,
+    hasToken: live.has(row.id),
+    tokenExpiresAt: live.get(row.id) ?? null,
+  }));
+}
+
+function listAgentRows(db: HeelDb, orgId: string) {
   return db
     .select({
       id: agents.id,
@@ -263,4 +325,21 @@ export function workRootsOf(db: HeelDb, agentId: string): string[] {
     .where(eq(agents.id, agentId))
     .get();
   return row?.workRoots ?? [];
+}
+
+/**
+ * Pure: live agents whose token expires within TOKEN_WARNING_DAYS of `now`,
+ * or already has, soonest first. heel warns about these at startup and in
+ * the agent's own tool results, so a token isn't a surprise when it stops.
+ */
+export function expiringTokens(
+  agents: readonly AgentSummary[],
+  now: Date,
+): { name: string; expiresAt: Date }[] {
+  const horizon = now.getTime() + TOKEN_WARNING_DAYS * DAY_MS;
+  return agents
+    .filter((a) => a.revokedAt === null && a.tokenExpiresAt !== null)
+    .map((a) => ({ name: a.name, expiresAt: a.tokenExpiresAt as Date }))
+    .filter((a) => a.expiresAt.getTime() <= horizon)
+    .sort((x, y) => x.expiresAt.getTime() - y.expiresAt.getTime());
 }

@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { AUDIT_KINDS, type AuditKind } from "../../core/audit.ts";
 import { suggestRules } from "../../core/suggestions.ts";
+import { listAgents } from "../../gateway/agents.ts";
 import { agentInventory, readActivity, wouldHaveStopped } from "../../store/activity.ts";
 import { agents } from "../../store/schema.ts";
 import {
@@ -79,7 +80,17 @@ export function activityRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       title: "Agents",
       viewer: viewerOf(session),
       current: "agents",
-      body: agentsPage({ agents: list, sinceHours: 24 }),
+      body: agentsPage({
+        agents: list,
+        sinceHours: 24,
+        tokens: new Map(
+          listAgents(deps.db, deps.orgId).map((a) => [
+            a.id,
+            a.hasToken ? (a.tokenExpiresAt ?? "never") : null,
+          ]),
+        ),
+        now: deps.now(),
+      }),
     });
   });
 
