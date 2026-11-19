@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   alternates: { canonical: '/roadmap' },
 };
 
-const UPDATED = 'november 18, 2026';
+const UPDATED = 'november 19, 2026';
 
 type Status = 'now' | 'next' | 'later' | 'exploring';
 
@@ -55,6 +55,10 @@ const PHASES: Phase[] = [
         'agents can’t read the vault or edit rules, and binding outside localhost warns loudly.',
       ],
       ['expiring agent tokens', 'agent tokens renew on a schedule and revoke with one command.'],
+      [
+        'sign in with google, no setup',
+        'connect gmail and calendar with one click. heel brings its own google client, and it works when heel runs on another machine too.',
+      ],
       [
         'red-team rounds',
         'repeated attempts by ai models to read secrets, approve themselves or rewrite rules. every finding becomes a test.',
@@ -138,6 +142,10 @@ const PHASES: Phase[] = [
       ],
       ['import from 1password', 'bring your existing api keys into heel in one step.'],
       [
+        'your connections on every machine',
+        'run heel login on any of your machines and your connections are there, end-to-end encrypted. or point every machine’s agents at one heel.',
+      ],
+      [
         'starter rules per service',
         'sensible defaults for each built-in service: reads allowed, sends and merges ask, deletes counted.',
       ],
@@ -172,6 +180,8 @@ const SHIPPED = [
   'standing approvals and grants',
   'local-only by default',
   'optional decision-model hints',
+  'credentials never enter the sandbox',
+  'a complete rules reference',
 ];
 
 const badge: Record<Status, string> = {
