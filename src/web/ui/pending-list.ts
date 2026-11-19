@@ -94,11 +94,11 @@ function requestCard(row: PendingRow, now: Date): Html {
   const said = row.headline;
   return html`<li class="card req" data-status="${row.status}">
     <div class="ap-meta">
+      ${approvalStatusBadge(row.status)}
       <span class="ap-agent">${row.agent}</span>
       ${row.client === null ? "" : html`<span class="muted">via ${clientLabel(row.client)}</span>`}
       <span class="muted">on ${row.account}</span>
       <span class="muted">${formatRelative(row.createdAt, now)}</span>
-      ${approvalStatusBadge(row.status)}
     </div>
     <h2 class="req-title">
       <a href="${row.href}"

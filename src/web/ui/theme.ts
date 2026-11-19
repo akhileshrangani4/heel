@@ -211,6 +211,9 @@ body:has(.ap){background:var(--page)}
 }
 .req-list{list-style:none;margin:.75rem 0 2rem;padding:0;display:grid;gap:.75rem}
 .req{margin:0}
+.req .ap-meta{display:block;line-height:1.75}
+.req .ap-meta > *{display:inline-block;white-space:nowrap;margin-right:.75rem}
+.req .ap-meta .badge{float:right;margin:0 0 0 .75rem;line-height:1.5}
 .req-title{font-size:1.1rem;line-height:1.4;margin:.5rem 0 0;font-weight:600;overflow-wrap:anywhere}
 .req-title a{color:var(--text);text-decoration:none}
 .req-title a:hover{text-decoration:underline}
@@ -221,7 +224,6 @@ body:has(.ap){background:var(--page)}
 .req-count{margin:0}
 .req-foot-row{display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap;margin-top:.5rem}
 .req-foot-row .req-foot{margin:0;overflow-wrap:anywhere}
-.ap-meta .req-state{margin-left:auto;font-size:.85rem}
 .grant-form{display:grid;gap:.4rem .75rem;grid-template-columns:minmax(7rem,max-content) minmax(0,1fr);align-items:center}
 .grant-form h2{grid-column:1/-1;font-size:1rem;margin:0 0 .25rem}
 .grant-form label{color:var(--muted);font-size:.9rem}
@@ -255,6 +257,7 @@ body:has(.ap){background:var(--page)}
 .pause-resume{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
 .conn-add h2{font-size:1rem;margin:0 0 .25rem}
 .conn-add pre.args{margin-top:.75rem}
+@media (max-width:22rem){.site nav ul{margin:0 -.25rem}.site nav a{font-size:.78rem;padding:.35rem .25rem}}
 .story{border-top:4px solid var(--border);margin-top:2rem;padding-top:1rem}
 .visually-hidden{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 body:has(.auth){background-color:var(--page);background-image:radial-gradient(circle,rgb(0 0 0 / .07) 1px,transparent 1px);background-size:22px 22px}
