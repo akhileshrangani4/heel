@@ -3,6 +3,7 @@
  * proxy (PR #78). Each test pins one way the proxy could leak the credential,
  * crash heel, let a request past its checks, or hold resources.
  */
+import { randomBytes } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { connect } from "node:net";
 import { tmpdir } from "node:os";
@@ -15,8 +16,9 @@ import { httpsUpstream, rawTlsUpstream } from "../helpers/https-upstream.ts";
 import { exchange, request, secure, tunnel } from "../helpers/proxy-client.ts";
 import { leakedForms } from "../helpers/token-forms.ts";
 
+/** Made per run: a fixed random-looking string here reads as a leaked secret to scanners. */
+const TOKEN = randomBytes(24).toString("base64url");
 const PLACEHOLDER = `${PLACEHOLDER_PREFIX}0123456789abcdef0123`;
-const TOKEN = "Tk9zR8vQ2mL5xW1pB7nC4yH6jD3fG0aE";
 const BEARER: CredentialAuth = { type: "authorization", schemes: ["bearer"] };
 const BASIC: CredentialAuth = { type: "authorization", schemes: ["basic"] };
 const b64 = (text: string) => Buffer.from(text).toString("base64");
