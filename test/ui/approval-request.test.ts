@@ -135,6 +135,9 @@ describe("ApprovalRequest", () => {
     const meta = (request: ApprovalRequestView) => text(render(request).querySelector(".ap-meta"));
     expect(meta(PENDING_REQUEST)).toContain("via Claude Code");
     expect(meta({ ...PENDING_REQUEST, client: null, surface: "cli" })).toContain("via heel run");
+    expect(meta({ ...PENDING_REQUEST, client: null, surface: "http" })).toContain(
+      "via the HTTP proxy",
+    );
     expect(meta({ ...PENDING_REQUEST, client: null, surface: "mcp" })).not.toContain("via");
   });
 

@@ -47,6 +47,8 @@ export interface RunScriptInput {
   code: string;
   agent: AuthenticatedAgent;
   runId?: string | undefined;
+  /** The agent's `heel_reason` for the script, shown on any approval a call in it asks for. */
+  reason?: string | undefined;
   /** The modules the script may import, by Python name, with the account each one is. */
   modules: readonly (StubModule & { account: string })[];
   pipeline: Pipeline;
@@ -119,6 +121,7 @@ export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
       tool,
       args,
       ...(input.runId === undefined ? {} : { runId: input.runId }),
+      ...(input.reason === undefined ? {} : { reason: input.reason }),
     });
     const record = (decision: CallRecord["decision"]) =>
       calls.push({ account: module.account, tool, decision });

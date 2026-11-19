@@ -179,10 +179,11 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
         "Code mode isn't available on this host",
       );
     }
-    const code = typeof args["code"] === "string" ? args["code"] : "";
+    const { args: scriptArgs, reason } = takeReason(args);
+    const code = typeof scriptArgs["code"] === "string" ? scriptArgs["code"] : "";
     const runId =
-      typeof args["run_id"] === "string"
-        ? args["run_id"]
+      typeof scriptArgs["run_id"] === "string"
+        ? scriptArgs["run_id"]
         : typeof metaRunId === "string"
           ? metaRunId
           : undefined;
@@ -198,6 +199,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
         code,
         agent,
         runId,
+        ...(reason === undefined ? {} : { reason }),
         modules: await modulesFor(agent),
         pipeline: deps.pipeline,
         worker,
