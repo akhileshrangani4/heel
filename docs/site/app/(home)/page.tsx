@@ -215,6 +215,12 @@ export default function HomePage() {
               how rules work →
             </Link>
             <Link
+              href="/docs/rules-reference"
+              className="underline decoration-neutral-300 underline-offset-4 hover:decoration-current dark:decoration-neutral-600"
+            >
+              rules reference and recipes →
+            </Link>
+            <Link
               href="/docs/using-heel"
               className="underline decoration-neutral-300 underline-offset-4 hover:decoration-current dark:decoration-neutral-600"
             >

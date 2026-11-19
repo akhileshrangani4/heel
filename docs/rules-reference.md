@@ -106,7 +106,7 @@ heel reloads the file as soon as you save it.
 2. **Calls that outlive heel** need a rule that names them: see [Calls that outlive heel](#calls-that-outlive-heel).
 3. **Org rules, then your rules, top to bottom.** The first rule whose `match` holds decides with its `then`. Rules with `watch: true` are logged and skipped.
 4. **Nothing matched:** the call is denied (`deny by default`).
-5. **Grants and standing approvals** can turn an `ask` from your own rules into `allow`, and a grant can also allow a call nothing matched. Neither ever overrides a `deny` or an org `ask`. See [Grants, standing approvals and watch mode](#grants-standing-approvals-and-watch-mode).
+5. **Standing approvals and intent grants** can turn an `ask` from your own rules into `allow`, and an intent grant can also allow a call nothing matched. Neither ever overrides a `deny` or an org `ask`. See [Grants, standing approvals and watch mode](#grants-standing-approvals-and-watch-mode).
 
 There is no merging of decisions: one rule decides, and the order of the file is the priority. Put specific rules (deny this domain, limit this count) above broad ones (allow every send).
 
@@ -244,7 +244,7 @@ Which operators each key takes:
 ### Details that matter
 
 - **Case matters.** Text is compared exactly, so `method: get` never matches a `GET` call. heel lower-cases `repo` on the call, so write repos in lower case: `repo: Acme/Web` never matches. Addresses and domains are the exception: both sides are lower-cased first, except a `matches` pattern, which runs on the lower-cased address as written, so write it in lower case.
-- **Types matter.** `args.number: 42` matches the number 42, not the text `"42"`. HTTP query values and CLI flag values are always text, so write `query.limit: "100"`. `max` never holds on one of them, but on a repeated parameter or flag (a list) it limits how many there are.
+- **Types matter.** `args.number: 42` matches the number 42, not the text `"42"`. HTTP query values, form body values and CLI flag values are always text, so write `query.limit: "100"`. `max` never holds on one of them, but on a repeated parameter or flag (a list) it limits how many there are.
 - **`matches` is the whole value.** Patterns are [RE2](https://github.com/google/re2/wiki/Syntax) and anchored at both ends: `matches: "web"` doesn't match `acme/web`, but `matches: ".*web"` does. Quote patterns in YAML.
 - **Shorthand on a list is set equality.** `recipients: sam@company.com` holds only when Sam is the only recipient. `argv: publish` never holds, because `argv` also holds the command name. Use `any_of` or `one_of` instead.
 - **Paths walk through arrays.** `args.messages.id` reads `id` from every element of `args.messages`. An element without `id` makes "every element" checks fail, so a batch with one odd entry doesn't slip through.
@@ -415,8 +415,8 @@ These change what happens around your rules, not the rules file itself.
 
 | | What it does | Limits |
 | --- | --- | --- |
-| **Standing approval** | Approving an `ask` with "keep allowing this" lets that agent's calls under that rule run without asking. | Only for an `ask` from your own rules, never an org `ask`. It is tied to the rule's `match` and `then`: edit the rule and it ends. |
-| **Grant** | A narrow `allow` for one agent and one task, which you sign with your passkey. It is one `match`, in the same language as a rule, and must name an action or tool. | Consulted only when your rules end in an `ask` or nothing matched. Never overrides a `deny` or an org `ask`. |
+| **Standing approval** ([Approvals](approvals.md) calls it a grant from an approval) | When you approve an `ask`, you can also allow, for this agent and for up to 90 days, either this exact call (same account, tool and arguments) or everything that rule asks about. | Checked only when that rule matches and would ask, and only for your own rules, never an org `ask`. It is tied to the rule's `match` and `then`: edit the rule and it ends. |
+| **Intent grant** | A narrow `allow` for one agent and one task, which you sign with your passkey. It is one `match`, in the same language as a rule, and must name an action or tool. | Consulted only when your rules end in an `ask` or nothing matched. Never overrides a `deny` or an org `ask`. |
 | **`watch: true` on a rule** | heel logs what the rule would have decided, then carries on as if it hadn't matched. | The rule never decides. |
 | **Watch mode** (`heel serve --watch`, or the shadow and record modes) | Calls your rules would deny or ask about run anyway, and Activity shows what would have happened. | Org rules, hard denies, pause, hiding, the fail-closed denies, and unnamed calls that outlive heel still hold. |
 
@@ -735,6 +735,12 @@ rules:
   - name: kubectl-writes
     match: { command: kubectl }
     then: ask
+  - name: gh-api-asks
+    match: { tool: gh api }
+    then: ask
+  - name: gh-reads
+    match: { command: gh, kind: read }
+    then: allow
   - name: npm-installs
     match:
       command: npm
@@ -753,6 +759,12 @@ cases:
   - name: delete in staging asks
     call: { agent: a, account: k8s, action: kubectl.delete, kind: write, cli: { command: kubectl, verb: delete, flags: { namespace: staging }, argv: [kubectl, -n, staging, delete, pod, web-1] } }
     expect: { decision: ask, rule: kubectl-writes }
+  - name: gh api asks, whatever it calls
+    call: { agent: a, account: gh, provider: "cli:gh", tool: gh api, action: github.api, kind: write, cli: { command: gh, verb: api, argv: [gh, api, /user] } }
+    expect: { decision: ask, rule: gh-api-asks }
+  - name: gh pr view is a read
+    call: { agent: a, account: gh, provider: "cli:gh", tool: gh pr view, action: github.read, kind: read, repo: acme/web, cli: { command: gh, verb: pr, subcommand: view, flags: { repo: acme/web }, argv: [gh, pr, view, "7", -R, acme/web] } }
+    expect: { decision: allow, rule: gh-reads }
   - name: npm ci with scripts off
     call: { agent: a, account: npm, cli: { command: npm, argv: [npm, ci, --ignore-scripts] } }
     expect: { decision: allow, rule: npm-installs }

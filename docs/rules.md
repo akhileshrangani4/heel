@@ -6,7 +6,7 @@ Rules are a file you can read, review and test. A call no rule matches is denied
 
 1. **Organization rules.** These can only deny or ask, so nothing below can loosen them.
 2. **Your rules,** top to bottom.
-3. **Grants and standing approvals,** only when your rules end in an `ask` (or, for a grant, when nothing matched). They can turn that into `allow`, but never get past a `deny` or an org `ask`.
+3. **Standing approvals and intent grants,** only when your rules end in an `ask` (or, for an intent grant, when nothing matched). They can turn that into `allow`, but never get past a `deny` or an org `ask`.
 
 ```yaml
 rules:
