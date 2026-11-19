@@ -40,6 +40,24 @@ describe("pages at phone width", () => {
   });
 });
 
+describe("the top menu (1.11)", () => {
+  it("shows five sections, and the section's pages as tabs", async () => {
+    const h = humanPlaneHarness();
+    const admin = await h.signIn(await h.enroll());
+    const page = await (await h.fetch("/grants", { as: admin })).text();
+    const main = page.match(/<nav aria-label="Main">[\s\S]*?<\/nav>/)?.[0] ?? "";
+    expect(main.match(/<li>/g)).toHaveLength(5);
+    expect(main).toMatch(/aria-current="page"\s*>Agents</);
+    const tabs = page.match(/<nav class="subnav"[\s\S]*?<\/nav>/)?.[0] ?? "";
+    expect(tabs).toContain(">Standing approvals<");
+    expect(tabs).toMatch(/aria-current="page"\s*>Grants</);
+    // A section with one page has no tabs.
+    expect(await (await h.fetch("/activity", { as: admin })).text()).not.toContain(
+      'class="subnav"',
+    );
+  });
+});
+
 describe("the Connections page (1.11)", () => {
   it("shows one next step per card, and none for a ready account", async () => {
     const h = humanPlaneHarness();

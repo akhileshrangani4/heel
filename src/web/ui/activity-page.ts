@@ -149,42 +149,42 @@ export function agentsPage(props: {
             </p>`,
           )
     }
-    ${scrollRegion(
-      "Agents",
-      html`<table class="data">
-        <caption>Agents</caption>
-        <thead>
-          <tr>
-            <th scope="col">Agent</th>
-            <th scope="col">Owner</th>
-            <th scope="col">Last call</th>
-            <th scope="col">Calls</th>
-            <th scope="col">Allowed</th>
-            <th scope="col">Denied</th>
-            <th scope="col">Asked</th>
-            <th scope="col">Would have stopped</th>
-            <th scope="col">Accounts</th>
-            <th scope="col">Token expires</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${props.agents.map(
-            (a) => html`<tr>
-              <th scope="row"><a href="/activity?agent=${a.agentId}">${a.name}</a>${a.revoked ? html` ${badge("revoked", "muted")}` : ""}</th>
-              <td>${a.owner}</td>
-              <td>${a.lastCallAt === null ? html`<span class="muted">never</span>` : time(a.lastCallAt)}</td>
-              <td>${String(a.calls)}</td>
-              <td>${String(a.allowed)}</td>
-              <td>${String(a.denied)}</td>
-              <td>${String(a.asked)}</td>
-              <td>${String(a.wouldHaveStopped)}</td>
-              <td class="mono">${a.accounts.join(", ")}</td>
-              <td>${a.revoked ? "" : tokenCell(props.tokens?.get(a.agentId), now)}</td>
-            </tr>`,
-          )}
-        </tbody>
-      </table>`,
-    )}`;
+    ${
+      props.agents.length === 0
+        ? html`<div class="card req-empty">
+            <p><strong>No agents yet.</strong></p>
+            <p class="muted">Add one from the command line: <code>heel agent add &lt;name&gt;</code></p>
+          </div>`
+        : html`<ul class="conn-list agent-list" aria-label="Agents">
+            ${props.agents.map((a) => agentCard(a, props.tokens?.get(a.agentId), now))}
+          </ul>`
+    }`;
+}
+
+/** One agent: who owns it, its token, and what it did in the window. */
+function agentCard(a: AgentActivity, token: Date | "never" | null | undefined, now: Date): Html {
+  const stat = (label: string, value: number) =>
+    html`<li><strong>${String(value)}</strong><span>${label}</span></li>`;
+  return html`<li class="card conn" data-agent="${a.name}">
+    <div class="conn-head">
+      <div>
+        <h2 class="conn-name mono"><a href="/activity?agent=${a.agentId}">${a.name}</a></h2>
+        <p class="muted conn-kind">
+          ${a.owner} · last call
+          ${a.lastCallAt === null ? "never" : time(a.lastCallAt)}
+        </p>
+      </div>
+      ${a.revoked ? badge("revoked", "muted") : ""}
+    </div>
+    <ul class="agent-stats" aria-label="${a.name} in this window">
+      ${stat("calls", a.calls)} ${stat("allowed", a.allowed)} ${stat("denied", a.denied)}
+      ${stat("asked", a.asked)} ${stat("would stop", a.wouldHaveStopped)}
+    </ul>
+    <p class="muted agent-foot">
+      ${a.accounts.length === 0 ? "No accounts used" : html`Accounts: <span class="mono">${a.accounts.join(", ")}</span>`}
+      ${a.revoked ? "" : html` · Token expires: ${tokenCell(token, now)}`}
+    </p>
+  </li>`;
 }
 
 /** The live stream: appends rows the server sends to the explorer table. */

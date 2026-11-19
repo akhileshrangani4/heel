@@ -90,6 +90,10 @@ a{color:var(--link);text-underline-offset:.2em}
 .site nav a:hover{color:var(--text);background:var(--surface)}
 .site nav a[aria-current="page"]{color:var(--text);font-weight:600;background:var(--bg);box-shadow:inset 0 0 0 1px var(--line)}
 .site .who{margin-left:auto;color:var(--muted);font-size:.88rem}
+.subnav{margin:0 0 1rem}
+.subnav ul{display:flex;flex-wrap:wrap;gap:.25rem;list-style:none;margin:0;padding:.25rem;background:var(--surface);border-radius:10px;width:fit-content;max-width:100%}
+.subnav a{display:inline-block;padding:.3rem .7rem;border-radius:7px;color:var(--muted);text-decoration:none;font-size:.9rem;white-space:nowrap}
+.subnav a[aria-current="page"]{background:var(--bg);color:var(--text);font-weight:600;box-shadow:0 1px 2px rgb(0 0 0 / .08)}
 main{max-width:72rem;margin:0 auto;padding:1.5rem}
 h1{font-size:1.55rem;line-height:1.3;letter-spacing:-.015em;margin:0 0 .5rem}
 h2{font-size:1.2rem;margin:1.5rem 0 .5rem}
@@ -197,8 +201,11 @@ body:has(.ap){background:var(--page)}
   .ap-note{order:3;flex-basis:100%;font-size:.8rem}
   .ap-decide{padding:.5rem .6rem;margin-bottom:.5rem}
   .ap-more{margin-top:.25rem}
-  .site{padding:.6rem 1rem;gap:.5rem 1rem}
-  .site .who{margin-left:0;flex-basis:100%;font-size:.9rem}
+  .site{padding:.6rem 1rem 0;gap:.4rem 1rem}
+  .site .who{display:none}
+  .site nav{flex-basis:100%}
+  .site nav ul{flex-wrap:nowrap;justify-content:space-between;gap:0}
+  .site nav a{padding:.35rem .4rem;font-size:.85rem}
   main{padding:1rem}
   table.data{min-width:34rem}
 }
@@ -219,6 +226,13 @@ body:has(.ap){background:var(--page)}
 .conn-name{font-size:1rem;margin:0;overflow-wrap:anywhere}
 .conn-kind{margin:.1rem 0 0;font-size:.88rem}
 .conn-step{border-top:1px solid var(--line);padding-top:.75rem;font-size:.9rem}
+.conn-name a{color:var(--text);text-decoration:none}
+.conn-name a:hover{text-decoration:underline}
+.agent-stats{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:.35rem}
+.agent-stats li{background:var(--surface);border-radius:8px;padding:.4rem .55rem;display:flex;flex-direction:column}
+.agent-stats strong{font-size:1.05rem}
+.agent-stats span{color:var(--muted);font-size:.75rem}
+.agent-foot{margin:0;font-size:.85rem;border-top:1px solid var(--line);padding-top:.6rem}
 .pause-status{display:flex;flex-direction:column;gap:.5rem}
 .pause-status p{margin:0}
 .pause-all{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}
