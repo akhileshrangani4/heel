@@ -185,7 +185,7 @@ describe("Connections without providers.google", () => {
     }
     const outlook = rowOf(page, "outlook-home");
     expect(outlook).toContain("<code>providers.microsoft</code>");
-    expect(outlook).toContain('href="https://useheel.dev/docs/running#configuration"');
+    expect(outlook).toContain('href="https://useheel.dev/docs/configuration"');
   });
 
   it("shows Sign in, and no setup hint, once the client is configured", async () => {

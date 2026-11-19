@@ -47,6 +47,8 @@ const GROUPS = [
     "Reference",
     [
       ["cli", "cli.md"],
+      ["configuration", "configuration.md"],
+      ["sandbox", "sandbox.md"],
       ["rules-reference", "rules-reference.md"],
       ["definitions", "definitions.md"],
     ],

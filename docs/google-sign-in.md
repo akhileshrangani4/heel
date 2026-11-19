@@ -209,4 +209,4 @@ The browser didn't bring its heel session along on the way back. Sign in with yo
 
 ## Outlook
 
-Outlook accounts sign in the same way through a Microsoft app registration, configured as `providers.microsoft`. Its redirect URI is `public_url` + `/oauth/microsoft/callback`, and its secret is `$HEEL_HOME/microsoft-client-secret` or `HEEL_MICROSOFT_CLIENT_SECRET`. See [Configuration](running.md#configuration).
+Outlook accounts sign in the same way through a Microsoft app registration, configured as `providers.microsoft`. Its redirect URI is `public_url` + `/oauth/microsoft/callback`, and its secret is `$HEEL_HOME/microsoft-client-secret` or `HEEL_MICROSOFT_CLIENT_SECRET`. See [Configuration](configuration.md).

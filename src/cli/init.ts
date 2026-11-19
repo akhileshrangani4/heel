@@ -11,7 +11,7 @@ import { createMasterKeyFile } from "../vault/key.ts";
  * with the next commands to run.
  */
 
-export const STARTER_CONFIG = `# heel's settings. Every key: https://useheel.dev/docs/running#configuration
+export const STARTER_CONFIG = `# heel's settings. Every key: https://useheel.dev/docs/configuration
 listen:
   # Where agents connect (MCP, the HTTP proxy, heel run).
   agent: 127.0.0.1:7300

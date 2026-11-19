@@ -240,7 +240,7 @@ The `heel:` lines you're most likely to see while setting up:
 | `{"status":"denied","reason":"unknown_host",…}` | `HEEL_URL` uses a name heel doesn't serve. | [Listen on that name](#point-the-agent-at-heel), or use `127.0.0.1`. |
 | `{"status":"denied","reason":"no_rule_matched",…}` | No rule matches the command. | Add a rule. |
 | `{"status":"denied","reason":"unsupported",…}` | heel can't check this command: for gh, often a repo command without `-R`. | Add `-R <owner>/<repo>`. |
-| `{"status":"error","reason":"sandbox_unavailable"}` (exit 70) | heel's host can't run the sandbox (macOS, or Docker without the options above). | `heel serve`'s log says why. See [The sandbox](running.md#the-sandbox). |
+| `{"status":"error","reason":"sandbox_unavailable"}` (exit 70) | heel's host can't run the sandbox (macOS, or Docker without the options above). | `heel serve`'s log says why. See [The sandbox](sandbox.md). |
 | `{"status":"error","detail":"couldn't reach heel: fetch failed"}` (exit 70) | Nothing answers at `HEEL_URL`. | Check that heel is running, and the port. |
 | `{"status":"denied","reason":"token_refused",...}` (exit 77) | heel refused `HEEL_TOKEN`: a typo, or a token since rotated or revoked. | Set the token `heel agent add` or `heel agent rotate` printed. |
 | `{"status":"denied","reason":"token_expired",...}` (exit 77) | The agent's token expired (tokens last 90 days unless `--expires` said otherwise). | Run `heel agent rotate <agent>` on heel's side and set the new token. |
