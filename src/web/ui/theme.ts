@@ -219,6 +219,14 @@ body:has(.ap){background:var(--page)}
 .req-reason{margin:.5rem 0 0;padding-left:.75rem;border-left:2px solid var(--line)}
 .req-foot{margin:.6rem 0 0;font-size:.85rem}
 .req-count{margin:0}
+.req-foot-row{display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap;margin-top:.5rem}
+.req-foot-row .req-foot{margin:0;overflow-wrap:anywhere}
+.ap-meta .req-state{margin-left:auto;font-size:.85rem}
+.grant-form{display:grid;gap:.4rem .75rem;grid-template-columns:minmax(7rem,max-content) minmax(0,1fr);align-items:center}
+.grant-form h2{grid-column:1/-1;font-size:1rem;margin:0 0 .25rem}
+.grant-form label{color:var(--muted);font-size:.9rem}
+.grant-form .btn{grid-column:2;justify-self:start;margin-top:.25rem}
+@media (max-width:36rem){.grant-form{grid-template-columns:1fr}.grant-form .btn{grid-column:1}}
 .req-empty{text-align:center;padding:2rem 1rem}
 .conn-list{list-style:none;margin:.75rem 0 1rem;padding:0;display:grid;gap:.75rem;align-items:start;grid-template-columns:repeat(auto-fill,minmax(17rem,1fr))}
 .conn{margin:0;display:flex;flex-direction:column;gap:.75rem}
