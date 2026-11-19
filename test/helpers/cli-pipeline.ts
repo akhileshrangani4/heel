@@ -85,12 +85,21 @@ export function cliPipeline(options: {
     const stderr = new PassThrough();
     stdout.end(options.stdout ?? "");
     stderr.end("");
+    // Killing a fake command ends it, as killing a real sandbox does.
+    let killed: (outcome: SandboxOutcome) => void = () => {};
+    const kill = new Promise<SandboxOutcome>((resolve) => {
+      killed = resolve;
+    });
     return {
       stdin: null,
       stdout,
       stderr,
-      done: options.done?.() ?? Promise.resolve(options.outcome ?? { kind: "exited", code: 0 }),
-      kill: () => {},
+      done: Promise.race<SandboxOutcome>([
+        options.done?.() ??
+          Promise.resolve<SandboxOutcome>(options.outcome ?? { kind: "exited", code: 0 }),
+        kill,
+      ]),
+      kill: () => killed({ kind: "exited", code: 137 }),
     };
   };
   const { logger } = captureLogger();
@@ -155,11 +164,16 @@ export function cliPipeline(options: {
   ).agentId;
   setWorkRoots(t.db, t.orgId, "reviewer", [root]);
   const other = { ...agent, agentId: otherId, agentName: "reviewer", tokenId: "tok_2" };
-  const run = async (body: Record<string, unknown>, as: "agent" | "other" = "agent") => {
+  const run = async (
+    body: Record<string, unknown>,
+    as: "agent" | "other" = "agent",
+    signal?: AbortSignal,
+  ) => {
     const response = await app.request("/run", {
       method: "POST",
       headers: { "content-type": "application/json", "x-test-agent": as },
       body: JSON.stringify(body),
+      ...(signal === undefined ? {} : { signal }),
     });
     return { status: response.status, body: (await response.json()) as Record<string, unknown> };
   };

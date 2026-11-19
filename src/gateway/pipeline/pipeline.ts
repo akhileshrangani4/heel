@@ -436,6 +436,7 @@ class DecisionPipeline implements Pipeline {
       result = await withDeadline(
         definition.executeTimeoutMs ?? this.#timeouts.upstreamMs,
         (signal) => definition.execute(call, signal),
+        request.signal,
       );
     } catch (error) {
       if (error instanceof UpstreamError) {

@@ -43,6 +43,12 @@ export interface CallRequest {
    * page): it's what the agent claims, not what the call does.
    */
   reason?: string;
+  /**
+   * Aborts when the surface's request ends early (the client hung up). It
+   * stops a call already executing, so a `heel run` command or a script
+   * doesn't keep running, and holding a sandbox slot, for nobody.
+   */
+  signal?: AbortSignal;
 }
 
 // ── provider definitions ────────────────────────────────────────────────────
