@@ -10,6 +10,7 @@ import type { Logger } from "../../log.ts";
 import type { AccountRecord } from "../../store/directory.ts";
 import type { Secret } from "../../vault/secret.ts";
 import { type Vault, VaultError } from "../../vault/vault.ts";
+import { type CappedFetch, cappedFetch } from "./capped-fetch.ts";
 import {
   MessageTooLargeError,
   SandboxStdioTransport,
@@ -68,6 +69,8 @@ export type StdioLauncher = (
 interface Connection {
   client: Client;
   transport: Transport;
+  /** A remote server's capped fetch, which remembers a reply it stopped reading. */
+  capped?: CappedFetch;
 }
 
 export class UpstreamPool {
@@ -179,7 +182,8 @@ export class UpstreamPool {
     pending: Promise<Connection>,
   ): Promise<UpstreamError | null> {
     const failure = await pending.then(
-      ({ transport }) => (transport instanceof SandboxStdioTransport ? transport.failure : null),
+      ({ transport, capped }) =>
+        transport instanceof SandboxStdioTransport ? transport.failure : (capped?.failure ?? null),
       () => null,
     );
     if (!(failure instanceof MessageTooLargeError)) return null;
@@ -189,7 +193,7 @@ export class UpstreamPool {
       "upstream MCP server sent a message too large to read; stopped it, the next call starts it again",
     );
     return new UpstreamError(502, {
-      error: `the MCP server answered with more than ${megabytes} MB; heel withheld the response and stopped the server, which starts again on the next call. The call may have taken effect.`,
+      error: `the MCP server answered with more than ${megabytes} MB; heel withheld the response and closed the connection, which opens again on the next call. The call may have taken effect.`,
     });
   }
 
@@ -200,22 +204,31 @@ export class UpstreamPool {
     const client = new Client({ name: "heel", version: "0.1.0" });
     // A server that exits, or a connection heel drops, must not fail the next call too.
     client.onclose = onClose;
-    const transport = await this.#transport(account, upstream, token);
+    const capped = upstream.transport === "http" ? cappedFetch(this.#deps.fetch) : undefined;
+    if (capped !== undefined) {
+      capped.onExceeded = () => {
+        void client.close().catch(() => {});
+      };
+    }
+    const transport = await this.#transport(account, upstream, token, capped);
     await client.connect(transport);
     this.#deps.log.info(
       { account: account.alias, transport: upstream.transport },
       "connected to upstream MCP server",
     );
-    return { client, transport };
+    return { client, transport, ...(capped === undefined ? {} : { capped }) };
   }
 
   async #transport(
     account: AccountRecord,
     upstream: UpstreamSettings,
     token: Secret | null,
+    capped?: CappedFetch,
   ): Promise<Transport> {
     if (upstream.transport === "http") {
-      const fetch = this.#deps.fetch === undefined ? {} : { fetch: this.#deps.fetch };
+      // Every reply goes through the capped fetch: a remote server can't make heel read more
+      // than MAX_MESSAGE_BYTES of one message, as a local one can't.
+      const fetch = { fetch: (capped ?? cappedFetch(this.#deps.fetch)).fetch };
       if (upstream.oauth) {
         // The SDK signs requests with the stored token and refreshes it when the server asks.
         const oauth = this.#deps.oauth;
