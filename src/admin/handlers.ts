@@ -14,6 +14,7 @@ import {
   revokeAgent,
   rotateAgentToken,
   setWorkRoots,
+  workRootsByName,
 } from "../gateway/agents.ts";
 import { listStanding, revokeStanding } from "../store/approvals.ts";
 import type { HeelDb } from "../store/db.ts";
@@ -159,6 +160,8 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
           deps.home === undefined ? [] : [deps.home],
         ),
       );
+    case "agent.workdirs.list":
+      return adminOk(workRootsByName(db, orgId, request.params.name));
     case "agent.rotate":
       return adminOk(rotateAgentToken(db, orgId, request.params.name, now));
     case "agent.revoke":

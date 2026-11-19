@@ -238,6 +238,17 @@ function realOrSelf(path: string): string {
   }
 }
 
+/** `heel agent workdir <name>`: the agent's work roots, as stored (resolved). */
+export function workRootsByName(
+  db: HeelDb,
+  orgId: string,
+  name: string,
+): { name: string; workRoots: string[] } {
+  const agent = findAgent(db, orgId, name);
+  if (!agent) throw new AgentError("not_found", `no agent named "${name}"`);
+  return { name, workRoots: agent.workRoots };
+}
+
 /** An agent's work roots (D8b); empty for an unknown agent. */
 export function workRootsOf(db: HeelDb, agentId: string): string[] {
   const row = db
