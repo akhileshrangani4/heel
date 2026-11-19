@@ -124,6 +124,16 @@ describe("gh: action map", () => {
     expect(normalizeGhRepo("https://github.com/Acme/Web.git")).toBe("acme/web");
     expect(normalizeGhRepo("ghe.corp.com/acme/web")).toBeUndefined();
     expect(normalizeGhRepo("acme")).toBeUndefined();
+    // Paths WHATWG URL would rewrite but Go's url.Parse, and so gh, reads as written.
+    for (const value of [
+      "https://github.com/evil/../acme/web",
+      "https://github.com/evil/other\\..\\..\\acme\\web",
+      "https://github.com/evil/other/%2e%2e/%2e%2e/acme/web",
+      "https://github.com/acme/web/pull/1",
+    ]) {
+      expect(normalizeGhRepo(value), value).toBeUndefined();
+    }
+    expect(normalizeGhRepo("https://github.com/acme/web/")).toBe("acme/web");
     // pflag keeps the last value of a repeated string flag; so does heel.
     expect(gh("pr", "view", "1", "-R", "a/one", "-R", "b/two").repo).toBe("b/two");
   });
@@ -174,6 +184,66 @@ describe("gh: what heel refuses before rules", () => {
       expect(view.repo).toBeUndefined();
     }
     expect(gh("pr", "view", "1", "--repo", "github.com/acme/web").refusals).toEqual([]);
+  });
+
+  it("takes the repo from a github.com URL, and refuses one it can't pin or that disagrees with -R", () => {
+    expect(gh("pr", "comment", "https://github.com/Acme/Web/pull/7", "--body", "x").repo).toBe(
+      "acme/web",
+    );
+    expect(gh("issue", "view", "HTTP://GITHUB.COM/acme/web/issues/5#top").repo).toBe("acme/web");
+    for (const url of [
+      "https://www.github.com/evil/other/pull/7",
+      "https://evil.github.com/evil/other/pull/7",
+      "https://github.com:443/evil/other/pull/7",
+      "https://x@github.com/evil/other/pull/7",
+      "https://WWW.GitHub.com/evil/other/pull/7",
+      "https://ghe.corp.example/evil/other/pull/7",
+      "https:github.com/evil/other/pull/7",
+      "https://github.com/evil/other/issues/7",
+      "https://github.com/evil/other/PULL/7",
+      "https://github.com/evil/other.git/pull/7",
+      "https://github.com/acme/web/pull/7?%2e",
+      "https://github.com/acme/web",
+    ]) {
+      for (const args of [
+        ["pr", "comment", url, "-R", "acme/web", "--body", "x"],
+        ["pr", "close", url, "-R", "acme/web"],
+      ]) {
+        expect(gh(...args).refusals, url).toContainEqual({ kind: "ambiguous_repo", argument: url });
+      }
+    }
+    expect(
+      gh("pr", "comment", "https://github.com/evil/other/pull/7", "-R", "acme/web").refusals,
+    ).toContainEqual({ kind: "ambiguous_repo", argument: "https://github.com/evil/other/pull/7" });
+    // Outside pr and issue, gh reads no URL heel maps, so any URL argument is refused.
+    expect(gh("run", "view", "https://github.com/acme/web/pull/7").refusals).toContainEqual(
+      expect.objectContaining({ kind: "ambiguous_repo" }),
+    );
+  });
+
+  it("reads --json as taking its field list, as gh does", () => {
+    const view = gh("pr", "view", "-R", "acme/web", "--json", "title", "7");
+    expect(view.cli.flags["json"]).toBe("title");
+    expect(view.refusals).toEqual([]);
+    expect(gh("pr", "view", "7", "-R", "acme/web", "--json=title").refusals).toEqual([]);
+    const smuggled = gh(
+      "pr",
+      "view",
+      "-R",
+      "acme/web",
+      "--json",
+      "title",
+      "https://github.com/other/repo/pull/1",
+    );
+    expect(smuggled.refusals).toContainEqual(expect.objectContaining({ kind: "ambiguous_repo" }));
+  });
+
+  it("types every gh --json that lists fields as taking a value", () => {
+    for (const [key, def] of Object.entries(GH_TABLE.commands)) {
+      const json = [...(def.local ?? []), ...(def.persistent ?? [])].find(([n]) => n === "json");
+      // `gh workflow run --json` is a bool: read the inputs as JSON from stdin.
+      if (json !== undefined) expect(json[2], key).toBe(key === "workflow run" ? "bool" : "value");
+    }
   });
 
   it("reserves the spec's GH_* overrides: heel sets them, never the agent", () => {

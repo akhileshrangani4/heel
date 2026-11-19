@@ -152,10 +152,17 @@ function isCommandListHeading(section: string): boolean {
 /** What the binary did with `<command> --flag` given bare at the end of argv. */
 export type ProbeOutcome = "unknown" | "needs_value" | "accepted";
 
-/** Classifies the stderr of a probe; pflag's messages are the same in gh and kubectl. */
+/**
+ * Classifies the stderr of a probe; pflag's messages are the same in gh and
+ * kubectl. gh rewrites pflag's "flag needs an argument: --json" into a list
+ * of the command's JSON fields, so that message means a value too.
+ */
 export function classifyProbe(output: string, flag: string): ProbeOutcome {
   if (output.includes(`unknown flag: --${flag}`)) return "unknown";
   if (output.includes(`flag needs an argument: --${flag}`)) return "needs_value";
+  if (output.includes(`Specify one or more comma-separated fields for \`--${flag}\``)) {
+    return "needs_value";
+  }
   return "accepted";
 }
 
@@ -163,10 +170,29 @@ export function classifyProbe(output: string, flag: string): ProbeOutcome {
  * The kind a listed flag has once probing says whether it needs a value. A
  * flag that takes no value bare is a bool unless its listing shows a value:
  * gh marks optional values `string[="last"]`, kubectl shows a non-bool default.
+ *
+ * gh lists a placeholder for every flag that takes a value, so a gh probe
+ * that disagrees with the listing throws: a command that rewrites pflag's
+ * error (as `--json` does) would otherwise turn a value flag into a bool,
+ * and heel would read its value as a positional argument.
  */
 export function flagKind(cli: "gh" | "kubectl", listed: ListedFlag, needsValue: boolean): FlagKind {
+  if (cli === "gh") {
+    const optional = listed.placeholder?.includes("[=") === true;
+    // pflag shows a backquoted word from the usage as the placeholder, bool or not:
+    // "--force `--hostname`" is a bool, "--value `--field`" a string. Those say nothing.
+    const quoted = listed.placeholder?.startsWith("-") === true;
+    const listsValue = listed.placeholder !== undefined && !optional;
+    if (!quoted && needsValue !== listsValue) {
+      throw new Error(
+        `gh --${listed.long}: help lists ${listed.placeholder ?? "no value"}, but the probe ` +
+          `says it ${needsValue ? "needs" : "doesn't need"} one`,
+      );
+    }
+    if (needsValue) return "value";
+    return optional ? "optional" : "bool";
+  }
   if (needsValue) return "value";
-  if (cli === "gh") return listed.placeholder?.includes("[=") === true ? "optional" : "bool";
   return listed.placeholder === "true" || listed.placeholder === "false" ? "bool" : "optional";
 }
 
