@@ -32,9 +32,11 @@ A sandboxed agent (`heel run`, code mode) never sees `HEEL_HOME`; this is about 
 ```sh
 npm install -g useheel
 export HEEL_HOME=~/.heel     # put this in your shell profile
-heel vault init              # creates $HEEL_HOME/master.key: back it up
+heel init                    # $HEEL_HOME/master.key (back it up), heel.yaml, starter rules
 heel serve
 ```
+
+`heel init` changes nothing that's already there, so it's safe to run again. `heel vault init` still creates just the master key, for a setup that has its own config and rules.
 
 This runs heel as your own user, which is right for trying it out but not for keeping local agents out: see [Keep agents out of heel's files](#keep-agents-out-of-heels-files).
 

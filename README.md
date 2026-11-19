@@ -29,7 +29,7 @@ docker pull ghcr.io/akhileshrangani4/heel    # or run the OCI image
 
 ```sh
 export HEEL_HOME=~/.heel                    # heel's config, keys and database
-heel vault init                             # creates the master key: back it up
+heel init                                   # master key (back it up), heel.yaml, starter rules
 heel serve                                  # agents on :7300, approvals on :7301
 ```
 
@@ -41,7 +41,7 @@ gh auth token | heel connect github --as github --credential-stdin
 heel agent add my-agent                     # prints the agent's token (once) and MCP URL
 ```
 
-Until you write rules, every call is denied: see [Write rules](#write-rules) and the [rules reference](docs/rules-reference.md).
+`heel init` writes starter rules in `$HEEL_HOME/rules/owner.yaml`: reads run, and everything else waits for you to approve it. Change them any time: see [Write rules](#write-rules) and the [rules reference](docs/rules-reference.md). `heel tui` shows requests, activity, agents and accounts live in the terminal.
 
 **Gmail and Google Calendar need your own Google OAuth client first.** heel is self-hosted, so it signs these accounts in through a client you create in Google Cloud and add to `heel.yaml` as `providers.google`. It takes about 5 minutes, once: follow [Set up Google sign-in for heel](docs/google-sign-in.md). Then run `heel connect gmail --as gmail-work` and sign in from the Connections page. GitHub works without it (with the [`gh` CLI](https://cli.github.com) signed in), so you can finish the quick start first and add Gmail after.
 

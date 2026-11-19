@@ -9,7 +9,7 @@ This is what working with heel looks like day to day: what you set up once, what
 ```sh
 npm install -g useheel
 export HEEL_HOME=~/.heel
-heel vault init
+heel init        # master key (back it up), heel.yaml, starter rules: reads run, the rest asks you
 heel serve
 ```
 
