@@ -1,5 +1,6 @@
 import { type Dirent, readdirSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
+import type { z } from "zod";
 import {
   type CompiledRulesFile,
   compileRulesFile,
@@ -7,7 +8,7 @@ import {
   type RuleIssue,
 } from "../core/rules/compile.ts";
 import type { RuleSet } from "../core/rules/evaluate.ts";
-import { RulesFile } from "../core/rules/schema.ts";
+import { HideEntry, Rule, RulesFile, type RulesFileInput } from "../core/rules/schema.ts";
 import { hasErrnoCode } from "../util/errno.ts";
 import {
   issueAt,
@@ -161,7 +162,15 @@ export function compileRulesText(
   layer: Layer,
 ): { file: CompiledRulesFile; warnings: YamlIssue[] } {
   const parsed = parseYamlDocument(source, path);
-  const input = validateYaml(parsed, RulesFile);
+  let input: RulesFileInput;
+  try {
+    input = validateYaml(parsed, RulesFile);
+  } catch (error) {
+    if (!(error instanceof YamlValidationError)) throw error;
+    throw new YamlValidationError(
+      byPosition([...error.issues, ...compileIssuesOfValidEntries(parsed, display, layer)]),
+    );
+  }
   const result = compileRulesFile(input, {
     file: display,
     layer,
@@ -172,6 +181,58 @@ export function compileRulesText(
     throw new YamlValidationError(result.errors.map((issue) => located(parsed, issue)));
   }
   return { file: result.file, warnings };
+}
+
+/**
+ * When a file's shape is wrong, the compiler can't run on the whole file, so
+ * its problems (unknown match keys, duplicate names, ...) would only show up
+ * after the shape is fixed. Compiling the entries that are shaped right
+ * reports both kinds of problem in one `heel rules check`.
+ */
+function compileIssuesOfValidEntries(
+  parsed: ParsedYaml,
+  display: string,
+  layer: Layer,
+): YamlIssue[] {
+  const value = parsed.value;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return [];
+  const record = value as Record<string, unknown>;
+  const rules = shapedEntries(record["rules"], Rule);
+  const hide = shapedEntries(record["hide"], HideEntry);
+  // Paths from the compiler index the filtered lists; map them back to the file's.
+  const original = (path: readonly PropertyKey[]): PropertyKey[] => {
+    const [key, index, ...rest] = path;
+    const indices = key === "rules" ? rules.indices : key === "hide" ? hide.indices : null;
+    if (key === undefined || indices === null || typeof index !== "number") return [...path];
+    return [key, indices[index] ?? index, ...rest];
+  };
+  const result = compileRulesFile(
+    { rules: rules.entries, hide: hide.entries },
+    { file: display, layer, lineOf: (issuePath) => parsed.locate(original(issuePath)).line },
+  );
+  if (result.ok) return [];
+  return result.errors.map((issue) => issueAt(parsed, original(issue.path), issue.message));
+}
+
+function shapedEntries<S extends z.ZodType>(
+  list: unknown,
+  schema: S,
+): { entries: z.output<S>[]; indices: number[] } {
+  const entries: z.output<S>[] = [];
+  const indices: number[] = [];
+  if (!Array.isArray(list)) return { entries, indices };
+  list.forEach((entry, i) => {
+    const result = schema.safeParse(entry);
+    if (result.success) {
+      entries.push(result.data);
+      indices.push(i);
+    }
+  });
+  return { entries, indices };
+}
+
+function byPosition(issues: YamlIssue[]): YamlIssue[] {
+  return issues.sort((a, b) => a.line - b.line || a.col - b.col);
 }
 
 function located(parsed: ParsedYaml, issue: RuleIssue): YamlIssue {

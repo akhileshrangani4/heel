@@ -102,6 +102,29 @@ describe("loading rules files", () => {
     expect(loadIssues()).toEqual([expect.stringMatching(/^rules\/alice\.yaml:4: /)]);
   });
 
+  it("reports shape and compile problems in one load", () => {
+    writeOwner(
+      "alice",
+      [
+        "rules:",
+        "  - name: twice",
+        "    match: { acount: gmail-work }",
+        "    then: allow",
+        "  - match: {}",
+        "    then: maybe",
+        "  - name: twice",
+        "    match: {}",
+        "    then: deny",
+        "",
+      ].join("\n"),
+    );
+    const issues = loadIssues();
+    // Line 3: an unknown match key (compile); line 6: a bad `then` (shape);
+    // a duplicate name (compile), at the second rule named twice.
+    expect(issues.map((issue) => issue.split(":")[1])).toEqual(["3", "6", "7"]);
+    expect(issues.join("\n")).toMatch(/acount/);
+  });
+
   it("rejects duplicate keys instead of letting the last one win", () => {
     writeOwner("alice", "rules:\n  - match: {}\n    then: deny\n    then: allow\n");
     expect(loadIssues()).toEqual([expect.stringMatching(/^rules\/alice\.yaml:4: /)]);
