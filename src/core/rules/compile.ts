@@ -256,6 +256,23 @@ const CASED_FIELDS: Readonly<Record<string, (value: string) => string>> = {
   method: (value) => value.toUpperCase(),
 };
 
+/**
+ * Fields whose call values heel stores in one case (repo, addresses and
+ * currency lower, method and team upper, Linear and Notion ids lower-case
+ * hex). A `matches` pattern on them ignores case: `team: { matches: "eng" }`
+ * means ENG. Changing the pattern's own letters instead would change escapes
+ * such as \D into \d.
+ */
+const ONE_CASE_FIELDS: ReadonlySet<string> = new Set([
+  "repo",
+  "method",
+  "team",
+  "currency",
+  "project",
+  "parent",
+  "recipients",
+]);
+
 function compileCondition<F>(
   key: string,
   raw: ConditionInput,
@@ -300,10 +317,12 @@ function compileCondition<F>(
     checks.push({ op, values: new Set(values.map((v, j) => operand(v, [...at, op, j]))) });
   }
   if (ops.matches !== undefined) {
-    // repo and method are normalized on the call (lower and upper case), so a
-    // pattern on them ignores case; changing the pattern's own letters would
-    // change escapes such as \D into \d.
-    const regex = compileRegex(ops.matches, [...at, "matches"], report, cased !== undefined);
+    const regex = compileRegex(
+      ops.matches,
+      [...at, "matches"],
+      report,
+      ONE_CASE_FIELDS.has(key) || addresses,
+    );
     if (regex !== null) checks.push({ op: "matches", source: ops.matches, regex });
   }
   for (const op of ["any_domain_in", "all_domain_in"] as const) {
