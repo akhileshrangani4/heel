@@ -1,8 +1,9 @@
 # heel's example configuration, as the OCI image ships it (/etc/heel/heel.yaml).
 # Every key is documented in docs/design/spec-v0.1.md, "Configuration".
 #
-# The master key comes from HEEL_MASTER_KEY (base64, 32 bytes), or a file:
-#   docker run -e HEEL_MASTER_KEY="$(head -c 32 /dev/urandom | base64)" ...
+# The master key is read from /var/lib/heel/master.key (vault.key_file).
+# Create it once, inside the volume, before the first start:
+#   docker run --rm -v heel-data:/var/lib/heel ghcr.io/akhileshrangani4/heel vault init
 # Keep it somewhere safe: without it, the stored credentials can't be read.
 
 # The human plane's public origin: its host becomes the passkey (WebAuthn) RP ID.
