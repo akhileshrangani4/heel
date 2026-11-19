@@ -70,6 +70,48 @@ describe("/run", () => {
     expect(h.started).toEqual([]);
   });
 
+  it.each([
+    [
+      "kind: read",
+      [
+        "gh",
+        "repo",
+        "view",
+        "acme/web",
+        "--json",
+        "name",
+        "--jq",
+        "$ENV.GH_TOKEN | explode | reverse | implode",
+      ],
+    ],
+    ["kind: read", ["gh", "repo", "view", "acme/web", "--json", "name", "--jq", "env | keys"]],
+    [
+      "kind: read",
+      ["gh", "pr", "list", "-R", "acme/web", "--json", "title", "-q", "$ENV.GH_TOKEN"],
+    ],
+    ["kind: read", ["gh", "pr", "list", "-R", "acme/web", "--json", "title", "--jq=env"]],
+    ["action: github.api", ["gh", "api", "repos/acme/web", "--jq", "$ENV.GH_TOKEN"]],
+  ])(
+    "denies a --jq filter, which can read GH_TOKEN, under a rule allowing %s: %j",
+    async (match, argv) => {
+      const h = cliPipeline({
+        owner: `rules:\n  - match: { command: gh, ${match} }\n    then: allow\n`,
+      });
+      const answer = await h.run({ argv, cwd: h.repo });
+      expect(answer).toMatchObject({ status: 403, body: { reason: "credential_exposure" } });
+      expect(h.started).toEqual([]);
+    },
+  );
+
+  it("still runs a read with --json and --template", async () => {
+    const h = cliPipeline({
+      owner: "rules:\n  - match: { command: gh, kind: read }\n    then: allow\n",
+    });
+    const argv = ["gh", "repo", "view", "acme/web", "--json", "name", "--template", "{{.name}}"];
+    const answer = await h.run({ argv, cwd: h.repo });
+    expect(answer).toMatchObject({ status: 200, body: { status: "ran" } });
+  });
+
   it("denies a command heel can't parse", async () => {
     const h = cliPipeline({ owner: ALLOW_GH });
     const answer = await h.run({ argv: ["gh", "my-alias"], cwd: h.repo });

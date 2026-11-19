@@ -14,6 +14,17 @@ const printsAs = (argv: CliArgv): string | undefined => {
   return refusal?.kind === "prints_credentials" ? refusal.form : undefined;
 };
 
+/** The form id, spelled out so the tests can't pass on an undefined import. */
+const GH_JQ = "gh --jq";
+
+/** jq filters that read GH_TOKEN, in the forms the red team used. */
+const JQ_FILTERS = [
+  "$ENV.GH_TOKEN | explode | reverse | implode",
+  "env | keys",
+  "$ENV.GH_TOKEN",
+  ".",
+] as const;
+
 const NAMESPACE = [["-n", "prod"], ["-nprod"], ["--namespace", "prod"], ["--namespace=prod"]];
 
 /** Each form in the spec's "Hard denies: print credentials" row, with flags to shuffle around it. */
@@ -180,6 +191,58 @@ describe("I-31: commands that print credentials", () => {
     );
   });
 
+  it.each(JQ_FILTERS)("I-31: gh's --jq is refused in every spelling and order: %s", (filter) => {
+    const jq = [["--jq", filter], [`--jq=${filter}`], ["-q", filter], [`-q${filter}`]];
+    const lines: CobraCommandLine[] = [
+      {
+        command: "gh",
+        path: ["repo", "view"],
+        positionals: ["acme/web"],
+        late: [jq, [["--json", "name"]]],
+      },
+      {
+        command: "gh",
+        path: ["api"],
+        positionals: ["repos/acme/web"],
+        late: [jq, [["--paginate"]], [["-H", "Accept: application/json"]]],
+      },
+    ];
+    for (const line of lines) {
+      fc.assert(
+        fc.property(cobraOrderings(line), (argv) => {
+          expect(printsAs(argv)).toBe(GH_JQ);
+        }),
+        { numRuns: 100 },
+      );
+    }
+  });
+
+  it("I-31: the red team's commands are refused", () => {
+    const view = ["gh", "repo", "view", "acme/web", "--json", "name", "--jq"] as const;
+    expect(printsAs([...view, "$ENV.GH_TOKEN | explode | reverse | implode"])).toBe(GH_JQ);
+    expect(printsAs([...view, "env | keys"])).toBe(GH_JQ);
+    expect(printsAs(["gh", "api", "user", "--jq", "$ENV.GH_TOKEN"])).toBe(GH_JQ);
+    expect(printsAs(["gh", "auth", "status", "--json", "hosts", "--jq=env"])).toBe(GH_JQ);
+    // -q inside a shorthand cluster takes the next argument as its filter.
+    expect(printsAs(["gh", "pr", "list", "-R", "acme/web", "--json", "number", "-wq", "env"])).toBe(
+      GH_JQ,
+    );
+    // An empty or repeated filter is still a filter.
+    expect(printsAs(["gh", "api", "user", "--jq="])).toBe(GH_JQ);
+    expect(printsAs(["gh", "api", "user", "-q", ".", "-q", "env"])).toBe(GH_JQ);
+  });
+
+  it("I-31: every gh command that takes --jq refuses it", () => {
+    const takesJq = Object.entries(GH_TABLE.commands).filter(([, def]) =>
+      [...(def.local ?? []), ...(def.persistent ?? [])].some(([name]) => name === "jq"),
+    );
+    expect(takesJq.length).toBeGreaterThan(20);
+    for (const [path] of takesJq) {
+      const argv: CliArgv = ["gh", ...path.split(" "), "--jq", "$ENV.GH_TOKEN"];
+      expect(printsAs(argv), path).toBe(GH_JQ);
+    }
+  });
+
   it("I-31: the classification holds even when the command also redirects", () => {
     const both = normalizeCliArgv(["gh", "auth", "token", "--hostname", "evil.example"]);
     expect(both.refusals).toEqual(
@@ -195,6 +258,10 @@ describe("I-31: commands that print credentials", () => {
     ["gh", "auth", "status", "--show-token=false"],
     ["gh", "auth", "status", "-t", "--show-token=false"],
     ["gh", "pr", "view", "1"],
+    ["gh", "repo", "view", "acme/web", "--json", "name"],
+    ["gh", "repo", "view", "acme/web", "--json", "name", "--template", "{{.name}}"],
+    ["gh", "pr", "list", "-R", "acme/web", "--json", "title", "-t", "{{range .}}{{.title}}{{end}}"],
+    ["gh", "pr", "create", "-R", "acme/web", "--template", "bug_report.md", "--title", "t"],
     ["kubectl", "config", "view"],
     ["kubectl", "config", "view", "--raw=false"],
     ["kubectl", "get", "pods", "-o", "yaml"],
@@ -217,6 +284,7 @@ describe("I-31: commands that print credentials", () => {
       refusals: [],
     });
     expect(printsAs(["gh", "auth", "token", "--help=false"])).toBe("gh auth token");
+    expect(normalizeCliArgv(["gh", "api", "--jq", "env", "--help"]).refusals).toEqual([]);
   });
 
   it("every form's command path exists in its CLI's generated table", () => {

@@ -731,7 +731,7 @@ Part 3
 |  | `gh` | `kubectl` |
 | --- | --- | --- |
 | Finding the verb | The first word must be a built-in command. Aliases and extensions are denied. Only flags after the command path are accepted _[MCP §5.2]_ | A full table of global flags with their arity, so `-n prod delete pod x` parses as `delete`. Unknown flags and unknown verbs (plugins) are denied _[MCP §5.1]_ |
-| Hard denies: print credentials (I-31) | `auth token`, `auth status -t/--show-token` | `config view --raw/--flatten`, `create token`, `get` or `describe secret(s)`, `proxy`, `port-forward` |
+| Hard denies: print credentials (I-31) | `auth token`, `auth status -t/--show-token`, and `--jq/-q` on any command: gh runs jq with its environment loaded, so `$ENV.GH_TOKEN` and `env` read the token, and a transform of it gets past the output scrub. `--template` stays allowed: gh's template functions read neither the environment nor files | `config view --raw/--flatten`, `create token`, `get` or `describe secret(s)`, `proxy`, `port-forward` |
 | Denied: redirect or debug | `--hostname`; `GH_HOST`, `GH_REPO`, `GH_DEBUG` and `GH_CONFIG_DIR` are set by heel and never inherited | `--server`, `--kubeconfig`, `--kuberc`, `--context`, `--cluster`, `--user`, `--token`, `--as*`, `--username`, `--password`, `--insecure-skip-tls-verify`, `-v/--v` |
 | Denied: defeats a check | `pr merge --admin` and `--auto` under `checks: passing`_[MCP §4]_ | — |
 | Denied: runs repo code | `pr checkout`, `repo clone`, `repo sync`. Each invokes git in the cwd with `GH_TOKEN` set, and hooks would see it _[STK §3.3 item 2]_ | `exec`, `cp`, `debug`, `attach`. Each is mapped to its own action, denied by default |
