@@ -30,6 +30,7 @@ import {
   RUN_CODE,
   RUN_CODE_TOOL,
   splitDirectName,
+  takeReason,
 } from "./names.ts";
 import { toolResult } from "./results.ts";
 
@@ -234,13 +235,16 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     if (target === null) {
       throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Unknown tool: ${params.name}`);
     }
+    // The agent's reason travels beside the call, never inside it (spec: The approval page).
+    const { args: callArgs, reason } = takeReason(args);
     const result = await deps.pipeline.run({
       agent,
       surface: "mcp",
       account: target.alias,
       tool: target.tool,
-      args,
+      args: callArgs,
       runId: params._meta?.[RUN_ID_META_KEY],
+      ...(reason !== undefined && { reason }),
     });
     // The pipeline already checked the account; this only tells a native tool from a passthrough.
     const account = findAccount(deps.db, agent.orgId, target.alias);

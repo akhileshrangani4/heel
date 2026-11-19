@@ -36,6 +36,13 @@ export interface CallRequest {
    * the pipeline validates it the same way for every surface.
    */
   runId?: unknown;
+  /**
+   * Why the agent says it's making the call, in its own words (MCP's
+   * `heel_reason` argument). Shown to the approver beside heel's own summary.
+   * Never part of the arguments, the call hash or any rule (spec: The approval
+   * page): it's what the agent claims, not what the call does.
+   */
+  reason?: string;
 }
 
 // ── provider definitions ────────────────────────────────────────────────────
@@ -181,6 +188,8 @@ export interface ApprovalRequest {
   rule: RuleRef;
   ruleHash: string;
   origin: ApprovalOrigin;
+  /** The agent's own reason (CallRequest.reason), or null when it gave none. */
+  reason: string | null;
 }
 
 export interface ApprovalStore {

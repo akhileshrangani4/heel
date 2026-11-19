@@ -80,5 +80,46 @@ export function splitDirectName(name: string): { alias: string; tool: string } |
  */
 export function listedTool(tool: Tool, name: string): Tool {
   const { outputSchema: _dropped, ...rest } = tool;
-  return { ...rest, name };
+  return { ...rest, name, inputSchema: withReason(tool.inputSchema) };
+}
+
+/**
+ * The optional argument every listed account tool gains: the agent's reason,
+ * shown to the approver (spec: The approval page). The name is heel's own, so
+ * it's taken out of the arguments before anything else sees them.
+ */
+export const REASON_ARG = "heel_reason";
+
+/** Reasons longer than this are cut, so one argument can't fill the approval page. */
+export const REASON_MAX_CHARS = 500;
+
+const REASON_PROPERTY = {
+  type: "string",
+  description:
+    "Optional. One plain sentence on why you're making this call. If the call needs approval, " +
+    "heel shows it to the person deciding, next to what the call actually does. It never " +
+    "changes whether the call runs.",
+} as const;
+
+/** Pure: an input schema with `heel_reason` added to its properties. */
+export function withReason(schema: Tool["inputSchema"]): Tool["inputSchema"] {
+  return { ...schema, properties: { ...(schema.properties ?? {}), [REASON_ARG]: REASON_PROPERTY } };
+}
+
+/**
+ * Pure: a call's arguments without `heel_reason`, and the reason itself when
+ * it's a non-blank string (trimmed and capped). Anything else under that name
+ * is dropped, never forwarded.
+ */
+export function takeReason(args: Record<string, unknown>): {
+  args: Record<string, unknown>;
+  reason: string | undefined;
+} {
+  if (!Object.hasOwn(args, REASON_ARG)) return { args, reason: undefined };
+  const { [REASON_ARG]: raw, ...rest } = args;
+  const text = typeof raw === "string" ? raw.trim() : "";
+  return {
+    args: rest,
+    reason: text === "" ? undefined : text.slice(0, REASON_MAX_CHARS),
+  };
 }

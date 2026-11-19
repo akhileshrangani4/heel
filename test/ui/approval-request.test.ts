@@ -61,6 +61,16 @@ describe("ApprovalRequest", () => {
     ).toContain("Hints from jev are on the way.");
   });
 
+  it("quotes the agent's reason as its own words, as text, and shows nothing without one", () => {
+    const reason = text(render(PENDING_REQUEST).querySelector("figure.reason"));
+    expect(reason).toContain("inbox-bot says");
+    expect(reason).toContain("Sending Bob the Q4 renewal schedule");
+    const marked = render({ ...PENDING_REQUEST, reason: "<b>trust me</b>" });
+    expect(marked.querySelector("figure.reason b")).toBeNull();
+    expect(text(marked.querySelector("figure.reason blockquote"))).toBe("<b>trust me</b>");
+    expect(render({ ...PENDING_REQUEST, reason: null }).querySelector("figure.reason")).toBeNull();
+  });
+
   it("shows agent, run, account, action, rule, counts and expiry", () => {
     const page = text(render(PENDING_REQUEST));
     for (const fact of [

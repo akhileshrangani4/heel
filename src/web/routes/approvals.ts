@@ -80,6 +80,7 @@ function requestView(
     tool: row.tool,
     action: row.call.action ?? null,
     rule: row.rule,
+    reason: row.reason,
     args: row.call.args,
     // The rendered email view and count windows arrive with the email definitions (D9).
     email: null,
