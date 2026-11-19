@@ -14,6 +14,7 @@ import {
 import { stdioSandboxSpec, upstreamSettings } from "../../src/definitions/mcp/settings.ts";
 import { UpstreamPool } from "../../src/definitions/mcp/upstream.ts";
 import { UpstreamError } from "../../src/gateway/pipeline/ports.ts";
+import { SandboxSlots } from "../../src/gateway/sandbox-slots.ts";
 import { MAX_WALL_TIME_MS } from "../../src/runner/plan.ts";
 import { findAccount } from "../../src/store/directory.ts";
 import { ConnectError, connectAccount } from "../../src/vault/connect.ts";
@@ -70,7 +71,7 @@ async function launchChild(
   };
 }
 
-function setUp(options: { launch?: boolean } = {}) {
+function setUp(options: { launch?: boolean; slots?: SandboxSlots } = {}) {
   const t = testStore();
   const vault = Vault.open(t.db, { bytes: randomBytes(KEY_BYTES), source: "test" });
   connectAccount(
@@ -91,6 +92,7 @@ function setUp(options: { launch?: boolean } = {}) {
   const pool = new UpstreamPool({
     vault,
     log: log.logger,
+    ...(options.slots === undefined ? {} : { slots: options.slots }),
     ...(options.launch !== false && {
       launchStdio: (account, settings, credential) => {
         launches++;
@@ -171,6 +173,20 @@ describe("local MCP servers", () => {
     );
     expect(result).toMatchObject({ content: [{ type: "text", text: "still here" }] });
     expect(launches()).toBe(2);
+  });
+
+  it("counts a running server against the sandbox limit until it stops (red-team round 3)", async () => {
+    const slots = new SandboxSlots({ perAgent: 4, total: 2 });
+    const { pool, account } = setUp({ slots });
+    await pool.listTools(account, AbortSignal.timeout(10_000));
+    expect(slots.inUse()).toBe(1);
+    // One place left for scripts and commands, not two.
+    const first = slots.tryAcquire("agt_1");
+    expect(first.ok).toBe(true);
+    expect(slots.tryAcquire("agt_1")).toMatchObject({ ok: false, limit: "total" });
+    if (first.ok) first.release();
+    await pool.close();
+    expect(slots.inUse()).toBe(0);
   });
 
   it("denies calls when the host can't run the sandbox", async () => {

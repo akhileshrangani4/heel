@@ -54,6 +54,11 @@ export interface UpstreamDeps {
    * each one. Absent: never paused.
    */
   paused?: (account: AccountRecord) => boolean;
+  /**
+   * The sandbox count code mode and `heel run` share. A running local server
+   * is a sandbox too, so it holds a place in the count while it runs.
+   */
+  slots?: { holdServer(): () => void };
 }
 
 /**
@@ -203,15 +208,27 @@ export class UpstreamPool {
     const token = await this.credential(account);
     const client = new Client({ name: "heel", version: "0.1.0" });
     // A server that exits, or a connection heel drops, must not fail the next call too.
-    client.onclose = onClose;
+    // A local server is a sandbox: it takes a place in the shared count until it stops.
+    const release =
+      upstream.transport === "stdio" ? (this.#deps.slots?.holdServer() ?? (() => {})) : () => {};
+    client.onclose = () => {
+      release();
+      onClose();
+    };
     const capped = upstream.transport === "http" ? cappedFetch(this.#deps.fetch) : undefined;
     if (capped !== undefined) {
       capped.onExceeded = () => {
         void client.close().catch(() => {});
       };
     }
-    const transport = await this.#transport(account, upstream, token, capped);
-    await client.connect(transport);
+    let transport: Transport;
+    try {
+      transport = await this.#transport(account, upstream, token, capped);
+      await client.connect(transport);
+    } catch (error) {
+      release();
+      throw error;
+    }
     this.#deps.log.info(
       { account: account.alias, transport: upstream.transport },
       "connected to upstream MCP server",
