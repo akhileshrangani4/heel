@@ -128,6 +128,18 @@ function pauseKeyFor(db: HeelDb, orgId: string, params: PauseParams): PauseKey {
   }
 }
 
+/**
+ * Gmail, Calendar and Outlook sign in from the Connections page, which needs
+ * the operator's own client: whether that's possible yet. Null for other
+ * providers, and while the vault is closed, when nobody can sign in at all.
+ */
+function signInState(deps: AdminDeps, provider: string): "ready" | "needs_setup" | null {
+  if (deps.signIns === undefined || deps.vault === null || signInSetupFor(provider) === null) {
+    return null;
+  }
+  return missingSignInSetup(provider, deps.signIns) === null ? "ready" : "needs_setup";
+}
+
 function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminResponse {
   const { db, orgId } = deps;
   switch (request.method) {
@@ -176,16 +188,7 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
         ...(cli === undefined ? {} : { cli }),
       };
       const connected = connectAccount(db, deps.vault, input, now);
-      // Gmail, Calendar and Outlook sign in from the Connections page, which
-      // needs the operator's own client: say whether that's possible yet. With
-      // the vault closed nobody can sign in, client or not, so say nothing.
-      const signIn =
-        deps.signIns === undefined || deps.vault === null || signInSetupFor(provider) === null
-          ? null
-          : missingSignInSetup(provider, deps.signIns) === null
-            ? "ready"
-            : "needs_setup";
-      return adminOk({ ...connected, signIn });
+      return adminOk({ ...connected, signIn: signInState(deps, provider) });
     }
     case "account.list":
       return adminOk(listAccounts(db, orgId));

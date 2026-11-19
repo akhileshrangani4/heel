@@ -83,7 +83,7 @@ While an External app is in **Testing**, Google lets its sign-ins last 7 days: t
 5. Click **Create**.
 6. **Copy the Client ID and the Client secret now.** Google shows the secret only once, when you create the client: download the JSON or copy both values somewhere safe. Later, the console shows only the secret's last four characters. If you lose it, open the client and click **Add secret** to make a new one.
 
-Google notes that changes to a client can take a few minutes to apply. If sign-in fails with `redirect_uri_mismatch` right after you add a URI, wait and try again.
+Changes to a client can take a few minutes to apply. If sign-in fails with `redirect_uri_mismatch` right after you add a URI, wait and try again.
 
 ## 6. Give heel the client
 
@@ -132,7 +132,9 @@ heel: no secret: set HEEL_GOOGLE_CLIENT_SECRET or create /Users/you/.heel/google
 4. Choose the Google account to connect. If you see the unverified-app warning, that's expected for your own client: continue past it (see [Troubleshooting](#google-says-it-hasnt-verified-the-app)).
 5. Allow every permission heel asks for, and continue.
 
-**Success looks like this:** Google sends you back to Connections, which says **Signed in to gmail-work. Agents can use it now.**, and the account's state is **Ready**. heel records which mailbox (or calendar) the account is, and from then on refreshes its access by itself.
+If heel asks for your passkey again on the way back from Google, use it: heel then finishes the sign-in. (The sign-in has to be finished within 10 minutes of clicking **Sign in**.)
+
+**Success looks like this:** you land back on Connections, which says **Signed in to gmail-work. Agents can use it now.**, and the account's state is **Ready**. heel records which mailbox (or calendar) the account is, and from then on refreshes its access by itself.
 
 To connect another Gmail or Calendar account, run `heel connect` again with a new alias and sign in. The same client works for all of them. Add each account as a test user first if the app is in Testing.
 
@@ -203,7 +205,7 @@ Remove the app's access at [myaccount.google.com/permissions](https://myaccount.
 
 ### Google sent me back to heel's sign-in page
 
-The browser has no heel session at the redirect URI's address, usually because you opened heel at a different one (`127.0.0.1` when `public_url` says `localhost`). Sign in with your passkey and heel finishes the sign-in. Next time, open heel at exactly your `public_url` address.
+The browser didn't bring its heel session along on the way back. Sign in with your passkey and heel finishes the sign-in. If it then says "That sign-in expired or wasn't yours. Start again.", more than 10 minutes passed, or a different heel user signed in: click **Sign in** on Connections again.
 
 ## Outlook
 

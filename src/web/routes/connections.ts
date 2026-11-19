@@ -24,7 +24,6 @@ import {
   requireCsrfField,
   requireSession,
   type SignedInEnv,
-  sameSiteHop,
   viewerOf,
 } from "../http.ts";
 import { type ConnectionsOutcome, connectionsPage } from "../ui/connections.ts";
@@ -66,8 +65,6 @@ function back(params: Record<string, string>): string {
 export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
   const app = new Hono<SignedInEnv>();
   const signedIn = requireSession(deps);
-  // Callbacks are where the provider sends the browser back from its own site.
-  const backFromSignIn = sameSiteHop(deps);
   const oauth = deps.upstreamOAuth;
   // Sign-in for built-in mail accounts, by account provider; only for the
   // providers the operator configured a client for.
@@ -158,7 +155,7 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     }
   });
 
-  app.get(UPSTREAM_CALLBACK_PATH, backFromSignIn, signedIn, async (c) => {
+  app.get(UPSTREAM_CALLBACK_PATH, signedIn, async (c) => {
     const session = c.get("session");
     const params = new URL(c.req.url).searchParams;
     const state = params.get("state") ?? "";
@@ -194,7 +191,7 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
   // One route per callback path; Gmail and Google Calendar share Google's.
   const callbackPaths = new Set([...providers.values()].map((p) => p.callbackPath));
   for (const callbackPath of callbackPaths) {
-    app.get(callbackPath, backFromSignIn, signedIn, async (c) => {
+    app.get(callbackPath, signedIn, async (c) => {
       const session = c.get("session");
       const params = new URL(c.req.url).searchParams;
       const pending = oauth.signIns.take(params.get("state") ?? "", deps.now());

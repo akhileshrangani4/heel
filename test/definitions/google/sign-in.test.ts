@@ -98,41 +98,6 @@ describe("Gmail sign-in", () => {
     expect(account(h)?.status).toBe("reconnect_required");
   });
 
-  it("comes back from Google without a second passkey prompt", async () => {
-    const { h, google } = setUp();
-    const owner = await h.signIn(await h.enroll());
-    const started = await h.fetch("/connections/sign-in", {
-      as: owner,
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ csrf: owner.csrf, alias: "gmail-home" }).toString(),
-    });
-    const callback = google.consent(started.headers.get("location") ?? "");
-    const path = callback.pathname + callback.search;
-
-    // Google's redirect is cross-site, so the SameSite=Strict session cookie stays behind.
-    const hop = await h.fetch(path, { headers: { "sec-fetch-site": "cross-site" } });
-    expect(hop.status).toBe(200);
-    const body = await hop.text();
-    expect(body).toContain('http-equiv="refresh"');
-    expect(body.replaceAll("&#38;", "&")).toContain(path);
-    expect(account(h)?.status).toBe("reconnect_required");
-
-    // The page reloads the same URL same-site, with the cookie: the sign-in finishes.
-    const landed = await h.fetch(path, { as: owner, headers: { "sec-fetch-site": "same-origin" } });
-    expect(landed.headers.get("location")).toContain("connected=1");
-    expect(account(h)?.status).toBe("active");
-  });
-
-  it("still sends a browser with no session to sign in, rather than looping", async () => {
-    const { h } = setUp();
-    const landed = await h.fetch("/oauth/google/callback?state=x&code=y", {
-      headers: { "sec-fetch-site": "same-origin" },
-    });
-    expect(landed.status).toBe(303);
-    expect(landed.headers.get("location")).toContain("/sign-in?next=");
-  });
-
   it("can't be finished by someone else", async () => {
     const { h, google } = setUp();
     const owner = await h.signIn(await h.enroll());

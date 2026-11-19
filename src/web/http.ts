@@ -115,36 +115,6 @@ export function requireSession(deps: HumanPlaneDeps): MiddlewareHandler<SignedIn
   };
 }
 
-const escapeHtml = (text: string) => text.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
-
-/** A page that goes on to `next` (a path on this site) by itself, with a link if it doesn't. */
-export function continuePage(next: string, title = "Signed in"): string {
-  const href = escapeHtml(next);
-  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=${href}"><title>${escapeHtml(title)}</title></head><body><p>${escapeHtml(title)}. <a href="${href}">Continue</a></p></body></html>`;
-}
-
-/**
- * For a page another site sends the browser back to (an OAuth callback):
- * the session cookie is SameSite=Strict, so a browser leaves it off that
- * cross-site navigation, and `requireSession` would ask for a passkey again.
- * Instead, answer with a page that loads the same URL by itself. That load
- * is same-site and carries the cookie. Only cross-site requests without the
- * cookie get the page, so it can't loop.
- */
-export function sameSiteHop(deps: HumanPlaneDeps): MiddlewareHandler {
-  return async (c, next) => {
-    if (
-      c.req.method === "GET" &&
-      c.req.header("sec-fetch-site") === "cross-site" &&
-      readSessionCookie(c, deps) === undefined
-    ) {
-      const url = new URL(c.req.url);
-      return c.html(continuePage(url.pathname + url.search, "Back from sign-in"));
-    }
-    return next();
-  };
-}
-
 export function setSessionCookie(c: Context, deps: HumanPlaneDeps, started: StartedSession): void {
   setCookie(c, sessionCookieName(deps.publicUrl), started.cookieValue, {
     path: "/",
