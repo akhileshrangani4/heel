@@ -214,6 +214,12 @@ function logRulesOutcome(log: Logger, outcome: ReloadOutcome): void {
   if (outcome.ok) {
     const { files, warnings } = outcome.loaded;
     log.info({ files: files.map((file) => file.file) }, "rules loaded");
+    if (files.length === 0) {
+      log.warn(
+        { code: "no_rules" },
+        "no rules files, so every call is denied. Write rules in $HEEL_HOME/rules/<user>.yaml (docs/rules.md); heel loads them without a restart",
+      );
+    }
     for (const warning of warnings)
       log.warn({ warning: formatYamlIssue(warning) }, "rules warning");
     return;
@@ -275,6 +281,26 @@ function sandboxedAccounts(db: HeelDb, orgId: string): SandboxedAccount[] {
       kind: isCliProvider(account.provider) ? "cli" : "mcp",
       delivery: account.credentialDelivery,
     }));
+}
+
+/**
+ * Pure: a `public_url` on this machine whose port isn't the one the approval
+ * page listens on. Approval links, passkeys and sign-in callbacks would all
+ * point at the wrong port. Behind a proxy or tunnel the ports differ on
+ * purpose, so only loopback URLs are checked.
+ */
+export function publicUrlPortProblem(
+  config: Pick<HeelConfig, "publicUrl" | "listen">,
+): string | null {
+  const url = config.publicUrl;
+  if (!["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) return null;
+  const port = url.port === "" ? (url.protocol === "https:" ? 443 : 80) : Number(url.port);
+  if (port === config.listen.human.port || config.listen.human.port === 0) return null;
+  return (
+    `public_url is ${url.origin}, but the approval page listens on port ${config.listen.human.port}, ` +
+    `so approval links and passkey sign-in would go to the wrong port. Set public_url to ` +
+    `http://localhost:${config.listen.human.port}, or remove it: unset, it follows listen.human`
+  );
 }
 
 /** What `exposureWarnings` needs to know about this process and its home. */
@@ -394,6 +420,9 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
     // Messages hidden from agents, by reason; `uncertain` is the fail-closed
     // count (I-44). Shown on the Activity page (A5).
     const hideCounts = new HideCounts();
+
+    const portProblem = publicUrlPortProblem(config);
+    if (portProblem !== null) log.warn({ code: "public_url_port" }, portProblem);
 
     let human: PlaneState;
     const urlProblem = humanPlaneUrlProblem(config.publicUrl);

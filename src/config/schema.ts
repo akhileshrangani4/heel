@@ -187,9 +187,10 @@ export const HeelConfigFileSchema = z.strictObject({
   /**
    * The human plane's public origin; its host becomes the WebAuthn RP ID.
    * Only https:// may serve the human plane, except localhost (spec:
-   * Architecture, "Listeners").
+   * Architecture, "Listeners"). Unset, it is http://localhost on
+   * `listen.human`'s port, so moving the approval page's port moves its links.
    */
-  public_url: httpUrl.default("http://localhost:7301"),
+  public_url: httpUrl.optional(),
   /**
    * Where cloud agents (Claude, ChatGPT, Grok connectors) reach the agent
    * plane, e.g. through a reverse proxy. Setting it turns on OAuth for
@@ -359,6 +360,8 @@ export interface HeelConfig {
   configFile: string | null;
   databasePath: string;
   publicUrl: URL;
+  /** Whether heel.yaml names `public_url`; unset, it follows `listen.human`. */
+  publicUrlSet: boolean;
   /** Null when OAuth for connectors is off; agents then use static tokens only. */
   agentPublicUrl: URL | null;
   listen: { agent: ListenAddress; human: ListenAddress };
@@ -390,11 +393,15 @@ export function resolveConfig(
   configFile: string | null,
 ): HeelConfig {
   const fromHome = (path: string): string => (isAbsolute(path) ? path : resolve(home, path));
+  // Port 0 (any free port, in tests) has no address to link to; keep the documented default.
+  const humanPort = file.listen.human.port === 0 ? 7301 : file.listen.human.port;
+  const publicUrl = file.public_url ?? `http://localhost:${humanPort}`;
   return {
     home,
     configFile,
     databasePath: fromHome(file.database),
-    publicUrl: new URL(file.public_url),
+    publicUrl: new URL(publicUrl),
+    publicUrlSet: file.public_url !== undefined,
     agentPublicUrl: file.agent_public_url === undefined ? null : new URL(file.agent_public_url),
     listen: { agent: file.listen.agent, human: file.listen.human },
     adminSocketPath:
@@ -405,7 +412,7 @@ export function resolveConfig(
           : fromHome("admin.sock"),
     vault: { keyFile: fromHome(file.vault.key_file) },
     log: { level: file.log.level },
-    oidc: file.oidc ? resolveOidc(file.oidc, new URL(file.public_url), fromHome) : null,
+    oidc: file.oidc ? resolveOidc(file.oidc, new URL(publicUrl), fromHome) : null,
     drafting: file.drafting
       ? {
           baseUrl: new URL(file.drafting.base_url),
@@ -422,21 +429,21 @@ export function resolveConfig(
       })),
     },
     audit: { siem: file.audit.siem ? resolveSiem(file.audit.siem, fromHome) : null },
-    notify: resolveNotify(file.notify, new URL(file.public_url), fromHome),
+    notify: resolveNotify(file.notify, new URL(publicUrl), fromHome),
     sandboxes: { perAgent: file.sandboxes.per_agent, total: file.sandboxes.total ?? null },
     providers: {
       google: file.providers.google
         ? {
             clientId: file.providers.google.client_id,
             clientSecretFile: fromHome(file.providers.google.client_secret_file),
-            redirectUri: new URL(GOOGLE_CALLBACK_PATH, file.public_url),
+            redirectUri: new URL(GOOGLE_CALLBACK_PATH, publicUrl),
           }
         : null,
       microsoft: file.providers.microsoft
         ? {
             clientId: file.providers.microsoft.client_id,
             clientSecretFile: fromHome(file.providers.microsoft.client_secret_file),
-            redirectUri: new URL(MICROSOFT_CALLBACK_PATH, file.public_url),
+            redirectUri: new URL(MICROSOFT_CALLBACK_PATH, publicUrl),
             tenant: file.providers.microsoft.tenant,
           }
         : null,
