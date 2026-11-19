@@ -137,7 +137,7 @@ Every call gets one of four answers, right away:
 | **Paused** | "send on gmail-work is paused. Nothing ran." |
 
 - **Over HTTP,** these are 403, 202 and 423.
-- **For `heel run`,** they're exit codes 77, 75 and 69.
+- **For `heel run`,** they're exit codes 77, 75 and 69. Exit 70 means heel couldn't run the command at all, and 64 is a usage error.
 
 The agent can't approve anything itself.
 
@@ -147,7 +147,7 @@ The agent can't approve anything itself.
 2. **The request page shows exactly what will run:** the account, the rule that asked, the counts, and the full arguments (every recipient and the whole body). If you turn on the optional [hints](docs/approvals.md#hints), it also shows advice from Jev, TypeSafe's decision model, like "asks someone for money". heel works fully without hints, and the advice can't approve or deny anything.
 3. **You decide with your passkey:**
    - **Approve once:** the call runs the next time the agent sends it.
-   - **Approve as standing:** also allow this exact call, or everything the rule asks about, for up to 90 days.
+   - **Approve as standing:** also allow this exact call, or everything the rule asks about, for up to 30 days.
    - **Deny.**
 4. **The agent re-sends,** and the call runs once, after the rules check it again. A request nobody answers expires after 24 hours.
 

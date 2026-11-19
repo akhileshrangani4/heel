@@ -92,7 +92,7 @@ Every call gets one of these answers, right away:
 | **Paused** | "send on gmail-work is paused. Nothing ran." | Stop and wait for you. |
 
 - **Over HTTP,** these are status codes: 403 denied, 202 needs approval, 423 paused.
-- **For `heel run`,** they're exit codes: 77 denied, 75 needs approval, 69 paused.
+- **For `heel run`,** they're exit codes: 77 denied, 75 needs approval, 69 paused. 70 means heel couldn't run the command at all (no sandbox on its host, a limit hit, or heel unreachable), and 64 is a usage error. [heel run](heel-run.md#what-the-agent-gets-back) has every case.
 - **In code mode,** a denial is an exception the script can catch, while "needs approval" and "paused" stop the script and return what already ran.
 - **When too much is running at once,** a script or command doesn't start: `run_code` returns status `busy`, and `heel run` exits 75 with `"status":"busy"` on its `heel:` line. Send it again once one of yours has finished.
 
@@ -104,13 +104,37 @@ The agent never sees why a rule matched, and it can't answer an approval. Approv
 2. **You open the request.** The page shows the account, the tool, the rule that asked, the counts, and the **full arguments**: every recipient and the whole body, exactly what will run. If you've turned on the optional [hints](approvals.md#hints), they appear under the call ("asks someone for money", "looks routine for this agent"). Without them, everything else here works the same.
 3. **You decide, with your passkey:**
    - **Approve once:** this exact call runs the next time the agent sends it, once.
-   - **Approve as standing:** also allow this exact call, or everything this rule asks about, for a while (an hour up to 90 days), so you aren't asked again. Standing approvals are listed on the Standing approvals page, where you can revoke them.
+   - **Approve as standing:** also allow this exact call, or everything this rule asks about, for a while (an hour, a day, 7 days or 30 days), so you aren't asked again. Standing approvals are listed on the Standing approvals page, where you can revoke them.
    - **Deny:** the agent gets "denied" when it re-sends.
 4. **The agent re-sends and the call runs**, checked against your rules again. A request nobody answers expires after 24 hours.
 
 ## 5. When something looks wrong
 
 Tap **Pause** on the approval page, or run `heel pause --agent my-agent`. You can pause one agent, one account, or everything. Every call in scope stops at once, even one you already approved. Resuming needs your passkey, and nothing called during the pause is replayed.
+
+## Using the `heel` command
+
+- `heel help` lists every command; `heel <command> --help` (or `heel help <command>`) shows just that one. A usage error prints the line that went wrong and that command's usage, not the whole list.
+- `heel agent list`, `heel account list`, `heel pause list` and `heel approvals list` print a table with names:
+
+  ```text
+  NAME       OWNER  STATUS  ADDED (UTC)
+  inbox-bot  owner  active  2026-11-19 18:02
+  ```
+
+  Add `--json` for the full rows, ids included, to use in scripts.
+- Exit codes for the admin commands:
+
+  | Exit | Means |
+  | --- | --- |
+  | 0 | Done. |
+  | 1 | heel refused it (for example, no account by that name), a `heel rules test` case failed, or something unexpected happened (the `heel:` line says which). |
+  | 64 | A usage error: the command line is wrong. |
+  | 65 | The rules files, or a cases file, are invalid. |
+  | 69 | heel isn't running, so the command couldn't reach it. |
+  | 78 | heel.yaml, or a secret file it names, is missing or invalid. |
+
+  `heel run` has its own: 75 needs approval, 77 denied, 69 paused, 70 heel couldn't run the command. [heel run](heel-run.md#what-the-agent-gets-back) has every case.
 
 ## 6. Over time
 
