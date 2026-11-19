@@ -114,7 +114,7 @@ export const USAGE = `usage:
                                           each --credential-host. --credential-delivery
                                           env puts the credential itself in <NAME>
                                           instead, where the server can read it
-  heel run [--account <alias>] [--json] -- <cmd> [args...]
+  heel run [--account <alias>] [--reason <text>] [--json] -- <cmd> [args...]
                                           (agent side) ask heel to run a command;
                                           reads HEEL_TOKEN (the agent's token),
                                           HEEL_URL (heel's agent plane, such as

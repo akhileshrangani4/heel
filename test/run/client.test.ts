@@ -49,6 +49,22 @@ describe("heel run", () => {
     expect(headers?.["authorization"]).toBe("Bearer heel_test");
   });
 
+  it("sends --reason for the approver", async () => {
+    const h = io();
+    const f = answering({ status: "pending", approvalId: "apr_1" });
+    await runCommand(
+      ["--reason", "Merging the reviewed fix", "--", "gh", "pr", "merge", "7"],
+      h.io,
+      {
+        fetch: f.fetch,
+        cwd: () => "/w",
+      },
+    );
+    expect(JSON.parse(String(f.sent[0]?.init.body))).toMatchObject({
+      reason: "Merging the reviewed fix",
+    });
+  });
+
   it.each([
     [{ status: "ran", exitCode: 3, stdout: "", stderr: "" }, 3],
     [{ status: "pending", approvalId: "apr_1" }, 75],

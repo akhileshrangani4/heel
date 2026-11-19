@@ -6,6 +6,7 @@ import type { HeelDb } from "../store/db.ts";
 import { accountsUsableBy } from "../store/sharing.ts";
 import { isCliProvider } from "../vault/connect.ts";
 import type { AuthenticatedAgent } from "./agent-tokens.ts";
+import { cleanReason } from "./mcp/names.ts";
 import type { Pipeline } from "./pipeline/pipeline.ts";
 import type { PipelineResult } from "./pipeline/ports.ts";
 import { type SandboxSlots, UNLIMITED_SLOT } from "./sandbox-slots.ts";
@@ -28,6 +29,8 @@ export const RunRequestSchema = z.strictObject({
   cwd: z.string().max(4_096),
   runId: z.string().max(256).optional(),
   account: z.string().max(128).optional(),
+  /** `heel run --reason`: why the agent runs it, shown to the approver, never part of the call. */
+  reason: z.string().max(4_096).optional(),
 });
 
 export interface RunRouteDeps {
@@ -105,6 +108,7 @@ export async function handleRun(
   const parsed = RunRequestSchema.safeParse(body);
   if (!parsed.success) return deny(c, "invalid_request");
   const { argv, cwd, runId } = parsed.data;
+  const reason = cleanReason(parsed.data.reason);
   // Absolute only; the definition resolves it, symlinks and all, before any check.
   if (!isAbsolute(cwd)) return deny(c, "invalid_request");
   const command = argv[0] as string;
@@ -137,6 +141,7 @@ export async function handleRun(
       tool: command,
       args: { argv, cwd },
       ...(runId === undefined ? {} : { runId }),
+      ...(reason === undefined ? {} : { reason }),
       // A client that hangs up stops its command, and frees the slot now (as run_code does).
       signal: c.req.raw.signal,
     });

@@ -47,7 +47,8 @@ export interface ApprovalRequestView {
   action: string | null;
   rule: RuleRef;
   /**
-   * The agent's own reason (MCP `heel_reason`), or null. What the agent claims,
+   * The agent's own reason (MCP `heel_reason`, the HTTP proxy's `Heel-Reason`,
+   * `heel run --reason`), or null. What the agent claims,
    * never what the call does: it's shown apart from heel's facts, as quoted words.
    */
   reason: string | null;

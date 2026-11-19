@@ -9,6 +9,7 @@ import { proxiedPath } from "../../src/gateway/http-proxy.ts";
 import { createPipeline } from "../../src/gateway/pipeline/pipeline.ts";
 import { SqliteApprovalStore } from "../../src/store/approvals.ts";
 import { SqlitePauseStore } from "../../src/store/pauses.ts";
+import { approvals } from "../../src/store/schema.ts";
 import { ConnectError, connectAccount } from "../../src/vault/connect.ts";
 import { KEY_BYTES } from "../../src/vault/crypto.ts";
 import { Vault } from "../../src/vault/vault.ts";
@@ -203,6 +204,26 @@ describe("the HTTP proxy", () => {
     expect(denied.status).toBe(403);
     expect(await denied.json()).toMatchObject({ status: "denied", reason: "no_rule_matched" });
     expect(seen).toEqual([]);
+  });
+
+  it("shows the agent's Heel-Reason to the approver, and never sends it upstream", async () => {
+    const { request, seen, t } = setUp(ALLOW_TICKETS);
+    const asked = await request("/http/tickets/tickets/42", {
+      method: "DELETE",
+      headers: { "heel-reason": "  Removing a duplicate ticket  " },
+    });
+    expect(asked.status).toBe(202);
+    const [row] = t.db.select().from(approvals).all();
+    expect(row?.reason).toBe("Removing a duplicate ticket");
+    expect(JSON.stringify(row?.call)).not.toContain("duplicate");
+
+    const created = await request("/http/tickets/tickets", {
+      method: "POST",
+      headers: { "content-type": "application/json", "heel-reason": "Filing the bug" },
+      body: "{}",
+    });
+    expect(created.status).toBe(201);
+    expect(JSON.stringify(seen)).not.toContain("Filing the bug");
   });
 
   it("rules see the method, path template, query and parsed body", async () => {
