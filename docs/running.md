@@ -197,7 +197,7 @@ printf %s "$KEY" | heel connect cli tool --as tool --bin /usr/local/bin/tool \
   --credential-env TOOL_KEY --credential-delivery env --credential-stdin
 ```
 
-Anything that program runs can read the credential. `heel serve` warns about each such account at every start, and `heel account list` shows it as `"credentialDelivery": "env"`. Connect only a credential scoped to what the agent may do.
+Anything that program runs can read the credential. `heel serve` warns about each such account at every start, and `heel account list` shows `env` in its CREDENTIAL column (`"credentialDelivery": "env"` with `--json`). Connect only a credential scoped to what the agent may do.
 
 #### Upgrading: accounts that still put the credential in the environment
 
@@ -208,7 +208,7 @@ Earlier versions of heel gave a local MCP server or CLI connected without `--cre
   heel: {"status":"denied","reason":"credential_delivery","rule":null,"message":"account \"acme\" would put its credential in its CLI's environment, where anything the program runs can read it, so heel refuses its calls. heel's operator can fix it: name the hosts it authenticates to, and heel adds the credential on the wire: heel account set acme --credential-host <host> --credential-auth bearer|basic|header:<Name>. To keep the credential in the environment anyway: heel account set acme --credential-delivery env"}
   ```
   A local MCP server in this state is never started, so it lists no tools, and in code mode it has no module: the agent sees the account as empty. A call that names one of its tools anyway gets "heel denied … (credential delivery)." followed by the same message.
-- **What you see.** `heel serve` logs a `credential_delivery_refused` warning for each one at startup, and `heel account list` shows it as `"credentialDelivery": "refused"`. `gh` accounts aren't affected; they moved to the proxy on their own in an earlier release.
+- **What you see.** `heel serve` logs a `credential_delivery_refused` warning for each one at startup, and `heel account list` shows `refused` in its CREDENTIAL column (`"credentialDelivery": "refused"` with `--json`). `gh` accounts aren't affected; they moved to the proxy on their own in an earlier release.
 
 To fix one, name its credential hosts. This is the better choice:
 

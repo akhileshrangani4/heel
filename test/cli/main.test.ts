@@ -3,7 +3,8 @@ import { randomBytes } from "node:crypto";
 import { existsSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, onTestFinished } from "vitest";
-import { agentMcpUrl, type CliIo, EXIT, main } from "../../src/cli/main.ts";
+import { formatTable } from "../../src/cli/common.ts";
+import { agentMcpUrl, type CliIo, EXIT, main, usageFor } from "../../src/cli/main.ts";
 import { loadConfig, resolveConfigSource } from "../../src/config/load.ts";
 import { createLogger } from "../../src/log.ts";
 import { startHeel } from "../../src/serve.ts";
@@ -174,8 +175,14 @@ describe("heel CLI", () => {
     expect(duplicate.code).toBe(EXIT.failed);
 
     const listed = await run(["agent", "list"], { HEEL_HOME: home });
-    expect(listed.stdout).toContain('"inbox-bot"');
+    // A table by default, with names; --json for scripts.
+    expect(listed.stdout).toMatch(
+      /^NAME\s+OWNER\s+STATUS\s+ADDED \(UTC\)\ninbox-bot\s+owner\s+active\s/,
+    );
     expect(listed.stdout).not.toContain(token);
+    const json = await run(["agent", "list", "--json"], { HEEL_HOME: home });
+    expect(JSON.parse(json.stdout)).toMatchObject([{ name: "inbox-bot", owner: "owner" }]);
+    expect(json.stdout).not.toContain(token);
   });
 
   it("agent workdir lists with no directories, sets them, and clears only with --clear", async () => {
@@ -349,5 +356,28 @@ describe("heel CLI", () => {
     child.kill("SIGTERM");
     expect(await exited).toBe(0);
     expect(existsSync(join(home, "run", "admin.sock"))).toBe(false);
+  });
+});
+
+describe("heel help and usage errors (T10)", () => {
+  it("prints one command's usage for <command> --help and heel help <command>", () => {
+    expect(usageFor("agent")).toContain("heel agent workdir <name>");
+    expect(usageFor("agent")).not.toContain("heel connect");
+    expect(usageFor("rules")).toContain("heel rules test <cases.yaml>");
+    expect(usageFor("nope")).toBeNull();
+  });
+
+  it("formats lists as aligned tables, with a hint when empty", () => {
+    expect(
+      formatTable(
+        ["name", "owner"],
+        [
+          ["inbox-bot", "alice"],
+          ["b", "bob"],
+        ],
+        "none",
+      ),
+    ).toBe("NAME       OWNER\ninbox-bot  alice\nb          bob\n");
+    expect(formatTable(["name"], [], "No agents yet.")).toBe("No agents yet.\n");
   });
 });

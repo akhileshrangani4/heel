@@ -283,7 +283,7 @@ describe("ApprovalRequest", () => {
     });
   });
 
-  it("offers 1 h, 1 day, 7 days and 30 days; exact call, rule match or this run; capped at 90 days", () => {
+  it("offers 1 h, 1 day, 7 days and 30 days; exact call, rule match or this run; at most 30 days", () => {
     const doc = render(PENDING_REQUEST);
     const options = [...doc.querySelectorAll("fieldset select option")].map((o) =>
       o.getAttribute("value"),
@@ -305,7 +305,7 @@ describe("ApprovalRequest", () => {
     expect(doc.querySelector("fieldset input[value=exact_call]")?.hasAttribute("checked")).toBe(
       true,
     );
-    expect(text(doc.querySelector("fieldset"))).toContain("at most 90 days");
+    expect(text(doc.querySelector("fieldset"))).toContain("at most 30 days");
   });
 
   it("org asks are approve-once only, with no standing option (Q-A7)", () => {

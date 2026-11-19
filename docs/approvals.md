@@ -15,8 +15,8 @@ An approval can become a **grant**, placed just above the rule that asked:
 
 | Grant | Covers | Lasts |
 | --- | --- | --- |
-| This exact call | The same account, tool and arguments | Up to 90 days |
-| Everything this rule asks about | The rule's whole match, for this agent | Up to 90 days |
+| This exact call | The same account, tool and arguments | Up to 30 days |
+| Everything this rule asks about | The rule's whole match, for this agent | Up to 30 days |
 
 Editing the rule ends its grants, so widening a rule asks again.
 

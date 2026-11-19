@@ -76,3 +76,30 @@ export function onePositional(positionals: string[], what: string): string {
   if (extra.length > 0) throw new UsageError(`unexpected argument "${extra[0]}"`);
   return value;
 }
+
+/** `--json`: the list commands print JSON instead of a table, for scripts. */
+export const JSON_OPTION = { json: { type: "boolean" } } as const;
+
+/** Pure: rows as aligned columns under upper-case headers, or `empty` when there are none. */
+export function formatTable(
+  headers: readonly string[],
+  rows: readonly (readonly string[])[],
+  empty: string,
+): string {
+  if (rows.length === 0) return `${empty}\n`;
+  const widths = headers.map((header, i) =>
+    Math.max(header.length, ...rows.map((row) => (row[i] ?? "").length)),
+  );
+  const line = (cells: readonly string[]) =>
+    cells
+      .map((cell, i) => (i === cells.length - 1 ? cell : cell.padEnd(widths[i] ?? 0)))
+      .join("  ")
+      .trimEnd();
+  return `${[line(headers.map((h) => h.toUpperCase())), ...rows.map(line)].join("\n")}\n`;
+}
+
+/** Pure: an ISO time as `YYYY-MM-DD HH:MM` UTC, short enough for a table. */
+export function shortTime(iso: string | null | undefined): string {
+  if (iso === null || iso === undefined) return "";
+  return `${iso.slice(0, 10)} ${iso.slice(11, 16)}`;
+}

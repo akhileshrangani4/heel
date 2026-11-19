@@ -19,9 +19,12 @@ import {
   ConfigError,
   configFrom,
   EXIT,
+  formatTable,
+  JSON_OPTION,
   onePositional,
   parseOrUsage,
   RefusedError,
+  shortTime,
   UsageError,
 } from "./common.ts";
 import { RULES_USAGE, rulesCommand } from "./rules.ts";
@@ -29,6 +32,35 @@ import { RULES_USAGE, rulesCommand } from "./rules.ts";
 export { type CliIo, EXIT } from "./common.ts";
 
 import { runCommand } from "./run.ts";
+
+/** What the list admin methods return, as the tables read it. */
+interface AgentRow {
+  name: string;
+  owner: string;
+  createdAt: string;
+  revokedAt: string | null;
+}
+interface AccountRow {
+  alias: string;
+  provider: string;
+  owner: string;
+  status: string;
+  credentialDelivery: string | null;
+}
+interface PauseRowView {
+  scope: string;
+  targetName: string;
+  pausedAt: string;
+  pausedBy: string;
+}
+interface StandingRowView {
+  id: string;
+  agent: string;
+  account: string | null;
+  scope: string;
+  expiresAt: string;
+  revokedAt: string | null;
+}
 
 export const USAGE = `usage:
   heel serve [--watch]                    start the agent, human and admin planes
@@ -299,7 +331,12 @@ async function agentCommand(args: string[], io: CliIo): Promise<number> {
   const { values, positionals } = parseOrUsage(() =>
     parseArgs({
       args,
-      options: { ...CONFIG_OPTION, owner: { type: "string" }, clear: { type: "boolean" } },
+      options: {
+        ...CONFIG_OPTION,
+        ...JSON_OPTION,
+        owner: { type: "string" },
+        clear: { type: "boolean" },
+      },
       allowPositionals: true,
       strict: true,
     }),
@@ -358,12 +395,28 @@ async function agentCommand(args: string[], io: CliIo): Promise<number> {
       io.stdout.write(`Revoked agent "${name}". Its next call is rejected.\n`);
       return EXIT.ok;
     }
-    case "list":
+    case "list": {
       if (rest.length > 0) throw new UsageError(`unexpected argument "${rest[0]}"`);
+      const listed = await admin(config, { method: "agent.list" });
+      if (values.json) {
+        io.stdout.write(`${JSON.stringify(listed, null, 2)}\n`);
+        return EXIT.ok;
+      }
+      const rows = (listed as AgentRow[]).map((a) => [
+        a.name,
+        a.owner,
+        a.revokedAt === null ? "active" : `revoked ${shortTime(a.revokedAt)}`,
+        shortTime(a.createdAt),
+      ]);
       io.stdout.write(
-        `${JSON.stringify(await admin(config, { method: "agent.list" }), null, 2)}\n`,
+        formatTable(
+          ["name", "owner", "status", "added (UTC)"],
+          rows,
+          "No agents yet. Add one: heel agent add <name>",
+        ),
       );
       return EXIT.ok;
+    }
     default:
       throw new UsageError(
         subcommand === undefined
@@ -517,6 +570,7 @@ async function accountCommand(args: string[], io: CliIo): Promise<number> {
     parseArgs({
       args,
       options: {
+        ...JSON_OPTION,
         ...CONFIG_OPTION,
         user: { type: "string", multiple: true },
         group: { type: "string", multiple: true },
@@ -541,7 +595,27 @@ async function accountCommand(args: string[], io: CliIo): Promise<number> {
   switch (subcommand) {
     case "list":
       if (alias !== undefined) throw new UsageError(`unexpected argument "${alias}"`);
-      print(await admin(config, { method: "account.list" }));
+      {
+        const listed = await admin(config, { method: "account.list" });
+        if (values.json) {
+          print(listed);
+          return EXIT.ok;
+        }
+        const rows = (listed as AccountRow[]).map((a) => [
+          a.alias,
+          a.provider,
+          a.owner,
+          a.status === "active" ? "ready" : a.status.replaceAll("_", " "),
+          a.credentialDelivery ?? "",
+        ]);
+        io.stdout.write(
+          formatTable(
+            ["alias", "provider", "owner", "status", "credential"],
+            rows,
+            "No accounts yet. Connect one: heel connect <provider> --as <alias>",
+          ),
+        );
+      }
       return EXIT.ok;
     case "set": {
       if (alias === undefined) throw new UsageError("missing account alias");
@@ -743,6 +817,7 @@ async function pauseCommand(args: string[], io: CliIo): Promise<number> {
     parseArgs({
       args,
       options: {
+        ...JSON_OPTION,
         ...CONFIG_OPTION,
         all: { type: "boolean" },
         agent: { type: "string" },
@@ -762,7 +837,20 @@ async function pauseCommand(args: string[], io: CliIo): Promise<number> {
     if (all !== undefined || [agent, account, owner].some((v) => v !== undefined)) {
       throw new UsageError("pause list takes no scope flags");
     }
-    io.stdout.write(`${JSON.stringify(await admin(config, { method: "pause.list" }), null, 2)}\n`);
+    const listed = await admin(config, { method: "pause.list" });
+    if (values.json) {
+      io.stdout.write(`${JSON.stringify(listed, null, 2)}\n`);
+      return EXIT.ok;
+    }
+    const rows = (listed as PauseRowView[]).map((p) => [
+      p.scope === "global" ? "all" : p.scope,
+      p.targetName,
+      shortTime(p.pausedAt),
+      p.pausedBy,
+    ]);
+    io.stdout.write(
+      formatTable(["scope", "what", "since (UTC)", "by"], rows, "Nothing is paused."),
+    );
     return EXIT.ok;
   }
   const params = pauseParams(values);
@@ -778,16 +866,45 @@ async function pauseCommand(args: string[], io: CliIo): Promise<number> {
 
 async function approvalsCommand(args: string[], io: CliIo): Promise<number> {
   const { values, positionals } = parseOrUsage(() =>
-    parseArgs({ args, options: CONFIG_OPTION, allowPositionals: true, strict: true }),
+    parseArgs({
+      args,
+      options: { ...CONFIG_OPTION, ...JSON_OPTION },
+      allowPositionals: true,
+      strict: true,
+    }),
   );
   const [subcommand, ...rest] = positionals;
   const config = configFrom(io, values.config);
   switch (subcommand) {
     case "list":
       if (rest.length > 0) throw new UsageError(`unexpected argument "${rest[0]}"`);
-      io.stdout.write(
-        `${JSON.stringify(await admin(config, { method: "standing.list" }), null, 2)}\n`,
-      );
+      {
+        const listed = await admin(config, { method: "standing.list" });
+        if (values.json) {
+          io.stdout.write(`${JSON.stringify(listed, null, 2)}\n`);
+          return EXIT.ok;
+        }
+        const rows = (listed as StandingRowView[]).map((a) => [
+          a.id,
+          a.agent,
+          a.account ?? "",
+          a.scope === "exact_call"
+            ? "this exact call"
+            : a.scope === "rule"
+              ? "the rule"
+              : "the run",
+          a.revokedAt === null
+            ? `until ${shortTime(a.expiresAt)}`
+            : `revoked ${shortTime(a.revokedAt)}`,
+        ]);
+        io.stdout.write(
+          formatTable(
+            ["id", "agent", "account", "covers", "status (UTC)"],
+            rows,
+            "No standing approvals.",
+          ),
+        );
+      }
       return EXIT.ok;
     case "revoke": {
       const id = onePositional(rest, "standing approval id");
@@ -857,8 +974,40 @@ async function auditCommand(args: string[], io: CliIo): Promise<number> {
   }
 }
 
+/**
+ * Pure: the usage lines for one command (`heel agent ...`, `heel run ...`),
+ * or null when USAGE has none. Each entry starts at a `  heel <command>`
+ * line and runs through its indented description.
+ */
+export function usageFor(command: string): string | null {
+  const blocks: string[][] = [];
+  for (const line of USAGE.split("\n")) {
+    if (line.startsWith("  heel ")) blocks.push([line]);
+    else if (line.startsWith("   ") && blocks.length > 0) blocks.at(-1)?.push(line);
+  }
+  const mine = blocks.filter(([first]) => {
+    const name = first?.slice("  heel ".length).split(/[\s|]/)[0];
+    return name === command;
+  });
+  if (mine.length === 0) return null;
+  return `usage:\n${mine.map((block) => block.join("\n")).join("\n")}\n\nRun \`heel help\` for every command. Every command takes --config <file>.\n`;
+}
+
+/** `--help` or `-h` among a command's own arguments; for `heel run`, only before `--`. */
+function asksForHelp(rest: readonly string[]): boolean {
+  const own = rest.includes("--") ? rest.slice(0, rest.indexOf("--")) : rest;
+  return own.includes("--help") || own.includes("-h");
+}
+
 async function dispatch(argv: string[], io: CliIo): Promise<number> {
   const [command, ...rest] = argv;
+  if (command !== undefined && command !== "help" && asksForHelp(rest)) {
+    const usage = usageFor(command);
+    if (usage !== null) {
+      io.stdout.write(usage);
+      return EXIT.ok;
+    }
+  }
   switch (command) {
     case "serve":
       return serveCommand(rest, io);
@@ -889,7 +1038,11 @@ async function dispatch(argv: string[], io: CliIo): Promise<number> {
     }
     case "run":
       return runCommand(rest, io, { fetch, cwd: () => io.cwd?.() ?? process.cwd() });
-    case "help":
+    case "help": {
+      const usage = rest[0] === undefined ? null : usageFor(rest[0]);
+      io.stdout.write(usage ?? USAGE);
+      return EXIT.ok;
+    }
     case "--help":
     case "-h":
       io.stdout.write(USAGE);
@@ -910,7 +1063,9 @@ export async function main(argv: string[], io: CliIo): Promise<number> {
     return await dispatch(argv, io);
   } catch (error) {
     if (error instanceof UsageError) {
-      io.stderr.write(`heel: ${error.message}\n\n${USAGE}`);
+      // Only the command's own usage; the whole list buries the one line that matters.
+      const usage = argv[0] === undefined ? null : usageFor(argv[0]);
+      io.stderr.write(`heel: ${error.message}\n\n${usage ?? USAGE}`);
       return EXIT.usage;
     }
     if (error instanceof AdminClientError || error instanceof AdminSocketError) {

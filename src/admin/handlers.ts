@@ -267,15 +267,35 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
       const key = pauseKeyFor(db, orgId, request.params);
       return adminOk({ ...key, ...pause(db, orgId, key, ADMIN_SOCKET_ACTOR, now) });
     }
-    case "pause.list":
+    case "pause.list": {
+      // Agents and owners are stored by id; people read them by name.
+      const agentNames = new Map(listAgents(db, orgId).map((a) => [a.id, a.name]));
+      const ownerNames = new Map(
+        db
+          .select({ id: users.id, name: users.name })
+          .from(users)
+          .where(eq(users.orgId, orgId))
+          .all()
+          .map((u) => [u.id, u.name]),
+      );
+      const nameOf = (scope: string, target: string): string =>
+        scope === "agent"
+          ? (agentNames.get(target) ?? target)
+          : scope === "owner"
+            ? (ownerNames.get(target) ?? target)
+            : scope === "global"
+              ? "everything"
+              : target;
       return adminOk(
         listPauses(db, orgId).map((row) => ({
           scope: row.scope,
           target: row.target,
+          targetName: nameOf(row.scope, row.target),
           pausedBy: row.pausedBy,
           pausedAt: row.pausedAt.toISOString(),
         })),
       );
+    }
     case "standing.revoke": {
       const revoked = revokeStanding(db, orgId, request.params.id, null, now);
       if (revoked.ok) return adminOk({ id: request.params.id, revoked: true });

@@ -3,7 +3,7 @@ import { isAbsolute, resolve } from "node:path";
 import { and, eq } from "drizzle-orm";
 import type { HeelDb, HeelTx } from "../store/db.ts";
 import { newId } from "../store/ids.ts";
-import { agents } from "../store/schema.ts";
+import { agents, users } from "../store/schema.ts";
 import { issueAgentToken, revokeAgentTokens } from "./agent-tokens.ts";
 
 /**
@@ -34,6 +34,8 @@ export interface AgentSummary {
   id: string;
   name: string;
   ownerId: string;
+  /** The owner's name, for people reading `heel agent list`. */
+  owner: string;
   createdAt: Date;
   revokedAt: Date | null;
 }
@@ -124,10 +126,12 @@ export function listAgents(db: HeelDb, orgId: string): AgentSummary[] {
       id: agents.id,
       name: agents.name,
       ownerId: agents.ownerId,
+      owner: users.name,
       createdAt: agents.createdAt,
       revokedAt: agents.revokedAt,
     })
     .from(agents)
+    .innerJoin(users, eq(users.id, agents.ownerId))
     .where(eq(agents.orgId, orgId))
     .orderBy(agents.name)
     .all();

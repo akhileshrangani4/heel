@@ -74,14 +74,19 @@ export interface ApprovalRequestView {
   hints: readonly { adapter: string; result: ApprovalHints | { status: "pending" } }[];
 }
 
-/** Standing approval lengths offered to the approver; 90 days is the hard cap (Q-A6). */
+/**
+ * Standing approval lengths offered to the approver. The longest one is what
+ * the page and the docs promise; the store's 90-day hard cap (Q-A6) is a
+ * backstop above it, never an option.
+ */
 export const STANDING_DURATIONS = [
   { value: "1h", label: "1 hour" },
   { value: "1d", label: "1 day" },
   { value: "7d", label: "7 days" },
   { value: "30d", label: "30 days" },
 ] as const;
-export const STANDING_CAP_DAYS = 90;
+/** The longest standing approval a person can pick, in days. */
+export const STANDING_LONGEST_DAYS = 30;
 
 export interface ApprovalRequestProps {
   now: Date;
@@ -449,7 +454,7 @@ function standingOptions(request: ApprovalRequestView, fieldsetId: string, locke
     <legend>Standing approval</legend>
     <p class="muted" id="${fieldsetId}-help">
       Approving as standing turns this rule's ask into allow for ${request.agent} until it ends,
-      at most ${STANDING_CAP_DAYS} days. It lapses if the rule is edited or deleted.
+      at most ${STANDING_LONGEST_DAYS} days. It lapses if the rule is edited or deleted.
     </p>
     <div class="choice">
       <input type="radio" id="${fieldsetId}-exact" name="scope" value="exact_call" checked />
