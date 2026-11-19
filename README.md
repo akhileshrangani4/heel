@@ -197,6 +197,7 @@ The docs are at **[useheel.dev](https://useheel.dev)**, and in [`docs/`](docs).
 | [Using heel](docs/using-heel.md) | The full walkthrough: cloud connectors, code mode, grants, Activity and modes |
 | [Rules and hiding](docs/rules.md) | The tour: checks, counts, state checks, `hide` |
 | [Rules reference](docs/rules-reference.md) | Every key, operator and action, `heel rules test` cases, and recipes |
+| [Built-in services, and your own](docs/definitions.md) | What a built-in definition does, why it beats a raw MCP server, and your own API with `x-heel-action` |
 | [Approvals, grants and pause](docs/approvals.md) | Grants, standing approvals, hints |
 | [Run CLIs with heel run](docs/heel-run.md) | Workdirs, `HEEL_URL`, and sharing the directory with heel in Docker |
 | [Running heel](docs/running.md) | npm, Docker, configuration, upgrading, the sandbox |
