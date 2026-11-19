@@ -190,6 +190,13 @@ export function clientScript(csrfToken: string | null): string {
         sign: getAssertion,
         finish: "/oauth/authorize/confirm",
       }),
+    addDevice: ({ status }) =>
+      run({
+        status,
+        start: { url: "/devices/challenge", body: {} },
+        sign: getAssertion,
+        finish: "/devices/confirm",
+      }),
     resume: ({ binding, status }) =>
       run({
         status,

@@ -23,6 +23,14 @@ import {
 
 /** How long a `heel user enroll` link stays valid (Q-N2). */
 export const ENROLLMENT_TTL_MS = 15 * 60_000;
+/**
+ * How long a recovery link waits before it works. A local agent can run
+ * `heel user enroll` on a same-user install; the wait gives the person time
+ * to see the link on the approval page and cancel it.
+ */
+export const RECOVERY_DELAY_MS = 24 * 60 * 60_000;
+/** How long a recovery link stays usable once it starts working. */
+export const RECOVERY_WINDOW_MS = 24 * 60 * 60_000;
 
 /** The WebAuthn relying party: the human plane's public origin (spec: Listeners). */
 export interface RelyingParty {
@@ -49,6 +57,8 @@ export function enrollmentPath(token: string): string {
 export interface Enrollment {
   url: string;
   expiresAt: Date;
+  /** For a recovery link, when it starts working; null when it works at once. */
+  activeFrom: Date | null;
 }
 
 export class EnrollmentError extends Error {
@@ -62,14 +72,21 @@ export class EnrollmentError extends Error {
 }
 
 /**
- * `heel user enroll <user>` (Q-N2): a one-time link, valid 15 minutes, that
- * adds a passkey for that user. The same command adds a device or recovers a
- * lost passkey. It runs only over the admin socket; no agent-plane or
- * human-plane route creates one (I-58).
+ * A one-time link that adds a passkey for a user (Q-N2), valid 15 minutes.
+ *
+ * - **First passkey:** `heel user enroll <user>` over the admin socket.
+ * - **Another device:** from the approval page, after the person confirms with
+ *   a passkey they already have (`afterPasskey`). Works at once.
+ * - **Recovery:** `heel user enroll` for someone who already has a passkey.
+ *   It works only after `RECOVERY_DELAY_MS`, and the approval page shows it
+ *   with a way to cancel, so an agent that can run `heel` can't quietly add
+ *   a passkey of its own.
+ *
+ * No agent-plane route creates one (I-58).
  */
 export function createEnrollment(
   db: HeelDb,
-  input: { orgId: string; userName: string; publicUrl: URL; now: Date },
+  input: { orgId: string; userName: string; publicUrl: URL; now: Date; afterPasskey?: boolean },
 ): Enrollment {
   const user = db
     .select({ id: users.id, disabledAt: users.disabledAt })
@@ -82,8 +99,26 @@ export function createEnrollment(
   if (user.disabledAt !== null) {
     throw new EnrollmentError("user_disabled", `user "${input.userName}" is disabled`);
   }
+  // Only a passkey that works at this address counts: after public_url
+  // changes, the old ones can't sign in here, so enrolling isn't recovery.
+  const hasPasskey =
+    db
+      .select({ id: passkeys.id })
+      .from(passkeys)
+      .where(
+        and(
+          eq(passkeys.userId, user.id),
+          or(isNull(passkeys.rpId), eq(passkeys.rpId, relyingPartyFor(input.publicUrl).id)),
+        ),
+      )
+      .get() !== undefined;
+  const recovery = hasPasskey && input.afterPasskey !== true;
+  const notBefore = recovery ? new Date(input.now.getTime() + RECOVERY_DELAY_MS) : null;
   const token = randomBytes(32).toString("base64url");
-  const expiresAt = new Date(input.now.getTime() + ENROLLMENT_TTL_MS);
+  const expiresAt =
+    notBefore === null
+      ? new Date(input.now.getTime() + ENROLLMENT_TTL_MS)
+      : new Date(notBefore.getTime() + RECOVERY_WINDOW_MS);
   db.transaction((tx) => {
     tx.delete(enrollments)
       .where(or(lt(enrollments.expiresAt, input.now), eq(enrollments.userId, user.id)))
@@ -96,10 +131,15 @@ export function createEnrollment(
         tokenHash: hashEnrollmentToken(token),
         createdAt: input.now,
         expiresAt,
+        notBefore,
       })
       .run();
   });
-  return { url: new URL(enrollmentPath(token), input.publicUrl).href, expiresAt };
+  return {
+    url: new URL(enrollmentPath(token), input.publicUrl).href,
+    expiresAt,
+    activeFrom: notBefore,
+  };
 }
 
 export interface OpenEnrollment {
@@ -108,9 +148,15 @@ export interface OpenEnrollment {
   userId: string;
   userName: string;
   expiresAt: Date;
+  /** A recovery link that doesn't work yet: when it will. Null once it works. */
+  waitingUntil: Date | null;
 }
 
-/** The unused, unexpired enrollment a link token names; null otherwise. */
+/**
+ * The unused, unexpired enrollment a link token names; null otherwise. A
+ * recovery link that doesn't work yet is returned with `waitingUntil` set:
+ * the page says when it will, and registering refuses until then.
+ */
 export function findEnrollment(db: HeelDb, token: string, now: Date): OpenEnrollment | null {
   const row = db
     .select({
@@ -119,6 +165,7 @@ export function findEnrollment(db: HeelDb, token: string, now: Date): OpenEnroll
       userId: enrollments.userId,
       userName: users.name,
       expiresAt: enrollments.expiresAt,
+      notBefore: enrollments.notBefore,
       disabledAt: users.disabledAt,
     })
     .from(enrollments)
@@ -133,7 +180,49 @@ export function findEnrollment(db: HeelDb, token: string, now: Date): OpenEnroll
     userId: row.userId,
     userName: row.userName,
     expiresAt: row.expiresAt,
+    waitingUntil:
+      row.notBefore !== null && row.notBefore.getTime() > now.getTime() ? row.notBefore : null,
   };
+}
+
+/** A recovery link someone made that hasn't been used or cancelled, for the approval page. */
+export interface PendingRecovery {
+  id: string;
+  userId: string;
+  userName: string;
+  createdAt: Date;
+  activeFrom: Date;
+}
+
+export function pendingRecoveries(db: HeelDb, orgId: string, now: Date): PendingRecovery[] {
+  return db
+    .select({
+      id: enrollments.id,
+      userId: enrollments.userId,
+      userName: users.name,
+      createdAt: enrollments.createdAt,
+      activeFrom: enrollments.notBefore,
+      expiresAt: enrollments.expiresAt,
+    })
+    .from(enrollments)
+    .innerJoin(users, eq(users.id, enrollments.userId))
+    .where(and(eq(enrollments.orgId, orgId), isNull(enrollments.usedAt)))
+    .all()
+    .flatMap((row) =>
+      row.activeFrom === null || row.expiresAt.getTime() <= now.getTime()
+        ? []
+        : [{ ...row, activeFrom: row.activeFrom }],
+    );
+}
+
+/** Cancels an unused enrollment link. True when one was cancelled. */
+export function cancelEnrollment(db: HeelDb, orgId: string, id: string): boolean {
+  return (
+    db
+      .delete(enrollments)
+      .where(and(eq(enrollments.orgId, orgId), eq(enrollments.id, id), isNull(enrollments.usedAt)))
+      .run().changes === 1
+  );
 }
 
 /** True once anyone in the org has a passkey; the sign-in page says how to enroll otherwise. */
@@ -189,6 +278,7 @@ export type PasskeyRefusal =
   | "invalid_assertion"
   | "no_passkey"
   | "enrollment_invalid"
+  | "enrollment_waiting"
   | "already_enrolled";
 
 export type OptionsResult<T> =
@@ -202,7 +292,7 @@ export type OptionsResult<T> =
  */
 export type AssertionSubject =
   | { purpose: "sign_in"; userId: null }
-  | { purpose: "decide" | "resume" | "connect" | "mode" | "grant"; userId: string };
+  | { purpose: "decide" | "resume" | "connect" | "mode" | "grant" | "add_device"; userId: string };
 
 export type AssertionRequest = AssertionSubject & {
   orgId: string;
@@ -378,6 +468,7 @@ export class Passkeys {
   }): Promise<OptionsResult<PublicKeyCredentialCreationOptionsJSON>> {
     const enrollment = findEnrollment(this.#db, input.token, input.now);
     if (enrollment === null) return { ok: false, reason: "enrollment_invalid" };
+    if (enrollment.waitingUntil !== null) return { ok: false, reason: "enrollment_waiting" };
     const issued = issueChallenge(this.#db, {
       orgId: enrollment.orgId,
       userId: enrollment.userId,
@@ -414,6 +505,7 @@ export class Passkeys {
   > {
     const enrollment = findEnrollment(this.#db, input.token, input.now);
     if (enrollment === null) return { ok: false, reason: "enrollment_invalid" };
+    if (enrollment.waitingUntil !== null) return { ok: false, reason: "enrollment_waiting" };
     const claimed = claimChallenge(this.#db, {
       orgId: enrollment.orgId,
       id: input.challengeId,
@@ -476,6 +568,7 @@ export class Passkeys {
             publicKey: Buffer.from(credential.publicKey),
             counter: credential.counter,
             transports: credential.transports ?? [],
+            rpId: this.#rp.id,
             createdAt: input.now,
           })
           .run();

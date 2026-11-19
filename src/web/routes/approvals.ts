@@ -20,10 +20,12 @@ import {
   stringField,
   viewerOf,
 } from "../http.ts";
+import { pendingRecoveries } from "../passkeys.ts";
 import { pauseNoticeFor } from "../pause-targets.ts";
 import type { SessionView } from "../sessions.ts";
 import { type ApprovalRequestView, approvalRequest, foldKind } from "../ui/approval-request.ts";
 import { clientScript } from "../ui/client.ts";
+import { addDeviceControl, recoveryNotices } from "../ui/devices.ts";
 import { html } from "../ui/html.ts";
 import { type PendingRow, pendingList } from "../ui/pending-list.ts";
 import { pushControl } from "../ui/push-control.ts";
@@ -162,8 +164,15 @@ export function approvalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       title: "Approvals",
       viewer: viewerOf(session),
       current: "approvals",
-      body: html`${pendingList({ now, load: { ok: true, rows } })}
-      ${pushControl({ vapidPublicKey: deps.vapidPublicKey })}`,
+      body: html`${recoveryNotices(
+        pendingRecoveries(deps.db, deps.orgId, now).filter(
+          (r) => r.userId === session.userId || session.role === "admin",
+        ),
+        now,
+        { action: "/enroll/recoveries/cancel", csrfToken: session.csrfToken },
+      )}
+      ${pendingList({ now, load: { ok: true, rows } })}
+      ${pushControl({ vapidPublicKey: deps.vapidPublicKey })} ${addDeviceControl()}`,
       script: clientScript(session.csrfToken),
     });
   });

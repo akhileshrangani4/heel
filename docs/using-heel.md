@@ -16,6 +16,7 @@ heel serve
 In a second terminal:
 
 1. **Register your passkey.** `heel user enroll owner` prints a one-time link; opening it registers a passkey on that device.
+   - **More devices:** once you have a passkey, add a phone or another computer from the approval page with **Add another device**: confirm with your passkey and open the link it gives you on the new device. `heel user enroll` for someone who already has a passkey makes a recovery link instead. It works only after a day, and until then the approval page shows it with a button to cancel it, so an agent that can run `heel` on the host can't quietly add a passkey of its own.
    - **On `localhost`,** that's this computer: you approve here, with Touch ID, say.
    - **To approve from your phone,** give the approval page an HTTPS address first, and set it as `public_url` before you enroll, because a passkey is tied to the address. Tailscale (`tailscale serve --bg 7301`), a Cloudflare tunnel or a server with TLS all work. Only port 7301 needs to be reachable. Then open the enrollment link on your phone, add the page to your home screen, and allow notifications. [Approve from your phone](../README.md#approve-from-your-phone) has the steps.
 2. **Connect the accounts your agent should use.** Each one gets an alias, and the agent only ever sees the alias.

@@ -445,6 +445,11 @@ export const passkeys = sqliteTable(
     /** Signature counter; an assertion that doesn't advance a nonzero counter is refused. */
     counter: integer("counter").notNull(),
     transports: text("transports", { mode: "json" }).$type<string[]>().notNull(),
+    /**
+     * The relying party (public_url's host) it was made for; it signs only
+     * there. Null for passkeys made before heel recorded it.
+     */
+    rpId: text("rp_id"),
     createdAt: createdAt(),
     lastUsedAt: integer("last_used_at", { mode: "timestamp_ms" }),
   },
@@ -459,6 +464,7 @@ export const CHALLENGE_PURPOSES = [
   "connect",
   "mode",
   "grant",
+  "add_device",
 ] as const;
 export type ChallengePurpose = (typeof CHALLENGE_PURPOSES)[number];
 
@@ -506,6 +512,12 @@ export const enrollments = sqliteTable(
     tokenHash: text("token_hash").notNull(),
     createdAt: createdAt(),
     expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    /**
+     * A recovery link (the user already has a passkey, and the link came from
+     * the CLI rather than from one of their passkeys) works only from here, so
+     * the person can cancel it if they didn't make it. Null: works at once.
+     */
+    notBefore: integer("not_before", { mode: "timestamp_ms" }),
     usedAt: integer("used_at", { mode: "timestamp_ms" }),
   },
   (t) => [uniqueIndex("enrollments_token_hash").on(t.tokenHash)],

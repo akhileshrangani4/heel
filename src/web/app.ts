@@ -3,6 +3,7 @@ import { type HumanPlaneDeps, requireSameOrigin } from "./http.ts";
 import { activityRoutes } from "./routes/activity.ts";
 import { approvalRoutes } from "./routes/approvals.ts";
 import { connectionRoutes } from "./routes/connections.ts";
+import { deviceRoutes } from "./routes/devices.ts";
 import { enrollRoutes } from "./routes/enroll.ts";
 import { grantRoutes } from "./routes/grants.ts";
 import { modeRoutes } from "./routes/modes.ts";
@@ -33,6 +34,7 @@ export function createHumanApp(deps: HumanPlaneDeps): Hono {
   app.route("/", signInRoutes(deps));
   app.route("/", oidcRoutes(deps));
   app.route("/", enrollRoutes(deps));
+  app.route("/", deviceRoutes(deps));
   app.route("/", approvalRoutes(deps));
   app.route("/", pauseRoutes(deps));
   app.route("/", standingRoutes(deps));

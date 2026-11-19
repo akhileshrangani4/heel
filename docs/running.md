@@ -9,6 +9,22 @@ heel is one process. It serves the **agent plane** on port 7300 (MCP at `/mcp`, 
 - **Node 26.13 or later**, for the npm package. The OCI image includes it.
 - **Linux with bubblewrap**, only for `heel run` and code mode. On other hosts heel starts with both turned off and logs why; everything else works. See [The sandbox](#the-sandbox).
 
+## Keep agents out of heel's files
+
+heel can only control an agent that has to go through it. An agent that can read heel's files doesn't: with `HEEL_HOME` it can read the master key (and so every stored credential), edit the rules, and run `heel` commands on the admin socket. File permissions don't help when the agent runs as the same OS user as heel, because to the system it *is* heel's owner.
+
+Run heel where your agents can't reach it:
+
+| Setup | Agents on this machine | Use it for |
+| --- | --- | --- |
+| heel on another machine (a VPS, a Mac mini) | Can't reach it; they only see the ports you share | Daily use |
+| heel as its own OS user, or in Docker | Can't read its files, if they don't run as that user and can't use `sudo` or `docker` | Daily use on one machine |
+| heel as your own user in `~/.heel` | Can read and change everything | Trying heel out |
+
+`heel serve` warns at startup when heel's files sit in the running user's own home, and when either port listens beyond this machine.
+
+A sandboxed agent (`heel run`, code mode) never sees `HEEL_HOME`; this is about agents with their own shell, like Claude Code or Codex on your laptop.
+
 ## With npm
 
 ```sh
@@ -17,6 +33,8 @@ export HEEL_HOME=~/.heel     # put this in your shell profile
 heel vault init              # creates $HEEL_HOME/master.key: back it up
 heel serve
 ```
+
+This runs heel as your own user, which is right for trying it out but not for keeping local agents out: see [Keep agents out of heel's files](#keep-agents-out-of-heels-files).
 
 `HEEL_HOME` holds heel's config (`heel.yaml`), master key, database, rules and admin socket. Every `heel` command finds the running server through it, so set it in every shell, not just the one running `heel serve`.
 
@@ -47,6 +65,7 @@ docker exec heel heel agent add my-agent
 docker exec -i heel heel connect github --as github --credential-stdin < github-token.txt
 ```
 
+- **Who can reach it:** anyone who can run `docker` on the host can run `heel` commands in the container and read its volume. Don't give agents Docker access.
 - **Data:** the `heel-data` volume holds the database, rules and admin socket (`/var/lib/heel`). Put rules in `/var/lib/heel/rules/<user>.yaml`.
 - **Config:** the image starts with [`examples/heel.yaml`](../examples/heel.yaml) at `/etc/heel/heel.yaml`. Mount your own over it, or set `HEEL_CONFIG`.
 - **Master key:** a key file mounted read-only (`vault.key_file`) is better than the environment, which `docker inspect` shows.

@@ -1,7 +1,8 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, statSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { join } from "node:path";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getRequestListener } from "@hono/node-server";
 import { JevAdapter } from "./adapters/jev.ts";
@@ -40,6 +41,7 @@ import { logAdminAlerts } from "./notify/admin-alerts.ts";
 import { Notifier } from "./notify/notifier.ts";
 import { notifySetup } from "./notify/setup.ts";
 import { probeSandbox, startSandboxed } from "./runner/index.ts";
+import { type ExposureFacts, exposureWarnings } from "./security/exposure.ts";
 import { SqliteApprovalStore } from "./store/approvals.ts";
 import { type HeelDb, openStore } from "./store/db.ts";
 import { ensureInstall, ensureLocalOwner } from "./store/install.ts";
@@ -257,6 +259,24 @@ async function runClosers(closers: Closer[]): Promise<void> {
   if (errors.length > 1) throw new AggregateError(errors, "heel did not shut down cleanly");
 }
 
+/** What `exposureWarnings` needs to know about this process and its home. */
+function exposureFacts(config: HeelConfig): ExposureFacts {
+  let homeOwnerUid: number | null = null;
+  try {
+    homeOwnerUid = statSync(config.home).uid;
+  } catch {
+    // A home that doesn't exist yet is created later, by this user.
+    homeOwnerUid = process.getuid?.() ?? null;
+  }
+  return {
+    listen: config.listen,
+    home: resolve(config.home),
+    uid: process.getuid?.() ?? null,
+    homeOwnerUid,
+    userHome: homedir(),
+  };
+}
+
 /**
  * `heel serve`: opens the store and vault, then binds the admin socket, the
  * human plane and the agent plane (spec: Architecture).
@@ -277,6 +297,10 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
     const { orgId } = ensureInstall(store.db, now());
     // Single-user install: OIDC sign-in (D13) creates users instead.
     ensureLocalOwner(store.db, orgId, now());
+
+    for (const warning of exposureWarnings(exposureFacts(config))) {
+      log.warn({ code: warning.code }, warning.message);
+    }
 
     const rules = startRules(options, closers);
     const watch = options.watch ?? false;
