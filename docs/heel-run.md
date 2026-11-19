@@ -1,6 +1,6 @@
 # Run CLIs with heel run
 
-[README](../README.md) · [Using heel](using-heel.md) · [Rules](rules.md) · [Running](running.md)
+[README](../README.md) · [Using heel](using-heel.md) · [Rules](rules.md) · [Rules reference](rules-reference.md) · [Running](running.md)
 
 `heel run` lets an agent use a command-line tool such as `gh` or `npm` without holding its credential. The agent types `heel run -- gh pr list -R acme/web`. heel checks the command against your rules and, if they allow it, runs it itself, in a sandbox on heel's host, then sends back the output and the exit code. Nothing runs on the agent's side.
 

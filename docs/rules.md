@@ -1,12 +1,12 @@
 # Rules and hiding
 
-[README](../README.md) · [Using heel](using-heel.md) · [Why heel](why.md) · [How it works](how-it-works.md) · [Rules](rules.md) · [Approvals](approvals.md) · [Running](running.md)
+[README](../README.md) · [Using heel](using-heel.md) · [Why heel](why.md) · [How it works](how-it-works.md) · [Rules](rules.md) · [Rules reference](rules-reference.md) · [Approvals](approvals.md) · [Running](running.md)
 
-Rules are a file you can read, review and test. A call no rule matches is denied. They're checked in this order, and the first match decides:
+Rules are a file you can read, review and test. A call no rule matches is denied. This page is the tour; the [rules reference](rules-reference.md) has every key, operator, action and edge case, with recipes you can copy. Rules are checked in this order, and the first match decides:
 
 1. **Organization rules.** These can only deny or ask, so nothing below can loosen them.
-2. **Grants.** Each sits just above the rule that asked for it, so it can turn that `ask` into `allow` but can't get past an earlier `deny`.
-3. **Your rules,** top to bottom.
+2. **Your rules,** top to bottom.
+3. **Standing approvals and intent grants,** only when your rules end in an `ask` (or, for an intent grant, when nothing matched). They can turn that into `allow`, but never get past a `deny` or an org `ask`.
 
 ```yaml
 rules:
@@ -83,4 +83,4 @@ hide:
 | Where it works | Only where heel knows the response shape: built-in definitions and OpenAPI-described APIs. For an unknown MCP server or CLI, heel can allow or deny the call but can't remove items. |
 | Known gaps | A hidden message quoted inside a reply is only hidden if the reply matches too. The placeholder's count tells the agent that something was hidden, and how much. |
 
-Approvals for `ask` rules are in [approvals.md](approvals.md). [`examples/rules/owner.yaml`](../examples/rules/owner.yaml) holds this page's example rules and hide entries, unchanged.
+Every match key, operator and built-in action is in the [rules reference](rules-reference.md). Approvals for `ask` rules are in [approvals.md](approvals.md). [`examples/rules/owner.yaml`](../examples/rules/owner.yaml) holds this page's example rules and hide entries, unchanged.

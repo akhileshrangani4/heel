@@ -29,6 +29,7 @@ pnpm package:smoke   # the npm package installs and serves
 ```
 
 - **The docs site:** it's in [`docs/site`](docs/site/README.md) and builds from the README and `docs/*.md`.
+- **The rules reference:** every example in [`docs/rules-reference.md`](docs/rules-reference.md) is run by `pnpm test`, and its built-in service tables come from the definitions. After changing a built-in tool, run `pnpm gen:rules-reference` (and update its entry in `scripts/lib/rules-reference.ts` if the test asks).
 
 ## PR titles
 

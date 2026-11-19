@@ -1,6 +1,6 @@
 # Running heel
 
-[README](../README.md) · [Using heel](using-heel.md) · [Why heel](why.md) · [How it works](how-it-works.md) · [Rules](rules.md) · [Approvals](approvals.md) · [Running](running.md)
+[README](../README.md) · [Using heel](using-heel.md) · [Why heel](why.md) · [How it works](how-it-works.md) · [Rules](rules.md) · [Rules reference](rules-reference.md) · [Approvals](approvals.md) · [Running](running.md)
 
 heel is one process. It serves the **agent plane** on port 7300 (MCP at `/mcp`, the HTTP proxy at `/http/<account>/…`, `heel run` at `/run`) and the **human plane** on port 7301 (sign-in, passkeys, the approval page). Operators use the `heel` CLI, which reaches the running server over a local admin socket.
 
@@ -115,7 +115,7 @@ heel reads `$HEEL_HOME/heel.yaml`, or the file named by `HEEL_CONFIG` or `--conf
 Rules live in `$HEEL_HOME/rules/<user>.yaml`, one file per user. A single-user install has `rules/owner.yaml`. Organization rules go in `$HEEL_HOME/org-rules.yaml`. heel reloads them when they change.
 
 - `heel rules check` validates them.
-- `heel rules test` runs cases against them.
+- `heel rules test` runs cases against them: see [Testing rules](rules-reference.md#testing-rules).
 - [`examples/rules/owner.yaml`](../examples/rules/owner.yaml) holds the examples from [rules.md](rules.md).
 - With no rules files, every call is denied. `heel serve` logs a `no_rules` warning at startup when that's the case.
 

@@ -41,6 +41,8 @@ gh auth token | heel connect github --as github --credential-stdin
 heel agent add my-agent                     # prints the agent's token (once) and MCP URL
 ```
 
+Until you write rules, every call is denied: see [Write rules](#write-rules) and the [rules reference](docs/rules-reference.md).
+
 **Gmail and Google Calendar need your own Google OAuth client first.** heel is self-hosted, so it signs these accounts in through a client you create in Google Cloud and add to `heel.yaml` as `providers.google`. It takes about 5 minutes, once: follow [Set up Google sign-in for heel](docs/google-sign-in.md). Then run `heel connect gmail --as gmail-work` and sign in from the Connections page. GitHub works without it (with the [`gh` CLI](https://cli.github.com) signed in), so you can finish the quick start first and add Gmail after.
 
 - **This setup is for trying heel out.** It runs as your own user, so a local agent with a shell (Claude Code, Codex) could read heel's key and edit its rules. For daily use, run heel on another machine, as its own user, or in Docker: see [Keep agents out of heel's files](docs/running.md#keep-agents-out-of-heels-files).
@@ -80,7 +82,7 @@ The agent gets one MCP server with every connected account's tools, named by ali
 
 ## Write rules
 
-Rules live in `$HEEL_HOME/rules/owner.yaml`. The first rule that matches decides, and a call no rule matches is denied.
+Rules live in `$HEEL_HOME/rules/owner.yaml`. The first rule that matches decides, and a call no rule matches is denied. The [rules reference](docs/rules-reference.md) has every key and action, and recipes to copy.
 
 ```yaml
 rules:
@@ -193,7 +195,8 @@ The docs are at **[useheel.dev](https://useheel.dev)**, and in [`docs/`](docs).
 | | |
 | --- | --- |
 | [Using heel](docs/using-heel.md) | The full walkthrough: cloud connectors, code mode, grants, Activity and modes |
-| [Rules and hiding](docs/rules.md) | Every check, counts, state checks, `hide` |
+| [Rules and hiding](docs/rules.md) | The tour: checks, counts, state checks, `hide` |
+| [Rules reference](docs/rules-reference.md) | Every key, operator and action, `heel rules test` cases, and recipes |
 | [Approvals, grants and pause](docs/approvals.md) | Grants, standing approvals, hints |
 | [Run CLIs with heel run](docs/heel-run.md) | Workdirs, `HEEL_URL`, and sharing the directory with heel in Docker |
 | [Running heel](docs/running.md) | npm, Docker, configuration, upgrading, the sandbox |
