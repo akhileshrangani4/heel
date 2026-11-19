@@ -75,6 +75,8 @@ export const DENY_REASONS = [
   "address_unparseable",
   /** A state lookup failed for a rule that would otherwise match. */
   "state_check_unavailable",
+  /** A rule checks the HTTP body, and the body's content type isn't one heel reads. */
+  "body_unreadable",
 ] as const;
 export type DenyReason = (typeof DENY_REASONS)[number];
 
@@ -170,6 +172,8 @@ function ruleVerdict(
         continue;
       case "unparseable":
         return { decision: "deny", rule, reason: "address_unparseable" };
+      case "unreadable":
+        return { decision: "deny", rule, reason: "body_unreadable" };
       case "unavailable":
         return { decision: "deny", rule, reason: "state_check_unavailable" };
       case "match":
@@ -245,7 +249,7 @@ export function plainMatch(rule: CompiledRule, facts: RuleFacts): Outcome {
   );
 }
 
-type RuleOutcome = "match" | "no_match" | "unparseable" | "unavailable";
+type RuleOutcome = "match" | "no_match" | "unparseable" | "unreadable" | "unavailable";
 
 /**
  * Conditions are ANDed, so a definite false anywhere means no match. Only
@@ -259,7 +263,7 @@ function ruleOutcome(rule: CompiledRule, ctx: EvalContext): RuleOutcome {
   const plain = plainMatch(rule, ctx.facts);
   if (plain === false) return "no_match";
   if (!itemsHold(rule, ctx)) return "no_match";
-  if (plain === "unparseable") return "unparseable";
+  if (plain === "unparseable" || plain === "unreadable") return plain;
   let unavailable = false;
   for (const check of rule.stateChecks) {
     const result = ctx.state(check, rule);

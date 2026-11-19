@@ -148,6 +148,35 @@ export const GENERIC_REQUEST: ApprovalRequestView = {
   items: 1,
 };
 
+/** An HTTP proxy write: the body reads as JSON, not as the base64 the call carries. */
+export const HTTP_REQUEST: ApprovalRequestView = {
+  ...GENERIC_REQUEST,
+  id: "apr_Htp7mQ2wLs4",
+  agent: "ops-bot",
+  account: "api",
+  provider: "http",
+  surface: "http",
+  tool: "PUT /items/{id}",
+  action: "item.write",
+  rule: { name: "writes-ask", file: "rules/alice.yaml", line: 9 },
+  args: {
+    method: "PUT",
+    path: "/items/5",
+    query: {},
+    contentType: "application/json",
+    body: "eyJ0cmFuc2Zlcl90byI6ImF0dGFja2VyQGV2aWwuZXhhbXBsZSIsImFtb3VudCI6OTk5OTl9",
+  },
+  http: {
+    method: "PUT",
+    path: "/items/5",
+    query: {},
+    body: {
+      kind: "json",
+      text: JSON.stringify({ transfer_to: "attacker@evil.example", amount: 99999 }, null, 2),
+    },
+  },
+};
+
 export const ORG_REQUEST: ApprovalRequestView = {
   ...PENDING_REQUEST,
   id: "apr_Org9fT3kLw2",

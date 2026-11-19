@@ -85,12 +85,15 @@ export type FieldRef =
  */
 export type FieldValue =
   | { kind: "absent" }
+  /** The value exists but heel can't read it (an HTTP body in a type it doesn't parse). */
+  | { kind: "unreadable" }
   | { kind: "single"; value: unknown }
   | { kind: "list"; values: readonly unknown[] };
 
 export const MISSING: unique symbol = Symbol("missing");
 
 const ABSENT: FieldValue = { kind: "absent" };
+const UNREADABLE: FieldValue = { kind: "unreadable" };
 
 export function resolveField(facts: RuleFacts, field: FieldRef): FieldValue {
   switch (field.kind) {
@@ -105,6 +108,7 @@ export function resolveField(facts: RuleFacts, field: FieldRef): FieldValue {
     case "argv":
       return facts.cli === undefined ? ABSENT : { kind: "list", values: facts.cli.argv };
     case "path": {
+      if (field.root !== "args" && facts.http?.bodyUnreadable === true) return UNREADABLE;
       const root = field.root === "args" ? facts.args : facts.http?.body;
       return root === undefined ? ABSENT : resolvePath(root, field.path);
     }

@@ -233,8 +233,10 @@ export function headline(input: {
   account: string;
   email: EmailPreview | null;
   merge: MergePreview | null;
+  http?: HttpPreview | null;
 }): Headline {
   const { agent, email, merge } = input;
+  const http = input.http ?? null;
   if (email !== null) {
     return {
       agent,
@@ -255,7 +257,10 @@ export function headline(input: {
   }
   return {
     agent,
-    action: actionPhrase(input.action, input.tool),
+    action:
+      http !== null && (input.action === null || ACTION_PHRASES[input.action] === undefined)
+        ? `send ${http.method} ${http.path}`
+        : actionPhrase(input.action, input.tool),
     preposition: "on",
     place: input.account,
     rest: "",
@@ -313,4 +318,47 @@ const KNOWN: Readonly<Record<string, string>> = {
 
 export function clientLabel(name: string): string {
   return KNOWN[name] ?? name;
+}
+
+/** An HTTP proxy request, as the approver reads it (spec: HTTP proxy). */
+export interface HttpPreview {
+  method: string;
+  path: string;
+  query: Readonly<Record<string, string | string[]>>;
+  /** The body as rules saw it: pretty JSON, form fields, UTF-8 text, or a note about bytes. */
+  body:
+    | { kind: "none" }
+    | { kind: "json"; text: string }
+    | { kind: "text"; text: string; contentType: string }
+    | { kind: "bytes"; size: number; contentType: string };
+}
+
+/**
+ * The readable view of an HTTP proxy call. The stored arguments carry the
+ * body base64-encoded, exactly as it's sent; this decodes it so the approver
+ * reads what will be written, not an opaque string.
+ */
+export function httpPreviewFrom(call: {
+  surface: string;
+  args: unknown;
+  http?: { method: string; path: string; query: Record<string, string | string[]>; body?: unknown };
+}): HttpPreview | null {
+  if (call.surface !== "http" || call.http === undefined || !isRecord(call.args)) return null;
+  const { method, path, query } = call.http;
+  const raw = call.args["body"];
+  const contentType =
+    typeof call.args["contentType"] === "string" ? call.args["contentType"] : "unknown";
+  let body: HttpPreview["body"] = { kind: "none" };
+  if (call.http.body !== undefined) {
+    body = { kind: "json", text: JSON.stringify(call.http.body, null, 2) ?? "" };
+  } else if (typeof raw === "string") {
+    const bytes = Buffer.from(raw, "base64");
+    try {
+      const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      body = { kind: "text", text, contentType };
+    } catch {
+      body = { kind: "bytes", size: bytes.length, contentType };
+    }
+  }
+  return { method, path, query, body };
 }

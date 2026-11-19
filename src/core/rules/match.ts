@@ -50,30 +50,35 @@ export interface Condition<F> {
 
 /**
  * `unparseable`: a value the check needs to read as an address isn't one.
- * The rule can't be decided, so the evaluator denies (spec: addresses that
- * fail to parse make the call a deny).
+ * `unreadable`: the field's value exists but heel can't read it (an HTTP body
+ * in a content type it doesn't parse). Either way the rule can't be decided,
+ * so the evaluator denies (spec: addresses that fail to parse make the call a
+ * deny).
  */
-export type Outcome = boolean | "unparseable";
+export type Outcome = boolean | "unparseable" | "unreadable";
 
-/** ANDs outcomes: any false is false; otherwise any unparseable is unparseable. */
+/** ANDs outcomes: any false is false; otherwise unparseable, then unreadable, wins. */
 export function allOf(outcomes: Iterable<Outcome>): Outcome {
   let unparseable = false;
+  let unreadable = false;
   for (const outcome of outcomes) {
     if (outcome === false) return false;
     if (outcome === "unparseable") unparseable = true;
+    if (outcome === "unreadable") unreadable = true;
   }
-  return unparseable ? "unparseable" : true;
+  return unparseable ? "unparseable" : unreadable ? "unreadable" : true;
 }
 
 export function evalCondition<F>(condition: Condition<F>, raw: FieldValue): Outcome {
   if (raw.kind === "absent") return false;
+  if (raw.kind === "unreadable") return "unreadable";
   const value = condition.addresses ? normalizeAddresses(raw) : raw;
   if (value === null) return "unparseable";
   return allOf(condition.checks.map((check) => evalCheck(check, value)));
 }
 
 function normalizeAddresses(value: FieldValue): FieldValue | null {
-  if (value.kind === "absent") return value;
+  if (value.kind === "absent" || value.kind === "unreadable") return value;
   if (value.kind === "single") {
     const address = typeof value.value === "string" ? normalizeAddress(value.value) : null;
     return address === null ? null : { kind: "single", value: address };
@@ -89,6 +94,7 @@ function normalizeAddresses(value: FieldValue): FieldValue | null {
 
 export function evalCheck(check: Check, value: FieldValue): Outcome {
   if (value.kind === "absent") return false;
+  if (value.kind === "unreadable") return "unreadable";
   switch (check.op) {
     case "equals":
       return equals(check.value, value);
@@ -119,7 +125,7 @@ export function evalCheck(check: Check, value: FieldValue): Outcome {
 }
 
 function equals(operand: Scalar | readonly Scalar[], value: FieldValue): boolean {
-  if (value.kind === "absent") return false;
+  if (value.kind === "absent" || value.kind === "unreadable") return false;
   if (isList(operand)) {
     return value.kind === "list" && sameSet(value.values, operand);
   }
@@ -150,7 +156,7 @@ function sameSet(values: readonly unknown[], operand: readonly Scalar[]): boolea
 function domainCheck(
   op: "any_domain_in" | "all_domain_in",
   patterns: readonly DomainPattern[],
-  value: Exclude<FieldValue, { kind: "absent" }>,
+  value: Exclude<FieldValue, { kind: "absent" } | { kind: "unreadable" }>,
 ): Outcome {
   const elements = value.kind === "single" ? [value.value] : value.values;
   const inSet = (address: string) => patterns.some((p) => domainMatches(domainOf(address), p));

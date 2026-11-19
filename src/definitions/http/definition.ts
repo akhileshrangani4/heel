@@ -277,6 +277,7 @@ export function httpDefinition(account: AccountRecord, deps: HttpDeps): Definiti
         ...(op === null ? {} : { pathTemplate: op.template }),
         query: args.query,
         ...(body === undefined ? {} : { body }),
+        ...(body === undefined && canonical.body !== undefined && { bodyUnreadable: true }),
       };
       return {
         ok: true,
