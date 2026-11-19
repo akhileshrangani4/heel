@@ -99,7 +99,7 @@ const listCalendars = calendarTool({
   description: "List the calendars this account can see, with their ids.",
   args: z.strictObject({}),
   readOnly: true,
-  prepare: async (_box, args) => ({ args }),
+  prepare: async (_box, args) => ({ args, action: "calendar.read" }),
   run: (box, _args, signal) => box.client.listCalendars(signal),
   show: async (_box, calendars: Awaited<ReturnType<GoogleCalendarClient["listCalendars"]>>) => ({
     calendars: calendars.map((c) => ({
@@ -123,7 +123,11 @@ const listEvents = calendarTool({
     page_token: z.string().max(1_000).optional(),
   }),
   readOnly: true,
-  prepare: async (box, args) => ({ args, calendar: resolve(box, args.calendar_id) }),
+  prepare: async (box, args) => ({
+    args,
+    calendar: resolve(box, args.calendar_id),
+    action: "calendar.read",
+  }),
   run: (box, args, signal) =>
     box.client.listEvents(
       args.calendar_id,
@@ -146,7 +150,11 @@ const getEvent = calendarTool({
   description: "Read one event.",
   args: z.strictObject({ calendar_id: CalendarId, event_id: EventId }),
   readOnly: true,
-  prepare: async (box, args) => ({ args, calendar: resolve(box, args.calendar_id) }),
+  prepare: async (box, args) => ({
+    args,
+    calendar: resolve(box, args.calendar_id),
+    action: "calendar.read",
+  }),
   run: (box, args, signal) => box.client.getEvent(args.calendar_id, args.event_id, signal),
   show: async (_box, event: CalendarEvent) => shown(event),
 });

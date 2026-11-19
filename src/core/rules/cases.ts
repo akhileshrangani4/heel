@@ -173,7 +173,8 @@ export function caseFacts(call: CaseCallInput): RuleFacts {
     ...(call.action !== undefined && { action: call.action }),
     ...(call.kind !== undefined && { kind: call.kind }),
     ...(call.recipients !== undefined && { recipients: call.recipients }),
-    ...(call.repo !== undefined && { repo: call.repo }),
+    // Normalized as heel normalizes a real call: lower-case repo, upper-case method.
+    ...(call.repo !== undefined && { repo: call.repo.toLowerCase() }),
     ...(call.calendar !== undefined && { calendar: call.calendar }),
     ...(call.fields !== undefined && { fields: call.fields }),
     ...(call.run !== undefined && { runId: call.run }),
@@ -186,7 +187,7 @@ export function caseFacts(call: CaseCallInput): RuleFacts {
 
 function httpFacts(http: NonNullable<CaseCallInput["http"]>): HttpFields {
   return {
-    method: http.method,
+    method: http.method.toUpperCase(),
     path: http.path,
     query: http.query,
     ...(http.path_template !== undefined && { pathTemplate: http.path_template }),

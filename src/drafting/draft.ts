@@ -37,7 +37,17 @@ export class DraftingError extends Error {
 /** The actions each built-in provider maps its tools to (spec: Built-in providers). */
 const PROVIDER_ACTIONS: Readonly<Record<string, readonly string[]>> = {
   gmail: ["email.send", "email.draft", "email.remove", "email.filter", "email.label"],
-  outlook: ["email.send", "email.draft", "email.remove", "email.filter", "email.label"],
+  outlook: [
+    "email.send",
+    "email.draft",
+    "email.remove",
+    "email.filter",
+    "email.label",
+    "calendar.read",
+    "calendar.event.create",
+    "calendar.event.update",
+    "calendar.event.delete",
+  ],
   "google-calendar": [
     "calendar.read",
     "calendar.event.create",

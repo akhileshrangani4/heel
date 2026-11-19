@@ -12,6 +12,14 @@ const MEETING = {
 };
 
 describe("Outlook calendar tools", () => {
+  it("calendar.read covers the calendar reads, and not writes", async () => {
+    const h = outlookPipeline({
+      owner: "rules:\n  - match: { action: calendar.read }\n    then: allow\n",
+    });
+    expect(await h.call("list_calendars", {})).toMatchObject({ status: "allowed" });
+    expect(await h.call("create_event", MEETING)).toMatchObject({ status: "denied" });
+  });
+
   it("create: the attendees are the recipients; rules on their domains apply", async () => {
     const h = outlookPipeline({
       owner: `rules:

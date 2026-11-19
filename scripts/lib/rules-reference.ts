@@ -71,7 +71,8 @@ const filter: ToolFacts = {
   sees: "when it forwards: `recipients` (the forward address), and persistence",
 };
 
-const calendarRead = { action: "", sees: "`calendar`" };
+const calendarRead = { action: "`calendar.read`", sees: "`calendar`" };
+const calendarList = { action: "`calendar.read`", sees: "" };
 
 const githubRead = { action: "`github.read`", sees: "`repo`" };
 const githubWrite = (action: string): ToolFacts => ({ action: `\`${action}\``, sees: "`repo`" });
@@ -117,9 +118,9 @@ export const SERVICES: readonly Service[] = [
       delete: { action: "`email.remove`", sees: items },
       set_categories: { action: "`email.label`", sees: items },
       create_rule: filter,
-      list_calendars: none,
+      list_calendars: calendarList,
       list_events: calendarRead,
-      get_event: none,
+      get_event: calendarList,
       create_event: {
         action: "`calendar.event.create`",
         sees: "`recipients` (attendees), `calendar`",
@@ -137,7 +138,7 @@ export const SERVICES: readonly Service[] = [
     provider: "google-calendar",
     tools: GOOGLE_CALENDAR_TOOLS,
     facts: {
-      list_calendars: none,
+      list_calendars: calendarList,
       list_events: calendarRead,
       get_event: calendarRead,
       create_event: {

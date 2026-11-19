@@ -157,7 +157,7 @@ Every key in a `match` must hold (AND). A key whose field the call doesn't have 
 | `account` | text | The account's alias, as you connected it. | `account: gmail-work` |
 | `provider` | text | `gmail`, `outlook`, `google-calendar`, `github`, `slack`, `linear`, `notion`, `stripe`, or `mcp:<alias>`, `http:<alias>`, `cli:<command>`. | `provider: github` |
 | `agent` | text | The agent's name, from `heel agent add`. | `agent: triage-bot` |
-| `action` | text | What the call does, across services (`email.send`). Set by built-in services, by `gh` and `kubectl`, and by `x-heel-action` in an OpenAPI file. Built-in mail and calendar reads have none. | `action: { one_of: [email.send, email.draft] }` |
+| `action` | text | What the call does, across services (`email.send`). Set by built-in services, by `gh` and `kubectl`, and by `x-heel-action` in an OpenAPI file. Built-in mail reads have none; calendar reads are `calendar.read`. | `action: { one_of: [email.send, email.draft] }` |
 | `kind` | `read` or `write` | Set only where heel knows: built-in services, `gh`, `kubectl`, and `x-heel-kind`. Your own MCP tools and other CLIs have no kind, so neither value matches them. | `kind: read` |
 | `tool` | text | The tool name: a built-in tool, your MCP server's own tool name, `<METHOD> <path>` for HTTP, or the command path for a CLI (`gh pr merge`). | `tool: create_ticket` |
 | `recipients` | address list | Who a call reaches: to, cc and bcc together, a filter's forward address, calendar attendees, a Stripe customer's new email. | `recipients: { all_domain_in: [company.com] }` |
@@ -243,7 +243,7 @@ Which operators each key takes:
 
 ### Details that matter
 
-- **Case matters.** Text is compared exactly, so `method: get` never matches a `GET` call. heel lower-cases `repo` on the call, so write repos in lower case: `repo: Acme/Web` never matches. Addresses and domains are the exception: both sides are lower-cased first, except a `matches` pattern, which runs on the lower-cased address as written, so write it in lower case.
+- **Case matters,** except where heel normalizes. Text is compared exactly, but heel lower-cases `repo` and upper-cases `method` on the call and in your rule's literal values alike, so `repo: Acme/Web` and `method: get` match. A `matches` pattern isn't changed: write it in the call's case (`repo: { matches: "acme/.*" }`). Addresses and domains are the exception: both sides are lower-cased first, except a `matches` pattern, which runs on the lower-cased address as written, so write it in lower case.
 - **Types matter.** `args.number: 42` matches the number 42, not the text `"42"`. HTTP query values, form body values and CLI flag values are always text, so write `query.limit: "100"`. `max` never holds on one of them, but on a repeated parameter or flag (a list) it limits how many there are.
 - **`matches` is the whole value.** Patterns are [RE2](https://github.com/google/re2/wiki/Syntax) and anchored at both ends: `matches: "web"` doesn't match `acme/web`, but `matches: ".*web"` does. Quote patterns in YAML.
 - **Shorthand on a list is set equality.** `recipients: sam@company.com` holds only when Sam is the only recipient. `argv: publish` never holds, because `argv` also holds the command name. Use `any_of` or `one_of` instead.
@@ -445,7 +445,7 @@ cases:
 Each built-in service maps its tools to actions, so one rule covers the same thing everywhere: `email.send` is Gmail's and Outlook's send, reply, reply-all, forward and send-draft. The tables list every tool, its kind, its action, and what else a rule can match on. Every call also has `account`, `provider`, `agent`, `tool` and `args.*`.
 
 - **Kind `read` is set only here**, by the service's own definition, never by an argument or a tool name.
-- **Built-in mail and calendar reads have no action.** Match them with `kind: read`, or `tool`.
+- **Built-in mail reads have no action.** Match them with `kind: read`, or `tool`. Calendar reads (Google and Outlook) are `calendar.read`.
 - **`args.*` reads the arguments as heel will run them.** For most tools these are the tool's own input arguments, as the agent sees them listed; the tables name the ones heel adds or rewrites (such as `args.base` on a merge).
 - **Your own MCP servers, HTTP APIs and other CLIs** have none of this: see the sections after these tables.
 - **Gmail and GitHub also answer at `/http/<account>/...`:** a request to their own REST paths becomes the same tool call, with the same action and fields.
@@ -504,9 +504,9 @@ Provider `outlook`. Outlook's `calendar` is the calendar id, or the mailbox's ad
 | `delete` | write | `email.remove` | `items` (messages) |
 | `set_categories` | write | `email.label` | `items` (messages) |
 | `create_rule` | write | `email.filter`; `email.send` when it forwards | when it forwards: `recipients` (the forward address), and persistence |
-| `list_calendars` | read | none |   |
-| `list_events` | read | none | `calendar` |
-| `get_event` | read | none |   |
+| `list_calendars` | read | `calendar.read` |   |
+| `list_events` | read | `calendar.read` | `calendar` |
+| `get_event` | read | `calendar.read` |   |
 | `create_event` | write | `calendar.event.create` | `recipients` (attendees), `calendar` |
 | `update_event` | write | `calendar.event.update` | `recipients` (old and new attendees) |
 | `delete_event` | write | `calendar.event.delete` | `recipients` (attendees) |
@@ -517,9 +517,9 @@ Provider `google-calendar`. `calendar` is the calendar id in lower case, or the 
 
 | Tool | Kind | Action | Rules also see |
 | --- | --- | --- | --- |
-| `list_calendars` | read | none |   |
-| `list_events` | read | none | `calendar` |
-| `get_event` | read | none | `calendar` |
+| `list_calendars` | read | `calendar.read` |   |
+| `list_events` | read | `calendar.read` | `calendar` |
+| `get_event` | read | `calendar.read` | `calendar` |
 | `create_event` | write | `calendar.event.create` | `recipients` (attendees), `calendar` |
 | `update_event` | write | `calendar.event.update` | `recipients` (old and new attendees), `calendar` |
 | `delete_event` | write | `calendar.event.delete` | `recipients` (attendees), `calendar` |
@@ -878,7 +878,7 @@ The `call` is what the rules see, written as heel would derive it. Nothing is de
 
 - **Copy the fields a real call has** from the [service tables](#built-in-services): a rule on `provider` needs `provider` in the case, and `kind` and `action` belong only on calls that really have them (an unmapped `gh` command has neither).
 - **`tool` isn't built from `cli` or `http`.** Give it yourself: `tool: gh secret set`, or `tool: "DELETE /contacts/{id}"`.
-- **Values aren't normalized.** heel lower-cases `repo` on a real call, but a case's `repo` is used as written, so write it in lower case.
+- **`repo` and `method` are normalized** as on a real call (lower-case repo, upper-case method). Other values are used as written.
 - **`counts` applies to every counting rule** the call reaches, whatever its other conditions.
 
 | Key | Type | Notes |
