@@ -122,7 +122,8 @@ describe("approval notifications", () => {
       url: `https://heel.example.com/approvals/${approvalId}`,
     });
     // The arguments (the recipient, the subject) appear nowhere in what was sent.
-    expect(JSON.stringify(email.sent)).not.toMatch(/bob@vendor\.com|Q3/);
+    // (The approval id is random and can itself contain "Q3", so it's taken out first.)
+    expect(JSON.stringify(email.sent).replaceAll(approvalId, "")).not.toMatch(/bob@vendor\.com|Q3/);
   });
 
   it("send an org ask to the admins, not to the account's owner", async () => {
