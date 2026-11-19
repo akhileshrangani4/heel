@@ -42,6 +42,7 @@ heel connect gmail --as gmail-work          # then sign in from the Connections 
 heel agent add my-agent                     # prints the agent's token (once) and MCP URL
 ```
 
+- **This setup is for trying heel out.** It runs as your own user, so a local agent with a shell (Claude Code, Codex) could read heel's key and edit its rules. For daily use, run heel on another machine, as its own user, or in Docker: see [Keep agents out of heel's files](docs/running.md#keep-agents-out-of-heels-files).
 - **Approving:** on `localhost`, you approve on this computer, with a passkey (Touch ID, say). To approve from your phone, give heel an HTTPS address first: see [Approve from your phone](#approve-from-your-phone).
 - **Every account gets an alias** (`gmail-work`, `github`), and the agent only sees the alias. Any MCP server, any HTTP API with an OpenAPI file, and any CLI can go behind heel. `heel --help` lists the forms.
 - **The agent's heel token is its only credential.**
@@ -181,6 +182,7 @@ Hidden messages drop out of searches, lists and threads, and fetching, forwardin
 - **A model never decides a live call.** Rules, grants and people do. Whoever shapes a call (say, an injected instruction in an email) could shape a model judging it too.
 - **Checking calls doesn't stop every prompt injection.** When each call in an attack is allowed, nothing gets blocked. heel narrows where data can go and what an agent can destroy.
 - **heel must hold every credential.** A token you also gave the agent directly goes around it.
+- **An agent that can read heel's files isn't controlled by it.** Run heel where your agents can't reach its files: on another machine, as its own user, or in Docker.
 - **Down means denied.** If heel is down, every call fails until it's back.
 
 ## Docs

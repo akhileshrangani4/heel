@@ -17,6 +17,7 @@ import { enrollPage } from "../ui/enroll.ts";
 
 const REFUSALS: Partial<Record<PasskeyRefusal, string>> = {
   enrollment_invalid: "This link was already used or has expired.",
+  enrollment_waiting: "This recovery link doesn't work yet.",
   already_enrolled: "That passkey is already enrolled.",
   challenge_expired: "The passkey prompt timed out. Try again.",
 };
@@ -32,7 +33,9 @@ export function enrollRoutes(deps: HumanPlaneDeps): Hono {
       body: enrollPage(
         enrollment === null
           ? { kind: "invalid" }
-          : { kind: "open", token: c.req.param("token"), userName: enrollment.userName },
+          : enrollment.waitingUntil !== null
+            ? { kind: "waiting", userName: enrollment.userName, until: enrollment.waitingUntil }
+            : { kind: "open", token: c.req.param("token"), userName: enrollment.userName },
       ),
       script: clientScript(null),
     });

@@ -4,10 +4,14 @@ import { newId } from "../../src/store/ids.ts";
 import { passkeys, users, webauthnChallenges } from "../../src/store/schema.ts";
 import { CHALLENGE_TTL_MS, deriveChallenge } from "../../src/web/challenges.ts";
 import {
+  cancelEnrollment,
   createEnrollment,
   ENROLLMENT_TTL_MS,
   EnrollmentError,
+  findEnrollment,
   Passkeys,
+  pendingRecoveries,
+  RECOVERY_DELAY_MS,
   relyingPartyFor,
 } from "../../src/web/passkeys.ts";
 import { SoftAuthenticator } from "../helpers/authenticator.ts";
@@ -30,8 +34,15 @@ async function enroll(
   pk: Passkeys,
   userName = "owner",
   now = T0,
+  afterPasskey = false,
 ): Promise<SoftAuthenticator> {
-  const link = createEnrollment(t.db, { orgId: t.orgId, userName, publicUrl: PUBLIC_URL, now });
+  const link = createEnrollment(t.db, {
+    orgId: t.orgId,
+    userName,
+    publicUrl: PUBLIC_URL,
+    now,
+    afterPasskey,
+  });
   const token = tokenOf(link.url);
   const options = await pk.registrationOptions({ token, now });
   if (!options.ok) throw new Error(`registration options refused: ${options.reason}`);
@@ -121,9 +132,69 @@ describe("passkey enrollment (Q-N2)", () => {
       ok: false,
       reason: "enrollment_invalid",
     });
-    // A second device for the same person.
-    await enroll(t, pk);
+    // A second device, from a link made after confirming with the first passkey.
+    await enroll(t, pk, "owner", T0, true);
     expect(t.db.select().from(passkeys).all()).toHaveLength(2);
+  });
+
+  it("a command-line link for someone with a passkey is a recovery link: it waits a day", async () => {
+    const t = testStore();
+    const pk = new Passkeys(t.db, relyingPartyFor(PUBLIC_URL));
+    await enroll(t, pk);
+    const recovery = createEnrollment(t.db, {
+      orgId: t.orgId,
+      userName: "owner",
+      publicUrl: PUBLIC_URL,
+      now: T0,
+    });
+    expect(recovery.activeFrom).toEqual(at(RECOVERY_DELAY_MS));
+    expect(pendingRecoveries(t.db, t.orgId, T0)).toMatchObject([{ userName: "owner" }]);
+    expect(await pk.registrationOptions({ token: tokenOf(recovery.url), now: T0 })).toEqual({
+      ok: false,
+      reason: "enrollment_waiting",
+    });
+    expect(findEnrollment(t.db, tokenOf(recovery.url), T0)?.waitingUntil).toEqual(
+      at(RECOVERY_DELAY_MS),
+    );
+    // After the wait it works, until it's used.
+    const later = at(RECOVERY_DELAY_MS + 1);
+    expect((await pk.registrationOptions({ token: tokenOf(recovery.url), now: later })).ok).toBe(
+      true,
+    );
+  });
+
+  it("isn't recovery after public_url changes: old passkeys can't sign in at the new address", async () => {
+    const t = testStore();
+    const pk = new Passkeys(t.db, relyingPartyFor(PUBLIC_URL));
+    await enroll(t, pk);
+    const moved = createEnrollment(t.db, {
+      orgId: t.orgId,
+      userName: "owner",
+      publicUrl: new URL("https://heel.tailnet.example"),
+      now: T0,
+    });
+    expect(moved.activeFrom).toBeNull();
+  });
+
+  it("a cancelled recovery link never works", async () => {
+    const t = testStore();
+    const pk = new Passkeys(t.db, relyingPartyFor(PUBLIC_URL));
+    await enroll(t, pk);
+    const recovery = createEnrollment(t.db, {
+      orgId: t.orgId,
+      userName: "owner",
+      publicUrl: PUBLIC_URL,
+      now: T0,
+    });
+    const [pending] = pendingRecoveries(t.db, t.orgId, T0);
+    expect(cancelEnrollment(t.db, t.orgId, pending?.id ?? "")).toBe(true);
+    expect(
+      await pk.registrationOptions({
+        token: tokenOf(recovery.url),
+        now: at(RECOVERY_DELAY_MS + 1),
+      }),
+    ).toEqual({ ok: false, reason: "enrollment_invalid" });
+    expect(pendingRecoveries(t.db, t.orgId, T0)).toEqual([]);
   });
 
   it("names unknown and disabled users", () => {

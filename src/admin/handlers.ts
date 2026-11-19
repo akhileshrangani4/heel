@@ -195,6 +195,7 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
       return adminOk({
         url: enrollment.url,
         expiresAt: enrollment.expiresAt.toISOString(),
+        activeFrom: enrollment.activeFrom?.toISOString() ?? null,
         subject,
       });
     }

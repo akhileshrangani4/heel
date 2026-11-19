@@ -99,6 +99,7 @@ const EnrollmentResult = z.object({
   expiresAt: z.string(),
   /** The IdP identity the user signs in as, on a team install. */
   subject: z.string().nullable().default(null),
+  activeFrom: z.string().nullable().optional(),
 });
 const PauseResult = z.object({ scope: z.string(), created: z.boolean() });
 
@@ -496,6 +497,15 @@ async function userCommand(args: string[], io: CliIo): Promise<number> {
   const enrollment = EnrollmentResult.parse(
     await admin(config, { method: "user.enroll", params: { name } }),
   );
+  if (enrollment.activeFrom) {
+    io.stdout.write(
+      `"${name}" already has a passkey, so this is a recovery link. It works from ${enrollment.activeFrom}\n` +
+        `(a day from now), and the approval page shows it with a way to cancel it until then:\n` +
+        `${enrollment.url}\n` +
+        'To add a device right away instead, sign in with your passkey and use "Add another device" on the approval page.\n',
+    );
+    return EXIT.ok;
+  }
   io.stdout.write(
     `Enrollment link for "${name}"${enrollment.subject === null ? "" : ` (signs in as ${enrollment.subject})`} (one use, valid until ${enrollment.expiresAt}):\n` +
       `${enrollment.url}\n` +
