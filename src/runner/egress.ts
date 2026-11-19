@@ -9,9 +9,15 @@
  * refused even when allowlisted, so a DNS record can't point a CLI at heel's
  * own planes or the host's LAN. An IP literal is reached only when the
  * allowlist names that literal.
+ *
+ * For the hosts a sandbox's credential goes to (`inject`), the proxy doesn't
+ * tunnel blindly: it terminates TLS and adds the credential itself (see
+ * intercept.ts), so the sandbox never holds it.
  */
 import { lookup as dnsLookup } from "node:dns/promises";
+import { STATUS_CODES } from "node:http";
 import { BlockList, connect, createServer, isIP, type Server, type Socket } from "node:net";
+import { type InterceptOptions, intercept } from "./intercept.ts";
 
 export interface EgressTarget {
   /** Lower-cased hostname or IP literal (IPv6 without brackets). */
@@ -39,6 +45,18 @@ export interface EgressProxyOptions {
   /** Injectable for tests; defaults to the system resolver. */
   readonly resolve?: (host: string) => Promise<readonly string[]>;
   readonly connectTimeoutMs?: number;
+  /** How long a client may take to send its CONNECT head (default 10 s). */
+  readonly headTimeoutMs?: number;
+  /** Most client connections open at once (default 64); more are refused with 503. */
+  readonly maxConnections?: number;
+  /**
+   * Credential hosts: `host[:port]` entries, each also in `allow`, whose
+   * tunnels heel opens itself to add the credential.
+   */
+  readonly inject?: {
+    readonly hosts: readonly string[];
+    readonly intercept: Omit<InterceptOptions, "connectTimeoutMs">;
+  };
 }
 
 export interface EgressProxy {
@@ -51,6 +69,8 @@ export class EgressConfigError extends Error {
 }
 
 const DEFAULT_PORT = 443;
+const HEAD_TIMEOUT_MS = 10_000;
+const MAX_CONNECTIONS = 64;
 const MAX_HEADER_BYTES = 8 * 1024;
 const HEADER_END = Buffer.from("\r\n\r\n");
 
@@ -189,29 +209,74 @@ export async function startEgressProxy(options: EgressProxyOptions): Promise<Egr
   const allow = parseEgressAllow(options.allow);
   const resolve = options.resolve ?? systemResolve;
   const connectTimeoutMs = options.connectTimeoutMs ?? 10_000;
+  const inject = parseEgressAllow(options.inject?.hosts ?? []);
+  const outside = inject.find((target) => !isAllowlisted(allow, target));
+  if (outside !== undefined) {
+    throw new EgressConfigError(
+      `credential host ${outside.host}:${outside.port} isn't allowlisted`,
+    );
+  }
+  const interceptOptions =
+    options.inject === undefined ? undefined : { ...options.inject.intercept, connectTimeoutMs };
   const sockets = new Set<Socket>();
+  const clients = new Set<Socket>();
+  const maxConnections = options.maxConnections ?? MAX_CONNECTIONS;
+  const headTimeoutMs = options.headTimeoutMs ?? HEAD_TIMEOUT_MS;
+  // Hooks the caller supplied must not throw out of a socket handler and take heel down.
+  const onDecision = (decision: EgressDecision): void => {
+    try {
+      options.onDecision?.(decision);
+    } catch {
+      // Audit is best effort here; the decision stands.
+    }
+  };
+  const onError = (error: unknown): void => {
+    try {
+      options.onError?.(error);
+    } catch {
+      // Nowhere left to report it.
+    }
+  };
 
   const server: Server = createServer((client) => {
-    sockets.add(client);
-    client.on("close", () => sockets.delete(client));
     client.on("error", () => client.destroy());
-    readHead(client)
+    // Tracked even when refused, so closing the proxy never waits on a client that won't hang up.
+    sockets.add(client);
+    client.on("close", () => {
+      clients.delete(client);
+      sockets.delete(client);
+    });
+    if (clients.size >= maxConnections) {
+      refuse(client, 503, "too_many_connections");
+      return;
+    }
+    clients.add(client);
+    readHead(client, headTimeoutMs)
       .then(async ({ head, rest }) => {
         const decision = await decideEgress(
           allow,
           head === undefined ? undefined : parseConnectRequest(head),
           resolve,
         );
-        options.onDecision?.(decision);
+        onDecision(decision);
         if (!decision.allowed) {
           refuse(client, decision.reason === "bad_request" ? 400 : 403, decision.reason);
+          return;
+        }
+        if (interceptOptions !== undefined && isAllowlisted(inject, decision.target)) {
+          // A client that sends before the tunnel is open can't be read through TLS here.
+          if (rest.length > 0) {
+            refuse(client, 400, "early_data");
+            return;
+          }
+          await intercept(client, decision.target, decision.address, interceptOptions, sockets);
           return;
         }
         tunnel(client, rest, decision.address, decision.target.port, connectTimeoutMs, sockets);
       })
       .catch((error: unknown) => {
         client.destroy();
-        options.onError?.(error);
+        onError(error);
       });
   });
 
@@ -233,10 +298,17 @@ export async function startEgressProxy(options: EgressProxyOptions): Promise<Egr
   };
 }
 
-/** Reads up to the end of the request headers; `head` is undefined when they're too long or cut off. */
-function readHead(client: Socket): Promise<{ head: string | undefined; rest: Buffer }> {
+/**
+ * Reads up to the end of the request headers; `head` is undefined when they
+ * are too long, cut off, or not done within `timeoutMs`.
+ */
+function readHead(
+  client: Socket,
+  timeoutMs: number,
+): Promise<{ head: string | undefined; rest: Buffer }> {
   return new Promise((resolve) => {
     let buffered = Buffer.alloc(0);
+    const timer = setTimeout(() => finish(undefined, Buffer.alloc(0)), timeoutMs);
     const onData = (chunk: Buffer): void => {
       buffered = Buffer.concat([buffered, chunk]);
       const end = buffered.indexOf(HEADER_END);
@@ -251,6 +323,7 @@ function readHead(client: Socket): Promise<{ head: string | undefined; rest: Buf
     };
     const onEnd = (): void => finish(undefined, Buffer.alloc(0));
     const finish = (head: string | undefined, rest: Buffer): void => {
+      clearTimeout(timer);
       client.off("data", onData);
       client.off("end", onEnd);
       client.pause();
@@ -261,8 +334,8 @@ function readHead(client: Socket): Promise<{ head: string | undefined; rest: Buf
   });
 }
 
-function refuse(client: Socket, status: 400 | 403 | 502, reason: string): void {
-  const text = status === 400 ? "Bad Request" : status === 403 ? "Forbidden" : "Bad Gateway";
+function refuse(client: Socket, status: 400 | 403 | 502 | 503, reason: string): void {
+  const text = STATUS_CODES[status] ?? "Error";
   const body = `heel: egress refused (${reason})\n`;
   client.end(
     `HTTP/1.1 ${status} ${text}\r\nContent-Type: text/plain\r\nContent-Length: ${Buffer.byteLength(body)}\r\nConnection: close\r\n\r\n${body}`,

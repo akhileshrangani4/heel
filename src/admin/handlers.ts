@@ -26,6 +26,7 @@ import {
 import {
   ConnectError,
   type ConnectErrorCode,
+  configureAccount,
   connectAccount,
   listAccounts,
 } from "../vault/connect.ts";
@@ -50,6 +51,8 @@ export interface AdminDeps {
   publicUrl: URL;
   /** heel's own state directory; no agent work root may overlap it (D8b). */
   home?: string;
+  /** `heel account set` changed how an account's server runs: stop the one running now. */
+  onAccountConfigured?: (accountId: string) => void;
   now?: () => Date;
 }
 
@@ -65,6 +68,7 @@ const CONNECT_ERROR_CODES: Record<ConnectErrorCode, AdminErrorCode> = {
   unknown_provider: "invalid",
   invalid_settings: "invalid",
   alias_taken: "conflict",
+  not_found: "not_found",
   vault_unavailable: "vault_unavailable",
 };
 
@@ -164,6 +168,17 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
     }
     case "account.list":
       return adminOk(listAccounts(db, orgId));
+    case "account.configure": {
+      const { alias, credentialHosts, credentialAuth, credential } = request.params;
+      const configured = configureAccount(db, deps.vault, orgId, alias, {
+        credentialHosts,
+        credentialAuth,
+        credential,
+      });
+      // A running server holds whatever it started with; it starts again on its next call.
+      deps.onAccountConfigured?.(configured.accountId);
+      return adminOk(configured);
+    }
     case "account.share":
     case "account.unshare": {
       const { alias, kind, name } = request.params;

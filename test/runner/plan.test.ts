@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   ARGS_FD,
+  type CredentialInjection,
   DEFAULT_LIMITS,
   isUnder,
   MAX_WALL_TIME_MS,
   planSandbox,
   RELAY_PORT,
+  SANDBOX_CA_PATH,
   SANDBOX_EGRESS_SOCKET,
   SANDBOX_HOME,
   SANDBOX_RELAY,
@@ -13,7 +15,9 @@ import {
   type SandboxSpec,
   SandboxSpecError,
   sandboxEnv,
+  sandboxNoProxy,
   secretsOf,
+  TRUST_ENV,
 } from "../../src/runner/plan.ts";
 
 const HOST: SandboxHost = {
@@ -297,7 +301,20 @@ describe("sandboxEnv", () => {
 
   it("points both proxy spellings at the relay only with egress", () => {
     const proxy = `http://127.0.0.1:${RELAY_PORT}`;
-    expect(sandboxEnv(SPEC, true)).toMatchObject({ HTTPS_PROXY: proxy, https_proxy: proxy });
+    expect(sandboxEnv(SPEC, true)).toMatchObject({
+      HTTPS_PROXY: proxy,
+      https_proxy: proxy,
+      NODE_USE_ENV_PROXY: "1",
+      // Node's env proxy would otherwise send the sandbox's own loopback to heel's proxy.
+      NO_PROXY: "localhost,127.0.0.1,::1",
+      no_proxy: "localhost,127.0.0.1,::1",
+    });
+  });
+
+  it("leaves an allowlisted loopback address out of NO_PROXY: it's the host's, reached through the proxy", () => {
+    const spec = { ...SPEC, network: { kind: "egress", allow: ["127.0.0.1:8443"] } } as const;
+    expect(sandboxEnv(spec, true)).toMatchObject({ NO_PROXY: "localhost,::1" });
+    expect(sandboxNoProxy(["[::1]:9", "localhost:80", "127.0.0.1"])).toBe("");
     expect(sandboxEnv(SPEC, false)).not.toHaveProperty("HTTPS_PROXY");
   });
 });
@@ -318,5 +335,81 @@ describe("isUnder", () => {
     ["/anything", "/", true],
   ] as const)("%s under %s is %s", (path, root, expected) => {
     expect(isUnder(path, root)).toBe(expected);
+  });
+});
+
+describe("credential hosts", () => {
+  const PLACEHOLDER = "heel-placeholder-0123456789abcdef0123";
+  const TRUST = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n";
+  const injecting = (overrides: Partial<CredentialInjection> = {}): Partial<SandboxSpec> => ({
+    secretEnv: {},
+    env: { GH_TOKEN: PLACEHOLDER },
+    network: {
+      kind: "egress",
+      allow: ["api.github.com", "github.com", "uploads.github.com"],
+      inject: {
+        hosts: ["api.github.com", "github.com"],
+        auth: { type: "authorization", schemes: ["token"] },
+        placeholder: PLACEHOLDER,
+        credential: async () => TOKEN,
+        ...overrides,
+      },
+    },
+  });
+  const planWith = (spec: Partial<SandboxSpec>, trust?: string) =>
+    planSandbox(HOST, { ...SPEC, ...spec }, SECCOMP, "/tmp/e/egress.sock", trust);
+
+  it("writes the CA bundle under /heel/run and points every TLS stack at it", () => {
+    const planned = planWith(injecting(), TRUST);
+    const [bind] = valuesAfter(planned.options, "--ro-bind-data", 2).filter(
+      ([, path]) => path === SANDBOX_CA_PATH,
+    );
+    expect(bind).toBeDefined();
+    const fd = planned.fds.find((entry) => entry.fd === Number(bind?.[0]));
+    expect(fd?.kind === "write" && Buffer.from(fd.data).toString("utf8")).toBe(TRUST);
+    const env = Object.fromEntries(
+      valuesAfter(planned.options, "--setenv", 2).map(([name, value]) => [name, value]),
+    );
+    for (const name of TRUST_ENV) expect(env[name]).toBe(SANDBOX_CA_PATH);
+    expect(env["NODE_USE_ENV_PROXY"]).toBe("1");
+    expect(env["GH_TOKEN"]).toBe(PLACEHOLDER);
+    // The token isn't in anything bwrap is handed.
+    expect(planned.options.join("\n")).not.toContain(TOKEN);
+  });
+
+  it.each([...TRUST_ENV, "NODE_USE_ENV_PROXY"])("a spec can't set %s itself", (name) => {
+    expect(refusal({ env: { [name]: "/work/evil.pem" } })).toMatch(/set by the runner/);
+  });
+
+  it("a spec can't write its own ca.pem", () => {
+    expect(refusal({ files: [{ name: "ca.pem", content: "x" }] })).toMatch(/bad sandbox file name/);
+  });
+
+  it("needs the CA bundle exactly when it has credential hosts", () => {
+    expect(() => planWith(injecting())).toThrow(/CA bundle/);
+    expect(() =>
+      planWith({ network: { kind: "egress", allow: ["api.github.com"] } }, TRUST),
+    ).toThrow(/CA bundle/);
+  });
+
+  it.each([
+    [
+      "a credential host outside the egress list",
+      injecting({ hosts: ["evil.example"] }),
+      /isn't in the egress list/,
+    ],
+    ["no credential hosts", injecting({ hosts: [] }), /at least one host/],
+    [
+      "a placeholder heel didn't make",
+      injecting({ placeholder: "ghp_lookslikeatoken" }),
+      /placeholder/,
+    ],
+    [
+      "the real credential in a variable as well",
+      { ...injecting(), secretEnv: { GH_TOKEN: TOKEN }, env: {} },
+      /credential variables/,
+    ],
+  ] as const)("refuses %s", (_, spec, message) => {
+    expect(() => planWith(spec, TRUST)).toThrow(message);
   });
 });

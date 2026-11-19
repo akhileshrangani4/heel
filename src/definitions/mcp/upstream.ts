@@ -45,12 +45,25 @@ export interface UpstreamDeps {
    */
   /** Where OAuth upstreams keep their state (D5c); absent when the vault is closed. */
   oauth?: UpstreamOAuthDeps;
-  launchStdio?: (
-    account: AccountRecord,
-    upstream: StdioUpstream,
-    credential: string | null,
-  ) => Promise<StdioProcess>;
+  launchStdio?: StdioLauncher;
+  /**
+   * Whether a pause covers the account (global, its owner, its alias or its
+   * provider). A local server's credential is added at heel's egress proxy on
+   * the server's own requests, between calls too, so the proxy asks before
+   * each one. Absent: never paused.
+   */
+  paused?: (account: AccountRecord) => boolean;
 }
+
+/**
+ * Starts a local server. `credential` reads the account's credential afresh
+ * each time it's called (an OAuth token is refreshed); null when it has none.
+ */
+export type StdioLauncher = (
+  account: AccountRecord,
+  upstream: StdioUpstream,
+  credential: (() => Promise<string>) | null,
+) => Promise<StdioProcess>;
 
 interface Connection {
   client: Client;
@@ -60,6 +73,8 @@ interface Connection {
 export class UpstreamPool {
   readonly #deps: UpstreamDeps;
   readonly #clients = new Map<string, Promise<Connection>>();
+  /** The settings each connection was started with; one whose account has changed is replaced. */
+  readonly #startedWith = new WeakMap<Promise<Connection>, string>();
 
   constructor(deps: UpstreamDeps) {
     this.#deps = deps;
@@ -109,6 +124,14 @@ export class UpstreamPool {
     }
   }
 
+  /** Stops the account's server, if one is running; the next call starts it again. */
+  evict(accountId: string): void {
+    const pending = this.#clients.get(accountId);
+    if (pending === undefined) return;
+    this.#clients.delete(accountId);
+    void pending.then(({ client }) => client.close()).catch(() => {});
+  }
+
   async close(): Promise<void> {
     const connections = [...this.#clients.values()];
     this.#clients.clear();
@@ -121,12 +144,22 @@ export class UpstreamPool {
    */
   async #use<T>(account: AccountRecord, work: (client: Client) => Promise<T>): Promise<T> {
     let pending = this.#clients.get(account.id);
+    if (
+      pending !== undefined &&
+      this.#startedWith.get(pending) !== JSON.stringify(account.settings)
+    ) {
+      // `heel account set` changed how it runs: the old process may hold what the new settings keep out.
+      if (this.#clients.get(account.id) === pending) this.#clients.delete(account.id);
+      void pending.then(({ client }) => client.close()).catch(() => {});
+      pending = undefined;
+    }
     if (pending === undefined) {
       const created = this.#connect(account, () => {
         if (this.#clients.get(account.id) === created) this.#clients.delete(account.id);
       });
       pending = created;
       this.#clients.set(account.id, pending);
+      this.#startedWith.set(pending, JSON.stringify(account.settings));
     }
     try {
       return await work((await pending).client);
@@ -204,7 +237,15 @@ export class UpstreamPool {
     if (launch === undefined) {
       throw new Error("local MCP servers need the sandbox, which isn't available on this host");
     }
-    const server = await launch(account, upstream, token === null ? null : token.reveal());
+    // Read per use, so the egress proxy injects a refreshed token and stops when it's revoked.
+    const current = async (): Promise<string> => {
+      if (this.#deps.paused?.(account) === true)
+        throw new Error(`account ${account.alias} is paused`);
+      const fresh = await this.credential(account);
+      if (fresh === null) throw new Error(`account ${account.alias} has no credential`);
+      return fresh.reveal();
+    };
+    const server = await launch(account, upstream, token === null ? null : current);
     return new SandboxStdioTransport(server, (line) =>
       this.#deps.log.info({ account: account.alias, stderr: line }, "upstream MCP server log"),
     );

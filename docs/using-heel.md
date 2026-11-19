@@ -57,8 +57,15 @@ The agent now has one MCP server with every connected account's tools, named by 
 
 - **On Linux,** `/mcp` without `?tools=direct` is code mode: one `run_code` tool, where the agent writes a short Python script against typed modules (`gmail_work.search(...)`).
 - **Claude, ChatGPT or Grok connectors** sign in with OAuth. Set `agent_public_url` ([Running](running.md#configuration)) and add heel as a custom connector.
-- **CLIs:** the agent runs them as `heel run -- gh pr merge 123`, with `HEEL_TOKEN` and `HEEL_URL` set. gh's `--jq`/`-q` is always denied, because jq can read the token from gh's environment. Use `--json` (or `--template`) and filter the output with a local `jq` instead. A pull request or issue URL must be spelled `https://github.com/<owner>/<repo>/pull/<n>` (or `/issues/<n>`) and name the same repo as `-R`. heel denies other spellings (`www.`, ports, other hosts) and URL arguments to other gh commands, because gh would act on a repo the rules never checked.
+- **CLIs:** the agent runs them as `heel run -- gh pr merge 123`, with `HEEL_TOKEN` and `HEEL_URL` set. gh never holds your token: it runs with a placeholder, and heel puts the token in its requests to GitHub on the way out. gh's `--jq`/`-q` is still always denied, because jq can read gh's environment. Use `--json` (or `--template`) and filter the output with a local `jq` instead. A pull request or issue URL must be spelled `https://github.com/<owner>/<repo>/pull/<n>` (or `/issues/<n>`) and name the same repo as `-R`. heel denies other spellings (`www.`, ports, other hosts) and URL arguments to other gh commands, because gh would act on a repo the rules never checked.
 - **HTTP APIs:** the agent calls `/http/<alias>/<path>` with its heel token.
+- **Local MCP servers** run in heel's sandbox. Name the hosts the server authenticates to, and it never holds the credential either: its variable gets a placeholder, and heel adds the credential to requests to those hosts.
+  ```sh
+  heel connect mcp --as notes --command /usr/bin/node --arg /opt/notes/server.js \
+    --egress api.notes.example --credential-env NOTES_TOKEN \
+    --credential-host api.notes.example --credential-auth bearer --credential-stdin
+  ```
+  `--credential-auth` is `bearer` (the default), `basic` or `header:<Name>`. A server that sends its key in the URL can't use this; leave out `--credential-host` and it gets the credential in its environment, as before, with a warning at startup.
 
 ## 3. What your agent sees
 

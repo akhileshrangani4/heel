@@ -8,8 +8,16 @@ import type {
   HardDenyReason,
   NormalizeContext,
   Normalized,
+  PauseTarget,
 } from "../../gateway/pipeline/ports.ts";
-import { DEFAULT_LIMITS, type SandboxHost, type SandboxSpec } from "../../runner/plan.ts";
+import { type CredentialAuth, newPlaceholder } from "../../runner/intercept.ts";
+import {
+  type CredentialInjection,
+  DEFAULT_LIMITS,
+  type SandboxHost,
+  type SandboxNetwork,
+  type SandboxSpec,
+} from "../../runner/plan.ts";
 import type { SandboxProcess, SandboxRunOptions } from "../../runner/run.ts";
 import type { AccountRecord } from "../../store/directory.ts";
 import type { Vault } from "../../vault/vault.ts";
@@ -19,7 +27,7 @@ import { isMergeAction, isWorkflowPath } from "../github/definition.ts";
 import type { FetchFn } from "../sign-in.ts";
 import { GH_MERGE_BYPASS_FLAGS } from "./gh-actions.ts";
 import { normalizeCliArgv } from "./index.ts";
-import { cliSettings } from "./settings.ts";
+import { type CliSettings, cliSettings, GH_EGRESS } from "./settings.ts";
 import type { CliRefusal } from "./types.ts";
 
 /**
@@ -36,6 +44,9 @@ import type { CliRefusal } from "./types.ts";
  *   (I-31): printing a credential is `credential_exposure`; an unparseable
  *   command, an endpoint redirect, or running repo code is `unsupported`.
  * - Network goes only through heel's egress proxy, to the account's hosts.
+ * - `gh` never holds its token: `GH_TOKEN` is an inert placeholder, and
+ *   heel's egress proxy puts the real token in the `Authorization` header of
+ *   requests to GitHub's own hosts (spec: CLI runner, "Credential delivery").
  * - Only the `/run` surface reaches it; an MCP call naming the account is
  *   refused.
  * - `gh pr merge` (D11) is pinned: heel reads the pull request's head
@@ -75,6 +86,12 @@ export interface CliDeps {
   workRoots(agentId: string): readonly string[];
   /** For the GitHub reads `gh pr merge` needs (D11). */
   fetch: FetchFn;
+  /**
+   * Whether a pause now covers this call's agent, owner, account or provider.
+   * heel's egress proxy asks before every request it adds the credential to,
+   * so a pause stops a command that is already running. Absent: never paused.
+   */
+  paused?: (target: PauseTarget) => boolean;
 }
 
 function refusalReason(refusals: readonly CliRefusal[]): HardDenyReason | null {
@@ -252,12 +269,19 @@ export function cliDefinition(account: AccountRecord, deps: CliDeps): Definition
         // Nothing ran; the result says so rather than leaving the outcome unknown.
         return notRun("workdir_moved", "the working directory moved after the decision");
       }
-      const spec = credentialSpec(
-        settings.command,
-        settings.credentialEnv,
-        await credential(),
-        call.repo,
-      );
+      const target: PauseTarget = {
+        orgId: call.orgId,
+        agentId: call.agentId,
+        ownerId: call.ownerId,
+        account: call.account,
+        provider: call.provider,
+      };
+      // Read for each request the proxy injects into; a pause since the decision stops it.
+      const current = async (): Promise<string> => {
+        if (deps.paused?.(target) === true) throw new Error("paused");
+        return credential();
+      };
+      const { inject, ...spec } = credentialSpec(settings, await credential(), current, call.repo);
       const process = await deps.start(
         sandbox,
         {
@@ -266,12 +290,9 @@ export function cliDefinition(account: AccountRecord, deps: CliDeps): Definition
           workRoot,
           cwd: dir,
           ...spec,
-          // No /proc: the credential in the environment can't be read back as a file.
+          // No /proc: a credential in the environment can't be read back as a file.
           proc: false,
-          network:
-            settings.egress.length === 0
-              ? { kind: "none" }
-              : { kind: "egress", allow: settings.egress },
+          network: cliNetwork(settings.egress, inject),
         },
         { signal },
       );
@@ -313,17 +334,41 @@ function encodings(secret: string): string[] {
   return [bytes.toString("base64"), bytes.toString("base64url"), bytes.toString("hex")];
 }
 
-/** How the credential reaches each CLI. */
-function credentialSpec(
-  command: string,
-  credentialEnv: string | null,
+/** `gh` sends `Authorization: token <GH_TOKEN>`; GitHub also takes `bearer`. */
+const GH_AUTH: CredentialAuth = { type: "authorization", schemes: ["token", "bearer"] };
+
+function cliNetwork(
+  egress: readonly string[],
+  inject: CredentialInjection | undefined,
+): SandboxNetwork {
+  if (egress.length === 0) return { kind: "none" };
+  return { kind: "egress", allow: egress, ...(inject === undefined ? {} : { inject }) };
+}
+
+/**
+ * How the credential reaches each CLI. `credential` is its value now, for the
+ * host-side output scrub; `current` reads it again for each request heel's
+ * proxy injects it into.
+ */
+export function credentialSpec(
+  settings: Pick<CliSettings, "command" | "credentialEnv" | "egress">,
   credential: string,
+  current: () => Promise<string>,
   repo: string | undefined,
-): Pick<SandboxSpec, "env" | "secretEnv" | "files" | "secrets"> {
-  if (command === "gh") {
+): Pick<SandboxSpec, "env" | "secretEnv" | "files" | "secrets"> & {
+  inject?: CredentialInjection;
+} {
+  if (settings.command === "gh") {
+    // Only GitHub's own hosts get the token; an extra --egress host gets the placeholder at most.
+    const hosts = GH_EGRESS.filter((host) => settings.egress.includes(host));
+    const placeholder = newPlaceholder();
     return {
-      secretEnv: { GH_TOKEN: credential },
+      ...(hosts.length === 0
+        ? {}
+        : { inject: { hosts, auth: GH_AUTH, placeholder, credential: current } }),
       env: {
+        // Inert: heel's proxy swaps it for the token, in the Authorization header only.
+        GH_TOKEN: placeholder,
         // Never wait on a terminal, and no update check over the network.
         GH_PROMPT_DISABLED: "1",
         GH_NO_UPDATE_NOTIFIER: "1",
@@ -334,9 +379,11 @@ function credentialSpec(
         // The repo rules saw, not one gh would read from git remotes.
         ...(repo === undefined ? {} : { GH_REPO: repo }),
       },
-      secrets: encodings(credential),
+      // The sandbox never had it, but an upstream could still echo it back.
+      secrets: [credential, ...encodings(credential)],
     };
   }
+  const credentialEnv = settings.credentialEnv;
   if (credentialEnv === null) throw new Error("this CLI account has no credential variable");
   return { secretEnv: { [credentialEnv]: credential }, secrets: encodings(credential) };
 }

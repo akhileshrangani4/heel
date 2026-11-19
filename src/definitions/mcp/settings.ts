@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { MAX_WALL_TIME_MS, type SandboxSpec } from "../../runner/plan.ts";
+import { newPlaceholder, parseCredentialAuth } from "../../runner/intercept.ts";
+import { MAX_WALL_TIME_MS, type SandboxNetwork, type SandboxSpec } from "../../runner/plan.ts";
 
 /**
  * Where an MCP passthrough account's server lives, as `heel connect mcp`
@@ -9,8 +10,11 @@ import { MAX_WALL_TIME_MS, type SandboxSpec } from "../../runner/plan.ts";
  * - `http`: a remote server at a URL. heel is its HTTP client.
  * - `stdio`: a local program heel starts under bubblewrap, talking MCP over
  *   its stdin and stdout. It gets its own work directory, reaches only the
- *   hosts its egress list names, and gets the account's credential in one
- *   environment variable and nowhere else (N-8).
+ *   hosts its egress list names (N-8). With credential hosts, its credential
+ *   variable holds an inert placeholder and heel's egress proxy adds the real
+ *   credential to requests to those hosts, so the server never holds it.
+ *   Without them (accounts connected before heel could do that), the
+ *   credential is in the variable itself, and heel warns at startup.
  */
 
 const ENV_NAME = /^[A-Z_][A-Z0-9_]{0,63}$/;
@@ -35,8 +39,16 @@ const StdioSettings = z.object({
   args: z.array(z.string()).max(64).default([]),
   /** `host[:port]` entries the server may reach; empty means no network at all. */
   egress: z.array(z.string()).max(32).default([]),
-  /** The variable the account's credential is put in, e.g. NOTION_TOKEN. */
+  /** The variable the account's credential (or, with credential hosts, its placeholder) is put in, e.g. NOTION_TOKEN. */
   credentialEnv: z.string().regex(ENV_NAME).nullable().default(null),
+  /** `host[:port]` entries, each also in `egress`, that heel's proxy adds the credential for. */
+  credentialHosts: z.array(z.string()).max(32).default([]),
+  /** Where the credential goes in those requests: `bearer`, `basic` or `header:<Name>`. */
+  credentialAuth: z
+    .string()
+    .refine((text) => parseCredentialAuth(text) !== null)
+    .nullable()
+    .default(null),
   /** Host paths the server needs to read (its code, its dependencies), mounted read-only. */
   mounts: z.array(z.string().startsWith("/")).max(16).default([]),
 });
@@ -58,26 +70,59 @@ export function isEnvName(name: string): boolean {
 }
 
 /**
- * Pure: how a stdio server runs in the sandbox. It is long-lived, so the wall
- * time is the runner's maximum and output has no cap (stdout is the MCP
- * stream); if the server exits, heel starts it again on the next call.
+ * How a local server's credential reaches it: `proxy` (heel adds it on the
+ * wire; the server holds a placeholder), `env` (the server holds it, the
+ * setup heel warns about), or null when it has no credential variable.
  */
-export function stdioSandboxSpec(
+export function credentialDelivery(upstream: StdioUpstream): "proxy" | "env" | null {
+  if (upstream.credentialEnv === null) return null;
+  return upstream.credentialHosts.length > 0 ? "proxy" : "env";
+}
+
+/**
+ * How a stdio server runs in the sandbox. It is long-lived, so the wall time
+ * is the runner's maximum and output has no cap (stdout is the MCP stream);
+ * if the server exits, heel starts it again on the next call.
+ *
+ * `credential` reads the account's credential. With credential hosts it is
+ * only handed to heel's egress proxy, which calls it per request; the server
+ * gets a placeholder. Without them it is read once, into the variable.
+ */
+export async function stdioSandboxSpec(
   upstream: StdioUpstream,
-  options: { workRoot: string; credential: string | null },
-): SandboxSpec {
-  return {
+  options: { workRoot: string; credential: (() => Promise<string>) | null },
+): Promise<SandboxSpec> {
+  const base = {
     binary: upstream.command,
     args: upstream.args,
     workRoot: options.workRoot,
     cwd: options.workRoot,
     stdin: "pipe",
     readOnlyPaths: upstream.mounts,
-    ...(upstream.credentialEnv !== null && options.credential !== null
-      ? { secretEnv: { [upstream.credentialEnv]: options.credential } }
-      : {}),
-    network:
-      upstream.egress.length === 0 ? { kind: "none" } : { kind: "egress", allow: upstream.egress },
     limits: { wallTimeMs: MAX_WALL_TIME_MS, maxOutputBytes: Number.MAX_SAFE_INTEGER },
-  };
+  } as const;
+  const network = (): SandboxNetwork =>
+    upstream.egress.length === 0 ? { kind: "none" } : { kind: "egress", allow: upstream.egress };
+  const env = upstream.credentialEnv;
+  if (env === null || options.credential === null) return { ...base, network: network() };
+  if (credentialDelivery(upstream) === "proxy") {
+    const auth = parseCredentialAuth(upstream.credentialAuth ?? "bearer");
+    if (auth === null) throw new Error(`bad credentialAuth ${upstream.credentialAuth}`);
+    const placeholder = newPlaceholder();
+    return {
+      ...base,
+      env: { [env]: placeholder },
+      network: {
+        kind: "egress",
+        allow: upstream.egress,
+        inject: {
+          hosts: upstream.credentialHosts,
+          auth,
+          placeholder,
+          credential: options.credential,
+        },
+      },
+    };
+  }
+  return { ...base, secretEnv: { [env]: await options.credential() }, network: network() };
 }

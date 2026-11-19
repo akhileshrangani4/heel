@@ -77,3 +77,46 @@ function replaceAll(data: Buffer, needles: readonly Buffer[]): { out: Buffer[]; 
     from = at + length;
   }
 }
+
+/** Every form of the credential heel can predict an upstream echoing. */
+export function credentialForms(credential: string, auth: { readonly type: string }): string[] {
+  if (credential === "") return [];
+  const encoded = (secret: string) => [
+    secret,
+    encodeURIComponent(secret),
+    new URLSearchParams({ x: secret }).toString().slice(2),
+    JSON.stringify(secret).slice(1, -1),
+    Buffer.from(secret).toString("base64"),
+    Buffer.from(secret).toString("base64url"),
+  ];
+  const forms = new Set<string>(encoded(credential));
+  if (auth.type === "basic") {
+    const password = credential.slice(credential.indexOf(":") + 1);
+    // A short password on its own would scrub ordinary text; only a real one.
+    if (credential.includes(":") && password.length >= 6) {
+      for (const form of encoded(password)) forms.add(form);
+    }
+  }
+  // Longest first, so a form that contains another is replaced whole.
+  return [...forms].filter((f) => f.length >= 4).sort((a, b) => b.length - a.length);
+}
+
+/**
+ * The stretch of base64(secret) that doesn't depend on its neighbours, at
+ * each of the three byte alignments it can sit at inside a longer encoded
+ * value, and the base64url twin of each. Pieces shorter than 8 characters
+ * are left out: they would scrub ordinary text.
+ */
+export function base64Middles(secret: string): string[] {
+  const bytes = Buffer.from(secret, "utf8");
+  const middles = new Set<string>();
+  for (let offset = 0; offset < 3; offset++) {
+    const encoded = Buffer.concat([Buffer.alloc(offset), bytes]).toString("base64");
+    // The first group mixes in the bytes before; anything past the last whole group, the bytes after.
+    const middle = encoded.slice(offset === 0 ? 0 : 4, Math.floor((offset + bytes.length) / 3) * 4);
+    if (middle.length < 8) continue;
+    middles.add(middle);
+    middles.add(middle.replaceAll("+", "-").replaceAll("/", "_"));
+  }
+  return [...middles];
+}

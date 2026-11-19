@@ -116,3 +116,21 @@ heel migrates its database when it starts. Back up `HEEL_HOME` (or the volume) a
 
 - **On a Linux host:** install `bubblewrap` and `util-linux`.
 - **In Docker:** the default seccomp profile blocks user namespaces, so heel starts with both turned off. To turn them on, run with a seccomp profile that allows `unshare` and `clone` with `CLONE_NEWUSER`, on a host kernel that allows unprivileged user namespaces.
+
+### Credentials stay outside the sandbox
+
+A sandboxed program reaches the network only through heel's egress proxy. For `gh`, and for a local MCP server connected with `--credential-host`, heel keeps the credential on its side of that proxy:
+
+- The program gets a random placeholder where it expects the credential (`GH_TOKEN`, or the server's `--credential-env` variable).
+- For the credential hosts, the proxy opens TLS itself, with a certificate authority made for that one sandbox and host, valid only for that exact host (not its subdomains). The sandbox trusts it through `/heel/run/ca.pem` (`SSL_CERT_FILE`, `NODE_EXTRA_CA_CERTS` and the like).
+- The proxy puts the credential in the `Authorization` header (or the one header you named), and only where the program sent the placeholder. A request with any other credential there is refused.
+
+So code that runs in the sandbox, a gh extension or an npm script or the MCP server itself, can't read the credential and send it somewhere else. It can still use it against those hosts while the sandbox runs, the same as the program could.
+
+**Accounts connected before this** keep working the old way, with the credential in the program's environment. `heel serve` warns about each at startup, and `heel account list` shows them as `"credentialDelivery": "env"`. `gh` accounts switch on their own. For a local MCP server, name its credential hosts:
+
+```sh
+printf %s "$NEW_NOTES_TOKEN" | heel account set notes --credential-host api.notes.example --credential-stdin
+```
+
+heel stops the running server at once; it starts again, without the credential, on its next call. Until now the server held the credential, so anything it ran could have copied it: rotate it with the provider and pipe the new one in (`--credential-stdin`, as above). Without `--credential-stdin` the stored credential stays, and heel reminds you to rotate it. A pause also stops the proxy adding the credential, including to a local server's requests between calls. Other CLIs (`heel connect cli <command> --credential-env`) still get the credential in their environment; a later release moves them too.

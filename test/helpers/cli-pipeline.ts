@@ -10,6 +10,7 @@ import { UpstreamPool } from "../../src/definitions/mcp/upstream.ts";
 import { definitionRegistry } from "../../src/definitions/registry.ts";
 import { addAgent, setWorkRoots, workRootsOf } from "../../src/gateway/agents.ts";
 import { createPipeline } from "../../src/gateway/pipeline/pipeline.ts";
+import type { PauseTarget } from "../../src/gateway/pipeline/ports.ts";
 import { handleRun } from "../../src/gateway/run-route.ts";
 import type { SandboxHost, SandboxSpec } from "../../src/runner/plan.ts";
 import type { SandboxOutcome } from "../../src/runner/run.ts";
@@ -51,6 +52,8 @@ export function cliPipeline(options: {
   credential?: string;
   /** GitHub's API, for `gh pr merge`; every read fails without it. */
   fetch?: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+  /** Whether a pause covers a running command, as heel's proxy asks it. */
+  paused?: (target: PauseTarget) => boolean;
 }) {
   const t = testStore();
   const command = String(options.settings?.["command"] ?? "gh");
@@ -104,6 +107,7 @@ export function cliPipeline(options: {
               },
         workRoots: (agentId) => workRootsOf(t.db, agentId),
         fetch: options.fetch ?? (async () => new Response("{}", { status: 500 })),
+        ...(options.paused === undefined ? {} : { paused: options.paused }),
       },
     }),
     pauses: new SqlitePauseStore(),

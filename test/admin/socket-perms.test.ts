@@ -327,4 +327,44 @@ describe("admin socket requests", () => {
     });
     expect(unknown).toMatchObject({ ok: false, error: { code: "invalid" } });
   });
+
+  it("account.configure moves a local server's credential to the proxy, and account.list says so", async () => {
+    const { path } = await serve({ vault: false });
+    const stdio = {
+      command: "/usr/bin/node",
+      args: ["server.js"],
+      egress: ["api.notes.example"],
+      credentialEnv: "NOTES_TOKEN",
+      mounts: [],
+    };
+    resultOf(
+      await call(path, {
+        method: "account.connect",
+        params: { provider: "mcp", alias: "notes", stdio },
+      }),
+    );
+    expect(resultOf(await call(path, { method: "account.list" }))).toMatchObject([
+      { alias: "notes", credentialDelivery: "env" },
+    ]);
+    expect(
+      resultOf(
+        await call(path, {
+          method: "account.configure",
+          params: {
+            alias: "notes",
+            credentialHosts: ["api.notes.example"],
+            credentialAuth: "bearer",
+          },
+        }),
+      ),
+    ).toMatchObject({ alias: "notes", credentialDelivery: "proxy", rotate: true });
+    expect(resultOf(await call(path, { method: "account.list" }))).toMatchObject([
+      { alias: "notes", credentialDelivery: "proxy" },
+    ]);
+    const missing = await call(path, {
+      method: "account.configure",
+      params: { alias: "nope", credentialHosts: ["api.notes.example"], credentialAuth: null },
+    });
+    expect(missing).toMatchObject({ ok: false, error: { code: "not_found" } });
+  });
 });

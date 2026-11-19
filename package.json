@@ -63,6 +63,7 @@
     "@hono/node-server": "~2.1.8",
     "@modelcontextprotocol/client": "~2.4.0",
     "@modelcontextprotocol/server": "~2.4.0",
+    "@peculiar/x509": "~2.2.0",
     "@pydantic/monty": "1.6.0",
     "@simplewebauthn/server": "~14.1.0",
     "@slack/web-api": "~8.3.0",
@@ -73,6 +74,7 @@
     "openid-client": "~6.8.9",
     "pino": "~10.4.0",
     "re2js": "~2.10.0",
+    "reflect-metadata": "~0.2.2",
     "web-push": "~4.0.0",
     "yaml": "~2.9.1",
     "zod": "~4.6.7"

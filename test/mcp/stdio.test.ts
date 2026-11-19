@@ -36,6 +36,8 @@ const STDIO = {
   args: [FIXTURE],
   egress: [],
   credentialEnv: "NOTES_TOKEN",
+  credentialHosts: [],
+  credentialAuth: null,
   mounts: [FIXTURE],
 };
 
@@ -43,13 +45,14 @@ const STDIO = {
 async function launchChild(
   _account: unknown,
   _settings: unknown,
-  credential: string | null,
+  credential: (() => Promise<string>) | null,
 ): Promise<StdioProcess> {
+  const value = credential === null ? null : await credential();
   const child = spawn(process.execPath, [FIXTURE], {
     stdio: ["pipe", "pipe", "pipe"],
     env: {
       PATH: process.env["PATH"] ?? "",
-      ...(credential === null ? {} : { NOTES_TOKEN: credential }),
+      ...(value === null ? {} : { NOTES_TOKEN: value }),
     },
   });
   const done = new Promise((resolve) => child.once("exit", resolve));
@@ -116,6 +119,8 @@ describe("local MCP servers", () => {
       "echo",
       "token",
       "big",
+      "request",
+      "sweep",
     ]);
     const result = await definition.execute(
       { ...callFor(account), tool: "echo", args: { text: "hi" } },
@@ -201,10 +206,10 @@ describe("local MCP servers", () => {
     expect(connect).toThrow(message);
   });
 
-  it("runs long-lived with no output cap, in its own work root, with only its egress hosts", () => {
-    const spec = stdioSandboxSpec(
+  it("runs long-lived with no output cap, in its own work root, with only its egress hosts", async () => {
+    const spec = await stdioSandboxSpec(
       { transport: "stdio", ...STDIO, egress: ["api.notes.example"] },
-      { workRoot: "/srv/heel/mcp/local-notes", credential: TOKEN },
+      { workRoot: "/srv/heel/mcp/local-notes", credential: async () => TOKEN },
     );
     expect(spec).toMatchObject({
       binary: process.execPath,
@@ -217,9 +222,46 @@ describe("local MCP servers", () => {
       limits: { wallTimeMs: MAX_WALL_TIME_MS, maxOutputBytes: Number.MAX_SAFE_INTEGER },
     });
     expect(
-      stdioSandboxSpec({ transport: "stdio", ...STDIO }, { workRoot: "/w", credential: null })
-        .network,
+      (
+        await stdioSandboxSpec(
+          { transport: "stdio", ...STDIO },
+          { workRoot: "/w", credential: null },
+        )
+      ).network,
     ).toEqual({ kind: "none" });
+  });
+
+  it("with credential hosts, gives the server a placeholder and its proxy a way to read the credential", async () => {
+    let reads = 0;
+    const credential = async () => {
+      reads++;
+      return TOKEN;
+    };
+    const spec = await stdioSandboxSpec(
+      {
+        transport: "stdio",
+        ...STDIO,
+        egress: ["api.notes.example", "cdn.notes.example"],
+        credentialHosts: ["api.notes.example"],
+        credentialAuth: "header:X-Notes-Key",
+      },
+      { workRoot: "/w", credential },
+    );
+    expect(spec.secretEnv).toBeUndefined();
+    const placeholder = spec.env?.["NOTES_TOKEN"];
+    expect(placeholder).toMatch(/^heel-placeholder-[0-9a-f]+$/);
+    expect(spec.network).toMatchObject({
+      kind: "egress",
+      allow: ["api.notes.example", "cdn.notes.example"],
+      inject: {
+        hosts: ["api.notes.example"],
+        auth: { type: "header", name: "x-notes-key" },
+        placeholder,
+      },
+    });
+    // Nothing read it while building the spec; only the proxy will, per request.
+    expect(reads).toBe(0);
+    expect(JSON.stringify(spec)).not.toContain(TOKEN);
   });
 });
 

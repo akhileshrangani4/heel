@@ -51,8 +51,12 @@ export const USAGE = `usage:
                                           put an API behind heel's HTTP proxy at
                                           /http/<alias>/…
   heel connect mcp --as <alias> --command <path> [--arg <a>]... [--egress <host>]...
-                   [--mount <path>]... [--credential-env <NAME> --credential-stdin]
-                                          run a local MCP server in heel's sandbox
+                   [--mount <path>]... [--credential-env <NAME> --credential-stdin
+                   --credential-host <host>... [--credential-auth bearer|basic|header:<name>]]
+                                          run a local MCP server in heel's sandbox;
+                                          it gets a placeholder in <NAME>, and heel
+                                          adds the credential to its requests to
+                                          each --credential-host
   heel run [--account <alias>] [--json] -- <cmd> [args...]
                                           (agent side) ask heel to run a command;
                                           reads HEEL_TOKEN, HEEL_URL, HEEL_RUN_ID
@@ -62,6 +66,10 @@ export const USAGE = `usage:
                                           through heel with \`heel run\`; the
                                           credential stays with heel
   heel account list
+  heel account set <alias> --credential-host <host>... [--credential-auth bearer|basic|header:<name>]
+                   [--credential-stdin]
+                                          move a local MCP server's credential out of
+                                          its sandbox, to heel's egress proxy
   heel account share|unshare <alias> --user <name> | --group <group>
                                           let another person's agents use an account
   heel account approvers <alias> [--repo <owner/name>] [--user <name>]... [--group <group>]...
@@ -102,6 +110,11 @@ const EnrollmentResult = z.object({
   activeFrom: z.string().nullable().optional(),
 });
 const PauseResult = z.object({ scope: z.string(), created: z.boolean() });
+const ConfiguredAccountResult = z.object({
+  alias: z.string(),
+  credentialDelivery: z.string().nullable(),
+  rotate: z.boolean(),
+});
 
 const AuditExportPageResult = z.object({
   lines: z.array(z.string()),
@@ -311,6 +324,8 @@ async function connectCommand(args: string[], io: CliIo): Promise<number> {
         egress: { type: "string", multiple: true },
         mount: { type: "string", multiple: true },
         "credential-env": { type: "string" },
+        "credential-host": { type: "string", multiple: true },
+        "credential-auth": { type: "string" },
         "credential-stdin": { type: "boolean" },
         "base-url": { type: "string" },
         auth: { type: "string" },
@@ -362,6 +377,8 @@ async function connectCommand(args: string[], io: CliIo): Promise<number> {
             args: values.arg ?? [],
             egress: values.egress ?? [],
             credentialEnv: values["credential-env"] ?? null,
+            credentialHosts: values["credential-host"] ?? [],
+            credentialAuth: values["credential-auth"] ?? null,
             mounts: values.mount ?? [],
           },
         }),
@@ -384,7 +401,8 @@ async function connectCommand(args: string[], io: CliIo): Promise<number> {
 }
 
 /**
- * `heel account list`, and sharing (D13b):
+ * `heel account list`, `heel account set <alias> --credential-host <host>...
+ * [--credential-auth <auth>]`, and sharing (D13b):
  * `heel account share|unshare <alias> --user <name> | --group <group>`,
  * `heel account approvers <alias> [--repo <owner/name>] [--user <name>]... [--group <group>]...`
  * (no principals clears that scope), `heel account sharing <alias>`.
@@ -398,6 +416,9 @@ async function accountCommand(args: string[], io: CliIo): Promise<number> {
         user: { type: "string", multiple: true },
         group: { type: "string", multiple: true },
         repo: { type: "string" },
+        "credential-host": { type: "string", multiple: true },
+        "credential-auth": { type: "string" },
+        "credential-stdin": { type: "boolean" },
       },
       allowPositionals: true,
       strict: true,
@@ -416,6 +437,38 @@ async function accountCommand(args: string[], io: CliIo): Promise<number> {
       if (alias !== undefined) throw new UsageError(`unexpected argument "${alias}"`);
       print(await admin(config, { method: "account.list" }));
       return EXIT.ok;
+    case "set": {
+      if (alias === undefined) throw new UsageError("missing account alias");
+      const credentialHosts = values["credential-host"] ?? [];
+      if (credentialHosts.length === 0)
+        throw new UsageError("give at least one --credential-host <host>");
+      let credential: { type: "static"; value: string } | undefined;
+      if (values["credential-stdin"]) {
+        const value = (await readAll(io.stdin)).replace(/\r?\n$/, "");
+        if (value === "") throw new UsageError("--credential-stdin read nothing from stdin");
+        credential = { type: "static", value };
+      }
+      const configured = ConfiguredAccountResult.parse(
+        await admin(config, {
+          method: "account.configure",
+          params: {
+            alias,
+            credentialHosts,
+            credentialAuth: values["credential-auth"] ?? null,
+            ...(credential === undefined ? {} : { credential }),
+          },
+        }),
+      );
+      print(configured);
+      if (configured.rotate) {
+        io.stderr.write(
+          `Until now the server held this credential in its environment, where anything it ran could copy it. ` +
+            `Rotate it with the provider, then give heel the new one: ` +
+            `heel account set ${alias} --credential-host ... --credential-stdin\n`,
+        );
+      }
+      return EXIT.ok;
+    }
     case "share":
     case "unshare": {
       if (alias === undefined) throw new UsageError("missing account alias");

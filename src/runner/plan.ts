@@ -10,10 +10,15 @@
  * - the work root, read-write at the same path, starting in `cwd`;
  * - a private `/proc`, a minimal `/dev`, and tmpfs `HOME` (`/heel/home`) and `/tmp`;
  * - credential files, read-only under `/heel/run`;
+ * - with credential hosts, a CA bundle at `/heel/run/ca.pem` that trusts
+ *   heel's per-sandbox CA, which the egress proxy uses to add the credential
+ *   on the wire, so the program only ever holds a placeholder;
  * - nothing else from the host: no other home directories, no `/etc/passwd`,
  *   no heel state, and no network unless egress is on.
  */
 import { posix } from "node:path";
+import { EgressConfigError, isAllowlisted, parseEgressAllow, parseHostPort } from "./egress.ts";
+import { type CredentialAuth, PLACEHOLDER_PREFIX } from "./intercept.ts";
 import type { SeccompArch } from "./seccomp.ts";
 
 /** Defaults from the spec's CLI runner limits. */
@@ -48,7 +53,28 @@ export type SandboxNetwork =
   /** No network namespace route out; loopback only. */
   | { readonly kind: "none" }
   /** Only through heel's egress proxy, to the listed `host[:port]` entries (port 443 by default). */
-  | { readonly kind: "egress"; readonly allow: readonly string[] };
+  | {
+      readonly kind: "egress";
+      readonly allow: readonly string[];
+      /** Hosts heel's proxy adds the credential for; the program holds only the placeholder. */
+      readonly inject?: CredentialInjection;
+    };
+
+/**
+ * How the egress proxy adds a credential the sandbox never holds (spec: CLI
+ * runner, "Credential delivery"). The program is given `placeholder` where it
+ * expects the credential; for requests to `hosts`, heel swaps it for the real
+ * one in the auth position only.
+ */
+export interface CredentialInjection {
+  /** `host[:port]` entries, each also in `allow`. */
+  readonly hosts: readonly string[];
+  readonly auth: CredentialAuth;
+  /** From `newPlaceholder()`; the only form of the credential the sandbox sees. */
+  readonly placeholder: string;
+  /** Read by heel's proxy for each request, on the host side; never inside the sandbox. */
+  readonly credential: () => Promise<string>;
+}
 
 /** What a caller asks for. Paths are absolute and already resolved (no symlinks). */
 export interface SandboxSpec {
@@ -103,6 +129,30 @@ export const SANDBOX_RUN = "/heel/run";
 export const SANDBOX_TMP = "/tmp";
 export const SANDBOX_RELAY = "/heel/relay.ts";
 export const SANDBOX_EGRESS_SOCKET = `${SANDBOX_RUN}/egress.sock`;
+/** The sandbox's own loopback names, reached directly rather than through the proxy. */
+const LOOPBACK_NAMES = ["localhost", "127.0.0.1", "::1"];
+
+/**
+ * `NO_PROXY` for a sandbox: its own loopback, so Node's env proxy doesn't
+ * send a server talking to itself out to heel. A loopback name the egress
+ * list allows (a service on the host's loopback) is left out: that one must
+ * go through the proxy, the only route to the host.
+ */
+export function sandboxNoProxy(allow: readonly string[]): string {
+  const allowed = new Set(allow.map((entry) => parseHostPort(entry, 443)?.host));
+  return LOOPBACK_NAMES.filter((name) => !allowed.has(name)).join(",");
+}
+/** The CA bundle a sandbox with credential hosts trusts. */
+export const SANDBOX_CA_FILE = "ca.pem";
+export const SANDBOX_CA_PATH = `${SANDBOX_RUN}/${SANDBOX_CA_FILE}`;
+/** Where common TLS stacks read a CA bundle from: OpenSSL and Go, Node, Python requests, curl, git. */
+export const TRUST_ENV = [
+  "SSL_CERT_FILE",
+  "NODE_EXTRA_CA_CERTS",
+  "REQUESTS_CA_BUNDLE",
+  "CURL_CA_BUNDLE",
+  "GIT_SSL_CAINFO",
+] as const;
 /** The relay's loopback port inside the sandbox's own network namespace. */
 export const RELAY_PORT = 3128;
 const SANDBOX_PATH_ENV = "/usr/local/bin:/usr/bin:/bin";
@@ -135,6 +185,7 @@ const RESERVED_ENV = new Set([
   "https_proxy",
   "all_proxy",
   "no_proxy",
+  ...TRUST_ENV,
 ]);
 /** Prefixes that make the dynamic loader or a runtime load code the caller didn't name. */
 const RESERVED_ENV_PREFIXES = ["LD_", "NODE_", "BASH_FUNC_"];
@@ -178,14 +229,17 @@ export const ARGS_FD = 3;
 
 /**
  * The bwrap invocation for `spec`. `egressSocket` is the host path of the
- * egress proxy's socket, required exactly when the spec asks for egress.
- * Throws `SandboxSpecError` for anything that would weaken the sandbox.
+ * egress proxy's socket, required exactly when the spec asks for egress;
+ * `trust` is the CA bundle (PEM) the sandbox trusts, required exactly when
+ * the spec names credential hosts. Throws `SandboxSpecError` for anything
+ * that would weaken the sandbox.
  */
 export function planSandbox(
   host: SandboxHost,
   spec: SandboxSpec,
   seccomp: Uint8Array,
   egressSocket?: string,
+  trust?: string,
 ): SandboxPlan {
   validateSpec(spec);
   const limits = { ...DEFAULT_LIMITS, ...spec.limits };
@@ -193,6 +247,12 @@ export function planSandbox(
   const egress = spec.network?.kind === "egress";
   if (egress !== (egressSocket !== undefined)) {
     throw new SandboxSpecError("an egress socket is needed exactly when the network is egress");
+  }
+  const injects = spec.network?.kind === "egress" && spec.network.inject !== undefined;
+  if (injects !== (trust !== undefined)) {
+    throw new SandboxSpecError(
+      "a CA bundle is needed exactly when the sandbox has credential hosts",
+    );
   }
   if (egressSocket !== undefined) requirePath("egress socket", egressSocket);
   // These run with the credentials in their environment, so the agent mustn't be able to swap them (I-34).
@@ -221,12 +281,16 @@ export function planSandbox(
     ...systemMounts(host, spec.proc !== false),
     ...programMounts(host, spec, egressSocket),
   ];
-  for (const file of spec.files ?? []) {
+  const files = [
+    ...(spec.files ?? []),
+    ...(trust === undefined ? [] : [{ name: SANDBOX_CA_FILE, content: trust }]),
+  ];
+  for (const file of files) {
     const fd = allocate({ kind: "write", data: toBytes(file.content) });
     options.push("--ro-bind-data", String(fd), `${SANDBOX_RUN}/${file.name}`);
   }
   options.push("--bind", spec.workRoot, spec.workRoot, "--remount-ro", "/", "--chdir", spec.cwd);
-  for (const [name, value] of Object.entries(sandboxEnv(spec, egress))) {
+  for (const [name, value] of Object.entries(sandboxEnv(spec, egress, trust !== undefined))) {
     options.push("--setenv", name, value);
   }
 
@@ -311,7 +375,11 @@ function programMounts(
 }
 
 /** The program's whole environment; nothing is inherited from heel. */
-export function sandboxEnv(spec: SandboxSpec, egress: boolean): Record<string, string> {
+export function sandboxEnv(
+  spec: SandboxSpec,
+  egress: boolean,
+  trust = false,
+): Record<string, string> {
   const env: Record<string, string> = {
     ...spec.env,
     ...spec.secretEnv,
@@ -321,13 +389,20 @@ export function sandboxEnv(spec: SandboxSpec, egress: boolean): Record<string, s
   };
   if (egress) {
     const proxy = `http://127.0.0.1:${RELAY_PORT}`;
+    const noProxy = sandboxNoProxy(spec.network?.kind === "egress" ? spec.network.allow : []);
     Object.assign(env, {
       HTTPS_PROXY: proxy,
       HTTP_PROXY: proxy,
       https_proxy: proxy,
       http_proxy: proxy,
+      // Node's fetch and http ignore the proxy variables without it, and there is no other route.
+      NODE_USE_ENV_PROXY: "1",
+      // Loopback is the sandbox's own network namespace; the proxy would refuse it anyway.
+      NO_PROXY: noProxy,
+      no_proxy: noProxy,
     });
   }
+  if (trust) for (const name of TRUST_ENV) env[name] = SANDBOX_CA_PATH;
   return env;
 }
 
@@ -402,7 +477,11 @@ function validateSpec(spec: SandboxSpec): void {
   }
   const names = new Set<string>();
   for (const file of spec.files ?? []) {
-    if (!FILE_NAME.test(file.name) || file.name === "egress.sock") {
+    if (
+      !FILE_NAME.test(file.name) ||
+      file.name === "egress.sock" ||
+      file.name === SANDBOX_CA_FILE
+    ) {
       throw new SandboxSpecError(`bad sandbox file name: ${JSON.stringify(file.name)}`);
     }
     if (names.has(file.name)) throw new SandboxSpecError(`duplicate sandbox file: ${file.name}`);
@@ -413,6 +492,44 @@ function validateSpec(spec: SandboxSpec): void {
   }
   if (spec.network?.kind === "egress" && spec.network.allow.length === 0) {
     throw new SandboxSpecError("egress needs at least one allowed host; use network none instead");
+  }
+  if (spec.network?.kind === "egress" && spec.network.inject !== undefined) {
+    validateInjection(spec.network.allow, spec.network.inject, spec);
+  }
+}
+
+/** Credential hosts are allowlisted, the placeholder is one heel made, and no real credential rides along. */
+function validateInjection(
+  allow: readonly string[],
+  inject: CredentialInjection,
+  spec: SandboxSpec,
+): void {
+  let allowed: ReturnType<typeof parseEgressAllow>;
+  let hosts: ReturnType<typeof parseEgressAllow>;
+  try {
+    allowed = parseEgressAllow(allow);
+    hosts = parseEgressAllow(inject.hosts);
+  } catch (error) {
+    if (error instanceof EgressConfigError) throw new SandboxSpecError(error.message);
+    throw error;
+  }
+  if (hosts.length === 0) {
+    throw new SandboxSpecError("credential injection needs at least one host");
+  }
+  const outside = hosts.find((target) => !isAllowlisted(allowed, target));
+  if (outside !== undefined) {
+    throw new SandboxSpecError(
+      `credential host ${outside.host}:${outside.port} isn't in the egress list`,
+    );
+  }
+  if (!new RegExp(`^${PLACEHOLDER_PREFIX}[0-9a-f]{16,}$`).test(inject.placeholder)) {
+    throw new SandboxSpecError("the credential placeholder isn't one heel made");
+  }
+  // With a placeholder, the real credential has no business in the sandbox at all.
+  if (Object.keys(spec.secretEnv ?? {}).length > 0) {
+    throw new SandboxSpecError(
+      "a sandbox with credential hosts can't also get credential variables",
+    );
   }
 }
 
