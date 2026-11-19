@@ -14,7 +14,7 @@ That last part is what trips people up: **the command runs on heel's machine, in
 
 ## Set it up
 
-Run these as heel's operator, with the same `HEEL_HOME` as `heel serve` (or with `docker exec heel heel …` for Docker).
+Run these as heel's operator, with the same `HEEL_HOME` as `heel serve`. For heel in Docker, see [heel in Docker, agent on the host](#heel-in-docker-agent-on-the-host), which has each step in its Docker form.
 
 ### 1. Connect the CLI
 
@@ -22,7 +22,7 @@ Run these as heel's operator, with the same `HEEL_HOME` as `heel serve` (or with
 gh auth token | heel connect cli gh --as gh --bin /usr/bin/gh --credential-stdin
 ```
 
-`--bin` is the CLI's path **on heel's host**, and only that file and `/usr` are visible in the sandbox. For any other CLI, and for npm, see the CLI forms in [Using heel](using-heel.md#2-connect-your-agent).
+`--bin` is the CLI's path **on heel's host**: a real file (not a symlink) outside every workdir. The sandbox sees that file, `/usr` and the host's `/bin` and `/lib*` links into it, the CA certificates, and its own empty `HOME` and `/tmp`. For any other CLI, and for npm, see the CLI forms in [Using heel](using-heel.md#2-connect-your-agent).
 
 ### 2. Allow it in your rules
 
@@ -40,7 +40,7 @@ gh commands that act on a repo need `-R <owner>/<repo>`, so the rules can see wh
 
 ### 3. Give the agent a workdir
 
-A **workdir** is a directory the agent's commands may run in. `heel run` sends the directory it was started from, and heel runs the command only when that directory is a workdir or inside one. Each command's sandbox can see and change that workdir, and nothing else of the host but `/usr` and the CLI. A new agent has none, so every `heel run` is refused until you add one.
+A **workdir** is a directory the agent's commands may run in. `heel run` sends the directory it was started from, and heel runs the command only when that directory is a workdir or inside one. Each command's sandbox can see and change that workdir; of the rest of the host it sees only what step 1 lists, read-only. A new agent has none, so every `heel run` is refused until you add one.
 
 ```sh
 heel agent workdir my-agent /home/me/code
@@ -63,8 +63,8 @@ heel agent workdir my-agent /home/me/code
   "my-agent" has no workdirs, so heel run refuses its commands.
   Add one with: heel agent workdir my-agent <dir>
   ```
-- **Each one is checked on heel's host**, when you set it. It must be an absolute path to a directory that exists there. heel stores it with symlinks resolved, so the list can show a different spelling (on a Mac, `/tmp/x` becomes `/private/tmp/x`).
-- **Some directories can't be workdirs:** `/`, `/home`, `/tmp` and `/var` themselves, anything inside `/usr`, `/etc`, `/bin`, `/sbin`, `/lib`, `/lib64`, `/proc`, `/sys`, `/dev`, `/boot`, `/root` or `/run`, anything that overlaps heel's own home, and anything that overlaps a workdir of another person's agent.
+- **Each one is checked on heel's host**, when you set it. It must be an absolute path to a directory that exists there. heel stores it with symlinks resolved, so the list can show a different spelling (if `/home/me/code` is a link to `/data/code`, the list says `/data/code`).
+- **Some directories can't be workdirs:** `/`, `/home`, `/tmp` and `/var` themselves, anything inside `/usr`, `/etc`, `/bin`, `/sbin`, `/lib`, `/lib32`, `/lib64`, `/libx32`, `/proc`, `/sys`, `/dev`, `/boot`, `/root`, `/run` or `/heel` (the sandbox's own), anything that overlaps heel's own home, and anything that overlaps a workdir of another person's agent.
 
 When heel refuses one, nothing changes:
 
@@ -106,7 +106,7 @@ Which `HEEL_URL` to use:
 heel: {"status":"denied","reason":"unknown_host","rule":null}
 ```
 
-Fix it by listening on that name, in heel.yaml:
+Fix it by listening on that name, in heel.yaml (in Docker, see [the agent in a container too](#the-agent-in-a-container-too)):
 
 ```yaml
 listen:
@@ -141,51 +141,85 @@ If a directory at that path exists on heel's side but isn't the same one (a sepa
 
 ### heel in Docker, agent on the host
 
-This is the usual setup on a Mac. Mount each directory the agent works in at **the identical path**, and let the container create the sandbox:
+This is the usual setup on a Mac. Mount each directory the agent works in at **the identical path**, mount a Linux build of the CLI, and let the container create the sandbox.
 
-```sh
-docker run -d --name heel \
-  --security-opt seccomp=unconfined --security-opt systempaths=unconfined \
-  -p 127.0.0.1:7300:7300 -p 127.0.0.1:7301:7301 \
-  -v heel-data:/var/lib/heel \
-  -v "$HOME/code:$HOME/code" \
-  -e HEEL_MASTER_KEY="$(cat heel-master.key)" \
-  ghcr.io/akhileshrangani4/heel
+1. **Get a Linux gh.** The image doesn't include gh, and your Mac's gh can't run in a Linux container. Download the Linux build for your CPU from [gh's releases](https://github.com/cli/cli/releases) (`linux_arm64` on Apple silicon, `linux_amd64` on Intel) and unpack it:
+   ```sh
+   mkdir -p ~/heel-bin && cd ~/heel-bin
+   gh release download -R cli/cli -p 'gh_*_linux_arm64.tar.gz'
+   tar xzf gh_*_linux_arm64.tar.gz
+   ```
+   On Intel, write `linux_amd64` here and in step 3.
+2. **Create the master key** once, and keep it ([With Docker](running.md#with-docker) says why):
+   ```sh
+   head -c 32 /dev/urandom | base64 > heel-master.key
+   chmod 600 heel-master.key
+   ```
+3. **Start heel:**
+   ```sh
+   docker run -d --name heel \
+     --security-opt seccomp=unconfined --security-opt systempaths=unconfined \
+     -p 127.0.0.1:7300:7300 -p 127.0.0.1:7301:7301 \
+     -v heel-data:/var/lib/heel \
+     -v "$HOME/code:$HOME/code" \
+     -v "$(echo ~/heel-bin/gh_*_linux_arm64/bin/gh):/usr/local/bin/gh:ro" \
+     -e HEEL_MASTER_KEY="$(cat heel-master.key)" \
+     ghcr.io/akhileshrangani4/heel
+   ```
+4. **Set it up.** `docker exec -i` (with `-i`) is what passes a piped credential or file through:
+   ```sh
+   docker exec heel heel agent add my-agent
+   docker exec heel heel agent workdir my-agent "$HOME/code"
+   gh auth token | docker exec -i heel heel connect cli gh --as gh --bin /usr/local/bin/gh --credential-stdin
+   docker exec -i heel sh -c 'mkdir -p /var/lib/heel/rules && cat > /var/lib/heel/rules/owner.yaml' < owner.yaml
+   ```
+   `owner.yaml` is the rules file from [step 2](#2-allow-it-in-your-rules).
+5. **On the host, where the agent runs:**
+   ```sh
+   export HEEL_TOKEN=heel_…
+   export HEEL_URL=http://127.0.0.1:7300
+   cd ~/code/web && heel run -- gh pr list -R acme/web
+   ```
 
-docker exec heel heel agent add my-agent
-docker exec heel heel agent workdir my-agent "$HOME/code"
-```
-
-On the host, where the agent runs:
-
-```sh
-export HEEL_TOKEN=heel_…
-export HEEL_URL=http://127.0.0.1:7300
-cd ~/code/web && heel run -- gh pr list -R acme/web
-```
-
-- **Why the two `--security-opt`s.** Docker's defaults block what bubblewrap needs: its seccomp profile blocks user namespaces, and its masked `/proc` paths stop the sandbox mounting its own `/proc`. Without them, `heel serve` logs `sandbox unavailable: … bwrap: Can't mount proc on /newroot/proc: Operation not permitted` and every `heel run` exits 70. They loosen the container's own isolation, not the sandbox's: heel still runs each command under bubblewrap with its own seccomp filter. We checked these two on Docker Desktop. A Linux host that runs AppArmor may also need `--security-opt apparmor=unconfined`; `heel serve`'s log names what failed.
-- **The CLI has to be in the container.** `--bin` names a Linux binary inside the container, and the image doesn't include gh. Mount a Linux build of it, or build your own image from heel's with it installed.
+- **Why the two `--security-opt`s.** Docker's defaults block what bubblewrap needs: its seccomp profile blocks user namespaces, and its masked `/proc` paths stop the sandbox mounting its own `/proc`. Without them, `heel serve` logs `sandbox unavailable:` and the reason (`bwrap: Can't mount proc on /newroot/proc: Operation not permitted` with only the seccomp option), and every `heel run` exits 70. They loosen the container's own isolation, not the sandbox's: heel still runs each command under bubblewrap with its own seccomp filter. We checked these two on Docker Desktop. A Linux host that runs AppArmor may also need `--security-opt apparmor=unconfined`; `heel serve`'s log names what failed.
+- **`--bin` is a path inside the container,** to a real file (the mount above), outside every workdir.
 - **Commands write as the container's `heel` user.** On Docker Desktop for Mac, files they create on a bind mount show up as yours.
 
 ### The agent in a container too
 
 Mount the project at the same path in both containers, and pick a `HEEL_URL` the agent can reach under a name heel serves:
 
+Give heel a heel.yaml that listens on that name. Mounted over `/etc/heel/heel.yaml`, it replaces the image's whole config, so start from [`examples/heel.yaml`](../examples/heel.yaml) and change only `listen.agent`:
+
+```yaml
+public_url: http://localhost:7301
+listen:
+  agent: "heel:7300"
+  human: "0.0.0.0:7301"
+admin_socket: /var/lib/heel/admin.sock
+```
+
 ```sh
 docker network create heel-net
-# heel, with heel.yaml saying listen.agent: "heel:7300"
-docker run -d --name heel --network heel-net --network-alias heel … -v /srv/code:/srv/code …
+docker run -d --name heel --network heel-net --network-alias heel \
+  --security-opt seccomp=unconfined --security-opt systempaths=unconfined \
+  -p 127.0.0.1:7300:7300 -p 127.0.0.1:7301:7301 \
+  -v heel-data:/var/lib/heel -v /srv/code:/srv/code \
+  -v "$PWD/heel.yaml:/etc/heel/heel.yaml:ro" \
+  -e HEEL_MASTER_KEY="$(cat heel-master.key)" \
+  ghcr.io/akhileshrangani4/heel
 # the agent
 docker run --network heel-net -v /srv/code:/srv/code -w /srv/code/web \
   -e HEEL_TOKEN=heel_… -e HEEL_URL=http://heel:7300 my-agent-image
 ```
 
+heel then warns at startup that the agent port listens on `heel:7300`, not just this machine. On a private Docker network that's expected.
+
 Or run the agent with `--network container:heel` and `HEEL_URL=http://127.0.0.1:7300`, which needs no change to heel.yaml.
 
 ## What the agent gets back
 
-When the command ran, `heel run` prints its output and exits with its exit code. When it didn't, it prints one `heel:` line to stderr, and the exit code says why:
+When the command ran, `heel run` prints its output and exits with its exit code. When it didn't, it prints a `heel:` line to stderr (followed by the usage text, for a usage error), and the exit code says why:
 
 | Exit | Means | What to do |
 | --- | --- | --- |
@@ -200,12 +234,13 @@ The `heel:` lines you're most likely to see while setting up:
 
 | Line | Cause | Fix |
 | --- | --- | --- |
-| `heel: HEEL_URL isn't a URL` (exit 64) | `HEEL_URL` unset, or not a URL. | Set it, with the scheme: `http://127.0.0.1:7300`. |
+| `heel: HEEL_URL isn't an http:// or https:// URL` (exit 64) | `HEEL_URL` unset, or missing its `http://`. | Set it, with the scheme: `http://127.0.0.1:7300`. |
 | `heel: HEEL_TOKEN isn't set` (exit 64) | `HEEL_TOKEN` unset. | Set it to the agent's token. |
 | `{"status":"denied","reason":"workdir_not_allowed",…}` | The directory isn't inside a workdir, or heel can't find that path on its side. | `heel agent workdir my-agent` to check; [same directory on both sides](#the-directory-has-to-be-the-same-on-both-sides). |
 | `{"status":"denied","reason":"unknown_endpoint",…}` | No CLI account for that command (`heel connect cli …`), or `HEEL_URL` ends in a path such as `/mcp`. | Connect it, or drop the path from `HEEL_URL`. |
 | `{"status":"denied","reason":"unknown_host",…}` | `HEEL_URL` uses a name heel doesn't serve. | [Listen on that name](#point-the-agent-at-heel), or use `127.0.0.1`. |
 | `{"status":"denied","reason":"no_rule_matched",…}` | No rule matches the command. | Add a rule. |
+| `{"status":"denied","reason":"unsupported",…}` | heel can't check this command: for gh, often a repo command without `-R`. | Add `-R <owner>/<repo>`. |
 | `{"status":"error","reason":"sandbox_unavailable"}` (exit 70) | heel's host can't run the sandbox (macOS, or Docker without the options above). | `heel serve`'s log says why. See [The sandbox](running.md#the-sandbox). |
 | `{"status":"error","detail":"couldn't reach heel: fetch failed"}` (exit 70) | Nothing answers at `HEEL_URL`. | Check that heel is running, and the port. |
 | `{"status":"error","detail":"couldn't reach heel: Unexpected end of JSON input"}` (exit 70) | heel answered, but refused `HEEL_TOKEN`: a typo, or a token since rotated or revoked. | Set the token `heel agent add` or `heel agent rotate` printed. |

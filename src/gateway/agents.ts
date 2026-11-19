@@ -60,7 +60,7 @@ export function agentIdByName(db: HeelDb, orgId: string, name: string): string {
   return agent.id;
 }
 
-function requireLiveAgent(tx: HeelTx, orgId: string, name: string) {
+function requireLiveAgent(tx: HeelDb | HeelTx, orgId: string, name: string) {
   const agent = findAgent(tx, orgId, name);
   if (!agent) throw new AgentError("not_found", `no agent named "${name}"`);
   if (agent.revokedAt) throw new AgentError("revoked", `agent "${name}" is revoked`);
@@ -213,7 +213,11 @@ const SYSTEM_TREES = [
   "/bin",
   "/sbin",
   "/lib",
+  "/lib32",
   "/lib64",
+  "/libx32",
+  // The sandbox's own mount points: a work root there would never run.
+  "/heel",
   "/proc",
   "/sys",
   "/dev",
@@ -244,9 +248,7 @@ export function workRootsByName(
   orgId: string,
   name: string,
 ): { name: string; workRoots: string[] } {
-  const agent = findAgent(db, orgId, name);
-  if (!agent) throw new AgentError("not_found", `no agent named "${name}"`);
-  return { name, workRoots: agent.workRoots };
+  return { name, workRoots: requireLiveAgent(db, orgId, name).workRoots };
 }
 
 /** An agent's work roots (D8b); empty for an unknown agent. */

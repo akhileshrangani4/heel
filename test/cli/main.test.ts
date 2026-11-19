@@ -220,6 +220,11 @@ describe("heel CLI", () => {
     const missing = await run(["agent", "workdir", "coder", join(a, "absent")], env);
     expect(missing.code).toBe(EXIT.failed);
     expect(missing.stderr).toContain("it doesn't exist");
+
+    await run(["agent", "revoke", "coder"], env);
+    const revoked = await run(["agent", "workdir", "coder"], env);
+    expect(revoked.code).toBe(EXIT.failed);
+    expect(revoked.stderr).toContain('agent "coder" is revoked');
   });
 
   it("I-02: connect reads the credential from stdin and never echoes it", async () => {

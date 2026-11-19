@@ -42,6 +42,8 @@ describe("agent work roots", () => {
     "/srv/../etc",
     "/no/such/dir",
     "/private/etc",
+    "/heel/x",
+    "/lib32/x",
   ])("refuses %s", (root) => {
     const { t } = setUp();
     expect(() => setWorkRoots(t.db, t.orgId, "coder", [root])).toThrow(/work root/);
