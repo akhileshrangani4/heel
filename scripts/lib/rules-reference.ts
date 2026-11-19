@@ -316,7 +316,7 @@ function ghTable(): string {
   }
   lines.push(
     "",
-    `Persistence, with no action, so only a rule naming the \`tool\` (\`tool: gh secret set\`) admits them: ${[...GH_PERSISTENCE].map((c) => `\`gh ${c}\``).join(", ")}.`,
+    `Persistence, so only a rule naming the \`tool\` (\`tool: gh secret set\`), or for \`gh api\` its action \`github.api\`, admits them: ${[...GH_PERSISTENCE].map((c) => `\`gh ${c}\``).join(", ")}.`,
     "",
     `Always refused, because they run code from the checkout with the token set: ${[...GH_RUNS_REPO_CODE].map((c) => `\`gh ${c}\``).join(", ")}.`,
     "",
