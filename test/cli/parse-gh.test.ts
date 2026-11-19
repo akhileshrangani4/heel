@@ -137,6 +137,74 @@ describe("gh: action map", () => {
     // pflag keeps the last value of a repeated string flag; so does heel.
     expect(gh("pr", "view", "1", "-R", "a/one", "-R", "b/two").repo).toBe("b/two");
   });
+
+  it("reads -R on every group gh gives it, before or after the subcommand", () => {
+    for (const args of [
+      ["issue", "comment", "-R", "acme/web", "5", "--body", "x"],
+      ["issue", "-R", "acme/web", "comment", "5", "--body", "x"],
+      ["-R", "acme/web", "issue", "close", "5"],
+      ["release", "upload", "v1", "a.zip", "-R", "acme/web"],
+      ["run", "view", "123", "--repo=acme/web"],
+      ["label", "list", "-R", "acme/web"],
+      ["cache", "list", "-R", "acme/web"],
+      ["ruleset", "view", "7", "-R", "acme/web"],
+      ["workflow", "run", "ci.yml", "-R", "acme/web"],
+      ["secret", "list", "-R", "acme/web"],
+      ["variable", "get", "NAME", "-R", "acme/web"],
+      ["repo", "deploy-key", "list", "-R", "acme/web"],
+      ["repo", "read-file", "README.md", "-R", "acme/web"],
+      ["discussion", "view", "3", "-R", "acme/web"],
+    ]) {
+      const parsed = gh(...args);
+      expect(parsed.refusals, args.join(" ")).toEqual([]);
+      expect(parsed.repo, args.join(" ")).toBe("acme/web");
+      expect(parsed.takesRepo, args.join(" ")).toBe(true);
+    }
+    // Without -R or a URL these read the repo from git remotes, which rules can't see.
+    expect(gh("issue", "comment", "5", "--body", "x")).toMatchObject({ takesRepo: true });
+    expect(gh("issue", "comment", "5", "--body", "x").repo).toBeUndefined();
+  });
+
+  it("refuses an argument that names a second repo, unless it's -R's own", () => {
+    for (const [args, argument] of [
+      [["label", "clone", "evil/other", "-R", "acme/web"], "evil/other"],
+      [["issue", "transfer", "5", "evil/other", "-R", "acme/web"], "evil/other"],
+      [["issue", "develop", "5", "--branch-repo", "evil/other", "-R", "acme/web"], "evil/other"],
+      [
+        ["issue", "develop", "5", "--branch-repo", "ghe.corp.example/x/y", "-R", "acme/web"],
+        "ghe.corp.example/x/y",
+      ],
+    ] as const) {
+      expect(gh(...args).refusals, args.join(" ")).toContainEqual({
+        kind: "ambiguous_repo",
+        argument,
+      });
+    }
+    expect(gh("issue", "transfer", "5", "Acme/Web", "-R", "acme/web").refusals).toEqual([]);
+    expect(
+      gh("issue", "develop", "5", "--branch-repo", "acme/web", "-R", "acme/web").refusals,
+    ).toEqual([]);
+  });
+
+  it("treats an org or user secret, variable or ruleset as not the repo's, and refuses -R with it", () => {
+    for (const [args, flag] of [
+      [["secret", "set", "T", "--org", "acme", "-R", "acme/web"], "--org"],
+      [["secret", "list", "--user", "-R", "acme/web"], "--user"],
+      [["secret", "set", "T", "--repos", "evil/other", "-R", "acme/web"], "--repos"],
+      [["variable", "list", "-o", "acme", "-R", "acme/web"], "--org"],
+      [["ruleset", "list", "--org", "acme", "-R", "acme/web"], "--org"],
+    ] as const) {
+      expect(gh(...args).refusals, args.join(" ")).toContainEqual({
+        kind: "ambiguous_repo",
+        argument: flag,
+      });
+    }
+    // Without -R it acts on the org, as before: no repo for a rule to match, and none required.
+    const org = gh("secret", "list", "--org", "acme");
+    expect(org.refusals).toEqual([]);
+    expect(org.repo).toBeUndefined();
+    expect(org.takesRepo).toBeUndefined();
+  });
 });
 
 describe("gh: what heel refuses before rules", () => {

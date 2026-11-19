@@ -23,10 +23,14 @@ import {
   flagKind,
   type ListedCommand,
   type ListedFlag,
+  missingInheritedFlags,
+  missingRepoFlags,
+  parseGhHelpFlags,
   parseGhReference,
   parseKubectlHelp,
   renderTable,
   toFlagDef,
+  withHelpFlags,
 } from "./lib/cli-tables.ts";
 
 const root = join(import.meta.dirname, "..");
@@ -123,13 +127,17 @@ interface ProbedCommand {
   readonly listed: ListedCommand;
   readonly rawArgs: boolean;
   readonly interspersed: boolean;
+  /** gh: the flags its help page lists as inherited from its parents. */
+  readonly inherited?: readonly ListedFlag[];
 }
 
 async function probeCommand(
+  cli: "gh" | "kubectl",
   probe: Prober,
-  listed: ListedCommand,
+  reference: ListedCommand,
   hasChildren: boolean,
 ): Promise<ProbedCommand> {
+  let listed = reference;
   // A command that takes its arguments raw sees `--help` as an argument and
   // may refuse it (gh's auth check does), so this probe comes first.
   const unknown = await probe([...listed.path, `--${UNKNOWN_FLAG}`]);
@@ -139,12 +147,19 @@ async function probeCommand(
   if (help.code !== 0) {
     throw new Error(`"${key(listed.path)} --help" exited ${help.code}:\n${help.output}`);
   }
+  let inherited: readonly ListedFlag[] | undefined;
+  if (cli === "gh") {
+    // gh's reference can leave out a group's own flags (`gh issue` lists no `-R`); its help page doesn't.
+    listed = withHelpFlags(listed, parseGhHelpFlags(help.output, "FLAGS"));
+    inherited = parseGhHelpFlags(help.output, "INHERITED FLAGS");
+  }
+  const extra = inherited === undefined ? {} : { inherited };
   // Under a command with subcommands a positional is an unknown command
   // either way (gh even tries it as an extension), so only leaves are probed.
-  if (hasChildren) return { listed, rawArgs, interspersed: true };
+  if (hasChildren) return { listed, rawArgs, interspersed: true, ...extra };
   const afterWord = await probe([...listed.path, "--help", PROBE_WORD, `--${UNKNOWN_FLAG}`]);
   const interspersed = classifyProbe(afterWord.output, UNKNOWN_FLAG) === "unknown";
-  return { listed, rawArgs, interspersed };
+  return { listed, rawArgs, interspersed, ...extra };
 }
 
 async function probeFlag(
@@ -193,11 +208,12 @@ async function buildTable(
   listed: readonly ListedCommand[],
   probe: Prober,
   options: Pick<CommandTable, "normalizeUnderscores" | "defaultHelpFlag">,
-): Promise<CommandTable> {
+): Promise<{ table: CommandTable; probed: readonly ProbedCommand[] }> {
   const probed = await pool(
     listed.map(
       (command) => () =>
         probeCommand(
+          cli,
           probe,
           command,
           listed.some((other) => isChildOf(other.path, command.path)),
@@ -234,7 +250,7 @@ async function buildTable(
       ...(command.rawArgs && { rawArgs: true as const }),
     };
   }
-  return { cli, version, ...options, commands };
+  return { table: { cli, version, ...options, commands }, probed };
 }
 
 function inheritedFlags(
@@ -271,10 +287,24 @@ async function ghTable(bin: string): Promise<CommandTable> {
     ],
   };
   const listed = [rootCommand, ...parseGhReference(reference.output)];
-  return buildTable("gh", version, listed, probe, {
+  const { table, probed } = await buildTable("gh", version, listed, probe, {
     normalizeUnderscores: false,
     defaultHelpFlag: false,
   });
+  // Every flag a help page lists as inherited must reach the command through a parent's
+  // persistent flags; a lost `-R` would leave heel unable to parse the repo a command acts on.
+  const problems: string[] = [];
+  for (const command of probed) {
+    if (command.inherited === undefined || command.listed.path.length === 0) continue;
+    const path = key(command.listed.path);
+    if (command.inherited.length === 0) problems.push(`gh ${path}: help lists no inherited flags`);
+    for (const flag of missingInheritedFlags(table, command.listed.path, command.inherited)) {
+      problems.push(`gh ${path}: inherits ${flag}, but no parent has it as persistent`);
+    }
+  }
+  for (const path of missingRepoFlags(table)) problems.push(`gh ${path}: no -R/--repo`);
+  if (problems.length > 0) throw new Error(`gh table is missing flags:\n${problems.join("\n")}`);
+  return table;
 }
 
 async function kubectlTable(bin: string): Promise<CommandTable> {
@@ -299,10 +329,11 @@ async function kubectlTable(bin: string): Promise<CommandTable> {
       frontier.push(...page.subcommands.map((name) => [...path, name]));
     }
   }
-  return buildTable("kubectl", version, listed, probe, {
+  const { table } = await buildTable("kubectl", version, listed, probe, {
     normalizeUnderscores: true,
     defaultHelpFlag: true,
   });
+  return table;
 }
 
 function formatGenerated(files: readonly string[]): Promise<void> {

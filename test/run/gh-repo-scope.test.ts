@@ -124,9 +124,70 @@ describe("gh: the repo rules check is the repo gh acts on", () => {
     await ran(["gh", "pr", "view", "-R", "acme/web", "--json=title,body", "7"]);
   });
 
-  it("denies a comment whose repo heel can't see", async () => {
+  it("refuses a comment whose repo heel can't see", async () => {
     // Without -R or a URL, gh reads the repo from the checkout's git remotes.
-    await refused(["gh", "issue", "comment", "5", "--body", "hi"], "no_rule_matched");
+    await refused(["gh", "issue", "comment", "5", "--body", "hi"]);
+  });
+
+  it("runs gh issue comment -R acme/web under the acme/web rule, flag before or after", async () => {
+    await ran(["gh", "issue", "comment", "-R", "acme/web", "5", "--body", "hi"]);
+    await ran(["gh", "issue", "-R", "acme/web", "comment", "5", "--body", "hi"]);
+    await ran(["gh", "-R", "Acme/Web", "issue", "comment", "5", "--body", "hi"]);
+  });
+
+  it("doesn't match the acme/web rule with -R on another repo", async () => {
+    await refused(
+      ["gh", "issue", "comment", "-R", "other/repo", "5", "--body", "hi"],
+      "no_rule_matched",
+    );
+    await refused(["gh", "run", "view", "123", "-R", "other/repo"], "no_rule_matched");
+  });
+
+  it("refuses an issue URL with a -R that disagrees, either way round", async () => {
+    await refused([
+      "gh",
+      "issue",
+      "comment",
+      "https://github.com/acme/web/issues/5",
+      "-R",
+      "evil/other",
+      "--body",
+      "hi",
+    ]);
+    await refused([
+      "gh",
+      "issue",
+      "comment",
+      "https://github.com/evil/other/issues/5",
+      "-R",
+      "acme/web",
+      "--body",
+      "pwned",
+    ]);
+    // Outside pr and issue gh reads no URL heel maps, so -R can't pin one.
+    await refused(["gh", "run", "view", "https://github.com/evil/other/pull/7", "-R", "acme/web"]);
+  });
+
+  it("refuses commands that reach a second repo or an owner under a rule on acme/web", async () => {
+    const h = cliPipeline({
+      owner: "rules:\n  - match: { command: gh, repo: { one_of: [acme/web] } }\n    then: allow\n",
+    });
+    await expect(
+      h.run({ argv: ["gh", "release", "upload", "v1", "a.zip", "-R", "acme/web"], cwd: h.repo }),
+    ).resolves.toMatchObject({ body: { status: "ran" } });
+    for (const argv of [
+      ["gh", "label", "clone", "evil/other", "-R", "acme/web"],
+      ["gh", "issue", "transfer", "5", "evil/other", "-R", "acme/web"],
+      ["gh", "issue", "develop", "5", "--branch-repo", "evil/other", "-R", "acme/web"],
+      ["gh", "ruleset", "list", "--org", "evil", "-R", "acme/web"],
+      ["gh", "secret", "list", "--org", "evil", "-R", "acme/web"],
+    ]) {
+      await expect(h.run({ argv, cwd: h.repo }), argv.join(" ")).resolves.toMatchObject({
+        status: 403,
+        body: { reason: "unsupported" },
+      });
+    }
+    expect(h.started).toHaveLength(1);
   });
 
   it("still runs the URL spellings heel can pin", async () => {
