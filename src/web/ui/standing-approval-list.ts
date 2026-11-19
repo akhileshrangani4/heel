@@ -2,15 +2,7 @@ import type { RuleRef } from "../../core/call.ts";
 import type { StandingScope } from "../../store/schema.ts";
 import { formatRelative, formatRule } from "./format.ts";
 import { type Html, html } from "./html.ts";
-import {
-  badge,
-  type FormTarget,
-  notice,
-  postForm,
-  scrollRegion,
-  type Tone,
-  time,
-} from "./layout.ts";
+import { badge, type FormTarget, notice, postForm, type Tone, time } from "./layout.ts";
 
 /**
  * Where a standing approval stands. `lapsed` means its parent rule was edited
@@ -102,54 +94,40 @@ export function standingApprovalList(props: StandingApprovalListProps): Html {
       <p>No standing approvals. Approving a request as standing adds one here.</p>`;
   }
   return html`${heading}
-    ${scrollRegion(
-      "Standing approvals",
-      html`<table class="data">
-      <caption>
-        ${rows.length === 1 ? "1 standing approval" : `${rows.length} standing approvals`}
-      </caption>
-      <thead>
-        <tr>
-          <th scope="col">Agent and account</th>
-          <th scope="col">Covers</th>
-          <th scope="col">Rule</th>
-          <th scope="col">Granted</th>
-          <th scope="col">State</th>
-          <th scope="col">Revoke</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${rows.map(
-          (row) =>
-            html`<tr>
-              <th scope="row">
-                ${row.agent} on ${row.account}
-                <div class="muted mono">${row.id}</div>
-              </th>
-              <td>${scopeText(row)}</td>
-              <td>${formatRule(row.rule)}</td>
-              <td>${row.createdBy}, ${time(row.createdAt)}</td>
-              <td>${stateCell(row, props.now)}</td>
-              <td>
-                ${
-                  row.state === "active"
-                    ? postForm(
-                        props.revokeForm,
-                        { id: row.id },
-                        html`<button
-                          type="submit"
-                          class="btn btn-danger"
-                          aria-label="Revoke ${row.id} for ${row.agent} on ${row.account}"
-                        >
-                          Revoke
-                        </button>`,
-                      )
-                    : html`<span class="muted">—</span>`
-                }
-              </td>
-            </tr>`,
-        )}
-      </tbody>
-    </table>`,
-    )}`;
+    <p class="muted req-count">
+      ${rows.length === 1 ? "1 standing approval" : `${rows.length} standing approvals`}
+    </p>
+    <ul class="req-list" aria-label="Standing approvals">
+      ${rows.map(
+        (row) => html`<li class="card req" data-status="${row.state}">
+          <div class="ap-meta">
+            <span class="ap-agent">${row.agent}</span>
+            <span class="muted">on ${row.account}</span>
+            <span class="muted">by ${row.createdBy}, ${time(row.createdAt)}</span>
+            <span class="req-state">${stateCell(row, props.now)}</span>
+          </div>
+          <h2 class="req-title">${scopeText(row)}</h2>
+          <div class="req-foot-row">
+            <p class="req-foot muted">
+              Rule ${formatRule(row.rule)} · <span class="mono">${row.id}</span>
+            </p>
+            ${
+              row.state === "active"
+                ? postForm(
+                    props.revokeForm,
+                    { id: row.id },
+                    html`<button
+                      type="submit"
+                      class="btn btn-danger"
+                      aria-label="Revoke ${row.id} for ${row.agent} on ${row.account}"
+                    >
+                      Revoke
+                    </button>`,
+                  )
+                : ""
+            }
+          </div>
+        </li>`,
+      )}
+    </ul>`;
 }
