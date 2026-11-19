@@ -361,6 +361,10 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         now,
         // The pool exists only once the agent plane is up; until then nothing is running to stop.
         onAccountConfigured: (accountId) => evictLocalServer(accountId),
+        signIns: {
+          google: providerClients.google !== null,
+          microsoft: providerClients.microsoft !== null,
+        },
       }),
       log,
     });

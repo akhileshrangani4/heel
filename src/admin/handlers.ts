@@ -1,6 +1,11 @@
 import { and, eq } from "drizzle-orm";
 import { exportAuditPage } from "../audit/export.ts";
 import {
+  type ConfiguredSignIns,
+  missingSignInSetup,
+  signInSetupFor,
+} from "../definitions/sign-in-setup.ts";
+import {
   AgentError,
   type AgentErrorCode,
   addAgent,
@@ -53,6 +58,12 @@ export interface AdminDeps {
   home?: string;
   /** `heel account set` changed how an account's server runs: stop the one running now. */
   onAccountConfigured?: (accountId: string) => void;
+  /**
+   * Which sign-in clients (`providers.google`, `providers.microsoft`) heel
+   * started with, so `heel connect gmail` can say when its owner can't sign
+   * in yet. Left out, connect says nothing about it.
+   */
+  signIns?: ConfiguredSignIns;
   now?: () => Date;
 }
 
@@ -164,7 +175,16 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
         ...(http === undefined ? {} : { http }),
         ...(cli === undefined ? {} : { cli }),
       };
-      return adminOk(connectAccount(db, deps.vault, input, now));
+      const connected = connectAccount(db, deps.vault, input, now);
+      // Gmail, Calendar and Outlook sign in from the Connections page, which
+      // needs the operator's own client: say whether that's possible yet.
+      const signIn =
+        deps.signIns === undefined || signInSetupFor(provider) === null
+          ? null
+          : missingSignInSetup(provider, deps.signIns) === null
+            ? "ready"
+            : "needs_setup";
+      return adminOk({ ...connected, signIn });
     }
     case "account.list":
       return adminOk(listAccounts(db, orgId));

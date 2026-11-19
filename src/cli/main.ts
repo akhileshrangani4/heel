@@ -6,10 +6,12 @@ import { AdminClientError, adminCall } from "../admin/client.ts";
 import { type AdminRequest, AUDIT_EXPORT_MAX_PAGE } from "../admin/protocol.ts";
 import { AdminSocketError } from "../admin/server.ts";
 import type { HeelConfig, ListenAddress } from "../config/schema.ts";
+import { signInSetupFor } from "../definitions/sign-in-setup.ts";
 import { createLogger } from "../log.ts";
 import { startHeel } from "../serve.ts";
 import { hasErrnoCode } from "../util/errno.ts";
 import { createMasterKeyFile } from "../vault/key.ts";
+import { SecretFileError } from "../vault/secret-file.ts";
 import { HEEL_VERSION } from "../version.ts";
 import {
   type CliIo,
@@ -40,7 +42,9 @@ export const USAGE = `usage:
   heel connect gmail|google-calendar|outlook --as <alias> [--owner <user>]
                                           add a Gmail, Google Calendar or Outlook
                                           account; its owner signs in with Google or
-                                          Microsoft from the Connections page
+                                          Microsoft from the Connections page, once
+                                          heel.yaml has your OAuth client
+                                          (providers.google or providers.microsoft)
   heel connect mcp --as <alias> --url <upstream> [--credential-stdin | --oauth]
                                           put a remote MCP server behind heel; a
                                           token on stdin is sent to it as a bearer,
@@ -111,6 +115,8 @@ const ConnectedAccountResult = z.object({
   alias: z.string(),
   provider: z.string(),
   status: z.string(),
+  /** For accounts that sign in from the Connections page: whether heel has the client for it. */
+  signIn: z.enum(["ready", "needs_setup"]).nullable().default(null),
 });
 const EnrollmentResult = z.object({
   url: z.string(),
@@ -432,6 +438,16 @@ async function connectCommand(args: string[], io: CliIo): Promise<number> {
     await admin(config, { method: "account.connect", params }),
   );
   io.stdout.write(`Connected ${account.provider} as "${account.alias}" (${account.status}).\n`);
+  const setup = signInSetupFor(account.provider);
+  if (account.signIn === "needs_setup" && setup !== null) {
+    io.stdout.write(
+      `It can't sign in yet: ${account.provider} needs your own ${setup.label} OAuth client as ${setup.configKey} in heel.yaml, then a restart. Steps: ${setup.docsUrl}\n`,
+    );
+  } else if (account.signIn === "ready") {
+    io.stdout.write(
+      `Next: sign in to it from the Connections page: ${new URL("/connections", config.publicUrl)}\n`,
+    );
+  }
   return EXIT.ok;
 }
 
@@ -817,7 +833,8 @@ export async function main(argv: string[], io: CliIo): Promise<number> {
       io.stderr.write(`heel: ${error.message}\n`);
       return EXIT.unavailable;
     }
-    if (error instanceof ConfigError) {
+    // A configured secret (an OAuth client's, say) that's missing or unsafe: the fix is the file.
+    if (error instanceof ConfigError || error instanceof SecretFileError) {
       io.stderr.write(`heel: ${error.message}\n`);
       return EXIT.config;
     }

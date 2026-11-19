@@ -84,7 +84,7 @@ heel reads `$HEEL_HOME/heel.yaml`, or the file named by `HEEL_CONFIG` or `--conf
 | `admin_socket` | see [With npm](#with-npm) | The admin socket's path. |
 | `vault.key_file` | `master.key` | The master key file. `HEEL_MASTER_KEY` takes precedence. |
 | `database` | `heel.db` | The SQLite database. |
-| `providers.google`, `providers.microsoft` | none | Your OAuth clients, needed to sign in Gmail, Calendar and Outlook accounts. Their redirect URIs are `public_url` + `/oauth/google/callback` and `/oauth/microsoft/callback`. |
+| `providers.google`, `providers.microsoft` | none | Your OAuth clients, needed to sign in Gmail, Calendar and Outlook accounts. Each takes a `client_id`. The secret comes from `HEEL_GOOGLE_CLIENT_SECRET` (`HEEL_MICROSOFT_CLIENT_SECRET`) or the `client_secret_file`, `google-client-secret` (`microsoft-client-secret`) by default. Their redirect URIs are `public_url` + `/oauth/google/callback` and `/oauth/microsoft/callback`. Step by step for Google: [Set up Google sign-in for heel](google-sign-in.md). |
 | `agent_public_url` | none | Where cloud agents (Claude, ChatGPT and Grok connectors) reach the agent plane. Setting it turns on OAuth for them. |
 | `oidc` | none | Sign-in through your identity provider, for teams. |
 | `notify` | web push | Where approval requests are sent: web push, email, Slack. |

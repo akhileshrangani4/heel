@@ -1,3 +1,4 @@
+import type { SignInSetup } from "../../definitions/sign-in-setup.ts";
 import type { AccountStatus } from "../../store/schema.ts";
 import { type Html, html } from "./html.ts";
 import { badge, type FormTarget, notice, postForm } from "./layout.ts";
@@ -8,6 +9,8 @@ export interface ConnectionRow {
   status: AccountStatus;
   /** The server wants OAuth sign-in, done from this page. */
   signsIn: boolean;
+  /** It signs in through an OAuth client heel.yaml doesn't have yet. */
+  setup: SignInSetup | null;
 }
 
 export type ConnectionsOutcome =
@@ -38,6 +41,14 @@ function outcomeNotice(outcome: ConnectionsOutcome): Html | "" {
   }
 }
 
+/** Signing in needs the operator's own OAuth client first: say which key, and where the steps are. */
+function setupNeeded(setup: SignInSetup): Html {
+  return html`<span class="muted"
+    >Needs your ${setup.label} OAuth client: set <code>${setup.configKey}</code> in heel.yaml and
+    restart heel. <a href="${setup.docsUrl}" target="_blank" rel="noopener">How to set it up</a></span
+  >`;
+}
+
 /**
  * The accounts a person owns, and sign-in for the ones whose server wants it
  * (D5c). Signing in happens on the server's own page; heel keeps the tokens
@@ -65,15 +76,17 @@ export function connectionsPage(props: ConnectionsProps): Html {
             <td>${row.status === "active" ? badge("Ready", "ok") : badge("Needs sign-in", "warn")}</td>
             <td>
               ${
-                row.signsIn
-                  ? postForm(
-                      props.signInForm,
-                      { alias: row.alias },
-                      html`<button type="submit" class="btn btn-secondary">
-                        ${row.status === "active" ? "Sign in again" : "Sign in"}
-                      </button>`,
-                    )
-                  : html`<span class="muted">Set up with <code>heel connect</code></span>`
+                row.setup !== null
+                  ? setupNeeded(row.setup)
+                  : row.signsIn
+                    ? postForm(
+                        props.signInForm,
+                        { alias: row.alias },
+                        html`<button type="submit" class="btn btn-secondary">
+                          ${row.status === "active" ? "Sign in again" : "Sign in"}
+                        </button>`,
+                      )
+                    : html`<span class="muted">Set up with <code>heel connect</code></span>`
               }
             </td>
           </tr>`,

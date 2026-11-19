@@ -25,6 +25,7 @@ In a second terminal:
    heel connect gmail --as gmail-work          # then sign in from the Connections page
    heel connect mcp --as notion --url https://mcp.notion.com/mcp --oauth
    ```
+   Gmail and Google Calendar sign in through your own Google OAuth client, set as `providers.google` in `heel.yaml`. Create it first: [Set up Google sign-in for heel](google-sign-in.md) takes about 5 minutes, once.
    Any MCP server, any HTTP API with an OpenAPI file, and any CLI can go behind heel. `heel --help` lists the forms.
 3. **Write your rules** in `$HEEL_HOME/rules/owner.yaml` ([Rules](rules.md)). If you're unsure where to start, run `heel serve --watch` for a while. Every call runs, and the Activity page shows what each rule would have done.
 4. **Add the agent.** `heel agent add my-agent` prints its heel token, once, and the MCP URL. That token is the only credential the agent gets.

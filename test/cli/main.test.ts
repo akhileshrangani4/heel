@@ -48,8 +48,15 @@ async function run(
 }
 
 /** Boots heel in-process against `home`, so CLI commands have an admin socket to talk to. */
-async function serveIn(home: string): Promise<{ agentUrl: string }> {
-  const env = { HEEL_HOME: home, [MASTER_KEY_ENV]: encodeMasterKey(randomBytes(32)) };
+async function serveIn(
+  home: string,
+  extraEnv: Record<string, string> = {},
+): Promise<{ agentUrl: string }> {
+  const env = {
+    HEEL_HOME: home,
+    [MASTER_KEY_ENV]: encodeMasterKey(randomBytes(32)),
+    ...extraEnv,
+  };
   const config = loadConfig(resolveConfigSource(env, undefined));
   const heel = await startHeel({ config, env, log: createLogger("silent"), version: "test" });
   onTestFinished(() => heel.close());
@@ -192,6 +199,59 @@ describe("heel CLI", () => {
 
     const listed = await run(["account", "list"], { HEEL_HOME: home });
     expect(listed.stdout).not.toContain(secret);
+  });
+
+  it("connect gmail without providers.google says how to set up Google sign-in", async () => {
+    const home = heelHome();
+    await serveIn(home);
+
+    const gmail = await run(["connect", "gmail", "--as", "gmail-work"], { HEEL_HOME: home });
+    expect(gmail.code).toBe(EXIT.ok);
+    expect(gmail.stdout).toContain('Connected gmail as "gmail-work"');
+    expect(gmail.stdout).toContain("providers.google");
+    expect(gmail.stdout).toContain("https://useheel.dev/docs/google-sign-in");
+    expect(gmail.stdout.trimEnd().split("\n")).toHaveLength(2);
+
+    const calendar = await run(["connect", "google-calendar", "--as", "cal"], { HEEL_HOME: home });
+    expect(calendar.stdout).toContain("https://useheel.dev/docs/google-sign-in");
+
+    const github = await run(["connect", "github", "--as", "gh"], { HEEL_HOME: home });
+    expect(github.stdout).not.toContain("providers.");
+    expect(github.stdout).not.toContain("Connections page");
+  });
+
+  it("connect gmail with providers.google points at the Connections page", async () => {
+    const home = heelHome();
+    writeFileSync(
+      join(home, "heel.yaml"),
+      "admin_socket: run/admin.sock\nlisten:\n  agent: 127.0.0.1:0\n  human: 127.0.0.1:0\n" +
+        "providers:\n  google:\n    client_id: test-client.apps.googleusercontent.com\n",
+    );
+    await serveIn(home, { HEEL_GOOGLE_CLIENT_SECRET: "test-secret" });
+
+    const gmail = await run(["connect", "gmail", "--as", "gmail-work"], { HEEL_HOME: home });
+    expect(gmail.code).toBe(EXIT.ok);
+    expect(gmail.stdout).not.toContain("providers.google");
+    expect(gmail.stdout).toContain("http://localhost:7301/connections");
+  });
+
+  it("serve with providers.google but no client secret says which secret, without a stack", async () => {
+    const home = heelHome();
+    writeFileSync(
+      join(home, "heel.yaml"),
+      "admin_socket: run/admin.sock\nlisten:\n  agent: 127.0.0.1:0\n  human: 127.0.0.1:0\n" +
+        "providers:\n  google:\n    client_id: test-client.apps.googleusercontent.com\n",
+    );
+
+    const served = await run(["serve"], {
+      HEEL_HOME: home,
+      [MASTER_KEY_ENV]: encodeMasterKey(randomBytes(32)),
+    });
+
+    expect(served.code).toBe(EXIT.config);
+    expect(served.stderr).toContain("no secret: set HEEL_GOOGLE_CLIENT_SECRET or create");
+    expect(served.stderr).toContain("google-client-secret");
+    expect(served.stderr).not.toContain("    at ");
   });
 
   it("bin/heel.js serve boots under Node type stripping and stops cleanly on SIGTERM", async () => {

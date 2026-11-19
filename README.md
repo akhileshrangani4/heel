@@ -38,9 +38,10 @@ In a second terminal, with the same `HEEL_HOME`:
 ```sh
 heel user enroll owner                      # open the link and register a passkey
 gh auth token | heel connect github --as github --credential-stdin
-heel connect gmail --as gmail-work          # then sign in from the Connections page
 heel agent add my-agent                     # prints the agent's token (once) and MCP URL
 ```
+
+**Gmail and Google Calendar need your own Google OAuth client first.** heel is self-hosted, so it signs these accounts in through a client you create in Google Cloud and add to `heel.yaml` as `providers.google`. It takes about 5 minutes, once: follow [Set up Google sign-in for heel](docs/google-sign-in.md). Then run `heel connect gmail --as gmail-work` and sign in from the Connections page. GitHub works without it (with the [`gh` CLI](https://cli.github.com) signed in), so you can finish the quick start first and add Gmail after.
 
 - **This setup is for trying heel out.** It runs as your own user, so a local agent with a shell (Claude Code, Codex) could read heel's key and edit its rules. For daily use, run heel on another machine, as its own user, or in Docker: see [Keep agents out of heel's files](docs/running.md#keep-agents-out-of-heels-files).
 - **Approving:** on `localhost`, you approve on this computer, with a passkey (Touch ID, say). To approve from your phone, give heel an HTTPS address first: see [Approve from your phone](#approve-from-your-phone).
@@ -195,6 +196,7 @@ The docs are at **[useheel.dev](https://useheel.dev)**, and in [`docs/`](docs).
 | [Rules and hiding](docs/rules.md) | Every check, counts, state checks, `hide` |
 | [Approvals, grants and pause](docs/approvals.md) | Grants, standing approvals, hints |
 | [Running heel](docs/running.md) | npm, Docker, configuration, upgrading, the sandbox |
+| [Set up Google sign-in](docs/google-sign-in.md) | Your own Google OAuth client, for Gmail and Calendar accounts |
 | [How it works](docs/how-it-works.md) | Surfaces, the trust boundary, teams, built-in definitions |
 | [Why heel](docs/why.md) | The problem, intent-based access control, and where heel comes from |
 | [Incidents](docs/incidents.md) | Four real incidents, replayed against heel |
