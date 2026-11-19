@@ -33,6 +33,7 @@ import {
   type IncomingHttpHeaders,
   type IncomingMessage,
   type ServerResponse,
+  STATUS_CODES,
 } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { isIP, type Socket } from "node:net";
@@ -44,7 +45,7 @@ import {
 } from "node:tls";
 import { hostRoots, type SandboxCa } from "./ca.ts";
 import type { EgressTarget } from "./egress.ts";
-import { createScrubber, credentialForms, scrubAll } from "./scrub.ts";
+import { base64Middles, createScrubber, credentialForms, scrubAll } from "./scrub.ts";
 
 /** Where the credential goes in a request. */
 export type CredentialAuth =
@@ -200,8 +201,17 @@ const HOP_BY_HOP = new Set([
   "http2-settings",
 ]);
 
-/** Pure: the headers sent upstream: hop-by-hop ones dropped, identity encoding asked for. */
-export function forwardHeaders(rawHeaders: readonly string[], upgrade: boolean): string[] {
+/**
+ * Pure: the headers sent upstream: hop-by-hop ones dropped, identity encoding
+ * asked for. `chunked` puts back the framing of a chunked request body: Node
+ * decoded it, and without the header it would write the body raw, where the
+ * upstream would read whatever it holds as the next request.
+ */
+export function forwardHeaders(
+  rawHeaders: readonly string[],
+  upgrade: boolean,
+  chunked = false,
+): string[] {
   const out: string[] = [];
   for (let i = 0; i < rawHeaders.length; i += 2) {
     const name = rawHeaders[i] ?? "";
@@ -211,19 +221,28 @@ export function forwardHeaders(rawHeaders: readonly string[], upgrade: boolean):
   }
   // Bodies heel can read are bodies heel can scrub.
   out.push("Accept-Encoding", "identity");
+  if (chunked) out.push("Transfer-Encoding", "chunked");
   if (upgrade) out.push("Connection", "Upgrade", "Upgrade", "websocket");
   return out;
 }
+
+/** Defaults for the deadlines a sandboxed client gets inside a tunnel. */
+const HEADER_TIMEOUT_MS = 30_000;
+const IDLE_TIMEOUT_MS = 120_000;
 
 export interface InterceptOptions {
   readonly ca: SandboxCa;
   readonly auth: CredentialAuth;
   readonly placeholder: string;
-  /** Read for each request, so a refreshed or revoked credential takes effect at once. */
+  /** Read for each request, so a refreshed, revoked or paused credential takes effect at once. */
   readonly credential: () => Promise<string>;
   /** Trust roots for the upstream's certificate; the host's own when absent. Tests only. */
   readonly upstreamCa?: readonly string[];
   readonly connectTimeoutMs: number;
+  /** How long a request's headers may take to arrive, from the first byte or the last response. */
+  readonly headerTimeoutMs?: number;
+  /** How long a tunnel may sit with no traffic either way. */
+  readonly idleTimeoutMs?: number;
   /** One event per request heel read inside a tunnel, for audit. */
   readonly onRequest?: (event: InterceptEvent) => void;
 }
@@ -241,15 +260,29 @@ export type InterceptRefusal =
   | RewriteRefusal
   | "host_mismatch"
   | "bad_target"
+  | "bad_framing"
   | "unsupported_upgrade"
   | "nested_connect"
   | "credential_unavailable"
-  | "upstream_unreachable";
+  | "upstream_unreachable"
+  | "upstream_bad_response";
+
+/** One tunnel's context, shared by every request on it. */
+interface Tunnel {
+  readonly target: EgressTarget;
+  readonly address: string;
+  readonly options: InterceptOptions;
+  /** Every socket the proxy owns, so closing it closes the upstream side too. */
+  readonly sockets: Set<Socket>;
+}
 
 /**
  * Takes over a CONNECT tunnel to a credential host: answers it, terminates
  * TLS with a leaf from the sandbox CA, and serves HTTP/1.1 on it, forwarding
  * each request to `address` once its credential is in place.
+ *
+ * The http server here never listens, so Node's own header and request
+ * timeouts never run: the deadlines are heel's.
  */
 export async function intercept(
   client: Socket,
@@ -259,15 +292,32 @@ export async function intercept(
   sockets: Set<Socket>,
 ): Promise<void> {
   const leaf = await options.ca.leaf(target.host);
+  const tunnelContext: Tunnel = { target, address, options, sockets };
+  const headerTimeoutMs = options.headerTimeoutMs ?? HEADER_TIMEOUT_MS;
+  const deadlines = new WeakMap<Socket, NodeJS.Timeout>();
+  const arm = (socket: Socket): void => {
+    clearTimeout(deadlines.get(socket));
+    deadlines.set(
+      socket,
+      setTimeout(() => socket.destroy(), headerTimeoutMs),
+    );
+  };
+  const disarm = (socket: Socket): void => clearTimeout(deadlines.get(socket));
+
   const http = createHttpServer({ requireHostHeader: true, joinDuplicateHeaders: false });
   http.on("request", (req: IncomingMessage, res: ServerResponse) => {
-    void handleRequest(req, res, target, address, options).catch(() => res.destroy());
+    disarm(req.socket);
+    // The next request on a kept-alive connection gets its own deadline.
+    res.once("finish", () => arm(req.socket));
+    handleRequest(req, res, tunnelContext).catch(() => res.destroy());
   });
   http.on("upgrade", (req: IncomingMessage, socket: Socket, head: Buffer) => {
-    void handleUpgrade(req, socket, head, target, address, options).catch(() => socket.destroy());
+    disarm(socket);
+    handleUpgrade(req, socket, head, tunnelContext).catch(() => socket.destroy());
   });
   // A CONNECT inside the tunnel would open a tunnel heel can't see into.
   http.on("connect", (req: IncomingMessage, socket: Socket) => {
+    disarm(socket);
     report(options, target, req.method ?? "CONNECT", "nested_connect");
     answer(socket, 405, "nested_connect");
   });
@@ -283,8 +333,13 @@ export async function intercept(
   tls.on("secureConnection", (secure) => {
     // The http server drops its own listeners on an upgrade or a CONNECT; a reset must not go unhandled.
     secure.on("error", () => secure.destroy());
+    secure.setTimeout(options.idleTimeoutMs ?? IDLE_TIMEOUT_MS, () => secure.destroy());
     sockets.add(secure);
-    secure.on("close", () => sockets.delete(secure));
+    secure.on("close", () => {
+      disarm(secure);
+      sockets.delete(secure);
+    });
+    arm(secure);
     http.emit("connection", secure);
   });
   // A client that offers only h2, or doesn't trust the CA, never gets a request through.
@@ -298,26 +353,25 @@ export async function intercept(
 async function handleRequest(
   req: IncomingMessage,
   res: ServerResponse,
-  target: EgressTarget,
-  address: string,
-  options: InterceptOptions,
+  tunnel: Tunnel,
 ): Promise<void> {
+  const { target, options } = tunnel;
   const method = req.method ?? "GET";
-  const prepared = await prepare(req, target, options);
+  // Registered before the credential is read: a client gone by then gets nothing sent on its behalf.
+  let gone = false;
+  res.once("close", () => {
+    gone = true;
+  });
+  const prepared = await prepare(req, tunnel);
+  if (gone) return;
   if (!prepared.ok) {
     report(options, target, method, prepared.reason);
     req.resume();
     reply(res, prepared.status, prepared.reason);
     return;
   }
-  const { headers, credential, injected } = prepared;
-  const upstream = httpsRequest({
-    ...dialOptions(target, address, options),
-    method,
-    path: req.url,
-    headers: forwardHeaders(headers, false),
-  });
-  connectTimeout(upstream, options.connectTimeoutMs);
+  const { headers, forms, injected, chunked } = prepared;
+  const upstream = dial(tunnel, method, req.url ?? "/", forwardHeaders(headers, false, chunked));
   upstream.on("error", () => {
     if (!res.headersSent) {
       report(options, target, method, "upstream_unreachable");
@@ -327,102 +381,154 @@ async function handleRequest(
     }
   });
   upstream.on("response", (response) => {
-    report(options, target, method, undefined, injected);
-    const forms = credentialForms(credential, authType(options.auth));
-    const scrubBody = method !== "HEAD" && isIdentity(response.headers);
-    res.writeHead(
-      response.statusCode ?? 502,
-      response.statusMessage,
-      responseHeaders(response.rawHeaders, forms, scrubBody),
-    );
-    if (scrubBody) response.pipe(scrubbing(forms)).pipe(res);
-    else response.pipe(res);
-    response.on("error", () => res.destroy());
+    // Nothing thrown here may escape: this listener runs outside any promise heel awaits.
+    try {
+      const status = response.statusCode ?? 0;
+      if (!isForwardableStatus(status)) {
+        response.resume();
+        upstream.destroy();
+        report(options, target, method, "upstream_bad_response");
+        reply(res, 502, "upstream_bad_response");
+        return;
+      }
+      report(options, target, method, undefined, injected);
+      const scrubBody = method !== "HEAD" && isIdentity(response.headers);
+      res.writeHead(
+        status,
+        STATUS_CODES[status] ?? "Unknown",
+        responseHeaders(response.rawHeaders, forms, scrubBody),
+      );
+      response.on("error", () => res.destroy());
+      if (scrubBody) response.pipe(scrubbing(forms)).pipe(res);
+      else response.pipe(res);
+    } catch {
+      upstream.destroy();
+      res.destroy();
+    }
   });
+  res.once("close", () => upstream.destroy());
   req.pipe(upstream);
-  res.on("close", () => upstream.destroy());
 }
 
 async function handleUpgrade(
   req: IncomingMessage,
   socket: Socket,
   head: Buffer,
-  target: EgressTarget,
-  address: string,
-  options: InterceptOptions,
+  tunnel: Tunnel,
 ): Promise<void> {
+  const { target, options } = tunnel;
   const method = req.method ?? "GET";
+  let gone = false;
+  socket.once("close", () => {
+    gone = true;
+  });
   if ((req.headers.upgrade ?? "").toLowerCase() !== "websocket") {
     // h2c, or anything else that would change the protocol under heel.
     report(options, target, method, "unsupported_upgrade");
     answer(socket, 400, "unsupported_upgrade");
     return;
   }
-  const prepared = await prepare(req, target, options);
+  // An upgrade carries no body; one that claims to would leave bytes heel didn't frame.
+  if (
+    req.headers["transfer-encoding"] !== undefined ||
+    Number(req.headers["content-length"] ?? 0) > 0
+  ) {
+    report(options, target, method, "bad_framing");
+    answer(socket, 400, "bad_framing");
+    return;
+  }
+  const prepared = await prepare(req, tunnel);
+  if (gone) return;
   if (!prepared.ok) {
     report(options, target, method, prepared.reason);
     answer(socket, prepared.status, prepared.reason);
     return;
   }
-  const { headers, credential, injected } = prepared;
-  const forms = credentialForms(credential, authType(options.auth));
-  const upstream = httpsRequest({
-    ...dialOptions(target, address, options),
-    method,
-    path: req.url,
-    headers: forwardHeaders(headers, true),
-  });
-  connectTimeout(upstream, options.connectTimeoutMs);
+  const { headers, forms, injected } = prepared;
+  const upstream = dial(tunnel, method, req.url ?? "/", forwardHeaders(headers, true));
+  socket.once("close", () => upstream.destroy());
   upstream.on("error", () => {
     report(options, target, method, "upstream_unreachable");
     answer(socket, 502, "upstream_unreachable");
   });
   // The upstream refused the upgrade: pass its answer back and end.
   upstream.on("response", (response) => {
-    report(options, target, method, undefined, injected);
-    socket.write(statusBlock(response, forms, false));
-    response.pipe(scrubbing(forms)).pipe(socket);
+    try {
+      const status = response.statusCode ?? 0;
+      if (!isForwardableStatus(status)) {
+        response.resume();
+        upstream.destroy();
+        report(options, target, method, "upstream_bad_response");
+        answer(socket, 502, "upstream_bad_response");
+        return;
+      }
+      report(options, target, method, undefined, injected);
+      socket.write(statusBlock(status, response.rawHeaders, forms, false));
+      response.on("error", () => socket.destroy());
+      response.pipe(scrubbing(forms)).pipe(socket);
+    } catch {
+      upstream.destroy();
+      socket.destroy();
+    }
   });
   upstream.on("upgrade", (response, upstreamSocket: Socket, upstreamHead: Buffer) => {
-    report(options, target, method, undefined, injected);
-    socket.write(statusBlock(response, forms, true));
-    if (upstreamHead.length > 0) socket.write(upstreamHead);
-    if (head.length > 0) upstreamSocket.write(head);
-    upstreamSocket.pipe(socket);
-    socket.pipe(upstreamSocket);
-    upstreamSocket.on("error", () => socket.destroy());
-    socket.on("error", () => upstreamSocket.destroy());
-    upstreamSocket.on("close", () => socket.destroy());
-    socket.on("close", () => upstreamSocket.destroy());
+    try {
+      tunnel.sockets.add(upstreamSocket);
+      upstreamSocket.on("error", () => socket.destroy());
+      upstreamSocket.on("close", () => {
+        tunnel.sockets.delete(upstreamSocket);
+        socket.destroy();
+      });
+      socket.on("error", () => upstreamSocket.destroy());
+      socket.on("close", () => upstreamSocket.destroy());
+      report(options, target, method, undefined, injected);
+      socket.write(statusBlock(101, response.rawHeaders, forms, true));
+      if (upstreamHead.length > 0) socket.write(upstreamHead);
+      if (head.length > 0) upstreamSocket.write(head);
+      upstreamSocket.pipe(socket);
+      socket.pipe(upstreamSocket);
+    } catch {
+      upstreamSocket.destroy();
+      socket.destroy();
+    }
   });
   upstream.end();
 }
 
 type Prepared =
-  | { ok: true; headers: string[]; credential: string; injected: boolean }
+  | { ok: true; headers: string[]; forms: string[]; injected: boolean; chunked: boolean }
   | { ok: false; status: 400 | 403 | 503; reason: InterceptRefusal };
 
 /** The checks every request inside the tunnel passes, then its rewritten headers. */
-async function prepare(
-  req: IncomingMessage,
-  target: EgressTarget,
-  options: InterceptOptions,
-): Promise<Prepared> {
+async function prepare(req: IncomingMessage, tunnel: Tunnel): Promise<Prepared> {
+  const { target, options } = tunnel;
   // Origin-form only: an absolute URL could name a host other than the tunnel's.
   if (!(req.url ?? "").startsWith("/")) return { ok: false, status: 400, reason: "bad_target" };
   if (!hostMatches(singleHost(req.rawHeaders), target)) {
     return { ok: false, status: 403, reason: "host_mismatch" };
   }
+  // Node only accepts `chunked` as the last coding; anything layered under it heel won't re-create.
+  const encoding = req.headers["transfer-encoding"];
+  if (encoding !== undefined && encoding.trim().toLowerCase() !== "chunked") {
+    return { ok: false, status: 400, reason: "bad_framing" };
+  }
   let credential: string;
   try {
     credential = await options.credential();
   } catch {
-    // Disconnected, revoked, or a refresh that failed: nothing goes upstream.
+    // Disconnected, revoked, paused, or a refresh that failed: nothing goes upstream.
     return { ok: false, status: 503, reason: "credential_unavailable" };
   }
   const rewritten = rewriteAuth(req.rawHeaders, options.auth, options.placeholder, credential);
   if (!rewritten.ok) return { ok: false, status: 403, reason: rewritten.reason };
-  return { ok: true, headers: rewritten.headers, credential, injected: rewritten.injected };
+  const sent = rewritten.injected ? authValue(rewritten.headers, options.auth) : undefined;
+  return {
+    ok: true,
+    headers: rewritten.headers,
+    forms: scrubForms(credential, options.auth, sent),
+    injected: rewritten.injected,
+    chunked: encoding !== undefined,
+  };
 }
 
 /** The one `Host` header's value; undefined when there are none or several. */
@@ -434,31 +540,73 @@ function singleHost(rawHeaders: readonly string[]): string | undefined {
   return hosts.length === 1 ? hosts[0] : undefined;
 }
 
-function dialOptions(target: EgressTarget, address: string, options: InterceptOptions) {
+/** The value heel put in the auth position. */
+function authValue(rawHeaders: readonly string[], auth: CredentialAuth): string | undefined {
+  const name = auth.type === "authorization" ? "authorization" : auth.name;
+  for (let i = 0; i < rawHeaders.length; i += 2) {
+    if (rawHeaders[i]?.toLowerCase() === name) return rawHeaders[i + 1];
+  }
+  return undefined;
+}
+
+/**
+ * What the response scrub looks for: the credential's predictable forms, its
+ * base64 at every byte alignment (an upstream that encodes what it received
+ * puts it at an offset the sandbox can steer), and the exact value heel sent,
+ * which for basic auth is base64 of a user name the sandbox chose followed by
+ * the credential, aligned however that name makes it.
+ */
+function scrubForms(credential: string, auth: CredentialAuth, sent: string | undefined): string[] {
+  const forms = new Set(credentialForms(credential, authType(auth)));
+  for (const middle of base64Middles(credential)) forms.add(middle);
+  if (sent !== undefined) {
+    forms.add(sent);
+    const space = sent.indexOf(" ");
+    if (space !== -1) forms.add(sent.slice(space + 1));
+  }
+  return [...forms].filter((form) => form.length >= 4).sort((a, b) => b.length - a.length);
+}
+
+function dial(tunnel: Tunnel, method: string, path: string, headers: string[]): ClientRequest {
+  const { target, address, options, sockets } = tunnel;
   const named = isIP(target.host) === 0;
-  return {
+  const requestOptions = {
     // The address the egress decision checked; never resolved again.
     host: address,
     port: target.port,
     ...(named ? { servername: target.host } : {}),
     ALPNProtocols: ["http/1.1"],
-    agent: false as const,
+    agent: false,
     setHost: false,
     rejectUnauthorized: true,
     checkServerIdentity: (_host: string, cert: PeerCertificate) =>
       checkServerIdentity(target.host, cert),
     // The same roots the sandbox trusts for hosts heel tunnels blind.
     ca: options.upstreamCa === undefined ? hostRoots() : [...options.upstreamCa],
+    method,
+    path,
+    headers,
   };
+  const upstream = httpsRequest(requestOptions);
+  upstream.once("socket", (socket: Socket) => {
+    sockets.add(socket);
+    // Gives up on an upstream that hasn't finished its TLS handshake in time; a slow answer is fine.
+    const timer = setTimeout(
+      () => upstream.destroy(new Error("connect timeout")),
+      options.connectTimeoutMs,
+    );
+    socket.once("secureConnect", () => clearTimeout(timer));
+    socket.once("close", () => {
+      clearTimeout(timer);
+      sockets.delete(socket);
+    });
+  });
+  return upstream;
 }
 
-/** Gives up on an upstream that hasn't finished its TLS handshake in time; a slow answer is fine. */
-function connectTimeout(upstream: ClientRequest, ms: number): void {
-  upstream.once("socket", (socket: Socket) => {
-    const timer = setTimeout(() => upstream.destroy(new Error("connect timeout")), ms);
-    socket.once("secureConnect", () => clearTimeout(timer));
-    socket.once("close", () => clearTimeout(timer));
-  });
+/** A final status heel will pass on: informational and out-of-range ones become a 502. */
+function isForwardableStatus(status: number): boolean {
+  return Number.isInteger(status) && status >= 200 && status <= 599;
 }
 
 function authType(auth: CredentialAuth): { type: string } {
@@ -493,14 +641,18 @@ function responseHeaders(
   return out;
 }
 
-/** A raw status line and headers, for a socket heel writes to directly. */
+/**
+ * A raw status line and headers, for a socket heel writes to directly. The
+ * reason phrase is the standard one, never the upstream's.
+ */
 function statusBlock(
-  response: IncomingMessage,
+  status: number,
+  rawHeaders: readonly string[],
   forms: readonly string[],
   upgrade: boolean,
 ): string {
-  const lines = [`HTTP/1.1 ${response.statusCode ?? 502} ${response.statusMessage ?? ""}`];
-  const headers = responseHeaders(response.rawHeaders, forms, false);
+  const lines = [`HTTP/1.1 ${status} ${STATUS_CODES[status] ?? "Unknown"}`];
+  const headers = responseHeaders(rawHeaders, forms, false);
   for (let i = 0; i < headers.length; i += 2) lines.push(`${headers[i]}: ${headers[i + 1]}`);
   if (upgrade) lines.push("Connection: Upgrade", "Upgrade: websocket");
   else lines.push("Connection: close");
@@ -526,11 +678,20 @@ function report(
   refused: InterceptRefusal | undefined,
   injected = false,
 ): void {
-  options.onRequest?.({ target, method, injected, ...(refused === undefined ? {} : { refused }) });
+  try {
+    options.onRequest?.({
+      target,
+      method,
+      injected,
+      ...(refused === undefined ? {} : { refused }),
+    });
+  } catch {
+    // An audit hook that throws must not take a request, or heel, down with it.
+  }
 }
 
 function reply(res: ServerResponse, status: number, reason: string): void {
-  if (res.headersSent) {
+  if (res.headersSent || res.destroyed) {
     res.destroy();
     return;
   }
@@ -542,17 +703,10 @@ function reply(res: ServerResponse, status: number, reason: string): void {
   res.end(body);
 }
 
-const STATUS_TEXT: Record<number, string> = {
-  400: "Bad Request",
-  403: "Forbidden",
-  405: "Method Not Allowed",
-  502: "Bad Gateway",
-  503: "Service Unavailable",
-};
-
 function answer(socket: Socket, status: number, reason: string): void {
+  if (socket.destroyed) return;
   const body = `heel: request refused (${reason})\n`;
   socket.end(
-    `HTTP/1.1 ${status} ${STATUS_TEXT[status] ?? "Error"}\r\nContent-Type: text/plain\r\nContent-Length: ${Buffer.byteLength(body)}\r\nConnection: close\r\n\r\n${body}`,
+    `HTTP/1.1 ${status} ${STATUS_CODES[status] ?? "Error"}\r\nContent-Type: text/plain\r\nContent-Length: ${Buffer.byteLength(body)}\r\nConnection: close\r\n\r\n${body}`,
   );
 }

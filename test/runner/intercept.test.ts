@@ -1,8 +1,6 @@
 import { mkdtemp, rm } from "node:fs/promises";
-import { connect, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type TLSSocket, connect as tlsConnect } from "node:tls";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createSandboxCa, type SandboxCa } from "../../src/runner/ca.ts";
 import { EgressConfigError, startEgressProxy } from "../../src/runner/egress.ts";
@@ -17,6 +15,7 @@ import {
   rewriteAuth,
 } from "../../src/runner/intercept.ts";
 import { headerOf, httpsUpstream } from "../helpers/https-upstream.ts";
+import { exchange, request, secure, tunnel } from "../helpers/proxy-client.ts";
 
 const PLACEHOLDER = `${PLACEHOLDER_PREFIX}0123456789abcdef`;
 const TOKEN = "real-token-0123456789";
@@ -229,57 +228,6 @@ describe("newPlaceholder", () => {
   });
 });
 
-/** Opens a CONNECT tunnel through the proxy socket; resolves with the status line and the socket. */
-async function tunnel(
-  socketPath: string,
-  target: string,
-): Promise<{ status: string; socket: Socket }> {
-  const socket = connect(socketPath);
-  const status = await new Promise<string>((resolve, reject) => {
-    let buffered = "";
-    socket.once("error", reject);
-    const onData = (chunk: Buffer) => {
-      buffered += chunk.toString("latin1");
-      const end = buffered.indexOf("\r\n\r\n");
-      if (end !== -1) {
-        socket.off("data", onData);
-        resolve(buffered.slice(0, end).split("\r\n")[0] ?? "");
-      }
-    };
-    socket.on("data", onData);
-    socket.write(`CONNECT ${target} HTTP/1.1\r\nHost: ${target}\r\n\r\n`);
-  });
-  return { status, socket };
-}
-
-function secure(socket: Socket, ca: string, alpn: string[] = ["http/1.1"]): Promise<TLSSocket> {
-  return new Promise((resolve, reject) => {
-    const tls = tlsConnect({ socket, host: "127.0.0.1", ca, ALPNProtocols: alpn }, () =>
-      resolve(tls),
-    );
-    tls.once("error", reject);
-  });
-}
-
-/** Sends raw bytes and reads until the server closes; `Connection: close` requests end that way. */
-function exchange(
-  tls: TLSSocket,
-  raw: string,
-): Promise<{ status: number; head: string; body: string }> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    tls.on("data", (chunk: Buffer) => chunks.push(chunk));
-    tls.once("error", reject);
-    tls.once("end", () => {
-      const text = Buffer.concat(chunks).toString("utf8");
-      const end = text.indexOf("\r\n\r\n");
-      const head = text.slice(0, end);
-      resolve({ status: Number(head.split(" ")[1]), head, body: text.slice(end + 4) });
-    });
-    tls.write(raw);
-  });
-}
-
 describe("credential injection at the egress proxy", () => {
   let dir: string;
   let upstream: Awaited<ReturnType<typeof httpsUpstream>>;
@@ -331,16 +279,6 @@ describe("credential injection at the egress proxy", () => {
       },
       close: () => started.close(),
     };
-  }
-
-  function request(target: string, lines: string[], body = ""): string {
-    return [
-      ...lines.map((l) => l.replace("{target}", target)),
-      `Content-Length: ${Buffer.byteLength(body)}`,
-      "Connection: close",
-      "",
-      body,
-    ].join("\r\n");
   }
 
   it("adds the credential in the auth position only; the placeholder elsewhere arrives unchanged", async () => {

@@ -1,5 +1,6 @@
 import { createServer, type Server } from "node:https";
 import type { Socket } from "node:net";
+import { createServer as createTlsServer, type TLSSocket } from "node:tls";
 import { createSandboxCa } from "../../src/runner/ca.ts";
 
 /** One request the fake upstream saw, as it arrived on the wire. */
@@ -89,4 +90,58 @@ export function headerOf(rawHeaders: readonly string[], name: string): string | 
   }
   if (values.length > 1) throw new Error(`${name} appears ${values.length} times`);
   return values[0];
+}
+
+/**
+ * A TLS server on 127.0.0.1 that speaks no HTTP of its own: it records the
+ * exact bytes each connection sends and, once a connection has been quiet
+ * for 50 ms, lets `respond` answer with whatever bytes a test wants (a bad
+ * status line, a reflected request). `respond` may also leave it hanging.
+ */
+export async function rawTlsUpstream(
+  respond: (received: Buffer, socket: TLSSocket) => void,
+): Promise<{
+  readonly port: number;
+  readonly ca: string;
+  /** Every connection's bytes so far, in arrival order. */
+  readonly received: Buffer[];
+  /** Connections still open. */
+  open(): number;
+  close(): Promise<void>;
+}> {
+  const ca = await createSandboxCa(["127.0.0.1"]);
+  const leaf = await ca.leaf("127.0.0.1");
+  const received: Buffer[] = [];
+  const sockets = new Set<TLSSocket>();
+  const server = createTlsServer({ cert: leaf.cert, key: leaf.key }, (socket) => {
+    sockets.add(socket);
+    socket.on("close", () => sockets.delete(socket));
+    socket.on("error", () => {});
+    const index = received.push(Buffer.alloc(0)) - 1;
+    let timer: NodeJS.Timeout | undefined;
+    let answered = false;
+    socket.on("data", (chunk: Buffer) => {
+      received[index] = Buffer.concat([received[index] ?? Buffer.alloc(0), chunk]);
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (answered) return;
+        answered = true;
+        respond(received[index] ?? Buffer.alloc(0), socket);
+      }, 50);
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (address === null || typeof address === "string") throw new Error("no upstream port");
+  return {
+    port: address.port,
+    ca: ca.certificate,
+    received,
+    open: () => sockets.size,
+    close: () =>
+      new Promise<void>((resolve) => {
+        for (const socket of sockets) socket.destroy();
+        server.close(() => resolve());
+      }),
+  };
 }
