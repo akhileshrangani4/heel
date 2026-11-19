@@ -97,7 +97,7 @@ heel reloads the file as soon as you save it.
 - **Either file may be missing.** No org file means no org rules. A person with no file has no rules of their own, so their agents' calls fall through to the default deny.
 - **Only `.yaml`.** A `rules/<user>.yml` file is ignored, and `heel rules check` warns about it. Hidden files and editor leftovers (`alice.yaml~`, `.alice.yaml.swp`) are skipped.
 - **Reloading.** heel watches `$HEEL_HOME` and `rules/` and reloads about 100 ms after the last change. All files are read and checked first, then swapped in together, so no call ever sees half an edit.
-- **A bad edit keeps the last good rules.** If a change doesn't load, heel keeps deciding with the rules it had and logs the problem. If no valid rules have loaded since heel started, every call is denied.
+- **A bad edit keeps the last good rules.** If a change doesn't load, heel keeps deciding with that file's last good rules and logs the problem; other people's valid edits still apply ([details](#load-errors-and-warnings)). If no valid rules have loaded since heel started, every call is denied.
 - **`heel rules check` and `heel rules test` read the files directly,** so they work with heel stopped.
 
 ## How a call is decided
@@ -1305,7 +1305,12 @@ cases:
 
 ## Load errors and warnings
 
-`heel rules check` reports these with the file, line and column. While any file has an error, heel keeps all of its last good rules: one person's broken file holds back everyone's edits until it is fixed.
+`heel rules check` reports these with the file, line and column. While a file has an error, heel keeps deciding with that file's last good rules:
+
+- **A broken owner file** (`rules/alice.yaml`) holds back only Alice's edit. Every other person's edits, and edits to `org-rules.yaml`, still apply. If the broken file is new, it counts as missing until it loads.
+- **A broken `org-rules.yaml`** holds back every edit, since org rules bound everyone. heel keeps the whole last good set until it is fixed.
+
+heel logs each problem, and names the owners whose rules were held back.
 
 | Message | Fix |
 | --- | --- |

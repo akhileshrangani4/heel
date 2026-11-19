@@ -3,17 +3,20 @@ import type { RuleSet } from "../core/rules/evaluate.ts";
 import { hasErrnoCode } from "../util/errno.ts";
 import {
   type LoadedRules,
-  loadRuleSet,
+  loadRuleFiles,
   ORG_RULES_FILE,
   OWNER_RULES_DIR,
+  type RulesLoad,
   type RulesPaths,
 } from "./rules.ts";
 import { YamlValidationError } from "./yaml.ts";
 
 /**
  * Hot reload (spec: Rules, "Loading, testing and reload"). heel watches the
- * rules files and swaps the whole set in at once. An invalid edit keeps the
- * last good set deciding; with no valid set since boot, every call is denied.
+ * rules files and swaps the whole set in at once. An invalid owner file keeps
+ * that owner's last good rules while everyone else's edits apply; an invalid
+ * org file keeps the whole last good set, since org rules bound every owner.
+ * With no valid set since boot, every call is denied.
  */
 
 export type ReloadOutcome =
@@ -23,16 +26,21 @@ export type ReloadOutcome =
       error: YamlValidationError;
       /** A previously loaded set is still in force; false means calls are denied. */
       keptLastGood: boolean;
+      /**
+       * Owners whose last good rules were kept while every other file's
+       * edits applied. Empty when nothing new applied.
+       */
+      heldOwners: readonly string[];
     };
 
 /** Holds the rule set in force. The pipeline reads `set` once per call. */
 export class RulesHolder {
   readonly paths: RulesPaths;
-  readonly #load: (paths: RulesPaths) => LoadedRules;
+  readonly #load: (paths: RulesPaths) => RulesLoad;
   #loaded: LoadedRules | null = null;
   #lastError: YamlValidationError | null = null;
 
-  constructor(paths: RulesPaths, load: (paths: RulesPaths) => LoadedRules = loadRuleSet) {
+  constructor(paths: RulesPaths, load: (paths: RulesPaths) => RulesLoad = loadRuleFiles) {
     this.paths = paths;
     this.#load = load;
   }
@@ -57,16 +65,32 @@ export class RulesHolder {
    * anything else is a fault in heel and throws, leaving the set unchanged.
    */
   reload(): ReloadOutcome {
-    try {
-      const loaded = this.#load(this.paths);
+    const { errors, failed, ...loaded } = this.#load(this.paths);
+    if (errors.length === 0) {
       this.#loaded = loaded;
       this.#lastError = null;
       return { ok: true, loaded };
-    } catch (error) {
-      if (!(error instanceof YamlValidationError)) throw error;
-      this.#lastError = error;
-      return { ok: false, error, keptLastGood: this.#loaded !== null };
     }
+    const error = new YamlValidationError(errors);
+    this.#lastError = error;
+    const last = this.#loaded;
+    // Before any good set, or with the org file or rules/ unreadable, nothing
+    // in this load can be trusted on its own: keep everything as it was.
+    if (last === null || failed.org || failed.ownersDir) {
+      return { ok: false, error, keptLastGood: last !== null, heldOwners: [] };
+    }
+    const held = [...failed.owners].sort();
+    const owners = new Map(loaded.set.owners);
+    const files = [...loaded.files];
+    for (const user of held) {
+      const previous = last.set.owners.get(user);
+      if (previous === undefined) continue;
+      owners.set(user, previous);
+      const summary = last.files.find((file) => file.user === user);
+      if (summary !== undefined) files.push(summary);
+    }
+    this.#loaded = { set: { org: loaded.set.org, owners }, files, warnings: loaded.warnings };
+    return { ok: false, error, keptLastGood: true, heldOwners: held };
   }
 }
 

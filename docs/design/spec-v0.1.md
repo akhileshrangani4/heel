@@ -310,7 +310,7 @@ rules:
 - The YAML is parsed in YAML 1.2 core schema mode with duplicate keys rejected, then validated with a strict Zod schema. Every error carries the file, line and column _[STK §8]_.
 - `heel rules check` validates the files. `heel rules schema` prints a JSON Schema for editor completion. `heel rules show` prints the effective order, including live standing approvals.
 - `heel rules test cases.yaml` runs offline cases against the pure evaluator with no provider access. State-check results come from the case file. Exit code 0 means all cases pass and 1 means at least one fails.
-- **Hot reload.** heel watches the files and swaps the rule set in atomically. If a reload is invalid, heel keeps the last good set and alerts admins. If no valid set exists at boot, `heel serve` starts and denies every call.
+- **Hot reload.** heel watches the files and swaps the rule set in atomically. If a reload is invalid, heel keeps the last good version of each invalid file and alerts admins: a broken owner file holds back only that owner's edits, and a broken org file holds back every edit. If no valid set exists at boot, `heel serve` starts and denies every call.
 
 *cases.yaml (heel rules test input)*
 
@@ -874,7 +874,7 @@ Part 4
 | An OAuth refresh fails or a grant is revoked | denied on that account (`reconnect_required`) | The account is marked for reconnecting and the owner is notified. Other accounts are unaffected |
 | The vault key is missing, or a credential won't decrypt | denied for everything | `heel serve` refuses to start the agent plane |
 | A rules file is invalid at boot | denied for everything | The human plane still starts, so people can fix the file and pause agents |
-| A rules file is invalid on reload | The last valid set keeps deciding | Admins are alerted, and the error is shown on the rules page and by `heel rules check` |
+| A rules file is invalid on reload | That file's last valid rules keep deciding (the whole last valid set, for the org file) | Admins are alerted, and the error is shown on the rules page and by `heel rules check` |
 | The `looks_like` classifier errors, times out, isn't loaded or is unsure | The message is hidden | Counted in a metric (I-44) |
 | A message can't be parsed for hiding | Hidden, as if a rule matched it | See [Hiding](#hiding) |
 | A response can't be parsed on a surface where heel knows the shape | denied, with reason `response_unparseable` | Partial results are never passed through |
