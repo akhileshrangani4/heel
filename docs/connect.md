@@ -1,0 +1,75 @@
+# Connect accounts
+
+[README](../README.md) · [Quickstart](quickstart.md) · [Connect accounts](connect.md) · [Connect your agent](agents.md) · [Rules](rules.md) · [Approvals](approvals.md) · [Running](running.md)
+
+Connect each account once, on the machine heel runs on. heel keeps the credential encrypted, and your agent only ever sees the account's alias (`--as github`). Run these with `heel serve` running.
+
+![The Connections page: gmail-work and github, both ready](images/wide-connections.png)
+
+## Built-in services
+
+heel knows these services' tools, so rules can name what a call does (`action: github.merge`, `recipients: ...`) and approvals show it in plain words.
+
+| Service | Connect it with | Credential |
+| --- | --- | --- |
+| **GitHub** | `gh auth token \| heel connect github --as github --credential-stdin` | A token: `gh auth token`, or a fine-grained token |
+| **Slack** | `heel connect slack --as slack --credential-stdin` | A bot token (`xoxb-…`) from your Slack app |
+| **Linear** | `heel connect linear --as linear --credential-stdin` | A personal API key (`lin_api_…`) |
+| **Notion** | `heel connect notion --as notion --credential-stdin` | An internal integration secret |
+| **Stripe** | `heel connect stripe --as stripe --credential-stdin` | A restricted key (`rk_…`) with only what the agent needs |
+| **Gmail** | `heel connect gmail --as gmail-work` | Sign in from the Connections page |
+| **Google Calendar** | `heel connect google-calendar --as calendar` | Sign in from the Connections page |
+| **Outlook** (mail and calendar) | `heel connect outlook --as outlook` | Sign in from the Connections page |
+
+`--credential-stdin` reads the credential from standard input, so it never lands in your shell history: pipe it in, or paste it and press Ctrl-D.
+
+**Gmail, Google Calendar and Outlook** sign in with OAuth, through your own Google or Microsoft app (set in `heel.yaml` as `providers.google` or `providers.microsoft`). [Set up Google sign-in](google-sign-in.md) takes about 5 minutes, once. After `heel connect`, open **Connections** and select **Sign in**.
+
+## Any MCP server
+
+**A remote server** (a URL):
+
+```sh
+heel connect mcp --as notes --url https://mcp.example.com/mcp --oauth
+```
+
+With `--oauth`, sign in from the Connections page. For a server that takes a token instead, use `--credential-stdin`.
+
+**A local server** (a command heel starts) runs in heel's sandbox, on Linux. Name the hosts it talks to, and it gets a placeholder instead of the credential:
+
+```sh
+heel connect mcp --as notes --command /usr/bin/node --arg /opt/notes/server.js \
+  --egress api.notes.example --credential-env NOTES_TOKEN \
+  --credential-host api.notes.example --credential-stdin
+```
+
+heel adds the real credential to its requests to `--credential-host` on the way out.
+
+For a server heel doesn't know, rules match on the server's own tool and argument names.
+
+## Any HTTP API
+
+Give heel the API's base URL and its OpenAPI file:
+
+```sh
+heel connect http --as tickets --base-url https://api.tickets.example \
+  --openapi ./tickets-openapi.yaml --auth bearer --credential-stdin
+```
+
+Your agent calls it at `http://127.0.0.1:7300/http/tickets/<path>` with its heel token. `--auth` is `bearer`, `basic`, `header:<Name>` or `query:<name>`.
+
+## Any CLI
+
+`gh`, `kubectl` and other CLIs run through `heel run`, in heel's sandbox, without the agent holding the credential. See [Run CLIs with heel run](heel-run.md).
+
+## Change or remove an account
+
+- **New key:** after you rotate a key with the provider, give heel the new one. Every setting stays.
+  ```sh
+  printf %s "$NEW_TOKEN" | heel account set github --credential-stdin
+  ```
+  Accounts that sign in (Gmail, Calendar, Outlook, MCP with OAuth) sign in again from the Connections page.
+- **Remove:** `heel account remove github` deletes the account and its stored credential. Its waiting requests expire, and approvals and grants that name it are revoked. Activity keeps its history. Revoke the credential with the provider too.
+- **List:** `heel account list`.
+
+Remove the agent's own access to each account you connect (its GitHub MCP server, its `gh` login, its API keys), or it can go around heel.

@@ -1,6 +1,6 @@
 # Run CLIs with heel run
 
-[README](../README.md) · [Using heel](using-heel.md) · [Rules](rules.md) · [Rules reference](rules-reference.md) · [Running](running.md)
+[README](../README.md) · [Quickstart](quickstart.md) · [Connect accounts](connect.md) · [Connect your agent](agents.md) · [Rules](rules.md) · [Approvals](approvals.md) · [Running](running.md)
 
 `heel run` lets an agent use a command-line tool such as `gh` or `npm` without holding its credential. The agent types `heel run -- gh pr list -R acme/web`. heel checks the command against your rules and, if they allow it, runs it itself, in a sandbox on heel's host, then sends back the output and the exit code. Nothing runs on the agent's side.
 
@@ -22,7 +22,7 @@ Run these as heel's operator, with the same `HEEL_HOME` as `heel serve`. For hee
 gh auth token | heel connect cli gh --as gh --bin /usr/bin/gh --credential-stdin
 ```
 
-`--bin` is the CLI's path **on heel's host**: a real file (not a symlink) outside every workdir. The sandbox sees that file, `/usr` and the host's `/bin` and `/lib*` links into it, the CA certificates, and its own empty `HOME` and `/tmp`. For any other CLI, and for npm, see the CLI forms in [Using heel](using-heel.md#2-connect-your-agent).
+`--bin` is the CLI's path **on heel's host**: a real file (not a symlink) outside every workdir. The sandbox sees that file, `/usr` and the host's `/bin` and `/lib*` links into it, the CA certificates, and its own empty `HOME` and `/tmp`. For any other CLI, and for npm, see the CLI forms in [Using heel](agents.md).
 
 ### 2. Allow it in your rules
 

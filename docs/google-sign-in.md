@@ -1,6 +1,6 @@
 # Set up Google sign-in for heel
 
-[README](../README.md) · [Using heel](using-heel.md) · [Running](running.md)
+[README](../README.md) · [Quickstart](quickstart.md) · [Connect accounts](connect.md) · [Connect your agent](agents.md) · [Rules](rules.md) · [Approvals](approvals.md) · [Running](running.md)
 
 Gmail and Google Calendar accounts sign in to heel through your own Google OAuth client, so you need to create one first. Setting it up takes about 5 minutes, once, in the Google Cloud console. One client covers every Gmail and Calendar account you connect.
 

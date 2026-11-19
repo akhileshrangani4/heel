@@ -1,6 +1,6 @@
 # Rules and hiding
 
-[README](../README.md) · [Using heel](using-heel.md) · [Why heel](why.md) · [How it works](how-it-works.md) · [Rules](rules.md) · [Rules reference](rules-reference.md) · [Approvals](approvals.md) · [Running](running.md)
+[README](../README.md) · [Quickstart](quickstart.md) · [Connect accounts](connect.md) · [Connect your agent](agents.md) · [Rules](rules.md) · [Approvals](approvals.md) · [Running](running.md)
 
 Rules are a file you can read, review and test. A call no rule matches is denied. This page is the tour; the [rules reference](rules-reference.md) has every key, operator, action and edge case, with recipes you can copy. Rules are checked in this order, and the first match decides:
 
@@ -62,6 +62,20 @@ rules:
 
 - **Try before enforcing.** `heel serve --watch` lets calls through and logs what each rule would have done. One new rule can run that way on its own with `watch: true`.
 - **Describe a rule in words.** A model drafts the YAML for you to read and save. It never sees a live call.
+
+## Try rules before enforcing them
+
+**Watch mode** lets calls through that your rules would deny or send for approval, and marks each one in **Activity** as "would deny" or "would ask". Use it to try rules on real traffic, then switch back.
+
+- **Everyone:** `heel serve --watch`.
+- **One person, or the org default:** the **Modes** page (admins). Switching to Watch needs a passkey; switching back to Enforce doesn't.
+- **One rule:** add `watch: true` to it.
+
+Pause, org rules, hidden mail and calls heel can't check safely hold in every mode. **Activity** also suggests rules from what got asked or denied often.
+
+## Editing rules
+
+Edit the file and heel reloads it on its own. Before you rely on a change, run `heel rules check` (it reports every problem and names that match nothing) and `heel rules test` with your cases ([how](rules-reference.md#testing-rules)). Editing a rule ends the standing approvals made from it, so a widened rule asks again.
 
 ## Your agent can propose rules
 

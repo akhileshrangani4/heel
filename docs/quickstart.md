@@ -120,5 +120,5 @@ The agent checks back and sends the call again, and this time it runs. Every dec
 
 - **[Write rules](rules.md):** let the calls you always approve run on their own.
 - **[Approve from your phone](approvals.md):** give heel an HTTPS address and get notifications.
-- **[Connect more accounts](using-heel.md):** Gmail, Slack, Linear, any MCP server, API or CLI.
+- **[Connect more accounts](connect.md):** Gmail, Slack, Linear, any MCP server, API or CLI.
 - **[Run CLIs through heel](heel-run.md):** `gh`, `kubectl` and others, without the agent holding the token.

@@ -1,6 +1,6 @@
 # Running heel
 
-[README](../README.md) · [Using heel](using-heel.md) · [Why heel](why.md) · [How it works](how-it-works.md) · [Rules](rules.md) · [Rules reference](rules-reference.md) · [Approvals](approvals.md) · [Running](running.md)
+[README](../README.md) · [Quickstart](quickstart.md) · [Connect accounts](connect.md) · [Connect your agent](agents.md) · [Rules](rules.md) · [Approvals](approvals.md) · [Running](running.md)
 
 heel is one process. It serves the **agent plane** on port 7300 (MCP at `/mcp`, the HTTP proxy at `/http/<account>/…`, `heel run` at `/run`) and the **human plane** on port 7301 (sign-in, passkeys, the approval page). Operators use the `heel` CLI, which reaches the running server over a local admin socket.
 

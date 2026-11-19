@@ -221,10 +221,10 @@ export default function HomePage() {
               rules reference and recipes →
             </Link>
             <Link
-              href="/docs/using-heel"
+              href="/docs/quickstart"
               className="underline decoration-neutral-300 underline-offset-4 hover:decoration-current dark:decoration-neutral-600"
             >
-              what using heel is like →
+              get started in 10 minutes →
             </Link>
           </div>
         </div>

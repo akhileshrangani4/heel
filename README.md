@@ -195,7 +195,10 @@ The docs are at **[useheel.dev](https://useheel.dev)**, and in [`docs/`](docs).
 
 | | |
 | --- | --- |
-| [Using heel](docs/using-heel.md) | The full walkthrough: cloud connectors, code mode, grants, Activity and modes |
+| [Quickstart](docs/quickstart.md) | heel running, an agent connected and your first approval, in about 10 minutes |
+| [Connect accounts](docs/connect.md) | One command per service: GitHub, Gmail, Slack, Linear, any MCP server, API or CLI |
+| [Connect your agent](docs/agents.md) | Claude Code, Codex, Cursor and connectors, and what the agent gets back |
+| [CLI](docs/cli.md) | Every everyday command, the TUI and exit codes |
 | [Rules and hiding](docs/rules.md) | The tour: checks, counts, state checks, `hide` |
 | [Rules reference](docs/rules-reference.md) | Every key, operator and action, `heel rules test` cases, and recipes |
 | [Built-in services, and your own](docs/definitions.md) | What a built-in definition does, why it beats a raw MCP server, and your own API with `x-heel-action` |

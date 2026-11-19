@@ -9,6 +9,10 @@ const config = {
   reactStrictMode: true,
   // The repo root has heel's own lockfile; this site is its own package.
   turbopack: { root: dirname(fileURLToPath(import.meta.url)) },
+  // Pages that moved keep their old links working.
+  async redirects() {
+    return [{ source: '/docs/using-heel', destination: '/docs/connect', permanent: true }];
+  },
   async rewrites() {
     return [
       {

@@ -278,7 +278,7 @@ it("captures the docs screenshots", async () => {
     await shoot(page, "pause");
 
     // The wider pages read better on a laptop.
-    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.setViewportSize({ width: 1280, height: 400 });
     await page.goto(`${origin}/activity`);
     await shoot(page, "wide-activity");
     await page.goto(`${origin}/connections`);
