@@ -71,13 +71,28 @@ function outcomeHref(done: "paused" | "resumed", scope: PauseScope, target: stri
   return `/pause?${new URLSearchParams({ done, scope, target })}`;
 }
 
-function activePauses(deps: HumanPlaneDeps): ActivePause[] {
-  return listPauses(deps.db, deps.orgId).map((row) => ({
-    scope: row.scope,
-    target: pauseTargetName(deps.db, row),
-    pausedBy: pausedByName(deps.db, row.pausedBy),
-    pausedAt: row.pausedAt,
-  }));
+/**
+ * The pauses this person may see: all of them for an admin; for a member,
+ * the ones covering their own agents, accounts or themselves, and the
+ * org-wide ones (everything, a provider) that stop their calls too. Others'
+ * pauses would show agents and accounts the member can't otherwise see.
+ */
+function activePauses(deps: HumanPlaneDeps, session: SessionView): ActivePause[] {
+  return listPauses(deps.db, deps.orgId)
+    .filter(
+      (row) =>
+        session.role === "admin" ||
+        row.scope === "global" ||
+        row.scope === "provider" ||
+        mayPause(deps.db, session, row),
+    )
+    .map((row) => ({
+      scope: row.scope,
+      target: pauseTargetName(deps.db, row),
+      pausedBy: pausedByName(deps.db, row.pausedBy),
+      pausedAt: row.pausedAt,
+      canResume: mayResume(deps.db, session, row),
+    }));
 }
 
 /** The pause a resume names, if it exists and this person may lift it. */
@@ -103,7 +118,7 @@ export function pauseRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
         outcome: outcomeFrom(deps, c.req.query()),
         load: {
           ok: true,
-          active: activePauses(deps),
+          active: activePauses(deps, session),
           ...pausableTargets(deps.db, session),
           canPauseAll: session.role === "admin",
         },

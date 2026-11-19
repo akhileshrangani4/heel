@@ -10,6 +10,8 @@ export interface ActivePause {
   target: string | null;
   pausedBy: string;
   pausedAt: Date;
+  /** Whether this person may lift it (an admin, or whoever paused their own); unset means yes. */
+  canResume?: boolean;
 }
 
 /**
@@ -89,15 +91,19 @@ function activeList(active: readonly ActivePause[], onResume: CeremonyCallback):
             <span class="muted">by ${pause.pausedBy}, since ${time(pause.pausedAt)}</span>
           </div>
           <div class="pause-resume">
-            ${ceremonyButton({
-              callback: onResume,
-              intent: "resume",
-              label: `Resume ${formatPauseScope(pause.scope, pause.target)}`,
-              tone: "secondary",
-              binding: { scope: pause.scope, target: pause.target ?? "" },
-              describedBy: helpId,
-            })}
-            <span class="muted" id="${helpId}">Passkey required to resume.</span>
+            ${
+              pause.canResume === false
+                ? html`<span class="muted">Only an admin, or whoever paused it, can resume this.</span>`
+                : html`${ceremonyButton({
+                    callback: onResume,
+                    intent: "resume",
+                    label: `Resume ${formatPauseScope(pause.scope, pause.target)}`,
+                    tone: "secondary",
+                    binding: { scope: pause.scope, target: pause.target ?? "" },
+                    describedBy: helpId,
+                  })}
+            <span class="muted" id="${helpId}">Passkey required to resume.</span>`
+            }
           </div>
         </li>`;
       })}

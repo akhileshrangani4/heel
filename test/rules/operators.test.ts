@@ -591,5 +591,10 @@ describe("rule values are normalized like the call's", () => {
     expect(allowedBy("{ method: get }", get)).toBe(true);
     expect(allowedBy("{ method: { one_of: [get, head] } }", get)).toBe(true);
     expect(allowedBy("{ method: post }", get)).toBe(false);
+    // matches too, in either case, without changing what the pattern means.
+    expect(allowedBy("{ method: { matches: 'get|head' } }", get)).toBe(true);
+    expect(allowedBy("{ repo: { matches: 'Acme/.*' } }", facts({ repo: "acme/web" }))).toBe(true);
+    expect(allowedBy("{ repo: { matches: 'acme/\\D+' } }", facts({ repo: "acme/web" }))).toBe(true);
+    expect(allowedBy("{ repo: { matches: 'Acme/API' } }", facts({ repo: "acme/web" }))).toBe(false);
   });
 });

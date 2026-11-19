@@ -52,6 +52,16 @@ describe("enrollment and sign-in", () => {
     expect(safeNext("/approvals/apr_1")).toBe("/approvals/apr_1");
     expect(safeNext("//evil.example/x")).toBe("/approvals");
     expect(safeNext("https://evil.example")).toBe("/approvals");
+    // Red-team round 3: dot segments that collapse into a scheme-relative URL.
+    for (const sneaky of [
+      "/.//evil.example/phish",
+      "/a/..//evil.example/x",
+      "/%2e//evil.example",
+      "/./%2F/evil.example",
+    ]) {
+      expect(safeNext(sneaky), sneaky).not.toMatch(/^\/\//);
+    }
+    expect(safeNext("/.//evil.example/phish")).toBe("/approvals");
     expect(safeNext("/sign-in")).toBe("/approvals");
     expect(safeNext(undefined)).toBe("/approvals");
   });
@@ -111,6 +121,28 @@ describe("pause and resume", () => {
     );
     expect(resume.status).toBe(404);
     expect(findPause(h.t.db, h.t.orgId, { scope: "global", target: "" })).not.toBeNull();
+  });
+
+  it("shows a member only the pauses that cover them, and offers Resume only where they may", async () => {
+    const h = humanPlaneHarness();
+    h.addUser("sam", "member");
+    const sam = await h.signIn(await h.enroll("sam"));
+    // The owner's agent and account: nothing sam owns.
+    h.pause({ scope: "agent", target: h.agent.agentId });
+    h.pause({ scope: "account", target: "gmail-work" });
+
+    const before = await (await h.fetch("/pause", { as: sam })).text();
+    expect(before).not.toContain("inbox-bot");
+    expect(before).not.toContain("gmail-work");
+    expect(before).toContain("Nothing is paused");
+
+    // Everything is paused: that stops sam's calls too, so sam sees it, without a Resume.
+    h.pause({ scope: "global", target: "" });
+    const after = await (await h.fetch("/pause", { as: sam })).text();
+    expect(after).toContain("everything");
+    expect(after).toContain("Only an admin, or whoever paused it, can resume this.");
+    expect(after).not.toContain('data-heel-ceremony="resume"');
+    expect(after).not.toContain("inbox-bot");
   });
 });
 

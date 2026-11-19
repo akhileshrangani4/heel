@@ -137,6 +137,8 @@ export async function handleRun(
       tool: command,
       args: { argv, cwd },
       ...(runId === undefined ? {} : { runId }),
+      // A client that hangs up stops its command, and frees the slot now (as run_code does).
+      signal: c.req.raw.signal,
     });
     return respond(c, result);
   } finally {
