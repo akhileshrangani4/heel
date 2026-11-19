@@ -71,7 +71,14 @@ export interface ProposalPageProps {
   now: Date;
   /** What adding them would do to the file now, or why it can't be done. */
   effect:
-    | { ok: true; existing: number; existingNames: readonly string[]; diff: string }
+    | {
+        ok: true;
+        /** Hash of the file shown: adding signs this, so a later edit can't slip in. */
+        sha: string;
+        existing: number;
+        existingNames: readonly string[];
+        diff: string;
+      }
     | { ok: false; problem: string };
   reject: FormTarget;
   /** `applied` or `rejected` just now, for the notice at the top. */
@@ -172,7 +179,7 @@ export function proposalPage(props: ProposalPageProps): Html {
                     intent: "apply-rules",
                     label: "Add these rules",
                     tone: "primary",
-                    binding: { proposalId: props.id },
+                    binding: { proposalId: props.id, sha: props.effect.sha },
                     describedBy: "proposal-passkey",
                   })
                 : ""

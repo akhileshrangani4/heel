@@ -217,7 +217,7 @@ export function clientScript(csrfToken: string | null): string {
     applyRules: ({ binding, status }) =>
       run({
         status,
-        start: { url: "/proposals/challenge", body: { proposalId: binding.proposalId } },
+        start: { url: "/proposals/challenge", body: { proposalId: binding.proposalId, sha: binding.sha } },
         sign: getAssertion,
         finish: "/proposals/confirm",
       }),

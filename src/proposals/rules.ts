@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto";
-import { readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { and, desc, eq, lt } from "drizzle-orm";
 import { Document, isMap, isNode, isSeq, parseDocument, YAMLSeq } from "yaml";
 import { z } from "zod";
 import { compileRulesText, type RulesPaths } from "../config/rules.ts";
 import { formatYamlIssue, YamlValidationError } from "../config/yaml.ts";
+import type { CompiledRulesFile } from "../core/rules/compile.ts";
 import { Rule } from "../core/rules/schema.ts";
 import type { HeelDb } from "../store/db.ts";
 import { newId } from "../store/ids.ts";
@@ -162,7 +163,15 @@ export function findProposal(db: HeelDb, orgId: string, id: string): ProposalRow
   );
 }
 
-export function ownerRulesFile(paths: RulesPaths, userName: string): string {
+/** A user name heel will put in a file name: no path separators, no leading dot. */
+const SAFE_NAME = /^[A-Za-z0-9][A-Za-z0-9._@+-]{0,127}$/;
+
+/**
+ * The owner's rules file, `rules/<name>.yaml`: the same name the pipeline
+ * looks rules up by. Null for a name that isn't safe in a path.
+ */
+export function ownerRulesFile(paths: RulesPaths, userName: string): string | null {
+  if (!SAFE_NAME.test(userName) || userName.includes("..")) return null;
   return join(paths.ownersDir, `${userName}.yaml`);
 }
 
@@ -201,9 +210,10 @@ export function previewProposal(
   agentName: string,
 ): ProposalPreview {
   const before = readOwnerFile(file);
+  let current: CompiledRulesFile | null = null;
   if (before !== null) {
     try {
-      compileRulesText(before, file, display, "owner");
+      current = compileRulesText(before, file, display, "owner").file;
     } catch (error) {
       if (!(error instanceof YamlValidationError)) throw error;
       return {
@@ -244,13 +254,26 @@ export function previewProposal(
       list.items.unshift(node);
     });
   const after = doc.toString();
+  let merged: CompiledRulesFile;
   try {
-    compileRulesText(after, file, display, "owner");
+    merged = compileRulesText(after, file, display, "owner").file;
   } catch (error) {
     if (!(error instanceof YamlValidationError)) throw error;
     return {
       ok: false,
       problem: `these rules can't be added to ${display}: ${error.issues.map((i) => i.message).join("; ")}`,
+    };
+  }
+  // heel rewrites the whole file, so check every rule already there still
+  // says exactly what it said, in the same order, and the hide list too.
+  const kept = merged.rules.slice(proposal.rules.length).map((rule) => rule.hash);
+  const had = current?.rules.map((rule) => rule.hash) ?? [];
+  const sameHide =
+    current === null ? merged.hide.length === 0 : merged.hideHash === current.hideHash;
+  if (kept.length !== had.length || kept.some((hash, i) => hash !== had[i]) || !sameHide) {
+    return {
+      ok: false,
+      problem: `heel couldn't add these rules without changing ${display}'s own rules. Add them by hand.`,
     };
   }
   return {
@@ -264,8 +287,10 @@ export function previewProposal(
 
 /**
  * Writes the previewed file, if it is still what the passkey signed, and
- * marks the proposal applied. A dot-prefixed temporary file in `rules/`
- * renamed over the original, so heel's watcher never loads half a file.
+ * marks the proposal applied. It writes the file in place, so its owner,
+ * mode and any symlink stay as the person set them up. heel's watcher may
+ * see a half-written file for a moment; that load fails and the last good
+ * rules keep deciding until the next one, which the caller starts at once.
  */
 export function applyProposal(
   db: HeelDb,
@@ -282,13 +307,10 @@ export function applyProposal(
   if (preview.sha !== signedSha) {
     return { ok: false, problem: "The rules file changed since you opened this page. Reload it." };
   }
-  const dir = join(file, "..");
-  const temp = join(dir, `.heel-proposal-${proposal.id}.tmp`);
   try {
-    writeFileSync(temp, preview.after, { mode: 0o600 });
-    renameSync(temp, file);
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, preview.after);
   } catch (error) {
-    rmSync(temp, { force: true });
     return {
       ok: false,
       problem: `heel couldn't write ${file}: ${error instanceof Error ? error.message : String(error)}`,

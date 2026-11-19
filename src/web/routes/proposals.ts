@@ -77,9 +77,16 @@ export function proposalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
   function target(row: ProposalRow) {
     const files = deps.ruleFiles;
     if (files === undefined) return null;
-    const owner = nameOf(deps, "user", row.ownerId);
+    const ownerRow = deps.db
+      .select({ name: users.name })
+      .from(users)
+      .where(eq(users.id, row.ownerId))
+      .get();
+    const owner = ownerRow?.name;
+    const file = owner === undefined ? null : ownerRulesFile(files.paths, owner);
+    if (owner === undefined || file === null) return null;
     return {
-      file: ownerRulesFile(files.paths, owner),
+      file,
       display: `rules/${owner}.yaml`,
       agent: nameOf(deps, "agent", row.agentId),
     };
@@ -88,7 +95,13 @@ export function proposalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
   function preview(row: ProposalRow) {
     const where = target(row);
     if (where === null) {
-      return { where, effect: { ok: false as const, problem: "heel can't write rules here." } };
+      return {
+        where,
+        effect: {
+          ok: false as const,
+          problem: "heel can't write this person's rules file from the approval page.",
+        },
+      };
     }
     return { where, effect: previewProposal(row, where.file, where.display, where.agent) };
   }
@@ -141,6 +154,7 @@ export function proposalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
         effect: effect.ok
           ? {
               ok: true,
+              sha: effect.sha,
               existing: effect.existing,
               existingNames,
               diff: lineDiff(effect.before, effect.after),
@@ -174,6 +188,13 @@ export function proposalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     }
     const { effect } = preview(row);
     if (!effect.ok) return c.json({ ok: false, message: effect.problem }, 409);
+    // The page showed the file as it was when it loaded; sign only that file.
+    if (stringField(body, "sha") !== effect.sha) {
+      return c.json(
+        { ok: false, message: "The rules file changed since you opened this page. Reload it." },
+        409,
+      );
+    }
     const issued = await deps.passkeys.assertionOptions({
       orgId: deps.orgId,
       purpose: "rules",

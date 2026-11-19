@@ -1,4 +1,14 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 import { compileRulesText, loadRuleSet, rulesPaths } from "../../src/config/rules.ts";
@@ -28,6 +38,7 @@ function setUp(ownerFile?: string) {
   const paths = rulesPaths(home);
   mkdirSync(paths.ownersDir, { recursive: true });
   const file = ownerRulesFile(paths, "owner");
+  if (file === null) throw new Error("owner is a safe name");
   if (ownerFile !== undefined) writeFileSync(file, ownerFile);
   const who = { orgId: t.orgId, ownerId: t.ownerId, agentId };
   return { t, who, paths, file };
@@ -179,6 +190,59 @@ describe("applying a proposal", () => {
     if (!preview.ok) throw new Error(preview.problem);
     expect(applyProposal(t.db, rejected, file, preview, preview.sha, t.ownerId, NOW).ok).toBe(
       false,
+    );
+  });
+});
+
+describe("the file heel writes", () => {
+  function applied(ownerFile: string) {
+    const s = setUp(ownerFile);
+    const outcome = proposeRules(s.t.db, s.who, { rules: [readRepos] }, NOW);
+    if (!outcome.ok) throw new Error("expected it to be stored");
+    const proposal = findProposal(s.t.db, s.t.orgId, outcome.proposalId);
+    if (proposal === null) throw new Error("missing");
+    return { ...s, proposal };
+  }
+
+  it("keeps the file's mode", () => {
+    const { t, proposal, file } = applied(ASKS);
+    chmodSync(file, 0o644);
+    const preview = previewProposal(proposal, file, "rules/owner.yaml", "my-agent");
+    if (!preview.ok) throw new Error(preview.problem);
+    applyProposal(t.db, proposal, file, preview, preview.sha, t.ownerId, NOW);
+    expect(statSync(file).mode & 0o777).toBe(0o644);
+  });
+
+  it("writes through a symlinked rules file to its target", () => {
+    const { t, proposal, file } = applied(ASKS);
+    const target = join(tempDir("heel-proposals-target-"), "owner.yaml");
+    writeFileSync(target, ASKS);
+    rmSync(file);
+    symlinkSync(target, file);
+    const preview = previewProposal(proposal, file, "rules/owner.yaml", "my-agent");
+    if (!preview.ok) throw new Error(preview.problem);
+    applyProposal(t.db, proposal, file, preview, preview.sha, t.ownerId, NOW);
+    expect(lstatSync(file).isSymbolicLink()).toBe(true);
+    expect(readFileSync(target, "utf8")).toContain("read-repos");
+  });
+
+  it("creates rules/ when it doesn't exist yet", () => {
+    const { t, proposal, paths } = applied(ASKS);
+    const file = join(paths.home, "fresh", "owner.yaml");
+    const preview = previewProposal(proposal, file, "rules/owner.yaml", "my-agent");
+    if (!preview.ok) throw new Error(preview.problem);
+    expect(applyProposal(t.db, proposal, file, preview, preview.sha, t.ownerId, NOW)).toEqual({
+      ok: true,
+    });
+  });
+
+  it("names no file for a user name that isn't safe in a path", () => {
+    const paths = rulesPaths("/heel");
+    for (const name of ["../org-rules", "a/b", ".hidden", "", "a..b"]) {
+      expect(ownerRulesFile(paths, name)).toBeNull();
+    }
+    expect(ownerRulesFile(paths, "sam.lee@example.com")).toBe(
+      "/heel/rules/sam.lee@example.com.yaml",
     );
   });
 });
