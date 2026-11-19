@@ -11,7 +11,11 @@ import type {
   PauseTarget,
 } from "../../gateway/pipeline/ports.ts";
 import { parseHostPort } from "../../runner/egress.ts";
-import { type CredentialAuth, newPlaceholder } from "../../runner/intercept.ts";
+import {
+  type CredentialAuth,
+  newPlaceholder,
+  parseCredentialAuth,
+} from "../../runner/intercept.ts";
 import {
   type CredentialInjection,
   DEFAULT_LIMITS,
@@ -22,13 +26,21 @@ import {
 import type { SandboxProcess, SandboxRunOptions } from "../../runner/run.ts";
 import type { AccountRecord } from "../../store/directory.ts";
 import type { Vault } from "../../vault/vault.ts";
+import { CredentialDeliveryRefused, deliveryRefusedMessage } from "../credential-delivery.ts";
 import { GitHubApi } from "../github/api.ts";
 import { GitHubNotFoundError } from "../github/client.ts";
 import { isMergeAction, isWorkflowPath } from "../github/definition.ts";
 import type { FetchFn } from "../sign-in.ts";
 import { GH_MERGE_BYPASS_FLAGS } from "./gh-actions.ts";
 import { normalizeCliArgv } from "./index.ts";
-import { type CliSettings, cliSettings, GH_EGRESS, GH_UPLOAD_HOSTS } from "./settings.ts";
+import { NPM_ENV, NPMRC_FILE, npmUserConfig } from "./npm.ts";
+import {
+  type CliSettings,
+  cliCredentialDelivery,
+  cliSettings,
+  GH_EGRESS,
+  GH_UPLOAD_HOSTS,
+} from "./settings.ts";
 import type { CliRefusal } from "./types.ts";
 
 /**
@@ -48,7 +60,12 @@ import type { CliRefusal } from "./types.ts";
  * - `gh` never holds its token: `GH_TOKEN` is an inert placeholder, and
  *   heel's egress proxy puts the real token in the `Authorization` header of
  *   requests to GitHub's own hosts that the account's egress allows (spec:
- *   CLI runner, "Credential delivery").
+ *   CLI runner, "Credential delivery"). Another CLI with credential hosts
+ *   gets the same: a placeholder in its credential variable (and, for npm,
+ *   in the user config heel writes), the credential added on the wire.
+ * - A CLI whose credential would go into its environment, without the
+ *   operator having chosen that, is refused before any rule
+ *   (`credential_delivery`), with the fix in the answer.
  * - Only the `/run` surface reaches it; an MCP call naming the account is
  *   refused.
  * - `gh pr merge` (D11) is pinned: heel reads the pull request's head
@@ -194,6 +211,15 @@ export function cliDefinition(account: AccountRecord, deps: CliDeps): Definition
     async normalize(base: Call, ctx: NormalizeContext): Promise<Normalized> {
       // Only `heel run` reaches a CLI account, so a rule keyed on `surface: cli` sees every command.
       if (base.surface !== "cli") return { ok: false, reason: "unsupported" };
+      // Refused, or (a hand-edited row) no way to deliver it at all: `credentialSpec` would throw at execute.
+      const delivery = cliCredentialDelivery(settings);
+      if (delivery !== "proxy" && delivery !== "env") {
+        return {
+          ok: false,
+          reason: "credential_delivery",
+          detail: deliveryRefusedMessage(account.alias, "cli"),
+        };
+      }
       const parsed = CliArgsSchema.safeParse(base.args);
       if (!parsed.success) return { ok: false, reason: "unsupported" };
       const { argv, cwd } = parsed.data;
@@ -283,7 +309,13 @@ export function cliDefinition(account: AccountRecord, deps: CliDeps): Definition
         if (deps.paused?.(target) === true) throw new Error("paused");
         return credential();
       };
-      const { inject, ...spec } = credentialSpec(settings, await credential(), current, call.repo);
+      const { inject, ...spec } = credentialSpec(
+        settings,
+        await credential(),
+        current,
+        call.repo,
+        account.alias,
+      );
       const process = await deps.start(
         sandbox,
         {
@@ -370,13 +402,15 @@ function cliNetwork(
 /**
  * How the credential reaches each CLI. `credential` is its value now, for the
  * host-side output scrub; `current` reads it again for each request heel's
- * proxy injects it into.
+ * proxy injects it into. Throws `CredentialDeliveryRefused` for an account
+ * whose delivery is refused; `normalize` refuses those calls first.
  */
 export function credentialSpec(
-  settings: Pick<CliSettings, "command" | "credentialEnv" | "egress">,
+  settings: CliSettings,
   credential: string,
   current: () => Promise<string>,
   repo: string | undefined,
+  alias: string,
 ): Pick<SandboxSpec, "env" | "secretEnv" | "files" | "secrets"> & {
   inject?: CredentialInjection;
 } {
@@ -406,6 +440,32 @@ export function credentialSpec(
     };
   }
   const credentialEnv = settings.credentialEnv;
-  if (credentialEnv === null) throw new Error("this CLI account has no credential variable");
+  const delivery = cliCredentialDelivery(settings);
+  if (delivery === "proxy") {
+    const auth = parseCredentialAuth(settings.credentialAuth ?? "bearer");
+    if (auth === null) throw new Error(`bad credentialAuth ${settings.credentialAuth}`);
+    const placeholder = newPlaceholder();
+    const npm = settings.command === "npm";
+    return {
+      inject: { hosts: settings.credentialHosts, auth, placeholder, credential: current },
+      env: {
+        ...(credentialEnv === null ? {} : { [credentialEnv]: placeholder }),
+        // After the operator's variable, so heel's own settings always win.
+        ...(npm ? NPM_ENV : {}),
+      },
+      ...(npm
+        ? {
+            files: [
+              { name: NPMRC_FILE, content: npmUserConfig(settings.credentialHosts, placeholder) },
+            ],
+          }
+        : {}),
+      // The sandbox never had it, but an upstream could still echo it back.
+      secrets: [credential, ...encodings(credential)],
+    };
+  }
+  if (delivery !== "env" || credentialEnv === null) {
+    throw new CredentialDeliveryRefused(alias, "cli");
+  }
   return { secretEnv: { [credentialEnv]: credential }, secrets: encodings(credential) };
 }

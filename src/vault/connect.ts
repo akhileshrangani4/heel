@@ -1,11 +1,17 @@
 import { realpathSync } from "node:fs";
 import { and, eq } from "drizzle-orm";
 import { isLoopbackUrl } from "../config/schema.ts";
-import { cliSettings, GH_EGRESS } from "../definitions/cli/settings.ts";
+import { isNpmConfigEnv } from "../definitions/cli/npm.ts";
+import { cliCredentialDelivery, cliSettings, GH_EGRESS } from "../definitions/cli/settings.ts";
+import type {
+  CredentialDeliveryChoice,
+  SandboxCredentialDelivery,
+} from "../definitions/credential-delivery.ts";
 import { OpenApiError, type Operation, parseOpenApi } from "../definitions/http/openapi.ts";
 import { credentialDelivery, isEnvName, upstreamSettings } from "../definitions/mcp/settings.ts";
 import { EgressConfigError, isAllowlisted, parseEgressAllow } from "../runner/egress.ts";
 import { parseCredentialAuth } from "../runner/intercept.ts";
+import { isReservedEnv } from "../runner/plan.ts";
 import type { HeelDb } from "../store/db.ts";
 import { newId } from "../store/ids.ts";
 import { type AccountStatus, accounts, users } from "../store/schema.ts";
@@ -185,32 +191,76 @@ function cliAccountSettings(input: ConnectInput): Record<string, unknown> {
       "a cli account needs its credential (--credential-stdin)",
     );
   }
-  let egress: string[];
   if (cli.command === "gh") {
-    egress = [...GH_EGRESS, ...cli.egress];
-  } else {
-    if (cli.credentialEnv === null || !isEnvName(cli.credentialEnv)) {
+    if (
+      (cli.credentialHosts ?? []).length > 0 ||
+      (cli.credentialAuth ?? null) !== null ||
+      (cli.credentialDelivery ?? null) !== null
+    ) {
       throw new ConnectError(
         "invalid_settings",
-        "a CLI heel doesn't know needs --credential-env <NAME>",
+        "gh's token always goes through heel's egress proxy; leave out --credential-host, --credential-auth and --credential-delivery",
       );
     }
-    egress = [...cli.egress];
+    const egress = [...GH_EGRESS, ...cli.egress];
+    checkEgress(egress);
+    return { transport: "cli", command: "gh", bin: cli.bin, egress, credentialEnv: null };
   }
-  try {
-    if (egress.length > 0) parseEgressAllow(egress);
-  } catch (error) {
-    if (error instanceof EgressConfigError)
-      throw new ConnectError("invalid_settings", error.message);
-    throw error;
+  const npm = cli.command === "npm";
+  if (cli.credentialEnv === null && !(npm && (cli.credentialHosts ?? []).length > 0)) {
+    throw new ConnectError(
+      "invalid_settings",
+      npm
+        ? "npm needs --credential-host <registry host>: heel writes npm's token for it as a placeholder"
+        : "a CLI heel doesn't know needs --credential-env <NAME>",
+    );
   }
+  if (cli.credentialEnv !== null) checkCredentialEnv(cli.credentialEnv, npm);
+  const egress = [...cli.egress];
+  if (egress.length > 0) checkEgress(egress);
   return {
     transport: "cli",
     command: cli.command,
     bin: cli.bin,
     egress,
-    credentialEnv: cli.command === "gh" ? null : cli.credentialEnv,
+    credentialEnv: cli.credentialEnv,
+    ...deliverySettings(
+      {
+        egress,
+        credentialEnv: cli.credentialEnv,
+        credentialHosts: cli.credentialHosts ?? [],
+        credentialAuth: cli.credentialAuth ?? null,
+        credentialDelivery: cli.credentialDelivery ?? null,
+      },
+      { npm },
+    ),
   };
+}
+
+function checkEgress(egress: readonly string[]): void {
+  try {
+    parseEgressAllow(egress);
+  } catch (error) {
+    if (error instanceof EgressConfigError)
+      throw new ConnectError("invalid_settings", error.message);
+    throw error;
+  }
+}
+
+/** A credential variable heel can set: a valid name, and not one the runner or (for npm) heel sets itself. */
+function checkCredentialEnv(name: string, npm: boolean): void {
+  if (!isEnvName(name)) {
+    throw new ConnectError(
+      "invalid_settings",
+      "--credential-env must be an environment variable name",
+    );
+  }
+  if (isReservedEnv(name) || (npm && isNpmConfigEnv(name))) {
+    throw new ConnectError(
+      "invalid_settings",
+      `--credential-env ${name} is a variable heel sets itself; name another`,
+    );
+  }
 }
 
 /** What `heel connect` calls an MCP passthrough account. */
@@ -267,12 +317,7 @@ function mcpSettings(input: ConnectInput): Record<string, unknown> {
   if (!stdio.mounts.every((path) => path.startsWith("/"))) {
     throw new ConnectError("invalid_settings", "--mount paths must be absolute");
   }
-  if (stdio.credentialEnv !== null && !isEnvName(stdio.credentialEnv)) {
-    throw new ConnectError(
-      "invalid_settings",
-      "--credential-env must be an environment variable name",
-    );
-  }
+  if (stdio.credentialEnv !== null) checkCredentialEnv(stdio.credentialEnv, false);
   if (input.credential !== undefined && stdio.credentialEnv === null) {
     throw new ConnectError(
       "invalid_settings",
@@ -285,95 +330,157 @@ function mcpSettings(input: ConnectInput): Record<string, unknown> {
     args: stdio.args,
     egress: stdio.egress,
     credentialEnv: stdio.credentialEnv,
-    ...stdioCredential({
-      egress: stdio.egress,
-      credentialEnv: stdio.credentialEnv,
-      credentialHosts: stdio.credentialHosts ?? [],
-      credentialAuth: stdio.credentialAuth ?? null,
-    }),
+    ...deliverySettings(
+      {
+        egress: stdio.egress,
+        credentialEnv: stdio.credentialEnv,
+        credentialHosts: stdio.credentialHosts ?? [],
+        credentialAuth: stdio.credentialAuth ?? null,
+        credentialDelivery: stdio.credentialDelivery ?? null,
+      },
+      { npm: false },
+    ),
     mounts: stdio.mounts,
   };
 }
 
-/**
- * A local server's credential hosts and auth, checked: each host is one the
- * server may reach, a credential variable carries the placeholder, and the
- * auth is one heel can rewrite (never a URL query). `bearer` by default.
- */
-function stdioCredential(stdio: {
+/** How a sandboxed program's credential is to reach it, as `heel connect` and `heel account set` give it. */
+interface DeliveryFlags {
   egress: readonly string[];
   credentialEnv: string | null;
   credentialHosts: readonly string[];
   credentialAuth: string | null;
-}): { credentialHosts: string[]; credentialAuth: string | null } {
-  if (stdio.credentialHosts.length === 0) {
-    if (stdio.credentialAuth !== null) {
+  credentialDelivery: CredentialDeliveryChoice | null;
+}
+
+/** What an account stores about its credential's delivery (see `definitions/credential-delivery.ts`). */
+interface DeliveryStored {
+  credentialHosts: string[];
+  credentialAuth: string | null;
+  credentialDelivery: CredentialDeliveryChoice | null;
+}
+
+/**
+ * A sandboxed program's delivery settings, checked:
+ *
+ * - With credential hosts: each is one the program may reach, a credential
+ *   variable carries the placeholder (npm may go without: heel writes its
+ *   token into npm's config), and the auth is one heel can rewrite (never a
+ *   URL query), `bearer` by default and the only one npm sends.
+ * - `--credential-delivery env`: the operator chose to give the program the
+ *   credential itself; there must be a variable for it, and no hosts.
+ * - Neither, with a credential variable: refused, naming both fixes, since
+ *   such an account's calls would be refused anyway.
+ */
+function deliverySettings(flags: DeliveryFlags, options: { npm: boolean }): DeliveryStored {
+  const hosts = flags.credentialHosts;
+  if (flags.credentialDelivery === "env") {
+    if (hosts.length > 0 || flags.credentialAuth !== null) {
+      throw new ConnectError(
+        "invalid_settings",
+        "--credential-delivery env gives the program the credential itself; leave out --credential-host and --credential-auth",
+      );
+    }
+    if (flags.credentialEnv === null) {
+      throw new ConnectError(
+        "invalid_settings",
+        "--credential-delivery env needs a variable for the credential (--credential-env <NAME> on heel connect), and this account has none",
+      );
+    }
+    return { credentialHosts: [], credentialAuth: null, credentialDelivery: "env" };
+  }
+  if (hosts.length === 0) {
+    if (flags.credentialDelivery === "proxy") {
+      throw new ConnectError(
+        "invalid_settings",
+        "--credential-delivery proxy needs --credential-host <host>, the hosts heel adds the credential for",
+      );
+    }
+    if (flags.credentialAuth !== null) {
       throw new ConnectError(
         "invalid_settings",
         "--credential-auth needs --credential-host <host>",
       );
     }
-    return { credentialHosts: [], credentialAuth: null };
+    if (flags.credentialEnv !== null) {
+      throw new ConnectError(
+        "invalid_settings",
+        `the credential would be in the program's environment (${flags.credentialEnv}), where anything it runs can read it. ` +
+          "Add --credential-host <host> (one of its --egress hosts) and heel adds the credential on the wire instead, " +
+          "or accept that risk with --credential-delivery env",
+      );
+    }
+    return { credentialHosts: [], credentialAuth: null, credentialDelivery: null };
   }
-  if (stdio.credentialEnv === null) {
+  if (flags.credentialEnv === null && !options.npm) {
     throw new ConnectError(
       "invalid_settings",
-      "--credential-host needs --credential-env <NAME>, the variable the server reads its credential from",
+      "--credential-host needs --credential-env <NAME>, the variable the program reads its credential from",
     );
   }
   let egress: ReturnType<typeof parseEgressAllow>;
-  let hosts: ReturnType<typeof parseEgressAllow>;
+  let parsed: ReturnType<typeof parseEgressAllow>;
   try {
-    egress = parseEgressAllow(stdio.egress);
-    hosts = parseEgressAllow(stdio.credentialHosts);
+    egress = parseEgressAllow(flags.egress);
+    parsed = parseEgressAllow(hosts);
   } catch (error) {
     if (error instanceof EgressConfigError)
       throw new ConnectError("invalid_settings", error.message);
     throw error;
   }
-  const outside = hosts.findIndex((host) => !isAllowlisted(egress, host));
+  const outside = parsed.findIndex((host) => !isAllowlisted(egress, host));
   if (outside !== -1) {
     throw new ConnectError(
       "invalid_settings",
-      `--credential-host ${stdio.credentialHosts[outside]} isn't one of the server's --egress hosts`,
+      `--credential-host ${hosts[outside]} isn't one of the account's --egress hosts`,
     );
   }
-  const auth = stdio.credentialAuth ?? "bearer";
+  const auth = flags.credentialAuth ?? "bearer";
   if (parseCredentialAuth(auth) === null) {
     throw new ConnectError(
       "invalid_settings",
       "--credential-auth is bearer, basic or header:<Name>; heel won't put a credential in a URL",
     );
   }
-  return { credentialHosts: [...stdio.credentialHosts], credentialAuth: auth };
+  if (options.npm && auth !== "bearer") {
+    throw new ConnectError(
+      "invalid_settings",
+      "npm sends its registry token as a bearer token: --credential-auth bearer (or leave it out)",
+    );
+  }
+  return { credentialHosts: [...hosts], credentialAuth: auth, credentialDelivery: "proxy" };
 }
 
 /** What `heel account set` may change. */
 export interface ConfigureInput {
+  /** Empty only with `credentialDelivery: env`. */
   credentialHosts: string[];
   /** Null keeps the account's current auth (`bearer` if it had none). */
   credentialAuth: string | null;
-  /** A replacement static credential, e.g. after rotating one the server held. */
+  /** `env` to give the program the credential itself; `proxy` (or null) with hosts. */
+  credentialDelivery?: CredentialDeliveryChoice | null | undefined;
+  /** A replacement static credential, e.g. after rotating one the program held. */
   credential?: CredentialPayload | undefined;
 }
 
 export interface ConfiguredAccount {
   alias: string;
   accountId: string;
-  credentialDelivery: "proxy" | "env" | null;
+  credentialDelivery: SandboxCredentialDelivery | null;
   /**
-   * The server held the credential in its environment until now, and it
-   * wasn't replaced here: rotate it, since anything the server ran could
-   * have copied it.
+   * The program held the credential in its environment until now (or did,
+   * before heel refused that by default), and it wasn't replaced here:
+   * rotate it, since anything the program ran could have copied it.
    */
   rotate: boolean;
 }
 
 /**
- * `heel account set <alias> --credential-host …`: moves a local MCP server's
- * credential out of its sandbox without reconnecting it. Settings only; the
- * stored credential is untouched unless a replacement is given. The caller
- * stops any running server, so the old environment doesn't outlive the change.
+ * `heel account set <alias> --credential-host …` (or `--credential-delivery
+ * env`): changes how a local MCP server's or a CLI's credential reaches its
+ * sandbox, without reconnecting the account. Settings only; the stored
+ * credential is untouched unless a replacement is given. The caller stops any
+ * running server, so the old environment doesn't outlive the change.
  */
 export function configureAccount(
   db: HeelDb,
@@ -389,28 +496,42 @@ export function configureAccount(
     .get();
   if (!row) throw new ConnectError("not_found", `no account named "${alias}"`);
   const upstream = upstreamSettings(row.settings);
-  if (upstream?.transport !== "stdio") {
-    const cli = cliSettings(row.settings);
-    let message = "only local MCP servers (heel connect mcp --command) have credential hosts";
-    if (cli?.command === "gh") {
-      message =
-        "gh accounts already get their token at heel's egress proxy; there is nothing to set";
-    } else if (cli !== null) {
-      message = `heel can't keep the credential out of the sandbox for ${cli.command} yet`;
-    }
-    throw new ConnectError("invalid_settings", message);
+  const cli = upstream === null ? cliSettings(row.settings) : null;
+  const current = upstream?.transport === "stdio" ? upstream : cli;
+  if (current === null || cli?.command === "gh" || cli?.command === "kubectl") {
+    throw new ConnectError(
+      "invalid_settings",
+      cli?.command === "gh"
+        ? "gh accounts already get their token at heel's egress proxy; there is nothing to set"
+        : "only local MCP servers (heel connect mcp --command) and CLIs (heel connect cli) have credential hosts",
+    );
   }
-  if (input.credentialHosts.length === 0) {
-    throw new ConnectError("invalid_settings", "give at least one --credential-host <host>");
+  // An account stored before these checks may name a variable the runner sets; say so now, not at run time.
+  if (current.credentialEnv !== null) {
+    checkCredentialEnv(current.credentialEnv, cli?.command === "npm");
+  }
+  const delivery = input.credentialDelivery ?? null;
+  if (input.credentialHosts.length === 0 && delivery !== "env") {
+    throw new ConnectError(
+      "invalid_settings",
+      "give at least one --credential-host <host>, or --credential-delivery env",
+    );
   }
   const settings = {
-    ...upstream,
-    ...stdioCredential({
-      egress: upstream.egress,
-      credentialEnv: upstream.credentialEnv,
-      credentialHosts: input.credentialHosts,
-      credentialAuth: input.credentialAuth ?? upstream.credentialAuth,
-    }),
+    ...current,
+    ...deliverySettings(
+      {
+        egress: current.egress,
+        credentialEnv: current.credentialEnv,
+        credentialHosts: input.credentialHosts,
+        credentialAuth:
+          delivery === "env"
+            ? input.credentialAuth
+            : (input.credentialAuth ?? current.credentialAuth),
+        credentialDelivery: delivery,
+      },
+      { npm: cli?.command === "npm" },
+    ),
   };
   if (input.credential !== undefined && vault === null) {
     throw new ConnectError(
@@ -418,32 +539,37 @@ export function configureAccount(
       "the vault is not open (no master key), so credentials cannot be stored",
     );
   }
-  const before = credentialDelivery(upstream);
+  const before = sandboxCredentialDelivery(row.settings);
+  const after = sandboxCredentialDelivery(settings);
   // The new credential first: if storing it fails, the account still runs as it did.
   if (input.credential !== undefined) vault?.put(row.id, input.credential);
   db.update(accounts).set({ settings }).where(eq(accounts.id, row.id)).run();
   return {
     alias,
     accountId: row.id,
-    credentialDelivery: credentialDelivery(settings),
-    rotate: before === "env" && input.credential === undefined,
+    credentialDelivery: after,
+    // A refused account ran with the credential in its environment before heel refused that.
+    rotate:
+      after === "proxy" &&
+      (before === "env" || before === "refused") &&
+      input.credential === undefined,
   };
 }
 
 /**
  * How an account's credential reaches its sandbox: `proxy` (heel adds it on
- * the wire), `env` (the sandboxed program holds it), or null when no sandbox
- * gets it (built-in providers, HTTP accounts, remote MCP servers).
+ * the wire), `env` (the sandboxed program holds it, as the operator chose),
+ * `refused` (it would hold it, unchosen, so calls are refused), or null when
+ * no sandbox gets it (built-in providers, HTTP accounts, remote MCP servers).
  */
 export function sandboxCredentialDelivery(
   settings: Record<string, unknown>,
-): "proxy" | "env" | null {
+): SandboxCredentialDelivery | null {
   const upstream = upstreamSettings(settings);
   if (upstream?.transport === "stdio") return credentialDelivery(upstream);
+  if (upstream !== null) return null;
   const cli = cliSettings(settings);
-  if (cli === null) return null;
-  if (cli.command === "gh") return "proxy";
-  return cli.credentialEnv === null ? null : "env";
+  return cli === null ? null : cliCredentialDelivery(cli);
 }
 
 /** Pure: why an upstream MCP URL can't be used, or null. https, or http on loopback only. */
@@ -483,7 +609,18 @@ export interface ConnectInput {
   /** For `http` (D7a): the base URL, `--auth`, and the OpenAPI file's text. */
   http?: { baseUrl: string; auth: string; openapi: string };
   /** For `cli` (D8b): the command name, the binary heel runs, extra egress, and where the credential goes. */
-  cli?: { command: string; bin: string; egress: string[]; credentialEnv: string | null };
+  cli?: {
+    command: string;
+    bin: string;
+    egress: string[];
+    credentialEnv: string | null;
+    /** Hosts heel's egress proxy adds the credential for; the CLI gets a placeholder. */
+    credentialHosts?: string[] | undefined;
+    /** `bearer` (the default), `basic` or `header:<Name>`. */
+    credentialAuth?: string | null | undefined;
+    /** `env` to give the CLI the credential itself (`--credential-delivery env`). */
+    credentialDelivery?: CredentialDeliveryChoice | null | undefined;
+  };
   /** For a remote `mcp` server that wants OAuth sign-in (D5c). */
   oauth?: boolean;
   /** For `mcp`: a local server heel starts in the sandbox, instead of a URL. */
@@ -496,6 +633,8 @@ export interface ConnectInput {
     credentialHosts?: string[] | undefined;
     /** `bearer` (the default), `basic` or `header:<Name>`. */
     credentialAuth?: string | null | undefined;
+    /** `env` to give the server the credential itself (`--credential-delivery env`). */
+    credentialDelivery?: CredentialDeliveryChoice | null | undefined;
     mounts: string[];
   };
 }
@@ -632,8 +771,12 @@ export interface AccountSummary {
   /** The owner's user name, as rules files are named. */
   owner: string;
   status: AccountStatus;
-  /** For accounts whose credential a sandboxed program uses; `env` means the program holds it. */
-  credentialDelivery: "proxy" | "env" | null;
+  /**
+   * For accounts whose credential a sandboxed program uses: `env` means the
+   * program holds it (the operator chose that), `refused` that its calls are
+   * refused until the operator chooses.
+   */
+  credentialDelivery: SandboxCredentialDelivery | null;
 }
 
 export function listAccounts(db: HeelDb, orgId: string): AccountSummary[] {

@@ -1,5 +1,11 @@
 import { parse } from "yaml";
 import { z } from "zod";
+import { parseCredentialAuth } from "../../runner/intercept.ts";
+import {
+  CredentialDeliveryChoice,
+  effectiveDelivery,
+  type SandboxCredentialDelivery,
+} from "../credential-delivery.ts";
 
 /**
  * What a CLI account stores (D8b; spec: CLI runner): the command name
@@ -12,8 +18,13 @@ import { z } from "zod";
  *   operator allowed them; never to any other extra egress host.
  * - `kubectl`: the credential is a kubeconfig, written into the sandbox,
  *   with `KUBECONFIG` pointing at it; egress to its cluster's API server.
- * - any other CLI: the credential in the environment variable the operator
- *   names, and egress only to the hosts the operator lists.
+ * - any other CLI: egress only to the hosts the operator lists. With
+ *   credential hosts (a subset of those), the variable the operator names
+ *   holds a placeholder and heel's egress proxy adds the credential on the
+ *   wire; for `npm`, heel also writes a user config whose `_authToken` for
+ *   each credential host is that placeholder. Without credential hosts the
+ *   credential would be in the variable itself: only when the operator chose
+ *   that (`credentialDelivery: env`), and otherwise its commands are refused.
  */
 
 export const CliSettingsSchema = z.object({
@@ -21,14 +32,33 @@ export const CliSettingsSchema = z.object({
   command: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/),
   bin: z.string().startsWith("/"),
   egress: z.array(z.string()).default([]),
-  /** For a CLI heel doesn't know: where its credential goes. */
+  /** For a CLI heel doesn't know: where its credential (or, with credential hosts, its placeholder) goes. */
   credentialEnv: z.string().nullable().default(null),
+  /** `host[:port]` entries, each also in `egress`, that heel's proxy adds the credential for. */
+  credentialHosts: z.array(z.string()).max(32).default([]),
+  /** Where the credential goes in those requests: `bearer`, `basic` or `header:<Name>`. */
+  credentialAuth: z
+    .string()
+    .refine((text) => parseCredentialAuth(text) !== null)
+    .nullable()
+    .default(null),
+  /** `env` when the operator chose to put the credential in the variable itself. */
+  credentialDelivery: CredentialDeliveryChoice.nullable().default(null),
 });
 export type CliSettings = z.output<typeof CliSettingsSchema>;
 
 export function cliSettings(settings: Record<string, unknown>): CliSettings | null {
   const parsed = CliSettingsSchema.safeParse(settings);
   return parsed.success ? parsed.data : null;
+}
+
+/**
+ * How a CLI account's credential reaches its sandbox (see
+ * `../credential-delivery.ts`). `gh` always gets it at heel's egress proxy.
+ */
+export function cliCredentialDelivery(settings: CliSettings): SandboxCredentialDelivery | null {
+  if (settings.command === "gh") return "proxy";
+  return effectiveDelivery(settings);
 }
 
 /** GitHub's hosts `gh` needs (spec: CLI runner, "Network"). */

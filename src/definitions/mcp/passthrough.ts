@@ -1,6 +1,8 @@
 import type { Call } from "../../core/call.ts";
 import type { Definition, Normalized } from "../../gateway/pipeline/ports.ts";
 import type { AccountRecord } from "../../store/directory.ts";
+import { deliveryRefusedMessage } from "../credential-delivery.ts";
+import { credentialDelivery, upstreamSettings } from "./settings.ts";
 import type { UpstreamPool } from "./upstream.ts";
 
 /**
@@ -15,6 +17,10 @@ import type { UpstreamPool } from "./upstream.ts";
  * so it can allow or deny a call but can't hide items from what comes back
  * (I-46); it only removes the account's own credential if the server echoes
  * it.
+ *
+ * A local server whose credential would go into its environment without the
+ * operator choosing that is never started: its tools aren't listed, and a
+ * call is refused (`credential_delivery`) with the fix.
  */
 
 export const REDACTED_TEXT = "[redacted by heel]";
@@ -44,10 +50,18 @@ function argumentsOf(call: Call): Record<string, unknown> {
 }
 
 export function mcpPassthrough(account: AccountRecord, upstream: UpstreamPool): Definition {
+  const settings = upstreamSettings(account.settings);
+  const refused =
+    settings?.transport === "stdio" && credentialDelivery(settings) === "refused"
+      ? deliveryRefusedMessage(account.alias, "mcp")
+      : null;
   return {
-    tools: (signal) => upstream.listTools(account, signal),
+    // Never started, so nothing to list; a call naming one of its tools is refused in normalize, with the fix.
+    tools: (signal) =>
+      refused === null ? upstream.listTools(account, signal) : Promise.resolve([]),
 
     async normalize(base, ctx): Promise<Normalized> {
+      if (refused !== null) return { ok: false, reason: "credential_delivery", detail: refused };
       let tools: { name: string }[];
       try {
         tools = await upstream.listTools(account, ctx.signal);

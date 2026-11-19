@@ -53,7 +53,14 @@ function setUp() {
       },
       new Date(),
     );
-  return { t, vault, connect };
+  // A server connected before heel refused env delivery: its settings exactly as heel stored them then.
+  const legacy = (alias: string) => {
+    connect(alias, { credentialDelivery: "env" });
+    const { credentialDelivery: _, ...settings } =
+      findAccount(t.db, t.orgId, alias)?.settings ?? {};
+    t.db.update(accounts).set({ settings }).where(eq(accounts.alias, alias)).run();
+  };
+  return { t, vault, connect, legacy };
 }
 
 describe("heel connect mcp --credential-host", () => {
@@ -77,7 +84,7 @@ describe("heel connect mcp --credential-host", () => {
     [
       "a host the server can't reach",
       { credentialHosts: ["evil.example"] },
-      /isn't one of the server's --egress hosts/,
+      /isn't one of the account's --egress hosts/,
     ],
     [
       "the right host on another port",
@@ -109,20 +116,21 @@ describe("heel connect mcp --credential-host", () => {
 
 describe("heel account set", () => {
   it("moves an existing server's credential to the proxy without touching the stored credential", () => {
-    const { t, vault, connect } = setUp();
-    connect("notes", {});
-    expect(listAccounts(t.db, t.orgId)[0]?.credentialDelivery).toBe("env");
+    const { t, vault, legacy } = setUp();
+    legacy("notes");
+    expect(listAccounts(t.db, t.orgId)[0]?.credentialDelivery).toBe("refused");
     const configured = configureAccount(t.db, vault, t.orgId, "notes", {
       credentialHosts: ["api.notes.example"],
       credentialAuth: null,
     });
-    // The server held the credential until now, and none was given to replace it: rotate.
+    // The server held the credential before heel refused that, and none was given to replace it: rotate.
     expect(configured).toMatchObject({ alias: "notes", credentialDelivery: "proxy", rotate: true });
     const account = findAccount(t.db, t.orgId, "notes");
     expect(upstreamSettings(account?.settings ?? {})).toMatchObject({
       ...STDIO,
       credentialHosts: ["api.notes.example"],
       credentialAuth: "bearer",
+      credentialDelivery: "proxy",
     });
     expect(vault.get(account?.id ?? "")).toMatchObject({ type: "static" });
     expect(listAccounts(t.db, t.orgId)[0]?.credentialDelivery).toBe("proxy");
@@ -142,8 +150,8 @@ describe("heel account set", () => {
   });
 
   it("stores a rotated credential given with it, and then there's nothing left to rotate", () => {
-    const { t, vault, connect } = setUp();
-    connect("notes", {});
+    const { t, vault, legacy } = setUp();
+    legacy("notes");
     const configured = configureAccount(t.db, vault, t.orgId, "notes", {
       credentialHosts: ["api.notes.example"],
       credentialAuth: null,
@@ -156,8 +164,8 @@ describe("heel account set", () => {
   });
 
   it("stops the running server at once, through the admin socket's hook", async () => {
-    const { t, vault, connect } = setUp();
-    connect("notes", {});
+    const { t, vault, legacy } = setUp();
+    legacy("notes");
     const evicted: string[] = [];
     const handle = createAdminHandler({
       db: t.db,
@@ -177,7 +185,7 @@ describe("heel account set", () => {
 
   it("UpstreamPool.evict stops a running server without waiting for its next call", async () => {
     const { t, vault, connect } = setUp();
-    connect("notes", {});
+    connect("notes", { credentialDelivery: "env" });
     let killed = 0;
     const launch: StdioLauncher = async () => {
       const child = spawn(process.execPath, [FIXTURE], { stdio: ["pipe", "pipe", "pipe"] });
@@ -206,8 +214,8 @@ describe("heel account set", () => {
   });
 
   it("applies the same checks as connect", () => {
-    const { t, vault, connect } = setUp();
-    connect("notes", {});
+    const { t, vault, legacy } = setUp();
+    legacy("notes");
     expect(() =>
       configureAccount(t.db, vault, t.orgId, "notes", {
         credentialHosts: ["evil.example"],
@@ -247,7 +255,7 @@ describe("heel account set", () => {
 
   it("replaces a running server whose settings changed, so the old environment doesn't outlive the change", async () => {
     const { t, vault, connect } = setUp();
-    connect("notes", {});
+    connect("notes", { credentialDelivery: "env" });
     const launches: (string | null)[] = [];
     const killed: number[] = [];
     // The fixture server as a plain child process; the settings it was started with are recorded.
@@ -330,17 +338,18 @@ describe("pauses", () => {
 });
 
 describe("credential delivery in account list and startup warnings", () => {
-  it("marks gh as proxy, other CLIs and unmigrated local servers as env, and the rest as null", () => {
-    const { t, connect } = setUp();
+  it("marks gh and accounts with credential hosts as proxy, chosen env as env, unchosen env as refused, the rest null", () => {
+    const { t, connect, legacy } = setUp();
     connect("migrated", { credentialHosts: ["api.notes.example"] });
-    connect("legacy", {});
+    connect("chosen", { credentialDelivery: "env" });
+    legacy("legacy");
     connectAccount(
       t.db,
       null,
       { orgId: t.orgId, ownerId: t.ownerId, provider: "gmail", alias: "mail" },
       new Date(),
     );
-    // CLI accounts, as connect stores them (connect itself checks the binary exists).
+    // CLI accounts, as connect stored them before delivery was a choice (connect itself checks the binary exists).
     for (const [alias, settings] of [
       [
         "gh",
@@ -379,23 +388,32 @@ describe("credential delivery in account list and startup warnings", () => {
       listAccounts(t.db, t.orgId).map((a) => [a.alias, a.credentialDelivery]),
     );
     expect(delivery).toEqual({
+      chosen: "env",
       gh: "proxy",
-      legacy: "env",
+      legacy: "refused",
       mail: null,
       migrated: "proxy",
-      npm: "env",
+      npm: "refused",
     });
   });
 
-  it("warns once per account whose program holds the credential, saying how to move it", () => {
+  it("warns once per account whose program holds the credential, or whose calls are refused, with the fix", () => {
     const warnings = credentialDeliveryWarnings([
-      { alias: "legacy", kind: "mcp", delivery: "env" },
-      { alias: "npm", kind: "cli", delivery: "env" },
+      { alias: "chosen", kind: "mcp", delivery: "env" },
+      { alias: "npm", kind: "cli", delivery: "refused" },
       { alias: "migrated", kind: "mcp", delivery: "proxy" },
       { alias: "mail", kind: "mcp", delivery: null },
     ]);
-    expect(warnings.map((w) => w.code)).toEqual(["credential_in_sandbox", "credential_in_sandbox"]);
-    expect(warnings[0]?.message).toContain("heel account set legacy --credential-host");
-    expect(warnings[1]?.message).toContain('"npm"');
+    expect(warnings.map((w) => w.code)).toEqual([
+      "credential_in_sandbox",
+      "credential_delivery_refused",
+    ]);
+    expect(warnings[0]?.message).toContain("heel account set chosen --credential-host");
+    expect(warnings[0]?.message).toContain("(--credential-delivery env)");
+    expect(warnings[1]?.message).toContain("its calls are refused");
+    expect(warnings[1]?.message).toContain(
+      "heel account set npm --credential-host <host> --credential-auth bearer|basic|header:<Name>",
+    );
+    expect(warnings[1]?.message).toContain("heel account set npm --credential-delivery env");
   });
 });

@@ -169,10 +169,12 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
     case "account.list":
       return adminOk(listAccounts(db, orgId));
     case "account.configure": {
-      const { alias, credentialHosts, credentialAuth, credential } = request.params;
+      const { alias, credentialHosts, credentialAuth, credentialDelivery, credential } =
+        request.params;
       const configured = configureAccount(db, deps.vault, orgId, alias, {
         credentialHosts,
         credentialAuth,
+        credentialDelivery,
         credential,
       });
       // A running server holds whatever it started with; it starts again on its next call.

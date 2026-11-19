@@ -402,7 +402,9 @@ class DecisionPipeline implements Pipeline {
 
     this.#trace("normalize");
     const normalized = await this.#normalize(definition, call, hide);
-    if (!normalized.ok) return this.#deny(call, identityHash, normalized.reason);
+    if (!normalized.ok) {
+      return this.#deny(call, identityHash, normalized.reason, normalized.detail);
+    }
     const violations = normalizationViolations(call, normalized.call);
     if (violations.length > 0) throw new NormalizationContractError(violations);
     call = normalized.call;
@@ -902,13 +904,13 @@ class DecisionPipeline implements Pipeline {
     };
   }
 
-  #deny(call: Call, hash: string, reason: PipelineDenyReason): PipelineResult {
+  #deny(call: Call, hash: string, reason: PipelineDenyReason, detail?: string): PipelineResult {
     appendAudit(
       this.#deps.db,
       { kind: "deny", call, callHash: hash, rule: null, reason },
       this.#now(),
     );
-    return { status: "denied", reason, rule: null };
+    return { status: "denied", reason, rule: null, ...(detail === undefined ? {} : { detail }) };
   }
 
   #notify(approvalId: string): void {

@@ -19,6 +19,7 @@
  *   node fake-cli.ts spawn <count>
  *   node fake-cli.ts alloc <mebibytes>
  *   node fake-cli.ts hunt <credential-var> <host:port> <out-file>
+ *   node fake-cli.ts npm-like <host:port> <out-file>
  */
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -408,6 +409,56 @@ async function hunt(credentialVar: string, target: string, out: string): Promise
   return report;
 }
 
+/**
+ * What npm does with the config heel writes for it, without npm itself (the
+ * sandbox has only heel's Node): read `NPM_CONFIG_USERCONFIG`, take the
+ * `_authToken` keyed `//<host:port>/`, and send it as `Authorization: Bearer`
+ * through `HTTPS_PROXY`, the way npm-registry-fetch does, once with Node's
+ * fetch (trusting `NODE_EXTRA_CA_CERTS`) and once raw (trusting the config's
+ * `cafile`). Then a foreign token, and the same sweep as `hunt` of everything
+ * the program can read. The haul goes to `out` and stdout.
+ */
+async function npmLike(target: string, out: string): Promise<Report> {
+  const configPath = process.env["NPM_CONFIG_USERCONFIG"] ?? "";
+  const config = readOrUndefined(configPath) ?? "";
+  const key = `//${target}/:_authToken=`;
+  const token =
+    config
+      .split("\n")
+      .find((line) => line.startsWith(key))
+      ?.slice(key.length) ?? "";
+  const cafile = /^cafile=(.+)$/m.exec(config)?.[1] ?? "";
+  const ca = readOrUndefined(cafile) ?? "";
+  const files: Record<string, string> = {};
+  for (const dir of ["/heel", process.env["HOME"] ?? "/heel/home", "/tmp", process.cwd()]) {
+    readTree(dir, 4, files);
+  }
+  const raw = (path: string, bearer: string): string =>
+    [
+      `GET ${path} HTTP/1.1`,
+      `Host: ${target}`,
+      `Authorization: Bearer ${bearer}`,
+      "npm-command: whoami",
+      "Connection: close",
+      "",
+      "",
+    ].join("\r\n");
+  const requests = {
+    whoami: await fetch(`https://${target}/-/whoami`, {
+      headers: { authorization: `Bearer ${token}`, "npm-command": "whoami" },
+    }).then(
+      async (response) => `${response.status} ${await response.text()}`,
+      (error: unknown) =>
+        `error: ${error instanceof Error ? `${error.message} ${String(error.cause)}` : String(error)}`,
+    ),
+    packument: await tunnelled(target, ca, raw("/left-pad", token)),
+    foreign: await tunnelled(target, ca, raw("/foreign", "npm_not-the-placeholder")),
+  };
+  const report = { configPath, config, token, cafile, env: process.env, files, requests };
+  writeFileSync(out, JSON.stringify(report));
+  return report;
+}
+
 async function main(): Promise<Report | undefined> {
   const [command, ...rest] = process.argv.slice(2);
   switch (command) {
@@ -436,6 +487,8 @@ async function main(): Promise<Report | undefined> {
       return alloc(Number(rest[0]));
     case "hunt":
       return hunt(rest[0] ?? "", rest[1] ?? "", rest[2] ?? "hunt.json");
+    case "npm-like":
+      return npmLike(rest[0] ?? "", rest[1] ?? "npm.json");
     default:
       process.stderr.write(`fake-cli: unknown command ${String(command)}\n`);
       process.exit(64);

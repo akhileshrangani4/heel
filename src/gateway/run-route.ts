@@ -63,7 +63,15 @@ function respond(c: Context, result: PipelineResult): Response {
         202,
       );
     case "denied":
-      return c.json({ status: "denied", reason: result.reason, rule: result.rule }, 403);
+      return c.json(
+        {
+          status: "denied",
+          reason: result.reason,
+          rule: result.rule,
+          ...(result.detail === undefined ? {} : { message: result.detail }),
+        },
+        403,
+      );
     case "paused":
       return c.json({ status: "paused", scope: result.scope }, 423);
     case "expired":

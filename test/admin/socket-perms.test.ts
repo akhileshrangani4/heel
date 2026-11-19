@@ -337,10 +337,19 @@ describe("admin socket requests", () => {
       credentialEnv: "NOTES_TOKEN",
       mounts: [],
     };
+    // With neither credential hosts nor a choice, the credential would sit in the server's environment.
+    const unchosen = await call(path, {
+      method: "account.connect",
+      params: { provider: "mcp", alias: "notes", stdio },
+    });
+    expect(unchosen).toMatchObject({
+      ok: false,
+      error: { code: "invalid", message: expect.stringContaining("--credential-delivery env") },
+    });
     resultOf(
       await call(path, {
         method: "account.connect",
-        params: { provider: "mcp", alias: "notes", stdio },
+        params: { provider: "mcp", alias: "notes", stdio: { ...stdio, credentialDelivery: "env" } },
       }),
     );
     expect(resultOf(await call(path, { method: "account.list" }))).toMatchObject([

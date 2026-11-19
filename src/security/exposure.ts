@@ -1,4 +1,9 @@
 import type { ListenAddress } from "../config/schema.ts";
+import {
+  deliveryFix,
+  type SandboxCredentialDelivery,
+  type SandboxedKind,
+} from "../definitions/credential-delivery.ts";
 
 /**
  * Startup warnings about setups that weaken heel's protection (docs/running.md,
@@ -25,7 +30,8 @@ export interface ExposureWarning {
     | "agent_plane_exposed"
     | "human_plane_exposed"
     | "same_user_as_agents"
-    | "credential_in_sandbox";
+    | "credential_in_sandbox"
+    | "credential_delivery_refused";
   message: string;
 }
 
@@ -33,33 +39,47 @@ export interface ExposureWarning {
 export interface SandboxedAccount {
   alias: string;
   /** A local MCP server, or a CLI for `heel run`. */
-  kind: "mcp" | "cli";
-  /** `env`: the program holds the credential; `proxy`: heel adds it on the wire. */
-  delivery: "proxy" | "env" | null;
+  kind: SandboxedKind;
+  /** See `definitions/credential-delivery.ts`. */
+  delivery: SandboxCredentialDelivery | null;
 }
 
 /**
- * Accounts connected before heel could keep their credential out of the
- * sandbox. They still work: the program gets the credential in its
- * environment, where anything it runs can read it.
+ * Accounts whose credential would sit in a sandboxed program's environment:
+ *
+ * - `env`: the operator chose that (`--credential-delivery env`). They work,
+ *   but anything the program runs can read the credential, so heel says so
+ *   at every start, with how to move it to the proxy.
+ * - `refused`: connected before heel refused that by default, and never
+ *   moved. Their calls are refused until the operator chooses; this is where
+ *   an upgrading operator first hears of it.
  */
 export function credentialDeliveryWarnings(
   accounts: readonly SandboxedAccount[],
 ): ExposureWarning[] {
-  return accounts
-    .filter((account) => account.delivery === "env")
-    .map((account) => ({
-      code: "credential_in_sandbox" as const,
-      message:
-        account.kind === "mcp"
-          ? `account "${account.alias}" gives its local MCP server the credential in its environment, ` +
-            "where anything the server runs can read it. Name the hosts it authenticates to and " +
-            `heel adds it on the wire instead: heel account set ${account.alias} ` +
-            "--credential-host <host> [--credential-auth bearer|basic|header:<name>]"
-          : `account "${account.alias}" gives its CLI the credential in its environment, where ` +
-            "anything the command runs can read it. heel can keep it out of the sandbox only for " +
-            "gh so far; until then, connect only credentials scoped to what the agent may do.",
-    }));
+  const warnings: ExposureWarning[] = [];
+  for (const account of accounts) {
+    const program = account.kind === "mcp" ? "local MCP server" : "CLI";
+    if (account.delivery === "env") {
+      warnings.push({
+        code: "credential_in_sandbox",
+        message:
+          `account "${account.alias}" gives its ${program} the credential in its environment ` +
+          "(--credential-delivery env), where anything the program runs can read it. " +
+          "Name the hosts it authenticates to and heel adds it on the wire instead: " +
+          `heel account set ${account.alias} --credential-host <host> ` +
+          "[--credential-auth bearer|basic|header:<Name>]",
+      });
+    } else if (account.delivery === "refused") {
+      warnings.push({
+        code: "credential_delivery_refused",
+        message:
+          `account "${account.alias}" would give its ${program} the credential in its environment, ` +
+          `which heel no longer does unless asked, so its calls are refused. To fix it, ${deliveryFix(account.alias)}`,
+      });
+    }
+  }
+  return warnings;
 }
 
 const LOOPBACK = new Set(["127.0.0.1", "::1", "[::1]", "localhost"]);

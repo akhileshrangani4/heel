@@ -533,9 +533,14 @@ function validateInjection(
   }
 }
 
+/** Pure: a variable the runner sets itself, or one that makes a runtime load code; a spec can't set it. */
+export function isReservedEnv(name: string): boolean {
+  return RESERVED_ENV.has(name) || RESERVED_ENV_PREFIXES.some((prefix) => name.startsWith(prefix));
+}
+
 function validateEnv(name: string, value: string): void {
   if (!ENV_NAME.test(name)) throw new SandboxSpecError(`bad environment variable name: ${name}`);
-  if (RESERVED_ENV.has(name) || RESERVED_ENV_PREFIXES.some((prefix) => name.startsWith(prefix))) {
+  if (isReservedEnv(name)) {
     throw new SandboxSpecError(`${name} is set by the runner and can't be overridden`);
   }
   if (value.includes("\0")) throw new SandboxSpecError(`${name} contains a NUL byte`);

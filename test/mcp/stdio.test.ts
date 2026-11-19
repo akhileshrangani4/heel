@@ -38,6 +38,8 @@ const STDIO = {
   credentialEnv: "NOTES_TOKEN",
   credentialHosts: [],
   credentialAuth: null,
+  // Most of these tests are about the server, not delivery: it gets the credential itself, by choice.
+  credentialDelivery: "env" as const,
   mounts: [FIXTURE],
 };
 
@@ -209,7 +211,7 @@ describe("local MCP servers", () => {
   it("runs long-lived with no output cap, in its own work root, with only its egress hosts", async () => {
     const spec = await stdioSandboxSpec(
       { transport: "stdio", ...STDIO, egress: ["api.notes.example"] },
-      { workRoot: "/srv/heel/mcp/local-notes", credential: async () => TOKEN },
+      { workRoot: "/srv/heel/mcp/local-notes", credential: async () => TOKEN, alias: "notes" },
     );
     expect(spec).toMatchObject({
       binary: process.execPath,
@@ -225,7 +227,7 @@ describe("local MCP servers", () => {
       (
         await stdioSandboxSpec(
           { transport: "stdio", ...STDIO },
-          { workRoot: "/w", credential: null },
+          { workRoot: "/w", credential: null, alias: "notes" },
         )
       ).network,
     ).toEqual({ kind: "none" });
@@ -245,7 +247,7 @@ describe("local MCP servers", () => {
         credentialHosts: ["api.notes.example"],
         credentialAuth: "header:X-Notes-Key",
       },
-      { workRoot: "/w", credential },
+      { workRoot: "/w", credential, alias: "notes" },
     );
     expect(spec.secretEnv).toBeUndefined();
     const placeholder = spec.env?.["NOTES_TOKEN"];
