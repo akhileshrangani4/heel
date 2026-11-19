@@ -92,6 +92,16 @@ describe("heel CLI", () => {
     const missingAlias = await run(["connect", "github"], { HEEL_HOME: heelHome() });
     expect(missingAlias.code).toBe(EXIT.usage);
     expect(missingAlias.stderr).toContain("--as");
+
+    const badDelivery = await run(["account", "set", "notes", "--credential-delivery", "file"], {
+      HEEL_HOME: heelHome(),
+    });
+    expect(badDelivery.code).toBe(EXIT.usage);
+    expect(badDelivery.stderr).toContain("--credential-delivery is env or proxy");
+
+    const neither = await run(["account", "set", "notes"], { HEEL_HOME: heelHome() });
+    expect(neither.code).toBe(EXIT.usage);
+    expect(neither.stderr).toContain("--credential-host <host>, or --credential-delivery env");
   });
 
   it("exits 78 on an invalid or missing config file", async () => {

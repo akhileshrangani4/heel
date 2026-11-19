@@ -11,13 +11,19 @@
  * local HTTPS server on an allowlisted IP literal; nothing needs the internet.
  */
 import { randomBytes } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { probeSandbox, runSandboxed, type SandboxSpec } from "../../src/runner/index.ts";
+import {
+  probeSandbox,
+  runSandboxed,
+  type SandboxSpec,
+  startSandboxed,
+} from "../../src/runner/index.ts";
 import { type InterceptEvent, newPlaceholder } from "../../src/runner/intercept.ts";
+import { cliPipeline } from "../../test/helpers/cli-pipeline.ts";
 import { headerOf, httpsUpstream } from "../../test/helpers/https-upstream.ts";
 import { leakedForms } from "../../test/helpers/token-forms.ts";
 
@@ -128,5 +134,83 @@ describe.skipIf(!probe.ok)("credentials added at heel's egress proxy, under bubb
     // The reflected request came back with the token scrubbed by the proxy.
     expect(report.requests["auth"]).toContain("[redacted by heel]");
     expect(events.filter((event) => event.injected).length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("I-75: npm through heel run gets its token as a placeholder in the config heel writes; the registry gets the real one as a bearer", async () => {
+    if (!probe.ok) return;
+    const target = `127.0.0.1:${upstream.port}`;
+    // The real /run route, pipeline and CLI definition, with heel's own Node standing in for npm's binary.
+    const h = cliPipeline({
+      owner: "rules:\n  - match: { command: npm }\n    then: allow\n",
+      real: {
+        host: probe.host,
+        start: (host, spec, options) =>
+          startSandboxed(host, spec, { ...options, upstreamCa: [upstream.ca] }),
+      },
+      settings: {
+        transport: "cli",
+        command: "npm",
+        bin: probe.host.node,
+        egress: [target],
+        credentialEnv: "NPM_TOKEN",
+        credentialHosts: [target],
+        credentialAuth: "bearer",
+        credentialDelivery: "proxy",
+      },
+      credential: TOKEN,
+    });
+    // Only the work root is mounted, so the fake npm runs from inside it.
+    const script = join(h.root, "fake-cli.ts");
+    copyFileSync(FAKE_CLI, script);
+    const out = join(h.repo, "npm.json");
+    const before = upstream.seen.length;
+    const answer = await h.run({ argv: ["npm", script, "npm-like", target, out], cwd: h.repo });
+    expect(answer.body["status"], JSON.stringify(answer.body)).toBe("ran");
+    expect(answer.body["exitCode"], String(answer.body["stderr"])).toBe(0);
+    const report = JSON.parse(readFileSync(out, "utf8")) as {
+      configPath: string;
+      config: string;
+      token: string;
+      cafile: string;
+      env: Record<string, string>;
+      requests: Record<string, string>;
+    };
+
+    // npm's config is heel's, read-only under /heel/run, and its token is the placeholder.
+    expect(report.configPath).toBe("/heel/run/npmrc");
+    expect(report.token).toMatch(/^heel-placeholder-[0-9a-f]+$/);
+    expect(report.env["NPM_TOKEN"]).toBe(report.token);
+    expect(report.config).toContain(`//${target}/:_authToken=${report.token}`);
+    expect(report.cafile).toBe("/heel/run/ca.pem");
+    expect(report.env["NODE_EXTRA_CA_CERTS"]).toBe("/heel/run/ca.pem");
+
+    // Nothing the program could read, send or write carries the token, in any form.
+    expect(leakedForms(readFileSync(out), TOKEN)).toEqual([]);
+    expect(leakedForms(JSON.stringify(answer.body), TOKEN)).toEqual([]);
+
+    // The registry: the real token as a bearer, and nowhere else in any request.
+    const seen = upstream.seen.slice(before);
+    const byPath = (path: string) => seen.find((r) => r.url.startsWith(path));
+    expect(headerOf(byPath("/-/whoami")?.rawHeaders ?? [], "authorization")).toBe(
+      `Bearer ${TOKEN}`,
+    );
+    expect(headerOf(byPath("/left-pad")?.rawHeaders ?? [], "authorization")).toBe(
+      `Bearer ${TOKEN}`,
+    );
+    for (const request of seen) {
+      const elsewhere = [
+        request.url,
+        request.body,
+        ...request.rawHeaders.filter((_, i, all) => all[i - 1]?.toLowerCase() !== "authorization"),
+      ].join("\n");
+      expect(leakedForms(elsewhere, TOKEN), request.url).toEqual([]);
+    }
+    expect(report.requests["whoami"]).toMatch(/^200 /);
+    // The upstream reflects the request; the proxy scrubbed the token from what came back.
+    expect(report.requests["whoami"]).toContain("[redacted by heel]");
+    expect(report.requests["packument"]).toMatch(/^HTTP\/1\.1 200 /);
+    // A token npm didn't get from heel is refused before it reaches the registry.
+    expect(byPath("/foreign")).toBeUndefined();
+    expect(report.requests["foreign"]).toMatch(/^HTTP\/1\.1 403 [\s\S]*credential_mismatch/);
   });
 });

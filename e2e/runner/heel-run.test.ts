@@ -34,6 +34,8 @@ describe.skipIf(!probe.ok)("heel run under bubblewrap", () => {
         bin: probe.host.node,
         egress: [],
         credentialEnv: "FAKE_TOKEN",
+        // No network, so no credential host: this account chose to give the CLI the credential.
+        credentialDelivery: "env",
       },
       credential: TOKEN,
     });

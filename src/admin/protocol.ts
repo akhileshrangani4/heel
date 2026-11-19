@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { CredentialDeliveryChoice } from "../definitions/credential-delivery.ts";
 
 /**
  * The admin socket protocol: one JSON request line, one JSON response line,
@@ -76,6 +77,11 @@ export const AdminRequestSchema = z.discriminatedUnion("method", [
           bin: z.string().min(1).max(4_096),
           egress: z.array(z.string().max(255)).max(32),
           credentialEnv: z.string().max(64).nullable(),
+          /** Hosts heel's egress proxy adds the credential for; the CLI gets a placeholder. */
+          credentialHosts: z.array(z.string().max(255)).max(32).optional(),
+          credentialAuth: z.string().max(128).nullable().optional(),
+          /** `env`: the CLI gets the credential itself, by the operator's choice. */
+          credentialDelivery: CredentialDeliveryChoice.nullable().optional(),
         })
         .optional(),
       /** The remote server wants OAuth sign-in; its owner signs in from the Connections page. */
@@ -90,6 +96,8 @@ export const AdminRequestSchema = z.discriminatedUnion("method", [
           /** Hosts heel's egress proxy adds the credential for; the server gets a placeholder. */
           credentialHosts: z.array(z.string().max(255)).max(32).optional(),
           credentialAuth: z.string().max(128).nullable().optional(),
+          /** `env`: the server gets the credential itself, by the operator's choice. */
+          credentialDelivery: CredentialDeliveryChoice.nullable().optional(),
           mounts: z.array(z.string().max(4_096)).max(16),
         })
         .optional(),
@@ -98,16 +106,18 @@ export const AdminRequestSchema = z.discriminatedUnion("method", [
   z.strictObject({ method: z.literal("account.list") }),
   z.strictObject({
     /**
-     * `heel account set`: where a local MCP server's credential goes, so an
-     * account connected with it in the environment can move it to heel's
-     * egress proxy without reconnecting.
+     * `heel account set`: where a local MCP server's or a CLI's credential
+     * goes, so an account can move it to heel's egress proxy (or, by
+     * choice, into the program's environment) without reconnecting.
      */
     method: z.literal("account.configure"),
     params: z.strictObject({
       alias: z.string().min(1).max(64),
-      credentialHosts: z.array(z.string().min(1).max(255)).min(1).max(32),
+      /** At least one, except with `credentialDelivery: env`. */
+      credentialHosts: z.array(z.string().min(1).max(255)).max(32),
       credentialAuth: z.string().max(128).nullable(),
-      /** A replacement credential, for one the server held in its environment until now. */
+      credentialDelivery: CredentialDeliveryChoice.nullable().optional(),
+      /** A replacement credential, for one the program held in its environment until now. */
       credential: StaticCredentialSchema.optional(),
     }),
   }),

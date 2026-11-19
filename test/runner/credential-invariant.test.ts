@@ -1,12 +1,13 @@
 /**
- * I-75, structurally: for `gh` and for a local MCP server with credential
- * hosts, the real definitions build a sandbox from a random token, and none
+ * I-75, structurally: for `gh`, and for a local MCP server, another CLI or
+ * npm with credential hosts, the real definitions build a sandbox from a
+ * random token, and none
  * of what the sandbox would receive carries that token in any form: not its
  * environment, its files, its arguments, the bwrap options, or any fd heel
  * writes. Only the host side keeps it (the output scrub list, and the getter
  * heel's proxy calls).
  *
- * e2e/runner/credential-proxy.test.ts and e2e/runner/mcp-stdio.test.ts prove
+ * e2e/runner/credential-proxy.test.ts (gh and npm) and e2e/runner/mcp-stdio.test.ts prove
  * the same under real bubblewrap, red-team style.
  */
 import { randomBytes } from "node:crypto";
@@ -131,6 +132,65 @@ describe("I-75: the credential never enters the sandbox", () => {
     ghLeaves(["gh", "api", "/repos/acme/web/pulls"]));
   it("I-75: gh pr view --json gets a placeholder; the token's bytes are nowhere in what the sandbox receives", () =>
     ghLeaves(["gh", "pr", "view", "12", "-R", "acme/web", "--json", "title"]));
+
+  /** Another CLI with credential hosts, through the real `/run` route and definition. */
+  async function cliLeaves(settings: Record<string, unknown>, argv: string[]) {
+    const token = randomToken();
+    const h = cliPipeline({
+      owner: `rules:\n  - match: { command: ${String(settings["command"])} }\n    then: allow\n`,
+      settings,
+      credential: token,
+    });
+    const answer = await h.run({ argv, cwd: h.repo });
+    expect(answer.body["status"]).toBe("ran");
+    const [spec] = h.started;
+    if (spec === undefined) throw new Error("nothing started");
+    expect(leakedForms(sandboxReceives(spec), token)).toEqual([]);
+    const inject = spec.network?.kind === "egress" ? spec.network.inject : undefined;
+    expect(inject?.hosts).toEqual(settings["credentialHosts"]);
+    expect(await inject?.credential()).toBe(token);
+    expect(spec.secrets).toContain(token);
+    return { spec, placeholder: inject?.placeholder };
+  }
+
+  it("I-75: a generic CLI with credential hosts gets a placeholder in its variable, and nothing else", async () => {
+    const { spec, placeholder } = await cliLeaves(
+      {
+        transport: "cli",
+        command: "terraform",
+        bin: "/usr/bin/terraform",
+        egress: ["app.terraform.io", "releases.hashicorp.com"],
+        credentialEnv: "TF_TOKEN",
+        credentialHosts: ["app.terraform.io"],
+        credentialAuth: "bearer",
+        credentialDelivery: "proxy",
+      },
+      ["terraform", "plan"],
+    );
+    expect(spec.env?.["TF_TOKEN"]).toBe(placeholder);
+    expect(spec.secretEnv).toBeUndefined();
+  });
+
+  it("I-75: npm gets the placeholder in the user config heel writes and its variable, never the token", async () => {
+    const { spec, placeholder } = await cliLeaves(
+      {
+        transport: "cli",
+        command: "npm",
+        bin: "/usr/bin/npm",
+        egress: ["registry.npmjs.org"],
+        credentialEnv: "NPM_TOKEN",
+        credentialHosts: ["registry.npmjs.org"],
+        credentialAuth: "bearer",
+        credentialDelivery: "proxy",
+      },
+      ["npm", "publish"],
+    );
+    expect(spec.env?.["NPM_TOKEN"]).toBe(placeholder);
+    expect(String(spec.files?.[0]?.content)).toContain(
+      `//registry.npmjs.org/:_authToken=${placeholder}`,
+    );
+    expect(spec.secretEnv).toBeUndefined();
+  });
 
   /** A local MCP server through the real pool, vault and launcher, with a fake start that records the spec. */
   async function stdioLeaves(credentialAuth: string, auth: CredentialAuth): Promise<void> {

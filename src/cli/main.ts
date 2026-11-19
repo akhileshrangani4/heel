@@ -52,24 +52,33 @@ export const USAGE = `usage:
                                           /http/<alias>/…
   heel connect mcp --as <alias> --command <path> [--arg <a>]... [--egress <host>]...
                    [--mount <path>]... [--credential-env <NAME> --credential-stdin
-                   --credential-host <host>... [--credential-auth bearer|basic|header:<name>]]
+                   (--credential-host <host>... [--credential-auth bearer|basic|header:<name>]
+                    | --credential-delivery env)]
                                           run a local MCP server in heel's sandbox;
                                           it gets a placeholder in <NAME>, and heel
                                           adds the credential to its requests to
-                                          each --credential-host
+                                          each --credential-host. --credential-delivery
+                                          env puts the credential itself in <NAME>
+                                          instead, where the server can read it
   heel run [--account <alias>] [--json] -- <cmd> [args...]
                                           (agent side) ask heel to run a command;
                                           reads HEEL_TOKEN, HEEL_URL, HEEL_RUN_ID
   heel connect cli <command> --as <alias> --bin <path> [--egress <host>]...
                    [--credential-env <NAME>] --credential-stdin
-                                          let agents run a CLI (gh, kubectl, ...)
-                                          through heel with \`heel run\`; the
-                                          credential stays with heel
+                   [--credential-host <host>... [--credential-auth bearer|basic|header:<name>]
+                    | --credential-delivery env]
+                                          let agents run a CLI (gh, npm, ...) through
+                                          heel with \`heel run\`. gh, and a CLI with
+                                          --credential-host, get a placeholder and
+                                          heel adds the credential on the wire; npm
+                                          needs only --credential-host <registry>
   heel account list
-  heel account set <alias> --credential-host <host>... [--credential-auth bearer|basic|header:<name>]
-                   [--credential-stdin]
-                                          move a local MCP server's credential out of
-                                          its sandbox, to heel's egress proxy
+  heel account set <alias> (--credential-host <host>... [--credential-auth bearer|basic|header:<name>]
+                   | --credential-delivery env) [--credential-stdin]
+                                          move a local MCP server's or a CLI's
+                                          credential out of its sandbox, to heel's
+                                          egress proxy (or, knowingly, into its
+                                          environment)
   heel account share|unshare <alias> --user <name> | --group <group>
                                           let another person's agents use an account
   heel account approvers <alias> [--repo <owner/name>] [--user <name>]... [--group <group>]...
@@ -305,6 +314,13 @@ async function agentCommand(args: string[], io: CliIo): Promise<number> {
   }
 }
 
+/** `--credential-delivery env|proxy`, or null when it wasn't given. */
+function deliveryFlag(value: string | undefined): "env" | "proxy" | null {
+  if (value === undefined) return null;
+  if (value === "env" || value === "proxy") return value;
+  throw new UsageError("--credential-delivery is env or proxy");
+}
+
 /**
  * `heel connect`. A static credential comes from stdin, never argv, so it
  * stays out of shell history and the process list.
@@ -326,6 +342,7 @@ async function connectCommand(args: string[], io: CliIo): Promise<number> {
         "credential-env": { type: "string" },
         "credential-host": { type: "string", multiple: true },
         "credential-auth": { type: "string" },
+        "credential-delivery": { type: "string" },
         "credential-stdin": { type: "boolean" },
         "base-url": { type: "string" },
         auth: { type: "string" },
@@ -347,6 +364,12 @@ async function connectCommand(args: string[], io: CliIo): Promise<number> {
   }
   if (values.as === undefined) throw new UsageError("missing --as <alias>");
   const config = configFrom(io, values.config);
+  const delivery = deliveryFlag(values["credential-delivery"]);
+  const credentialFlags = {
+    credentialHosts: values["credential-host"] ?? [],
+    credentialAuth: values["credential-auth"] ?? null,
+    ...(delivery === null ? {} : { credentialDelivery: delivery }),
+  };
   let credential: { type: "static"; value: string } | undefined;
   if (values["credential-stdin"]) {
     const value = (await readAll(io.stdin)).replace(/\r?\n$/, "");
@@ -366,6 +389,7 @@ async function connectCommand(args: string[], io: CliIo): Promise<number> {
             bin: values.bin as string,
             egress: values.egress ?? [],
             credentialEnv: values["credential-env"] ?? null,
+            ...credentialFlags,
           },
         }
       : {}),
@@ -377,8 +401,7 @@ async function connectCommand(args: string[], io: CliIo): Promise<number> {
             args: values.arg ?? [],
             egress: values.egress ?? [],
             credentialEnv: values["credential-env"] ?? null,
-            credentialHosts: values["credential-host"] ?? [],
-            credentialAuth: values["credential-auth"] ?? null,
+            ...credentialFlags,
             mounts: values.mount ?? [],
           },
         }),
@@ -418,6 +441,7 @@ async function accountCommand(args: string[], io: CliIo): Promise<number> {
         repo: { type: "string" },
         "credential-host": { type: "string", multiple: true },
         "credential-auth": { type: "string" },
+        "credential-delivery": { type: "string" },
         "credential-stdin": { type: "boolean" },
       },
       allowPositionals: true,
@@ -440,8 +464,12 @@ async function accountCommand(args: string[], io: CliIo): Promise<number> {
     case "set": {
       if (alias === undefined) throw new UsageError("missing account alias");
       const credentialHosts = values["credential-host"] ?? [];
-      if (credentialHosts.length === 0)
-        throw new UsageError("give at least one --credential-host <host>");
+      const delivery = deliveryFlag(values["credential-delivery"]);
+      if (credentialHosts.length === 0 && delivery !== "env") {
+        throw new UsageError(
+          "give at least one --credential-host <host>, or --credential-delivery env",
+        );
+      }
       let credential: { type: "static"; value: string } | undefined;
       if (values["credential-stdin"]) {
         const value = (await readAll(io.stdin)).replace(/\r?\n$/, "");
@@ -455,6 +483,7 @@ async function accountCommand(args: string[], io: CliIo): Promise<number> {
             alias,
             credentialHosts,
             credentialAuth: values["credential-auth"] ?? null,
+            ...(delivery === null ? {} : { credentialDelivery: delivery }),
             ...(credential === undefined ? {} : { credential }),
           },
         }),
@@ -462,9 +491,15 @@ async function accountCommand(args: string[], io: CliIo): Promise<number> {
       print(configured);
       if (configured.rotate) {
         io.stderr.write(
-          `Until now the server held this credential in its environment, where anything it ran could copy it. ` +
+          `Until now the program held this credential in its environment, where anything it ran could copy it. ` +
             `Rotate it with the provider, then give heel the new one: ` +
             `heel account set ${alias} --credential-host ... --credential-stdin\n`,
+        );
+      }
+      if (configured.credentialDelivery === "env") {
+        io.stderr.write(
+          `The program now gets the credential itself, in its environment, where anything it runs can read it. ` +
+            `heel warns about this account at every start.\n`,
         );
       }
       return EXIT.ok;

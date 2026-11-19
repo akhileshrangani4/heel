@@ -139,7 +139,8 @@ export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
         record("deny");
         step = await step.raise(
           "PermissionError",
-          `heel denied ${tool} on ${module.account} (${result.reason.replaceAll("_", " ")})`,
+          `heel denied ${tool} on ${module.account} (${result.reason.replaceAll("_", " ")})` +
+            (result.detail === undefined ? "" : `: ${result.detail}`),
         );
         break;
       case "expired":

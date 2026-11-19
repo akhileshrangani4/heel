@@ -72,10 +72,23 @@ export const HARD_DENY_REASONS = [
   "unsupported",
   /** A `heel run` directory outside the agent's work roots (D8b). */
   "workdir_not_allowed",
+  /**
+   * The account would put its credential in a sandboxed program's
+   * environment, and its operator never chose that (spec: CLI runner,
+   * "Credential delivery").
+   */
+  "credential_delivery",
 ] as const;
 export type HardDenyReason = (typeof HARD_DENY_REASONS)[number];
 
-export type Normalized = { ok: true; call: Call } | { ok: false; reason: HardDenyReason };
+export type Normalized =
+  | { ok: true; call: Call }
+  | {
+      ok: false;
+      reason: HardDenyReason;
+      /** What the agent is told beside the reason, e.g. what the operator can do about it. Never secret. */
+      detail?: string;
+    };
 
 export interface NormalizeContext {
   signal: AbortSignal;
@@ -322,6 +335,8 @@ export type PipelineResult =
       adapter?: string;
       /** The call ran upstream; only its result was withheld (hiding or a response adapter). */
       executed?: true;
+      /** A definition's explanation of a hard deny, passed to the agent as is. */
+      detail?: string;
     }
   | { status: "paused"; scope: PauseScope }
   | { status: "expired"; approvalId: string }

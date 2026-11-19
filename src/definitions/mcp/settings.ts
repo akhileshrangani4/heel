@@ -1,6 +1,12 @@
 import { z } from "zod";
 import { newPlaceholder, parseCredentialAuth } from "../../runner/intercept.ts";
 import { MAX_WALL_TIME_MS, type SandboxNetwork, type SandboxSpec } from "../../runner/plan.ts";
+import {
+  CredentialDeliveryChoice,
+  CredentialDeliveryRefused,
+  effectiveDelivery,
+  type SandboxCredentialDelivery,
+} from "../credential-delivery.ts";
 
 /**
  * Where an MCP passthrough account's server lives, as `heel connect mcp`
@@ -13,8 +19,10 @@ import { MAX_WALL_TIME_MS, type SandboxNetwork, type SandboxSpec } from "../../r
  *   hosts its egress list names (N-8). With credential hosts, its credential
  *   variable holds an inert placeholder and heel's egress proxy adds the real
  *   credential to requests to those hosts, so the server never holds it.
- *   Without them (accounts connected before heel could do that), the
- *   credential is in the variable itself, and heel warns at startup.
+ *   Without them, the credential would be in the variable itself: heel does
+ *   that only when the operator chose it (`credentialDelivery: env`), and
+ *   warns at startup; otherwise the account's calls are refused (see
+ *   `../credential-delivery.ts`).
  */
 
 const ENV_NAME = /^[A-Z_][A-Z0-9_]{0,63}$/;
@@ -49,6 +57,11 @@ const StdioSettings = z.object({
     .refine((text) => parseCredentialAuth(text) !== null)
     .nullable()
     .default(null),
+  /**
+   * `env` when the operator chose to put the credential in the variable
+   * itself; absent in accounts stored before that needed choosing.
+   */
+  credentialDelivery: CredentialDeliveryChoice.nullable().default(null),
   /** Host paths the server needs to read (its code, its dependencies), mounted read-only. */
   mounts: z.array(z.string().startsWith("/")).max(16).default([]),
 });
@@ -71,12 +84,12 @@ export function isEnvName(name: string): boolean {
 
 /**
  * How a local server's credential reaches it: `proxy` (heel adds it on the
- * wire; the server holds a placeholder), `env` (the server holds it, the
- * setup heel warns about), or null when it has no credential variable.
+ * wire; the server holds a placeholder), `env` (the server holds it, which
+ * the operator chose), `refused` (it would hold it, unchosen: calls are
+ * refused), or null when it has no credential variable.
  */
-export function credentialDelivery(upstream: StdioUpstream): "proxy" | "env" | null {
-  if (upstream.credentialEnv === null) return null;
-  return upstream.credentialHosts.length > 0 ? "proxy" : "env";
+export function credentialDelivery(upstream: StdioUpstream): SandboxCredentialDelivery | null {
+  return effectiveDelivery(upstream);
 }
 
 /**
@@ -86,11 +99,13 @@ export function credentialDelivery(upstream: StdioUpstream): "proxy" | "env" | n
  *
  * `credential` reads the account's credential. With credential hosts it is
  * only handed to heel's egress proxy, which calls it per request; the server
- * gets a placeholder. Without them it is read once, into the variable.
+ * gets a placeholder. Without them it is read once, into the variable, but
+ * only when the operator chose that; otherwise this throws
+ * `CredentialDeliveryRefused` and nothing starts.
  */
 export async function stdioSandboxSpec(
   upstream: StdioUpstream,
-  options: { workRoot: string; credential: (() => Promise<string>) | null },
+  options: { workRoot: string; credential: (() => Promise<string>) | null; alias?: string },
 ): Promise<SandboxSpec> {
   const base = {
     binary: upstream.command,
@@ -105,7 +120,8 @@ export async function stdioSandboxSpec(
     upstream.egress.length === 0 ? { kind: "none" } : { kind: "egress", allow: upstream.egress };
   const env = upstream.credentialEnv;
   if (env === null || options.credential === null) return { ...base, network: network() };
-  if (credentialDelivery(upstream) === "proxy") {
+  const delivery = credentialDelivery(upstream);
+  if (delivery === "proxy") {
     const auth = parseCredentialAuth(upstream.credentialAuth ?? "bearer");
     if (auth === null) throw new Error(`bad credentialAuth ${upstream.credentialAuth}`);
     const placeholder = newPlaceholder();
@@ -124,5 +140,6 @@ export async function stdioSandboxSpec(
       },
     };
   }
+  if (delivery !== "env") throw new CredentialDeliveryRefused(options.alias ?? "<alias>", "mcp");
   return { ...base, secretEnv: { [env]: await options.credential() }, network: network() };
 }

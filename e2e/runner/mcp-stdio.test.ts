@@ -49,6 +49,8 @@ function setUp(
     credentialEnv: "NOTES_TOKEN",
     credentialHosts: [],
     credentialAuth: null,
+    // The cases without credential hosts chose env delivery; with hosts, the proxy wins.
+    credentialDelivery: "env",
     // The server's code and its dependencies, read-only; nothing else of the checkout.
     mounts: [dirname(FIXTURE), join(ROOT, "node_modules"), join(ROOT, "package.json")],
     ...settings,

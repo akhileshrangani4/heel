@@ -38,6 +38,8 @@ const STDIO = {
   credentialEnv: "NOTES_TOKEN",
   credentialHosts: [],
   credentialAuth: null,
+  // Most of these tests are about the server, not delivery: it gets the credential itself, by choice.
+  credentialDelivery: "env" as const,
   mounts: [FIXTURE],
 };
 

@@ -22,7 +22,7 @@ export function sandboxLauncher(deps: {
   return async (account, settings, credential) => {
     const workRoot = join(deps.home, "mcp", account.alias);
     mkdirSync(workRoot, { recursive: true, mode: 0o700 });
-    const spec = await stdioSandboxSpec(settings, { workRoot, credential });
+    const spec = await stdioSandboxSpec(settings, { workRoot, credential, alias: account.alias });
     return deps.start(deps.host, spec, {
       onEgress: (decision) => {
         if (decision.allowed) return;

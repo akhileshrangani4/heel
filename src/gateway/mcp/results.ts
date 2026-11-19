@@ -86,7 +86,9 @@ export function decisionFor(
         status: "denied",
         reason: result.reason,
         rule: result.rule,
-        message: `heel denied ${what} (${result.reason.replaceAll("_", " ")}).`,
+        message:
+          `heel denied ${what} (${result.reason.replaceAll("_", " ")}).` +
+          (result.detail === undefined ? "" : ` ${result.detail}`),
         ...(result.approvalId === undefined ? {} : { approvalId: result.approvalId }),
       };
     case "paused":
