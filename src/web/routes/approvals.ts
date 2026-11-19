@@ -29,7 +29,7 @@ import { addDeviceControl, recoveryNotices } from "../ui/devices.ts";
 import { html } from "../ui/html.ts";
 import { type PendingRow, pendingList } from "../ui/pending-list.ts";
 import { pushControl } from "../ui/push-control.ts";
-import { emailPreviewFrom, httpPreviewFrom, mergePreviewFrom } from "../ui/summary.ts";
+import { emailPreviewFrom, headline, httpPreviewFrom, mergePreviewFrom } from "../ui/summary.ts";
 
 /**
  * The approval page (spec: The approval page). A person sees every request
@@ -129,6 +129,18 @@ function pendingRow(deps: HumanPlaneDeps, record: ApprovalRecord): PendingRow {
     createdAt: row.createdAt,
     expiresAt: row.expiresAt,
     pausedBy: pauseNoticeFor(deps.db, row.call),
+    // The same sentence the request page leads with, built from the stored call.
+    headline: headline({
+      agent: record.agentName,
+      action: row.call.action ?? null,
+      tool: row.tool,
+      account: row.account,
+      email: emailPreviewFrom(row.call.action ?? null, row.call.args),
+      merge: mergePreviewFrom(row.call.action ?? null, row.call.args),
+      http: httpPreviewFrom(row.call),
+    }),
+    client: row.client,
+    reason: row.reason,
   };
 }
 

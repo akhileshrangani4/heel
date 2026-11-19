@@ -202,6 +202,17 @@ body:has(.ap){background:var(--page)}
   main{padding:1rem}
   table.data{min-width:34rem}
 }
+.req-list{list-style:none;margin:.75rem 0 2rem;padding:0;display:grid;gap:.75rem}
+.req{margin:0}
+.req-title{font-size:1.1rem;line-height:1.4;margin:.5rem 0 0;font-weight:600;overflow-wrap:anywhere}
+.req-title a{color:var(--text);text-decoration:none}
+.req-title a:hover{text-decoration:underline}
+.req-title mark{background:var(--surface);color:inherit;border-radius:6px;padding:0 .3rem}
+.req[data-status="pending"]{border-color:var(--border)}
+.req-reason{margin:.5rem 0 0;padding-left:.75rem;border-left:2px solid var(--line)}
+.req-foot{margin:.6rem 0 0;font-size:.85rem}
+.req-count{margin:0}
+.req-empty{text-align:center;padding:2rem 1rem}
 .conn-list{list-style:none;margin:.75rem 0 1rem;padding:0;display:grid;gap:.75rem;align-items:start;grid-template-columns:repeat(auto-fill,minmax(17rem,1fr))}
 .conn{margin:0;display:flex;flex-direction:column;gap:.75rem}
 .conn-head{display:flex;justify-content:space-between;align-items:flex-start;gap:.75rem}
