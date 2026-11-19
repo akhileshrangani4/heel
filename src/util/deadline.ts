@@ -19,8 +19,22 @@ export class DeadlineExceededError extends Error {
 export async function withDeadline<T>(
   ms: number,
   work: (signal: AbortSignal) => Promise<T>,
+  /** Also stop when this aborts: the request that asked for the work went away. */
+  outer?: AbortSignal,
 ): Promise<T> {
   const controller = new AbortController();
+  // The request went away: tell the work, and stop waiting for it, so whatever
+  // the caller holds for it (a sandbox slot) is let go even if the work is slow to notice.
+  const gone = new Promise<never>((_, reject) => {
+    if (outer === undefined) return;
+    const stop = () => {
+      controller.abort(outer.reason);
+      reject(outer.reason ?? new Error("aborted"));
+    };
+    if (outer.aborted) stop();
+    else outer.addEventListener("abort", stop, { once: true });
+  });
+  gone.catch(() => {});
   let timer: NodeJS.Timeout | undefined;
   const expired = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
@@ -30,7 +44,7 @@ export async function withDeadline<T>(
     }, ms);
   });
   try {
-    return await Promise.race([work(controller.signal), expired]);
+    return await Promise.race([work(controller.signal), expired, gone]);
   } finally {
     clearTimeout(timer);
   }

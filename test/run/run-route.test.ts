@@ -332,6 +332,25 @@ describe("/run's concurrency limits", () => {
     expect(slots.inUse()).toBe(0);
   });
 
+  it("frees the slot when the client hangs up, by stopping its command", async () => {
+    const slots = new SandboxSlots({ perAgent: 1, total: 10 });
+    const held = heldCommands();
+    const h = cliPipeline({ owner: ALLOW_GH, done: held.done, slots });
+    const client = new AbortController();
+    const first = h.run({ argv: LIST, cwd: h.repo }, "agent", client.signal).catch(() => null);
+    await vi.waitFor(() => expect(h.started).toHaveLength(1));
+    expect(slots.inUse()).toBe(1);
+
+    client.abort();
+    await first;
+    await vi.waitFor(() => expect(slots.inUse()).toBe(0));
+    // The agent can run again straight away; nothing waits for the old command's time limit.
+    const next = h.run({ argv: LIST, cwd: h.repo });
+    await vi.waitFor(() => expect(h.started).toHaveLength(2));
+    held.endAll();
+    expect((await next).body["status"]).toBe("ran");
+  });
+
   it("refuses every agent once the overall limit is reached", async () => {
     const slots = new SandboxSlots({ perAgent: 4, total: 1 });
     const held = heldCommands();
