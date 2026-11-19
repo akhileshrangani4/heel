@@ -55,5 +55,16 @@ describe("the top menu (1.11)", () => {
     expect(await (await h.fetch("/activity", { as: admin })).text()).not.toContain(
       'class="subnav"',
     );
+
+describe("the Connections page (1.11)", () => {
+  it("shows one next step per card, and none for a ready account", async () => {
+    const h = humanPlaneHarness();
+    const admin = await h.signIn(await h.enroll());
+    const page = await (await h.fetch("/connections", { as: admin })).text();
+    // Harness accounts are active: no setup hint, no dead-end "set up with heel connect".
+    expect(page).not.toContain("Needs your Google OAuth client");
+    expect(page).not.toContain("Set up with");
+    expect(page).toContain('class="card conn" data-alias="gmail-work"');
+    expect(page).toContain("Connect another account");
   });
 });
