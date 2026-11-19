@@ -56,8 +56,9 @@ export function mcpPassthrough(account: AccountRecord, upstream: UpstreamPool): 
       ? deliveryRefusedMessage(account.alias, "mcp")
       : null;
   return {
+    // Never started, so nothing to list; a call naming one of its tools is refused in normalize, with the fix.
     tools: (signal) =>
-      refused === null ? upstream.listTools(account, signal) : Promise.reject(new Error(refused)),
+      refused === null ? upstream.listTools(account, signal) : Promise.resolve([]),
 
     async normalize(base, ctx): Promise<Normalized> {
       if (refused !== null) return { ok: false, reason: "credential_delivery", detail: refused };

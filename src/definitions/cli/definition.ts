@@ -211,7 +211,9 @@ export function cliDefinition(account: AccountRecord, deps: CliDeps): Definition
     async normalize(base: Call, ctx: NormalizeContext): Promise<Normalized> {
       // Only `heel run` reaches a CLI account, so a rule keyed on `surface: cli` sees every command.
       if (base.surface !== "cli") return { ok: false, reason: "unsupported" };
-      if (cliCredentialDelivery(settings) === "refused") {
+      // Refused, or (a hand-edited row) no way to deliver it at all: `credentialSpec` would throw at execute.
+      const delivery = cliCredentialDelivery(settings);
+      if (delivery !== "proxy" && delivery !== "env") {
         return {
           ok: false,
           reason: "credential_delivery",

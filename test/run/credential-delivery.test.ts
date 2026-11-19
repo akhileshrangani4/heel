@@ -280,9 +280,8 @@ describe("a local MCP server whose credential would go into its environment, unc
     expect(upstreamSettings(account.settings)).toMatchObject({ credentialDelivery: null });
     expect(listAccounts(t.db, t.orgId)[0]?.credentialDelivery).toBe("refused");
     const definition = mcpPassthrough(account, pool);
-    await expect(definition.tools?.(AbortSignal.timeout(1_000))).rejects.toThrow(
-      /heel account set notes --credential-host <host>/,
-    );
+    // Not started to list tools: it has none to offer until the operator fixes it.
+    expect(await definition.tools?.(AbortSignal.timeout(1_000))).toEqual([]);
     const normalized = await definition.normalize(
       { ...callFor(account), tool: "echo", args: {} },
       { signal: AbortSignal.timeout(1_000), hide: hidingFor([], UNSURE_JUDGE) },
@@ -496,6 +495,34 @@ describe("heel connect cli and heel account set, for credential delivery", () =>
     expect(() =>
       configureAccount(t.db, vault, t.orgId, "tool", { credentialHosts: [], credentialAuth: null }),
     ).toThrow(/at least one --credential-host <host>, or --credential-delivery env/);
+  });
+
+  it("heel account set refuses an old account whose variable heel sets itself, at once rather than at run time", () => {
+    const { t, vault, run } = connect({ credentialDelivery: "env" });
+    run({});
+    const id = findAccount(t.db, t.orgId, "tool")?.id ?? "";
+    const settings = {
+      ...findAccount(t.db, t.orgId, "tool")?.settings,
+      credentialEnv: "NODE_AUTH_TOKEN",
+    };
+    t.db.update(accounts).set({ settings }).where(eq(accounts.id, id)).run();
+    expect(() =>
+      configureAccount(t.db, vault, t.orgId, "tool", {
+        credentialHosts: ["app.terraform.io"],
+        credentialAuth: null,
+      }),
+    ).toThrow(/NODE_AUTH_TOKEN is a variable heel sets itself/);
+  });
+
+  it("a hand-edited CLI row with no way to deliver its credential is refused before any rule", async () => {
+    const h = cliPipeline({
+      owner: allowAll("terraform"),
+      settings: { ...LEGACY_CLI, credentialEnv: null },
+      credential: TOKEN,
+    });
+    const answer = await h.run({ argv: ["terraform", "plan"], cwd: h.repo });
+    expect(answer.body).toMatchObject({ status: "denied", reason: "credential_delivery" });
+    expect(h.started).toEqual([]);
   });
 
   it("heel account set refuses gh, whose token is always at the proxy", () => {

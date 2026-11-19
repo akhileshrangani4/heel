@@ -49,8 +49,8 @@ function setUp(
     credentialEnv: "NOTES_TOKEN",
     credentialHosts: [],
     credentialAuth: null,
-    // The cases without credential hosts chose env delivery; with hosts, the proxy wins.
-    credentialDelivery: "env",
+    // As connect stores it: the case without credential hosts chose env delivery, one with hosts the proxy.
+    credentialDelivery: (settings.credentialHosts ?? []).length > 0 ? "proxy" : "env",
     // The server's code and its dependencies, read-only; nothing else of the checkout.
     mounts: [dirname(FIXTURE), join(ROOT, "node_modules"), join(ROOT, "package.json")],
     ...settings,
@@ -72,7 +72,11 @@ function setUp(
     launchStdio: async (_account, stdio) =>
       startSandboxed(
         host,
-        await stdioSandboxSpec(stdio, { workRoot, credential: async () => credential }),
+        await stdioSandboxSpec(stdio, {
+          workRoot,
+          credential: async () => credential,
+          alias: account.alias,
+        }),
         runOptions,
       ),
   });

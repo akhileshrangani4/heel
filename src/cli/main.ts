@@ -52,7 +52,7 @@ export const USAGE = `usage:
                                           /http/<alias>/…
   heel connect mcp --as <alias> --command <path> [--arg <a>]... [--egress <host>]...
                    [--mount <path>]... [--credential-env <NAME> --credential-stdin
-                   (--credential-host <host>... [--credential-auth bearer|basic|header:<name>]
+                   (--credential-host <host>... [--credential-auth bearer|basic|header:<Name>]
                     | --credential-delivery env)]
                                           run a local MCP server in heel's sandbox;
                                           it gets a placeholder in <NAME>, and heel
@@ -65,15 +65,16 @@ export const USAGE = `usage:
                                           reads HEEL_TOKEN, HEEL_URL, HEEL_RUN_ID
   heel connect cli <command> --as <alias> --bin <path> [--egress <host>]...
                    [--credential-env <NAME>] --credential-stdin
-                   [--credential-host <host>... [--credential-auth bearer|basic|header:<name>]
+                   [--credential-host <host>... [--credential-auth bearer|basic|header:<Name>]
                     | --credential-delivery env]
                                           let agents run a CLI (gh, npm, ...) through
                                           heel with \`heel run\`. gh, and a CLI with
                                           --credential-host, get a placeholder and
                                           heel adds the credential on the wire; npm
-                                          needs only --credential-host <registry>
+                                          needs no --credential-env, only its
+                                          registry as --egress and --credential-host
   heel account list
-  heel account set <alias> (--credential-host <host>... [--credential-auth bearer|basic|header:<name>]
+  heel account set <alias> (--credential-host <host>... [--credential-auth bearer|basic|header:<Name>]
                    | --credential-delivery env) [--credential-stdin]
                                           move a local MCP server's or a CLI's
                                           credential out of its sandbox, to heel's
@@ -365,6 +366,17 @@ async function connectCommand(args: string[], io: CliIo): Promise<number> {
   if (values.as === undefined) throw new UsageError("missing --as <alias>");
   const config = configFrom(io, values.config);
   const delivery = deliveryFlag(values["credential-delivery"]);
+  const sandboxed = provider === "cli" || values.command !== undefined;
+  if (
+    !sandboxed &&
+    (delivery !== null ||
+      values["credential-host"] !== undefined ||
+      values["credential-auth"] !== undefined)
+  ) {
+    throw new UsageError(
+      "--credential-host, --credential-auth and --credential-delivery are for heel connect cli and local MCP servers (--command)",
+    );
+  }
   const credentialFlags = {
     credentialHosts: values["credential-host"] ?? [],
     credentialAuth: values["credential-auth"] ?? null,

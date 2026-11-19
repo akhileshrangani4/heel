@@ -99,6 +99,22 @@ describe("heel CLI", () => {
     expect(badDelivery.code).toBe(EXIT.usage);
     expect(badDelivery.stderr).toContain("--credential-delivery is env or proxy");
 
+    const remote = await run(
+      [
+        "connect",
+        "mcp",
+        "--as",
+        "r",
+        "--url",
+        "https://mcp.example/mcp",
+        "--credential-delivery",
+        "env",
+      ],
+      { HEEL_HOME: heelHome() },
+    );
+    expect(remote.code).toBe(EXIT.usage);
+    expect(remote.stderr).toContain("are for heel connect cli and local MCP servers");
+
     const neither = await run(["account", "set", "notes"], { HEEL_HOME: heelHome() });
     expect(neither.code).toBe(EXIT.usage);
     expect(neither.stderr).toContain("--credential-host <host>, or --credential-delivery env");

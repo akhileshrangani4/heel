@@ -134,10 +134,10 @@ So code that runs in the sandbox, a gh extension or an npm script or the MCP ser
 Name the hosts it authenticates to with `--credential-host` (each one must also be an `--egress` host), and how it sends the credential with `--credential-auth`: `bearer` (the default), `basic`, or `header:<Name>` for an API key header.
 
 ```sh
-# A CLI that reads TF_TOKEN and sends it as a bearer token to app.terraform.io
-printf %s "$TF_TOKEN" | heel connect cli terraform --as terraform --bin /usr/bin/terraform \
-  --egress app.terraform.io --credential-env TF_TOKEN \
-  --credential-host app.terraform.io --credential-stdin
+# A CLI that reads ACME_TOKEN and sends it as a bearer token to api.acme.example
+printf %s "$ACME_TOKEN" | heel connect cli acme --as acme --bin /usr/local/bin/acme \
+  --egress api.acme.example --credential-env ACME_TOKEN \
+  --credential-host api.acme.example --credential-stdin
 
 # A local MCP server that sends NOTES_TOKEN in an X-Api-Key header
 printf %s "$NOTES_TOKEN" | heel connect mcp --as notes --command /usr/bin/node --arg /opt/notes/server.js \
@@ -152,6 +152,7 @@ printf %s "$NPM_TOKEN" | heel connect cli npm --as npm --bin "$(realpath "$(comm
   --egress registry.npmjs.org --credential-host registry.npmjs.org --credential-stdin
 ```
 
+- **npm and Node must live under `/usr`.** The sandbox sees `/usr` and the `--bin` file, nothing else of the host. `--bin` for npm is its `npm-cli.js`, which loads the rest of npm's package and runs `node` from the sandbox's `PATH` (`/usr/local/bin:/usr/bin:/bin`). A distribution package or the NodeSource install (`/usr/lib/node_modules/npm`, `/usr/bin/node`) works; npm under nvm, volta or Homebrew doesn't.
 - **Registries with a path** (`https://npm.example.com/api/npm/`): heel's entry covers every path on the host, which is enough for installs. `npm publish` and `npm whoami` only look for a token under the registry's exact path. For those, put `//npm.example.com/api/npm/:_authToken=${NPM_TOKEN}` in the project's `.npmrc` and connect with `--credential-env NPM_TOKEN`.
 - **A project `.npmrc` or a flag** can still change what npm sends. None of it can reach the token: at most npm sends a different value, which the proxy refuses (`credential_mismatch`), or goes to a host without the placeholder.
 - **npm only sends bearer tokens**, so `--credential-auth` must be `bearer` (or left out).
@@ -173,9 +174,9 @@ Earlier versions of heel gave a local MCP server or CLI connected without `--cre
 
 - **What the agent gets.** `heel run` exits 77 with:
   ```
-  heel: {"status":"denied","reason":"credential_delivery","rule":null,"message":"account \"terraform\" would put its credential in its CLI's environment, where anything the program runs can read it, so heel refuses its calls. heel's operator can fix it: name the hosts it authenticates to, and heel adds the credential on the wire: heel account set terraform --credential-host <host> --credential-auth bearer|basic|header:<Name>. To keep the credential in the environment anyway: heel account set terraform --credential-delivery env"}
+  heel: {"status":"denied","reason":"credential_delivery","rule":null,"message":"account \"acme\" would put its credential in its CLI's environment, where anything the program runs can read it, so heel refuses its calls. heel's operator can fix it: name the hosts it authenticates to, and heel adds the credential on the wire: heel account set acme --credential-host <host> --credential-auth bearer|basic|header:<Name>. To keep the credential in the environment anyway: heel account set acme --credential-delivery env"}
   ```
-  Over MCP and in code mode, the same message follows "heel denied … (credential delivery)". A local server in this state isn't started, so its tools aren't listed.
+  A local MCP server in this state is never started, so it lists no tools, and in code mode it has no module: the agent sees the account as empty. A call that names one of its tools anyway gets "heel denied … (credential delivery)." followed by the same message.
 - **What you see.** `heel serve` logs a `credential_delivery_refused` warning for each one at startup, and `heel account list` shows it as `"credentialDelivery": "refused"`. `gh` accounts aren't affected; they moved to the proxy on their own in an earlier release.
 
 To fix one, name its credential hosts. This is the better choice:

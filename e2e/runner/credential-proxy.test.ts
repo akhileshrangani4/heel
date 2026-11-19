@@ -15,7 +15,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, onTestFinished } from "vitest";
 import {
   probeSandbox,
   runSandboxed,
@@ -159,7 +159,13 @@ describe.skipIf(!probe.ok)("credentials added at heel's egress proxy, under bubb
       },
       credential: TOKEN,
     });
-    // Only the work root is mounted, so the fake npm runs from inside it.
+    onTestFinished(() => rmSync(h.root, { recursive: true, force: true }));
+    // Only the work root is mounted, so the fake npm runs from inside it. It is a stand-in: it reads
+    // heel's config and sends the token as npm-registry-fetch does, but it isn't npm. Real npm can't
+    // be used here: through a proxy, its https-proxy-agent drops the TLS server name for an
+    // IP-literal registry, and this upstream must be an allowlisted IP literal. That npm honours
+    // NPM_CONFIG_USERCONFIG, the //host:port/ key and NODE_EXTRA_CA_CERTS was checked against npm
+    // 11.9 outside the sandbox.
     const script = join(h.root, "fake-cli.ts");
     copyFileSync(FAKE_CLI, script);
     const out = join(h.repo, "npm.json");

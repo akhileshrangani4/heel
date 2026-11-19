@@ -384,7 +384,7 @@ function deliverySettings(flags: DeliveryFlags, options: { npm: boolean }): Deli
     if (flags.credentialEnv === null) {
       throw new ConnectError(
         "invalid_settings",
-        "--credential-delivery env needs --credential-env <NAME>, the variable the credential goes in",
+        "--credential-delivery env needs a variable for the credential (--credential-env <NAME> on heel connect), and this account has none",
       );
     }
     return { credentialHosts: [], credentialAuth: null, credentialDelivery: "env" };
@@ -505,6 +505,10 @@ export function configureAccount(
         ? "gh accounts already get their token at heel's egress proxy; there is nothing to set"
         : "only local MCP servers (heel connect mcp --command) and CLIs (heel connect cli) have credential hosts",
     );
+  }
+  // An account stored before these checks may name a variable the runner sets; say so now, not at run time.
+  if (current.credentialEnv !== null) {
+    checkCredentialEnv(current.credentialEnv, cli?.command === "npm");
   }
   const delivery = input.credentialDelivery ?? null;
   if (input.credentialHosts.length === 0 && delivery !== "env") {

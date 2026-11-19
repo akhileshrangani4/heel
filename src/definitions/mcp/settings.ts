@@ -105,7 +105,7 @@ export function credentialDelivery(upstream: StdioUpstream): SandboxCredentialDe
  */
 export async function stdioSandboxSpec(
   upstream: StdioUpstream,
-  options: { workRoot: string; credential: (() => Promise<string>) | null; alias?: string },
+  options: { workRoot: string; credential: (() => Promise<string>) | null; alias: string },
 ): Promise<SandboxSpec> {
   const base = {
     binary: upstream.command,
@@ -140,6 +140,6 @@ export async function stdioSandboxSpec(
       },
     };
   }
-  if (delivery !== "env") throw new CredentialDeliveryRefused(options.alias ?? "<alias>", "mcp");
+  if (delivery !== "env") throw new CredentialDeliveryRefused(options.alias, "mcp");
   return { ...base, secretEnv: { [env]: await options.credential() }, network: network() };
 }
