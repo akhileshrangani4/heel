@@ -37,6 +37,8 @@ export interface PendingSignIn {
   accountId: string;
   /** The person who started it; only they can finish it. */
   userId: string;
+  /** The exact redirect URI a loopback sign-in sent; its code exchange must repeat it. */
+  redirectUri?: string;
   verifier: string;
   expiresAt: number;
 }

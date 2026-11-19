@@ -157,6 +157,37 @@ describe("Vault OAuth refresh", () => {
     return { t, vault, accountId, onReconnectRequired };
   }
 
+  it("asks for the refresher of the client that issued the tokens, every time", async () => {
+    const t = testStore();
+    const asked: (string | undefined)[] = [];
+    const refresher = vi.fn<OAuthRefresher>(async () => ({
+      accessToken: "new-access",
+      expiresAt: T0.getTime() + 30_000, // stale again at once, so the next call refreshes too
+    }));
+    const vault = Vault.open(t.db, masterKey(), {
+      refreshers: (_provider, clientId) => {
+        asked.push(clientId);
+        return refresher;
+      },
+      now: () => T0,
+    });
+    const accountId = addAccount(t, "gmail-work", "gmail");
+    vault.put(accountId, {
+      type: "oauth",
+      accessToken: ACCESS,
+      refreshToken: REFRESH,
+      expiresAt: T0.getTime(),
+      clientId: "heel-built-in.apps.googleusercontent.com",
+    });
+    await vault.accessToken(accountId);
+    await vault.accessToken(accountId);
+    // The second refresh still knows the client: a refresh keeps it.
+    expect(asked).toEqual([
+      "heel-built-in.apps.googleusercontent.com",
+      "heel-built-in.apps.googleusercontent.com",
+    ]);
+  });
+
   it("returns the stored token while it is fresh, without refreshing", async () => {
     const refresher = vi.fn<OAuthRefresher>();
     const { vault, accountId } = setup(refresher);

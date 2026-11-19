@@ -2,6 +2,7 @@ import type { FetchLike } from "@modelcontextprotocol/client";
 import type { Context, MiddlewareHandler } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { RulesPaths } from "../config/rules.ts";
+import type { BuiltInGoogleClient } from "../definitions/google/builtin.ts";
 import type { GoogleClient } from "../definitions/google/oauth.ts";
 import type { UpstreamSignIns } from "../definitions/mcp/upstream-oauth.ts";
 import type { MicrosoftClient } from "../definitions/microsoft/oauth.ts";
@@ -58,6 +59,13 @@ export interface HumanPlaneDeps {
    * store, vault and fetch.
    */
   providerClients: { google: GoogleClient | null; microsoft: MicrosoftClient | null };
+  /**
+   * heel's own Google client (roadmap 1.14), used when `providerClients.google`
+   * is null: Gmail and Calendar then sign in through a loopback redirect on
+   * heel's host, with a paste-back for browsers elsewhere. Null in a build
+   * without one; absent in tests that don't need it.
+   */
+  builtInGoogle?: BuiltInGoogleClient | null;
   /**
    * Team sign-in (D13b): the IdP's client, discovered on first use, and the
    * name the sign-in page shows. Null on single-user installs.

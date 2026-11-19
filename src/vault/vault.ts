@@ -28,6 +28,13 @@ const OAuthPayloadSchema = z.strictObject({
   refreshToken: z.string().min(1).optional(),
   expiresAt: z.number().int().optional(),
   scope: z.string().optional(),
+  /**
+   * The OAuth client that issued these tokens, so they refresh with the same
+   * one: heel's built-in Google client, or the operator's own. Absent on
+   * tokens stored before heel had a built-in client: those came from the
+   * operator's.
+   */
+  clientId: z.string().min(1).optional(),
 });
 
 const StaticPayloadSchema = z.strictObject({
@@ -136,6 +143,7 @@ function refreshedPayload(previous: OAuthPayload, tokens: OAuthTokens): OAuthPay
     ...(refreshToken === undefined ? {} : { refreshToken }),
     ...(tokens.expiresAt === undefined ? {} : { expiresAt: tokens.expiresAt }),
     ...(scope === undefined ? {} : { scope }),
+    ...(previous.clientId === undefined ? {} : { clientId: previous.clientId }),
   };
 }
 
@@ -277,7 +285,7 @@ export class Vault {
   }
 
   async #refresh(accountId: string, provider: string, previous: OAuthPayload): Promise<Secret> {
-    const refresher = this.#refreshers(provider);
+    const refresher = this.#refreshers(provider, previous.clientId);
     if (!refresher || previous.refreshToken === undefined) {
       this.#markReconnectRequired(accountId);
       throw new VaultError(

@@ -1,0 +1,166 @@
+import { describe, expect, it } from "vitest";
+import { builtInGoogleClient } from "../../../src/definitions/google/builtin.ts";
+import { findAccount } from "../../../src/store/directory.ts";
+import { connectAccount } from "../../../src/vault/connect.ts";
+import { FakeGoogle, TEST_GOOGLE_CLIENT } from "../../helpers/fake-google.ts";
+import { humanPlaneHarness } from "../../helpers/human-plane.ts";
+
+/**
+ * heel's built-in Google client (roadmap 1.14): no `providers.google`, a
+ * loopback redirect on heel's host, and a paste-back for browsers elsewhere.
+ */
+
+const BUILT_IN = {
+  clientId: TEST_GOOGLE_CLIENT.clientId,
+  clientSecret: TEST_GOOGLE_CLIENT.clientSecret,
+};
+
+function setUp() {
+  const google = new FakeGoogle();
+  const h = humanPlaneHarness({ upstreamOAuth: { fetch: google.fetch }, builtInGoogle: BUILT_IN });
+  connectAccount(
+    h.t.db,
+    h.vault,
+    { orgId: h.t.orgId, ownerId: h.t.ownerId, provider: "gmail", alias: "gmail-home" },
+    new Date(),
+  );
+  return { h, google };
+}
+
+type Harness = ReturnType<typeof setUp>["h"];
+type Browser = Awaited<ReturnType<Harness["signIn"]>>;
+
+const form = (fields: Record<string, string>): RequestInit => ({
+  method: "POST",
+  headers: { "content-type": "application/x-www-form-urlencoded" },
+  body: new URLSearchParams(fields).toString(),
+});
+
+/** Starts a sign-in; returns Google's URL and the sign-in's state, from the page heel shows. */
+async function start(h: Harness, as: Browser) {
+  const page = await h.fetch("/connections/sign-in", {
+    as,
+    ...form({ csrf: as.csrf, alias: "gmail-home" }),
+  });
+  expect(page.status).toBe(200);
+  const text = await page.text();
+  const google = /href="(https:\/\/accounts\.google\.com[^"]+)"/
+    .exec(text)?.[1]
+    ?.replaceAll("&amp;", "&");
+  const state = /name="state" value="([^"]+)"/.exec(text)?.[1];
+  if (google === undefined || state === undefined) throw new Error("no Google link on the page");
+  return { google, state, text };
+}
+
+const account = (h: Harness) => findAccount(h.t.db, h.t.orgId, "gmail-home");
+
+describe("Gmail with heel's built-in Google client", () => {
+  it("is ready to sign in with no providers.google", async () => {
+    const { h } = setUp();
+    const owner = await h.signIn(await h.enroll());
+    const page = await (await h.fetch("/connections", { as: owner })).text();
+    expect(page).not.toContain("providers.google");
+    expect(page).toContain("Sign in");
+  });
+
+  it("on heel's host: Google comes back to the loopback listener, which hands over to heel", async () => {
+    const { h, google } = setUp();
+    const owner = await h.signIn(await h.enroll());
+    const { google: authorize } = await start(h, owner);
+    const redirect = new URL(new URL(authorize).searchParams.get("redirect_uri") ?? "");
+    expect(redirect.hostname).toBe("127.0.0.1");
+    expect(redirect.pathname).toBe("/");
+
+    // The browser follows Google back to the listener, which only forwards.
+    const callback = google.consent(authorize);
+    const forwarded = await fetch(`${callback}&extra=dropped`, { redirect: "manual" });
+    expect(forwarded.status).toBe(302);
+    expect(forwarded.headers.get("cache-control")).toBe("no-store");
+    const location = new URL(forwarded.headers.get("location") ?? "");
+    expect(location.pathname).toBe("/connections/google/return");
+    expect(location.searchParams.has("extra")).toBe(false);
+
+    const landed = await h.fetch(location.pathname + location.search, { as: owner });
+    expect(landed.headers.get("location")).toContain("connected=1");
+    expect(account(h)?.status).toBe("active");
+    // The tokens remember which client issued them, so they refresh with it.
+    const stored = h.vault.get(account(h)?.id ?? "");
+    expect(stored.type).toBe("oauth");
+
+    // The listener is gone once the sign-in finished.
+    await expect(fetch(callback.toString())).rejects.toThrow();
+  });
+
+  it("elsewhere: the person pastes the address that didn't load, and it finishes the same way", async () => {
+    const { h, google } = setUp();
+    const owner = await h.signIn(await h.enroll());
+    const { google: authorize, state } = await start(h, owner);
+    const callback = google.consent(authorize);
+
+    const pasted = await h.fetch("/connections/google/paste", {
+      as: owner,
+      ...form({ csrf: owner.csrf, state, address: callback.toString() }),
+    });
+    expect(pasted.status).toBe(303);
+    const next = pasted.headers.get("location") ?? "";
+    expect(next.startsWith("/connections/google/return?")).toBe(true);
+    const landed = await h.fetch(next, { as: owner });
+    expect(landed.headers.get("location")).toContain("connected=1");
+    expect(account(h)?.status).toBe("active");
+  });
+
+  it("refuses a pasted address for another listener, and from someone else", async () => {
+    const { h, google } = setUp();
+    const owner = await h.signIn(await h.enroll());
+    const { google: authorize, state } = await start(h, owner);
+    const callback = google.consent(authorize);
+
+    const elsewhere = new URL(callback);
+    elsewhere.host = "evil.example";
+    const wrongOrigin = await h.fetch("/connections/google/paste", {
+      as: owner,
+      ...form({ csrf: owner.csrf, state, address: elsewhere.toString() }),
+    });
+    expect(wrongOrigin.headers.get("location")).toContain("failed=");
+
+    h.addUser("sam", "admin");
+    const sam = await h.signIn(await h.enroll("sam"));
+    const notTheirs = await h.fetch("/connections/google/paste", {
+      as: sam,
+      ...form({ csrf: sam.csrf, state, address: callback.toString() }),
+    });
+    expect(notTheirs.headers.get("location")).toContain("failed=");
+    expect(account(h)?.status).not.toBe("active");
+  });
+
+  it("an operator's own client still wins", async () => {
+    const google = new FakeGoogle();
+    const h = humanPlaneHarness({
+      upstreamOAuth: { fetch: google.fetch },
+      providerClients: { google: TEST_GOOGLE_CLIENT },
+      builtInGoogle: BUILT_IN,
+    });
+    connectAccount(
+      h.t.db,
+      h.vault,
+      { orgId: h.t.orgId, ownerId: h.t.ownerId, provider: "gmail", alias: "gmail-home" },
+      new Date(),
+    );
+    const owner = await h.signIn(await h.enroll());
+    const started = await h.fetch("/connections/sign-in", {
+      as: owner,
+      ...form({ csrf: owner.csrf, alias: "gmail-home" }),
+    });
+    expect(started.status).toBe(303);
+    expect(started.headers.get("location")).toContain(
+      encodeURIComponent("https://heel.example.com/oauth/google/callback"),
+    );
+  });
+});
+
+describe("builtInGoogleClient", () => {
+  it("is off in a build without heel's client", () => {
+    expect(builtInGoogleClient({ clientId: "", clientSecret: "" })).toBeNull();
+    expect(builtInGoogleClient({ clientId: "id", clientSecret: "s" })?.clientId).toBe("id");
+  });
+});

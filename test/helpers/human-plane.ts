@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import type { FetchLike } from "@modelcontextprotocol/client";
 import type { Hono } from "hono";
 import { rulesPaths } from "../../src/config/rules.ts";
+import type { BuiltInGoogleClient } from "../../src/definitions/google/builtin.ts";
 import type { GoogleClient } from "../../src/definitions/google/oauth.ts";
 import { UpstreamSignIns } from "../../src/definitions/mcp/upstream-oauth.ts";
 import type { MicrosoftClient } from "../../src/definitions/microsoft/oauth.ts";
@@ -87,6 +88,8 @@ export function humanPlaneHarness(
     oidc?: { client: () => Promise<OidcClient>; name: string };
     /** Turns on adding proposed rules (roadmap 2.1), to the owner files under this home. */
     rulesHome?: string;
+    /** heel's built-in Google client (roadmap 1.14), used when `providerClients.google` is unset. */
+    builtInGoogle?: BuiltInGoogleClient;
   } = {},
 ): HumanPlaneHarness {
   const h = approvalHarness(options);
@@ -115,6 +118,7 @@ export function humanPlaneHarness(
     },
     watchFallback: false,
     ...(options.oidc === undefined ? {} : { oidc: options.oidc }),
+    ...(options.builtInGoogle === undefined ? {} : { builtInGoogle: options.builtInGoogle }),
     ...(options.rulesHome === undefined
       ? {}
       : { ruleFiles: { paths: rulesPaths(options.rulesHome), reload: () => {} } }),
