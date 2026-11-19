@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { PauseTarget } from "../../src/gateway/pipeline/ports.ts";
 import { SandboxSlots } from "../../src/gateway/sandbox-slots.ts";
 import type { SandboxOutcome } from "../../src/runner/run.ts";
+import { approvals } from "../../src/store/schema.ts";
 import { cliPipeline, GH_TEST_TOKEN } from "../helpers/cli-pipeline.ts";
 
 /** `/run` (D8b): the CLI runner's endpoint, through the real pipeline, with a fake sandbox. */
@@ -128,6 +129,20 @@ describe("/run", () => {
       allow: ["api.github.com", "github.com"],
       inject: { hosts: ["api.github.com", "github.com"] },
     });
+  });
+
+  it("shows the agent's reason on the request, outside the call", async () => {
+    const h = cliPipeline({ owner: "rules:\n  - match: { command: gh }\n    then: ask\n" });
+    const answer = await h.run({
+      argv: ["gh", "pr", "list", "-R", "acme/web"],
+      cwd: h.repo,
+      reason: "  Checking what is open  ",
+    });
+    expect(answer.status).toBe(202);
+    const [row] = h.t.db.select().from(approvals).all();
+    expect(row?.reason).toBe("Checking what is open");
+    expect(JSON.stringify(row?.call)).not.toContain("Checking");
+    expect(h.started).toEqual([]);
   });
 
   it("passes the command's own exit code through", async () => {

@@ -127,9 +127,15 @@ export function takeReason(args: Record<string, unknown>): {
 } {
   if (!Object.hasOwn(args, REASON_ARG)) return { args, reason: undefined };
   const { [REASON_ARG]: raw, ...rest } = args;
+  return { args: rest, reason: cleanReason(raw) };
+}
+
+/**
+ * Pure: an agent's reason as heel shows it, from any surface (MCP's
+ * `heel_reason`, the HTTP proxy's `Heel-Reason` header, `heel run --reason`):
+ * trimmed and capped, or undefined when blank or not text.
+ */
+export function cleanReason(raw: unknown): string | undefined {
   const text = typeof raw === "string" ? raw.trim() : "";
-  return {
-    args: rest,
-    reason: text === "" ? undefined : text.slice(0, REASON_MAX_CHARS),
-  };
+  return text === "" ? undefined : text.slice(0, REASON_MAX_CHARS);
 }

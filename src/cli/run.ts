@@ -3,7 +3,7 @@ import type { CliIo } from "./common.ts";
 import { parseOrUsage, UsageError } from "./common.ts";
 
 /**
- * `heel run [--account <alias>] [--json] -- <cmd> [args...]` (D8b; spec: CLI
+ * `heel run [--account <alias>] [--reason <text>] [--json] -- <cmd> [args...]` (D8b; spec: CLI
  * runner, "Client and topology"). Runs on the agent's side with only the
  * agent's token: it posts the command line and the current directory to
  * heel's `/run` and never runs anything itself.
@@ -36,7 +36,11 @@ export async function runCommand(args: string[], io: CliIo, deps: RunDeps): Prom
   const { values } = parseOrUsage(() =>
     parseArgs({
       args: args.slice(0, split),
-      options: { account: { type: "string" }, json: { type: "boolean" } },
+      options: {
+        account: { type: "string" },
+        reason: { type: "string" },
+        json: { type: "boolean" },
+      },
       allowPositionals: false,
       strict: true,
     }),
@@ -56,6 +60,7 @@ export async function runCommand(args: string[], io: CliIo, deps: RunDeps): Prom
     cwd: deps.cwd(),
     ...(runId === undefined || runId === "" ? {} : { runId }),
     ...(values.account === undefined ? {} : { account: values.account }),
+    ...(values.reason === undefined ? {} : { reason: values.reason }),
   };
 
   let answer: Record<string, unknown>;

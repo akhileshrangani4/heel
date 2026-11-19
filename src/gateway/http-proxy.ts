@@ -8,6 +8,7 @@ import { findAccount } from "../store/directory.ts";
 import { mayUseAccount } from "../store/sharing.ts";
 import { isHttpProvider } from "../vault/connect.ts";
 import type { AuthenticatedAgent } from "./agent-tokens.ts";
+import { cleanReason } from "./mcp/names.ts";
 import type { Pipeline } from "./pipeline/pipeline.ts";
 import type { PipelineResult } from "./pipeline/ports.ts";
 
@@ -150,6 +151,16 @@ function respond(c: Context, result: PipelineResult): Response {
   }
 }
 
+/**
+ * The agent's reason from its `Heel-Reason` header, shown to the approver.
+ * heel never sends the agent's request headers upstream (only the body's
+ * content type), so it can't reach the API.
+ */
+function reasonOf(c: Context): { reason?: string } {
+  const reason = cleanReason(c.req.header("heel-reason"));
+  return reason === undefined ? {} : { reason };
+}
+
 export async function handleHttpProxy(
   c: Context,
   agent: AuthenticatedAgent,
@@ -213,6 +224,7 @@ export async function handleHttpProxy(
     tool: `${method} ${target.path}`,
     args,
     runId: c.req.header("heel-run-id"),
+    ...reasonOf(c),
   });
   return respond(c, result);
 }
@@ -260,6 +272,7 @@ async function builtInRest(
     tool: mapped.tool,
     args: mapped.args,
     runId: c.req.header("heel-run-id"),
+    ...reasonOf(c),
   });
   if (result.status === "allowed") {
     return c.json(result.result as object, 200, { "heel-decision": "allow" });

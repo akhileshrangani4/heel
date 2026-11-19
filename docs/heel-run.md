@@ -122,6 +122,8 @@ heel run -- gh pr list -R acme/web
 
 gh's output comes back on stdout and stderr, and `heel run` exits with gh's exit code. Add `--json` to get heel's whole answer as one line instead, such as `{"status":"ran","exitCode":0,"stdout":"…","stderr":""}`.
 
+To tell you why, the agent adds `--reason`: `heel run --reason "Merging the fix you reviewed" -- gh pr merge 12 -R acme/web`. If the command needs your approval, the approval page shows it as the agent's own words. It never changes which rule matches or what runs.
+
 ## The directory has to be the same on both sides
 
 `heel run` sends the path of the directory it was started from, exactly as the agent sees it. heel then looks that path up **on its own filesystem**: it resolves it there (symlinks and all) and runs the command only if the result is inside one of the agent's workdirs. The command then runs in heel's sandbox, on heel's files at that path.
