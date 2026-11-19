@@ -23,6 +23,8 @@ Run heel where your agents can't reach it:
 
 `heel serve` warns at startup when heel's files sit in the running user's own home, and when either port listens beyond this machine.
 
+heel adds speed bumps for the same-user case (a recovery link from `heel user enroll` waits a day, where you can cancel it), but they only raise the bar: an agent running as heel's user can change heel's database too.
+
 A sandboxed agent (`heel run`, code mode) never sees `HEEL_HOME`; this is about agents with their own shell, like Claude Code or Codex on your laptop.
 
 ## With npm

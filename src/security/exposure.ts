@@ -31,9 +31,14 @@ export function isLoopbackHost(host: string): boolean {
   return LOOPBACK.has(host) || host.startsWith("127.");
 }
 
+/**
+ * Strictly inside: `~/.heel` is inside `~`. A service user whose home *is*
+ * HEEL_HOME (the OCI image's `heel` user, /var/lib/heel) is the setup the
+ * docs recommend, so it doesn't count.
+ */
 function inside(path: string, dir: string): boolean {
   const base = dir.endsWith("/") ? dir : `${dir}/`;
-  return path === dir || path.startsWith(base);
+  return path !== dir && path.startsWith(base);
 }
 
 export function exposureWarnings(facts: ExposureFacts): ExposureWarning[] {
@@ -67,9 +72,9 @@ export function exposureWarnings(facts: ExposureFacts): ExposureWarning[] {
       code: "same_user_as_agents",
       message:
         `heel runs as your own user with its files in ${facts.home}. A local agent running as ` +
-        "the same user (Claude Code, Codex) can read the master key and edit the rules, so " +
-        "heel can't stop it. That's fine for trying heel out; to keep local agents out, run " +
-        "heel as its own user or in Docker (docs/running.md).",
+        "the same user (Claude Code, Codex) can read the master key, the database and the " +
+        "rules, so heel can't control it. That's fine for trying heel out; to keep local " +
+        "agents out, run heel on another machine, as its own user, or in Docker (docs/running.md).",
     });
   }
   return warnings;

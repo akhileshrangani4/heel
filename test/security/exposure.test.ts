@@ -40,6 +40,8 @@ describe("exposureWarnings", () => {
       codes({ ...SAFE, homeOwnerUid: 1, home: "/Users/avi/.heel", userHome: "/Users/avi" }),
     ).toEqual([]);
     expect(codes({ ...SAFE, home: "/Users/avi2/.heel", userHome: "/Users/avi" })).toEqual([]);
+    // The OCI image: the heel user's home is HEEL_HOME itself.
+    expect(codes({ ...SAFE, home: "/var/lib/heel", userHome: "/var/lib/heel" })).toEqual([]);
     expect(
       codes({ ...SAFE, uid: null, homeOwnerUid: null, home: "C:/h", userHome: "C:/" }),
     ).toEqual([]);
