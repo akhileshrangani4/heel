@@ -1,9 +1,14 @@
 import "reflect-metadata";
+import { execFileSync } from "node:child_process";
 import { webcrypto } from "node:crypto";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { isIP } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { connect, createServer } from "node:tls";
+import { fileURLToPath } from "node:url";
 import * as x509 from "@peculiar/x509";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createSandboxCa, ipBytes, nameConstraints, trustBundle } from "../../src/runner/ca.ts";
 
 const ALG = { name: "ECDSA", namedCurve: "P-256", hash: "SHA-256" } as const;
@@ -98,6 +103,8 @@ describe("nameConstraints", () => {
   it.each([
     ["a name outside them", ["api.github.com"], "evil.test"],
     ["a subdomain-looking name that isn't one", ["github.com"], "evilgithub.com"],
+    ["a real subdomain (RFC 5280 would permit it)", ["github.com"], "uploads.github.com"],
+    ["a deeper subdomain", ["github.com"], "a.b.github.com"],
     ["another IP address", ["127.0.0.1"], "127.0.0.2"],
     ["any IP address, when only names are listed", ["api.github.com"], "127.0.0.1"],
     ["any name, when only addresses are listed", ["127.0.0.1"], "api.github.com"],
@@ -131,6 +138,25 @@ describe("ipBytes", () => {
 });
 
 describe("createSandboxCa", () => {
+  it("gives api.github.com and github.com their own CAs, so neither covers the other's subdomains", async () => {
+    const ca = await createSandboxCa(["github.com", "api.github.com"]);
+    expect(await verifies(ca.certificate, await ca.leaf("github.com"), "github.com")).toBe("ok");
+    expect(await verifies(ca.certificate, await ca.leaf("api.github.com"), "api.github.com")).toBe(
+      "ok",
+    );
+    expect(ca.certificate.match(/BEGIN CERTIFICATE/g)?.length).toBe(2);
+  });
+
+  it("doesn't keep a leaf that failed to generate", async () => {
+    const ca = await createSandboxCa(["a.test"]);
+    const spy = vi
+      .spyOn(webcrypto.subtle, "generateKey")
+      .mockRejectedValueOnce(new Error("entropy ran out"));
+    await expect(ca.leaf("a.test")).rejects.toThrow("entropy ran out");
+    spy.mockRestore();
+    expect(await verifies(ca.certificate, await ca.leaf("a.test"), "a.test")).toBe("ok");
+  });
+
   it("makes leaves for its hosts that verify against it, and none for any other", async () => {
     const ca = await createSandboxCa(["API.GitHub.com", "127.0.0.1"]);
     expect(ca.hosts).toEqual(["api.github.com", "127.0.0.1"]);
@@ -162,6 +188,21 @@ describe("createSandboxCa", () => {
 });
 
 describe("trustBundle", () => {
+  it("includes the roots heel itself was given in NODE_EXTRA_CA_CERTS", async () => {
+    const corporate = await createSandboxCa(["proxy.corp.example"]);
+    const dir = mkdtempSync(join(tmpdir(), "heel-extra-ca-"));
+    const file = join(dir, "corp.pem");
+    writeFileSync(file, corporate.certificate);
+    const ca = fileURLToPath(new URL("../../src/runner/ca.ts", import.meta.url));
+    const script = `import("${ca}").then((m) => process.stdout.write(String(m.hostRoots().some((c) => c.includes(process.argv[1])))))`;
+    const marker = corporate.certificate.split("\n")[3] ?? "";
+    const out = execFileSync(process.execPath, ["-e", script, marker], {
+      env: { ...process.env, NODE_EXTRA_CA_CERTS: file },
+      encoding: "utf8",
+    });
+    expect(out).toBe("true");
+  });
+
   it("holds the host's roots and the sandbox CA", async () => {
     const ca = await createSandboxCa(["a.test"]);
     const bundle = trustBundle(ca.certificate);

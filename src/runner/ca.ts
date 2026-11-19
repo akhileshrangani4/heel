@@ -4,11 +4,15 @@
  * goes to, so it can add the credential on the wire; the sandbox trusts this
  * CA for those hosts and for nothing else.
  *
- * - One CA per sandbox, ECDSA P-256. Its private key lives only in heel's
- *   memory and dies with the proxy; nothing writes it to disk.
- * - The CA is name-constrained to exactly the credential hosts: a leaf for
- *   any other name or address fails verification even if the key leaked.
- * - Leaves are made on demand, one per host, and cached for the CA's life.
+ * - One CA per credential host per sandbox, ECDSA P-256. Private keys live
+ *   only in heel's memory and die with the proxy; nothing writes them to disk.
+ * - Each CA is name-constrained to exactly its host: a DNS name permits the
+ *   name and excludes its subdomains (RFC 5280 would otherwise let
+ *   `github.com` cover `uploads.github.com`), an IP address permits that one
+ *   address. A leaf for anything else fails verification even if a key leaked.
+ *   One CA per host is what lets `github.com` exclude its subdomains while
+ *   `api.github.com` is a credential host too.
+ * - Leaves are made on demand, one per host, and cached once made.
  */
 import "reflect-metadata";
 import { randomBytes, webcrypto } from "node:crypto";
@@ -33,7 +37,7 @@ export interface LeafCertificate {
 }
 
 export interface SandboxCa {
-  /** The CA certificate, PEM. */
+  /** The CA certificates, one per host, PEM, concatenated. */
   readonly certificate: string;
   /** The hosts (lower-case names or IP literals) the CA may sign for. */
   readonly hosts: readonly string[];
@@ -45,7 +49,7 @@ export class SandboxCaError extends Error {
   override readonly name = "SandboxCaError";
 }
 
-/** Creates a CA that can sign only for `hosts` (names or IP literals, no ports). */
+/** Creates CAs that can sign only for `hosts` (names or IP literals, no ports), one each. */
 export async function createSandboxCa(hosts: readonly string[]): Promise<SandboxCa> {
   const names = [...new Set(hosts.map((host) => host.toLowerCase()))];
   if (names.length === 0) throw new SandboxCaError("a sandbox CA needs at least one host");
@@ -54,13 +58,49 @@ export async function createSandboxCa(hosts: readonly string[]): Promise<Sandbox
       throw new SandboxCaError(`can't make a certificate for ${JSON.stringify(name)}`);
     }
   }
-  const keys = await generateKeys();
   const now = Date.now();
   const validity = {
     notBefore: new Date(now - BACKDATE_MS),
     notAfter: new Date(now + LIFETIME_MS),
   };
-  const ca = await x509.X509CertificateGenerator.createSelfSigned({
+  const authorities = new Map(
+    await Promise.all(names.map(async (name) => [name, await authority(name, validity)] as const)),
+  );
+
+  const leaves = new Map<string, Promise<LeafCertificate>>();
+  return {
+    certificate: [...authorities.values()].map((ca) => ca.cert.toString("pem")).join("\n"),
+    hosts: names,
+    leaf(host) {
+      const name = host.toLowerCase();
+      const ca = authorities.get(name);
+      if (ca === undefined) {
+        return Promise.reject(new SandboxCaError(`the sandbox CA doesn't sign for ${name}`));
+      }
+      let pending = leaves.get(name);
+      if (pending === undefined) {
+        pending = makeLeaf(ca, name, validity);
+        leaves.set(name, pending);
+        // A failure isn't kept: the next connection tries again.
+        pending.catch(() => {
+          if (leaves.get(name) === pending) leaves.delete(name);
+        });
+      }
+      return pending;
+    },
+  };
+}
+
+interface Authority {
+  readonly cert: x509.X509Certificate;
+  readonly keys: KeyPair;
+}
+
+type Validity = { readonly notBefore: Date; readonly notAfter: Date };
+
+async function authority(host: string, validity: Validity): Promise<Authority> {
+  const keys = await generateKeys();
+  const cert = await x509.X509CertificateGenerator.createSelfSigned({
     serialNumber: serial(),
     name: "CN=heel sandbox CA, O=heel",
     ...validity,
@@ -69,52 +109,35 @@ export async function createSandboxCa(hosts: readonly string[]): Promise<Sandbox
     extensions: [
       new x509.BasicConstraintsExtension(true, 0, true),
       new x509.KeyUsagesExtension(x509.KeyUsageFlags.keyCertSign, true),
-      new x509.Extension(NAME_CONSTRAINTS_OID, true, nameConstraints(names)),
+      new x509.Extension(NAME_CONSTRAINTS_OID, true, nameConstraints([host])),
       await x509.SubjectKeyIdentifierExtension.create(keys.publicKey),
     ],
   });
+  return { cert, keys };
+}
 
-  const leaves = new Map<string, Promise<LeafCertificate>>();
-  async function makeLeaf(host: string): Promise<LeafCertificate> {
-    const leafKeys = await generateKeys();
-    const cert = await x509.X509CertificateGenerator.create({
-      serialNumber: serial(),
-      subject: isIP(host) === 0 ? `CN=${host}` : "CN=heel sandbox",
-      issuer: ca.subject,
-      ...validity,
-      publicKey: leafKeys.publicKey,
-      signingKey: keys.privateKey,
-      signingAlgorithm: ALGORITHM,
-      extensions: [
-        new x509.BasicConstraintsExtension(false, undefined, true),
-        new x509.KeyUsagesExtension(x509.KeyUsageFlags.digitalSignature, true),
-        new x509.ExtendedKeyUsageExtension([x509.ExtendedKeyUsage.serverAuth]),
-        new x509.SubjectAlternativeNameExtension([
-          { type: isIP(host) === 0 ? "dns" : "ip", value: host },
-        ]),
-        await x509.AuthorityKeyIdentifierExtension.create(keys.publicKey),
-      ],
-    });
-    const pkcs8 = Buffer.from(await webcrypto.subtle.exportKey("pkcs8", leafKeys.privateKey));
-    return { cert: cert.toString("pem"), key: pem("PRIVATE KEY", pkcs8) };
-  }
-
-  return {
-    certificate: ca.toString("pem"),
-    hosts: names,
-    leaf(host) {
-      const name = host.toLowerCase();
-      if (!names.includes(name)) {
-        return Promise.reject(new SandboxCaError(`the sandbox CA doesn't sign for ${name}`));
-      }
-      let pending = leaves.get(name);
-      if (pending === undefined) {
-        pending = makeLeaf(name);
-        leaves.set(name, pending);
-      }
-      return pending;
-    },
-  };
+async function makeLeaf(ca: Authority, host: string, validity: Validity): Promise<LeafCertificate> {
+  const leafKeys = await generateKeys();
+  const cert = await x509.X509CertificateGenerator.create({
+    serialNumber: serial(),
+    subject: isIP(host) === 0 ? `CN=${host}` : "CN=heel sandbox",
+    issuer: ca.cert.subject,
+    ...validity,
+    publicKey: leafKeys.publicKey,
+    signingKey: ca.keys.privateKey,
+    signingAlgorithm: ALGORITHM,
+    extensions: [
+      new x509.BasicConstraintsExtension(false, undefined, true),
+      new x509.KeyUsagesExtension(x509.KeyUsageFlags.digitalSignature, true),
+      new x509.ExtendedKeyUsageExtension([x509.ExtendedKeyUsage.serverAuth]),
+      new x509.SubjectAlternativeNameExtension([
+        { type: isIP(host) === 0 ? "dns" : "ip", value: host },
+      ]),
+      await x509.AuthorityKeyIdentifierExtension.create(ca.keys.publicKey),
+    ],
+  });
+  const pkcs8 = Buffer.from(await webcrypto.subtle.exportKey("pkcs8", leafKeys.privateKey));
+  return { cert: cert.toString("pem"), key: pem("PRIVATE KEY", pkcs8) };
 }
 
 /**
@@ -125,9 +148,18 @@ export function trustBundle(caCertificate: string): string {
   return `${[...hostRoots(), caCertificate].map((cert) => cert.trim()).join("\n")}\n`;
 }
 
-/** The host's system roots and Node's bundled ones, deduplicated. */
+/**
+ * The host's system roots, Node's bundled ones, and any heel was started
+ * with in NODE_EXTRA_CA_CERTS (a corporate proxy's CA), deduplicated.
+ */
 export function hostRoots(): string[] {
-  return [...new Set([...getCACertificates("system"), ...getCACertificates("bundled")])];
+  return [
+    ...new Set([
+      ...getCACertificates("system"),
+      ...getCACertificates("bundled"),
+      ...getCACertificates("extra"),
+    ]),
+  ];
 }
 
 type KeyPair = webcrypto.CryptoKeyPair;
@@ -153,6 +185,11 @@ function pem(label: string, der: Buffer): string {
  * apply per name type, so each type always gets an entry: when no host is an
  * IP address, the only one permitted is the unspecified address, which no
  * server holds, and likewise `heel.invalid` (RFC 6761) for names.
+ *
+ * A permitted DNS name also permits every name below it, so each one's
+ * subdomains are excluded (`.github.com`, which OpenSSL and Go read as
+ * "strictly below"). That would also exclude a listed host below another
+ * listed host, which is why each sandbox CA covers exactly one host.
  */
 export function nameConstraints(hosts: readonly string[]): Uint8Array {
   const dns = hosts.filter((host) => isIP(host) === 0);
@@ -168,8 +205,17 @@ export function nameConstraints(hosts: readonly string[]): Uint8Array {
     const mask = Buffer.alloc(address.length, 0xff);
     subtrees.push(der(0x30, der(0x87, Buffer.concat([address, mask]))));
   }
-  // NameConstraints ::= SEQUENCE { permittedSubtrees [0] GeneralSubtrees }
-  return new Uint8Array(der(0x30, der(0xa0, Buffer.concat(subtrees))));
+  const excluded = dns.map((name) => der(0x30, der(0x82, Buffer.from(`.${name}`, "ascii"))));
+  // NameConstraints ::= SEQUENCE { permittedSubtrees [0], excludedSubtrees [1] }
+  return new Uint8Array(
+    der(
+      0x30,
+      Buffer.concat([
+        der(0xa0, Buffer.concat(subtrees)),
+        ...(excluded.length === 0 ? [] : [der(0xa1, Buffer.concat(excluded))]),
+      ]),
+    ),
+  );
 }
 
 function der(tag: number, body: Buffer): Buffer {
