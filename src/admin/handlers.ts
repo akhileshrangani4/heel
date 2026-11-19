@@ -36,6 +36,7 @@ import {
   connectAccount,
   listAccounts,
 } from "../vault/connect.ts";
+import { removeAccount, setAccountCredential } from "../vault/manage.ts";
 import type { Vault } from "../vault/vault.ts";
 import { createEnrollment, EnrollmentError } from "../web/passkeys.ts";
 import {
@@ -207,6 +208,18 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
       // A running server holds whatever it started with; it starts again on its next call.
       deps.onAccountConfigured?.(configured.accountId);
       return adminOk(configured);
+    }
+    case "account.credential": {
+      const { alias, credential } = request.params;
+      const set = setAccountCredential(db, deps.vault, orgId, alias, credential);
+      // A local server holds the credential it started with; it starts again on its next call.
+      deps.onAccountConfigured?.(set.accountId);
+      return adminOk(set);
+    }
+    case "account.remove": {
+      const removed = removeAccount(db, orgId, request.params.alias, now);
+      deps.onAccountConfigured?.(removed.accountId);
+      return adminOk(removed);
     }
     case "account.share":
     case "account.unshare": {

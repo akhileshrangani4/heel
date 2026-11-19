@@ -76,6 +76,11 @@ const PROVIDER_ACTIONS: Readonly<Record<string, readonly string[]>> = {
 };
 
 /** The action names a set of providers has, sorted and without repeats. */
+/** Every action a built-in provider maps its tools to. */
+export const BUILT_IN_ACTIONS: ReadonlySet<string> = new Set(
+  Object.values(PROVIDER_ACTIONS).flat(),
+);
+
 export function actionsFor(providers: readonly string[]): string[] {
   const out = new Set<string>();
   for (const provider of providers) {

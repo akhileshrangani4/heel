@@ -418,9 +418,9 @@ These change what happens around your rules, not the rules file itself.
 | **Standing approval** ([Approvals](approvals.md) calls it a grant from an approval) | When you approve an `ask`, you can also allow, for this agent and for up to 90 days, either this exact call (same account, tool and arguments) or everything that rule asks about. | Checked only when that rule matches and would ask, and only for your own rules, never an org `ask`. It is tied to the rule's `match` and `then`: edit the rule and it ends. |
 | **Intent grant** | A narrow `allow` for one agent and one task, which you sign with your passkey. It is one `match`, in the same language as a rule, and must name an action or tool. | Consulted only when your rules end in an `ask` or nothing matched. Never overrides a `deny` or an org `ask`. |
 | **`watch: true` on a rule** | heel logs what the rule would have decided, then carries on as if it hadn't matched. | The rule never decides. |
-| **Watch mode** (`heel serve --watch`, or the shadow and record modes) | Calls your rules would deny or ask about run anyway, and Activity shows what would have happened. | Org rules, hard denies, pause, hiding, the fail-closed denies, and unnamed calls that outlive heel still hold. |
+| **Watch mode** (`heel serve --watch`, or Watch on the Modes page for the org or one person; the default is Enforce) | Calls your rules would deny or ask about run anyway, and Activity shows what would have happened. | Org rules, hard denies, pause, hiding, the fail-closed denies, and unnamed calls that outlive heel still hold. |
 
-`heel rules test` evaluates rules alone, in enforce mode, with no grants or standing approvals. [Approvals, grants and pause](approvals.md) and [Using heel](using-heel.md) cover the rest.
+`heel rules test` evaluates rules alone, in Enforce mode, with no grants or standing approvals. [Approvals, grants and pause](approvals.md) and [Using heel](using-heel.md) cover the rest.
 
 ```yaml title="rules/owner.yaml"
 rules:
@@ -821,6 +821,28 @@ heel: rules are invalid (2 problems):
   ~/.heel/rules/owner.yaml:2:22: rules.0.match.acount: unknown match key "acount"; use account, provider, agent, action, kind, recipients, repo, calendar, checks, items, tool, method, path, command, verb, subcommand, argv, channel, external, team, project, parent, amount, currency, customer, args.<path>, body.<path>, query.<name> or flags.<name>
   ~/.heel/rules/owner.yaml:4:26: rules.1.match.recipients: all_in_thread is a state check heel has only for action email.send; name that action in this rule (I-23)
 ```
+
+It also warns, without failing, about names that match nothing, so the rule would never fire:
+
+- **An action that doesn't exist,** when it starts with a built-in prefix (`email.`, `calendar.`, `github.`, `slack.`, `linear.`, `notion.`, `stripe.`). An HTTP account's own `x-heel-action` names aren't flagged.
+- **An account that isn't connected.** This is checked only while heel is running, against its accounts. Otherwise a rule that names an account gets a `note` that account names weren't checked.
+
+```yaml title="rules/owner.yaml"
+rules:
+  - match: { action: email.sends }
+    then: ask
+  - match: { account: gh-wrok, action: github.merge }
+    then: ask
+```
+
+```text
+$ heel rules check
+ok    rules/owner.yaml (user owner): 2 rules, 0 hide entries
+warn  rules/owner.yaml:2: action "email.sends" doesn't exist, so this rule never matches. email actions: email.draft, email.filter, email.label, email.remove, email.send
+note  heel isn't running, so account names weren't checked
+```
+
+With heel running, the second rule would get its own warning: `no account named "gh-wrok", so this rule never matches until one is connected. Accounts: gh`.
 
 `heel rules draft "<words>"` asks a configured model for a draft rules file and prints it with a diff; it never saves it.
 
@@ -1304,5 +1326,8 @@ Warnings don't stop the rules from loading:
 | --- | --- |
 | `a per: run limit doesn't apply to calls without a run id` | Add a `per: hour` rule for the same action below it. |
 | `ignored: rules files end in .yaml` | Rename `rules/<user>.yml` to `.yaml`. |
+| `action "..." doesn't exist, so this rule never matches` | A misspelled built-in action; the warning lists that service's actions. |
+| `no account named "...", so this rule never matches until one is connected` | A misspelled alias, or an account not connected yet. Only checked while heel is running. |
+| `note  heel isn't running, so account names weren't checked` | Start heel and run the check again to check account names. |
 
 Shape errors (a wrong type, a misspelled `then`) are reported first; fix them and run `heel rules check` again to see the rest. Warnings are only shown once there are no errors.

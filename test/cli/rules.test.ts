@@ -2,6 +2,8 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { type CliIo, EXIT, main } from "../../src/cli/main.ts";
+import { unknownNames } from "../../src/cli/rules.ts";
+import { loadRuleSet, rulesPaths } from "../../src/config/rules.ts";
 import { renderRulesJsonSchema } from "../../src/core/rules/schema.ts";
 import { tempDir } from "../helpers/store.ts";
 
@@ -186,5 +188,44 @@ describe("heel rules usage", () => {
       const result = await heel(argv, home({}));
       expect(result.code).toBe(EXIT.usage);
     }
+  });
+});
+
+describe("heel rules check: names that match nothing", () => {
+  it("warns on a misspelled built-in action, and not on an HTTP account's own action", async () => {
+    const dir = home({
+      "rules/alice.yaml":
+        "rules:\n  - match: { action: email.sends }\n    then: ask\n  - match: { action: tickets.close }\n    then: ask\n",
+    });
+    const result = await heel(["rules", "check"], dir);
+    expect(result.code).toBe(EXIT.ok);
+    expect(result.stdout).toContain(
+      'warn  rules/alice.yaml:2: action "email.sends" doesn\'t exist, so this rule never matches. email actions: email.draft, email.filter, email.label, email.remove, email.send',
+    );
+    expect(result.stdout).not.toContain("tickets.close");
+  });
+
+  it("says account names weren't checked when heel isn't running", async () => {
+    const dir = home({
+      "rules/alice.yaml": "rules:\n  - match: { account: gmial-work }\n    then: ask\n",
+    });
+    const result = await heel(["rules", "check"], dir);
+    expect(result.stdout).toContain("note  heel isn't running, so account names weren't checked");
+  });
+
+  it("warns on an account the running heel doesn't have", () => {
+    const loaded = loadRuleSet(
+      rulesPaths(
+        home({
+          "rules/alice.yaml":
+            "rules:\n  - match: { account: gmial-work }\n    then: ask\n  - match: { account: gmail-work }\n    then: ask\n",
+        }),
+      ),
+    );
+    expect(unknownNames(loaded.set, new Set(["gmail-work", "github"]))).toEqual([
+      expect.stringMatching(
+        /rules\/alice\.yaml:2: no account named "gmial-work".*Accounts: github, gmail-work$/,
+      ),
+    ]);
   });
 });

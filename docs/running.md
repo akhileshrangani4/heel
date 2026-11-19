@@ -59,6 +59,21 @@ docker run -d --name heel \
   ghcr.io/akhileshrangani4/heel
 ```
 
+That starts heel without its sandbox, so code mode and `heel run` are off; everything else works. To turn the sandbox on, start it with two more options instead (why: [The sandbox](#the-sandbox)):
+
+```sh
+docker run -d --name heel \
+  -p 127.0.0.1:7300:7300 -p 127.0.0.1:7301:7301 \
+  --security-opt seccomp=unconfined --security-opt systempaths=unconfined \
+  -v heel-data:/var/lib/heel \
+  -e HEEL_MASTER_KEY="$(cat heel-master.key)" \
+  ghcr.io/akhileshrangani4/heel
+```
+
+Check it worked: `docker logs heel` has no `sandbox unavailable` line. If it does, the line names what failed (on a Linux host with AppArmor, also add `--security-opt apparmor=unconfined`).
+
+**The `-p 127.0.0.1:` part matters.** Inside the container heel listens on every interface (`0.0.0.0`), because that is the only way Docker can forward to it, so heel can't tell who outside can reach it. `-p 127.0.0.1:7300:7300` publishes the port only to the host itself; a bare `-p 7300:7300` opens it to your whole network. At startup heel logs one `container_ports` line reminding you of this, instead of the "listens beyond this machine" warnings it gives outside a container.
+
 Run `heel` commands inside the container:
 
 ```sh

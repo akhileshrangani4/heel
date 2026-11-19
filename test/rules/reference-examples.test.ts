@@ -226,7 +226,8 @@ describe("docs/rules-reference.md match keys table", () => {
     writeFileSync(join(home, "rules/owner.yaml"), `rules:\n${rules.join("")}`);
     const result = await heel(["rules", "check"], home);
     expect(result.output).toBe(
-      `ok    rules/owner.yaml (user owner): ${rows.length} rules, 0 hide entries\n`,
+      `ok    rules/owner.yaml (user owner): ${rows.length} rules, 0 hide entries\n` +
+        "note  heel isn't running, so account names weren't checked\n",
     );
   });
 });

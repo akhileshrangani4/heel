@@ -13,7 +13,13 @@ import {
 import { type CaseResult, type RulesCase, RulesCasesFile, runCase } from "../core/rules/cases.ts";
 import type { RuleSet } from "../core/rules/evaluate.ts";
 import { renderRulesJsonSchema } from "../core/rules/schema.ts";
-import { actionsFor, DraftingError, lineDiff, requestDraft } from "../drafting/draft.ts";
+import {
+  actionsFor,
+  BUILT_IN_ACTIONS,
+  DraftingError,
+  lineDiff,
+  requestDraft,
+} from "../drafting/draft.ts";
 import { hasErrnoCode } from "../util/errno.ts";
 import { Secret } from "../vault/secret.ts";
 import { loadSecret } from "../vault/secret-file.ts";
@@ -65,9 +71,20 @@ export async function rulesCommand(args: string[], io: CliIo): Promise<number> {
       return EXIT.ok;
     case "check": {
       if (rest.length > 0) throw new UsageError(`unexpected argument "${rest[0]}"`);
-      const loaded = loadOrReport(io, configFrom(io, values.config).home);
+      const config = configFrom(io, values.config);
+      const loaded = loadOrReport(io, config.home);
       if (loaded === null) return EXIT.dataErr;
-      io.stdout.write(formatCheckReport(loaded));
+      // Account names come from the running heel; with heel stopped, they aren't checked.
+      let accounts: ReadonlySet<string> | null = null;
+      try {
+        const response = await adminCall(config.adminSocketPath, { method: "account.list" });
+        if (response.ok) {
+          accounts = new Set((response.result as { alias: string }[]).map((a) => a.alias));
+        }
+      } catch {
+        accounts = null;
+      }
+      io.stdout.write(formatCheckReport(loaded, accounts));
       return EXIT.ok;
     }
     case "test": {
@@ -148,7 +165,48 @@ function formatInvalid(what: string, issues: readonly YamlIssue[]): string {
 }
 
 /** Pure: what `heel rules check` prints for a valid set. */
-export function formatCheckReport(loaded: LoadedRules): string {
+/**
+ * Pure: names in the rules that match nothing, so the rule never fires.
+ * Actions are checked when they use a built-in prefix (`email.`, `github.`,
+ * ...): an HTTP account may name its own actions (`x-heel-action`), but
+ * `email.sends` is a typo. Accounts are checked against `accounts`, the
+ * running heel's aliases, when given.
+ */
+export function unknownNames(set: RuleSet, accounts: ReadonlySet<string> | null): string[] {
+  const prefixes = new Set([...BUILT_IN_ACTIONS].map((action) => action.split(".")[0]));
+  const files = [...(set.org === null ? [] : [set.org]), ...set.owners.values()];
+  const lines: string[] = [];
+  for (const file of files) {
+    for (const rule of file.rules) {
+      const at = `${rule.ref.file}:${rule.ref.line}`;
+      for (const action of rule.names.actions) {
+        const prefix = action.split(".")[0] ?? "";
+        if (prefixes.has(prefix) && !BUILT_IN_ACTIONS.has(action)) {
+          const same = [...BUILT_IN_ACTIONS].filter((a) => a.startsWith(`${prefix}.`)).sort();
+          lines.push(
+            `${at}: action "${action}" doesn't exist, so this rule never matches. ${prefix} actions: ${same.join(", ")}`,
+          );
+        }
+      }
+      if (accounts === null) continue;
+      for (const account of rule.names.accounts) {
+        if (!accounts.has(account)) {
+          const known = [...accounts].sort();
+          lines.push(
+            `${at}: no account named "${account}", so this rule never matches until one is connected. ` +
+              (known.length === 0 ? "No accounts are connected." : `Accounts: ${known.join(", ")}`),
+          );
+        }
+      }
+    }
+  }
+  return lines;
+}
+
+export function formatCheckReport(
+  loaded: LoadedRules,
+  accounts: ReadonlySet<string> | null = null,
+): string {
   const lines: string[] = [];
   if (loaded.files.length === 0) {
     lines.push("No rules files: every call is denied.");
@@ -160,6 +218,14 @@ export function formatCheckReport(loaded: LoadedRules): string {
     );
   }
   for (const warning of loaded.warnings) lines.push(`warn  ${formatYamlIssue(warning)}`);
+  for (const line of unknownNames(loaded.set, accounts)) lines.push(`warn  ${line}`);
+  const namesAccounts = [
+    ...(loaded.set.org === null ? [] : [loaded.set.org]),
+    ...loaded.set.owners.values(),
+  ].some((file) => file.rules.some((rule) => rule.names.accounts.size > 0));
+  if (accounts === null && namesAccounts) {
+    lines.push("note  heel isn't running, so account names weren't checked");
+  }
   return `${lines.join("\n")}\n`;
 }
 

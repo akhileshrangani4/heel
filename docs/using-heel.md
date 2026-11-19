@@ -116,5 +116,24 @@ Tap **Pause** on the approval page, or run `heel pause --agent my-agent`. You ca
 
 - **Activity** shows every call, with its decision and the rule that made it, as they happen. It also suggests rules from what got asked or denied often.
 - **Grants** and **standing approvals** list what you've allowed beyond your rules, and let you revoke any of it.
-- **Modes** let a new rule, or a new agent, run in watch mode first: heel logs what the rule would have done, then you switch it to enforce.
-- **Rules:** edit the file and heel reloads it. Run `heel rules check` and `heel rules test` before you rely on a change ([how](rules-reference.md#testing-rules)). Editing a rule ends the grants made from it, so widening a rule asks again.
+- **Modes** (admins, on the Modes page) decide whether heel's decisions take effect. There are two:
+  - **Enforce** (the default): heel applies the rules. Calls are allowed, sent to you for approval, or denied.
+  - **Watch**: calls your rules would deny or send for approval run anyway, and Activity marks each one "would deny" or "would ask" with "(watch)". Use it to try rules on real traffic, then switch back to Enforce.
+
+  There are three ways to watch, from widest to narrowest: `heel serve --watch` (everyone without a mode of their own), the Modes page (the org default, or one person), and `watch: true` on a single rule ([Rules](rules.md)). Some things hold in every mode: pause, org rules, hidden mail, and calls heel can't check safely. A person's own mode can only be stricter than the org default, so a person set to Watch stays in Enforce while the org default is Enforce. Switching to Watch needs a passkey; switching to Enforce doesn't. (The database and API store Watch as `shadow`; older installs may show `record`, which behaves the same.)
+- **Rules:** edit the file and heel reloads it. Run `heel rules check` and `heel rules test` before you rely on a change ([how](rules-reference.md#testing-rules)). Editing a rule ends the grants made from it, so widening a rule asks again. `heel rules check` also warns about names that match nothing, so the rule never fires:
+
+  ```text
+  warn  rules/owner.yaml:2: action "github.merges" doesn't exist, so this rule never matches. github actions: github.api, github.comment, ...
+  warn  rules/owner.yaml:2: no account named "gh-wrok", so this rule never matches until one is connected. Accounts: gh
+  ```
+
+  Actions are checked when they start with a built-in prefix (`email.`, `calendar.`, `github.`, `slack.`, `linear.`, `notion.`, `stripe.`); an HTTP account's own actions (`x-heel-action`) aren't flagged. Account names are checked only while heel is running; otherwise it prints `note  heel isn't running, so account names weren't checked`.
+- **A new key for an account:** after you rotate an API key or token with the provider, give heel the new one. Every setting stays as it is, and a local server picks it up on its next call:
+
+  ```sh
+  printf %s "$NEW_TOKEN" | heel account set github --credential-stdin
+  ```
+
+  Accounts that sign in with a provider (Gmail, Calendar, Outlook, MCP servers with OAuth) hold OAuth tokens instead; sign in again from the Connections page.
+- **Removing an account:** `heel account remove <alias>` deletes the account and its stored credential, and who it was shared with. Its pending approvals expire, and the standing approvals and grants that name it are revoked, so an account connected later under the same name starts with none of them. The Activity log keeps its rows. Revoke the credential with the provider too.
