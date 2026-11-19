@@ -269,6 +269,25 @@ describe("running a script", () => {
     expect(h.provider.executed).toEqual([]);
   });
 
+  it("carries the script's heel_reason, and the code surface's MCP client, onto the approval", async () => {
+    const { h } = setUp(oneRule("{ action: email.send }", "ask"));
+    const module = accountModule("gmail-work", TOOLS);
+    if (module === null) throw new Error("no module");
+    const result = await runScript({
+      code: `import gmail_work\n${SEND}`,
+      agent: { ...h.agent, clientName: "claude-code" },
+      reason: "Sending Bob the Q3 numbers he asked for.",
+      modules: [{ ...module, account: "gmail-work" }],
+      pipeline: h.pipeline,
+      worker: new MontyWorker(),
+    });
+    expect(result.status).toBe("pending");
+    expect(h.approvals.rows.at(-1)?.request).toMatchObject({
+      reason: "Sending Bob the Q3 numbers he asked for.",
+      client: "claude-code",
+    });
+  });
+
   it("I-62: a pause stops the script at its next call", async () => {
     const { h, run } = setUp(oneRule("{ action: email.send }"));
     h.pauses.paused.global = true;

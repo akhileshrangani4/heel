@@ -41,11 +41,19 @@ export const RUN_CODE_TOOL: Tool = {
     "heel already runs as many scripts as it allows at once, yours or all agents', so this one didn't " +
     "start; send it again once one has finished. See heel_stubs for " +
     "the functions and their arguments.",
+  // heel_reason here covers every call the script makes: one sentence on what the script is for.
   inputSchema: {
     type: "object",
     properties: {
       code: { type: "string", description: "The script." },
       run_id: { type: "string", description: "Your run id, for per-run limits." },
+      heel_reason: {
+        type: "string",
+        description:
+          "Optional. One plain sentence on what this script is for. If a call in it needs approval, " +
+          "heel shows it to the person deciding, next to what that call actually does. It never " +
+          "changes whether a call runs.",
+      },
     },
     required: ["code"],
     additionalProperties: false,

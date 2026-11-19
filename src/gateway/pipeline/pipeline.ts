@@ -7,7 +7,7 @@ import {
   parseResponseVerdict,
 } from "../../core/adapters.ts";
 import type { AuditEvent } from "../../core/audit.ts";
-import type { Call } from "../../core/call.ts";
+import type { Call, Surface } from "../../core/call.ts";
 import { callHash, UNREPRESENTABLE_ARGS, UNREPRESENTABLE_CALL_HASH } from "../../core/call-hash.ts";
 import { type CountEvent, storedFacts, sumMatching } from "../../core/counts.ts";
 import {
@@ -420,7 +420,7 @@ class DecisionPipeline implements Pipeline {
       states: new Map(),
       adapters: new Map(),
       reason: request.reason ?? null,
-      client: agent.clientName ?? null,
+      client: clientFor(request.surface, agent.clientName ?? null),
     });
     if (decided.kind === "final") {
       if (decided.requestedApprovalId !== undefined) {
@@ -1035,4 +1035,14 @@ function countReader(tx: HeelTx, call: Call, at: Date, onRead: () => void): Eval
     return events;
   };
   return (rule, per) => sumMatching(rule, read(per));
+}
+
+/**
+ * Pure: the MCP client to record on a call's approval. The client an agent
+ * names in `initialize` is stored on its token, so it is only true of MCP
+ * and code-mode calls; an HTTP proxy request or a `heel run` command with the
+ * same token records none, and the approval page names its surface instead.
+ */
+export function clientFor(surface: Surface, mcpClient: string | null): string | null {
+  return surface === "mcp" || surface === "code" ? mcpClient : null;
 }

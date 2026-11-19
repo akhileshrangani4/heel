@@ -342,7 +342,8 @@ function countsView(request: ApprovalRequestView): Html {
 
 /**
  * How the agent reached heel: the MCP client it named (self-reported, so the
- * title says so), or `heel run` for the CLI runner. Nothing for other surfaces.
+ * title says so), or the surface for `heel run` and the HTTP proxy, which
+ * record no client.
  */
 function viaView(request: ApprovalRequestView): Html | "" {
   if (request.client !== null) {
@@ -351,6 +352,7 @@ function viaView(request: ApprovalRequestView): Html | "" {
     >`;
   }
   if (request.surface === "cli") return html`<span class="muted">via heel run</span>`;
+  if (request.surface === "http") return html`<span class="muted">via the HTTP proxy</span>`;
   return "";
 }
 
