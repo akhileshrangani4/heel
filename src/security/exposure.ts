@@ -21,8 +21,45 @@ export interface ExposureFacts {
 }
 
 export interface ExposureWarning {
-  code: "agent_plane_exposed" | "human_plane_exposed" | "same_user_as_agents";
+  code:
+    | "agent_plane_exposed"
+    | "human_plane_exposed"
+    | "same_user_as_agents"
+    | "credential_in_sandbox";
   message: string;
+}
+
+/** An account whose credential a sandboxed program uses, and how it gets there. */
+export interface SandboxedAccount {
+  alias: string;
+  /** A local MCP server, or a CLI for `heel run`. */
+  kind: "mcp" | "cli";
+  /** `env`: the program holds the credential; `proxy`: heel adds it on the wire. */
+  delivery: "proxy" | "env" | null;
+}
+
+/**
+ * Accounts connected before heel could keep their credential out of the
+ * sandbox. They still work: the program gets the credential in its
+ * environment, where anything it runs can read it.
+ */
+export function credentialDeliveryWarnings(
+  accounts: readonly SandboxedAccount[],
+): ExposureWarning[] {
+  return accounts
+    .filter((account) => account.delivery === "env")
+    .map((account) => ({
+      code: "credential_in_sandbox" as const,
+      message:
+        account.kind === "mcp"
+          ? `account "${account.alias}" gives its local MCP server the credential in its environment, ` +
+            "where anything the server runs can read it. Name the hosts it authenticates to and " +
+            `heel adds it on the wire instead: heel account set ${account.alias} ` +
+            "--credential-host <host> [--credential-auth bearer|basic|header:<name>]"
+          : `account "${account.alias}" gives its CLI the credential in its environment, where ` +
+            "anything the command runs can read it. heel can keep it out of the sandbox only for " +
+            "gh so far; until then, connect only credentials scoped to what the agent may do.",
+    }));
 }
 
 const LOOPBACK = new Set(["127.0.0.1", "::1", "[::1]", "localhost"]);

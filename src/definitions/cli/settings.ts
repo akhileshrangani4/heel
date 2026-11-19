@@ -7,7 +7,8 @@ import { z } from "zod";
  * agent can't swap it, I-34), the hosts it may reach through heel's egress
  * proxy, and how its credential reaches it.
  *
- * - `gh`: the token in `GH_TOKEN`; egress to GitHub's API and site.
+ * - `gh`: a placeholder in `GH_TOKEN`, and heel's egress proxy adds the token
+ *   to requests to GitHub's API and site, never to an extra egress host.
  * - `kubectl`: the credential is a kubeconfig, written into the sandbox,
  *   with `KUBECONFIG` pointing at it; egress to its cluster's API server.
  * - any other CLI: the credential in the environment variable the operator

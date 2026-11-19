@@ -9,9 +9,14 @@
  * refused even when allowlisted, so a DNS record can't point a CLI at heel's
  * own planes or the host's LAN. An IP literal is reached only when the
  * allowlist names that literal.
+ *
+ * For the hosts a sandbox's credential goes to (`inject`), the proxy doesn't
+ * tunnel blindly: it terminates TLS and adds the credential itself (see
+ * intercept.ts), so the sandbox never holds it.
  */
 import { lookup as dnsLookup } from "node:dns/promises";
 import { BlockList, connect, createServer, isIP, type Server, type Socket } from "node:net";
+import { type InterceptOptions, intercept } from "./intercept.ts";
 
 export interface EgressTarget {
   /** Lower-cased hostname or IP literal (IPv6 without brackets). */
@@ -39,6 +44,14 @@ export interface EgressProxyOptions {
   /** Injectable for tests; defaults to the system resolver. */
   readonly resolve?: (host: string) => Promise<readonly string[]>;
   readonly connectTimeoutMs?: number;
+  /**
+   * Credential hosts: `host[:port]` entries, each also in `allow`, whose
+   * tunnels heel opens itself to add the credential.
+   */
+  readonly inject?: {
+    readonly hosts: readonly string[];
+    readonly intercept: Omit<InterceptOptions, "connectTimeoutMs">;
+  };
 }
 
 export interface EgressProxy {
@@ -189,6 +202,15 @@ export async function startEgressProxy(options: EgressProxyOptions): Promise<Egr
   const allow = parseEgressAllow(options.allow);
   const resolve = options.resolve ?? systemResolve;
   const connectTimeoutMs = options.connectTimeoutMs ?? 10_000;
+  const inject = parseEgressAllow(options.inject?.hosts ?? []);
+  const outside = inject.find((target) => !isAllowlisted(allow, target));
+  if (outside !== undefined) {
+    throw new EgressConfigError(
+      `credential host ${outside.host}:${outside.port} isn't allowlisted`,
+    );
+  }
+  const interceptOptions =
+    options.inject === undefined ? undefined : { ...options.inject.intercept, connectTimeoutMs };
   const sockets = new Set<Socket>();
 
   const server: Server = createServer((client) => {
@@ -205,6 +227,15 @@ export async function startEgressProxy(options: EgressProxyOptions): Promise<Egr
         options.onDecision?.(decision);
         if (!decision.allowed) {
           refuse(client, decision.reason === "bad_request" ? 400 : 403, decision.reason);
+          return;
+        }
+        if (interceptOptions !== undefined && isAllowlisted(inject, decision.target)) {
+          // A client that sends before the tunnel is open can't be read through TLS here.
+          if (rest.length > 0) {
+            refuse(client, 400, "early_data");
+            return;
+          }
+          await intercept(client, decision.target, decision.address, interceptOptions, sockets);
           return;
         }
         tunnel(client, rest, decision.address, decision.target.port, connectTimeoutMs, sockets);

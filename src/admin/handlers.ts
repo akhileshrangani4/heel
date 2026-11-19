@@ -26,6 +26,7 @@ import {
 import {
   ConnectError,
   type ConnectErrorCode,
+  configureAccount,
   connectAccount,
   listAccounts,
 } from "../vault/connect.ts";
@@ -65,6 +66,7 @@ const CONNECT_ERROR_CODES: Record<ConnectErrorCode, AdminErrorCode> = {
   unknown_provider: "invalid",
   invalid_settings: "invalid",
   alias_taken: "conflict",
+  not_found: "not_found",
   vault_unavailable: "vault_unavailable",
 };
 
@@ -164,6 +166,10 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
     }
     case "account.list":
       return adminOk(listAccounts(db, orgId));
+    case "account.configure": {
+      const { alias, credentialHosts, credentialAuth } = request.params;
+      return adminOk(configureAccount(db, orgId, alias, { credentialHosts, credentialAuth }));
+    }
     case "account.share":
     case "account.unshare": {
       const { alias, kind, name } = request.params;

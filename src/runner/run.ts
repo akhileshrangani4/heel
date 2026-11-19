@@ -14,11 +14,19 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { constants, tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough, Readable, Writable } from "node:stream";
-import { type EgressDecision, type EgressProxy, startEgressProxy } from "./egress.ts";
+import { createSandboxCa, trustBundle } from "./ca.ts";
+import {
+  type EgressDecision,
+  type EgressProxy,
+  parseEgressAllow,
+  startEgressProxy,
+} from "./egress.ts";
+import type { InterceptEvent } from "./intercept.ts";
 import {
   ARGS_FD,
   planSandbox,
   type SandboxHost,
+  type SandboxNetwork,
   type SandboxPlan,
   type SandboxSpec,
 } from "./plan.ts";
@@ -32,6 +40,13 @@ export interface SandboxRunOptions {
   readonly onEgress?: (decision: EgressDecision) => void;
   /** An egress connection failed for a reason other than its decision; it was closed. */
   readonly onEgressError?: (error: unknown) => void;
+  /** Every request heel read inside a credential host's tunnel, for audit. */
+  readonly onCredentialRequest?: (event: InterceptEvent) => void;
+  /**
+   * Trust roots for credential hosts' own certificates, in place of Node's.
+   * Tests only: it never comes from a spec or an account's settings.
+   */
+  readonly upstreamCa?: readonly string[];
 }
 
 export type SandboxOutcome =
@@ -77,10 +92,16 @@ export async function startSandboxed(
   options: SandboxRunOptions = {},
 ): Promise<SandboxProcess> {
   const egress =
-    spec.network?.kind === "egress" ? await openEgress(spec.network.allow, options) : undefined;
+    spec.network?.kind === "egress" ? await openEgress(spec.network, options) : undefined;
   let plan: SandboxPlan;
   try {
-    plan = planSandbox(host, spec, buildSeccompFilter(host.arch), egress?.proxy.socketPath);
+    plan = planSandbox(
+      host,
+      spec,
+      buildSeccompFilter(host.arch),
+      egress?.proxy.socketPath,
+      egress?.trust,
+    );
   } catch (error) {
     await egress?.close();
     throw error;
@@ -124,24 +145,53 @@ export function sandboxErrorDetail(stderr: string, code: number): string {
 
 interface OpenEgress {
   readonly proxy: EgressProxy;
+  /** The CA bundle the sandbox trusts, when it has credential hosts. */
+  readonly trust?: string;
   close(): Promise<void>;
 }
 
-/** The proxy listens in a fresh 0700 directory, so only heel's own uid (and the sandbox it maps) can connect. */
+/**
+ * The proxy listens in a fresh 0700 directory, so only heel's own uid (and
+ * the sandbox it maps) can connect. With credential hosts it gets a CA of
+ * its own, whose key never leaves this process.
+ */
 async function openEgress(
-  allow: readonly string[],
+  network: Extract<SandboxNetwork, { kind: "egress" }>,
   options: SandboxRunOptions,
 ): Promise<OpenEgress> {
+  const inject = network.inject;
+  const ca =
+    inject === undefined
+      ? undefined
+      : await createSandboxCa(parseEgressAllow(inject.hosts).map((target) => target.host));
   const dir = await mkdtemp(join(tmpdir(), "heel-egress-"));
   try {
     const proxy = await startEgressProxy({
       socketPath: join(dir, "egress.sock"),
-      allow,
+      allow: network.allow,
       ...(options.onEgress === undefined ? {} : { onDecision: options.onEgress }),
       ...(options.onEgressError === undefined ? {} : { onError: options.onEgressError }),
+      ...(inject === undefined || ca === undefined
+        ? {}
+        : {
+            inject: {
+              hosts: inject.hosts,
+              intercept: {
+                ca,
+                auth: inject.auth,
+                placeholder: inject.placeholder,
+                credential: inject.credential,
+                ...(options.upstreamCa === undefined ? {} : { upstreamCa: options.upstreamCa }),
+                ...(options.onCredentialRequest === undefined
+                  ? {}
+                  : { onRequest: options.onCredentialRequest }),
+              },
+            },
+          }),
     });
     return {
       proxy,
+      ...(ca === undefined ? {} : { trust: trustBundle(ca.certificate) }),
       async close() {
         await proxy.close();
         await rm(dir, { recursive: true, force: true });

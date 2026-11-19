@@ -12,7 +12,7 @@ const ALLOW_GH = `rules:
 `;
 
 describe("/run", () => {
-  it("runs an allowed command in the sandbox with heel's binary and the credential", async () => {
+  it("runs an allowed command in the sandbox with heel's binary, the credential added at its proxy", async () => {
     const h = cliPipeline({ owner: ALLOW_GH, stdout: "#12 fix it\n" });
     const answer = await h.run({ argv: ["gh", "pr", "list", "-R", "acme/web"], cwd: h.repo });
     expect(answer).toEqual({
@@ -24,11 +24,44 @@ describe("/run", () => {
     expect(spec?.args).toEqual(["pr", "list", "-R", "acme/web"]);
     expect(spec?.workRoot).toBe(h.root);
     expect(spec?.cwd).toBe(h.repo);
-    expect(spec?.secretEnv).toEqual({ GH_TOKEN: GH_TEST_TOKEN });
+    // gh holds a placeholder; heel's proxy puts the token in GitHub's Authorization header.
+    expect(spec?.secretEnv).toBeUndefined();
+    const placeholder = spec?.env?.["GH_TOKEN"];
+    expect(placeholder).toMatch(/^heel-placeholder-[0-9a-f]+$/);
     // git never reads the checkout, gh never reads the repo from it, and there's no /proc.
     expect(spec?.env).toMatchObject({ GIT_DIR: "/dev/null", GH_REPO: "acme/web" });
     expect(spec?.proc).toBe(false);
-    expect(spec?.network).toEqual({ kind: "egress", allow: ["api.github.com", "github.com"] });
+    expect(spec?.network).toMatchObject({
+      kind: "egress",
+      allow: ["api.github.com", "github.com"],
+      inject: {
+        hosts: ["api.github.com", "github.com"],
+        auth: { type: "authorization", schemes: ["token", "bearer"] },
+        placeholder,
+      },
+    });
+    const inject = spec?.network?.kind === "egress" ? spec.network.inject : undefined;
+    expect(await inject?.credential()).toBe(GH_TEST_TOKEN);
+    // Still scrubbed from the output, in case an upstream echoes it.
+    expect(spec?.secrets).toContain(GH_TEST_TOKEN);
+  });
+
+  it("injects the token only on GitHub's own hosts, never an extra egress host", async () => {
+    const h = cliPipeline({
+      owner: ALLOW_GH,
+      settings: {
+        transport: "cli",
+        command: "gh",
+        bin: "/usr/bin/gh",
+        egress: ["api.github.com", "github.com", "uploads.github.com"],
+        credentialEnv: null,
+      },
+    });
+    await h.run({ argv: ["gh", "pr", "list", "-R", "acme/web"], cwd: h.repo });
+    expect(h.started[0]?.network).toMatchObject({
+      allow: ["api.github.com", "github.com", "uploads.github.com"],
+      inject: { hosts: ["api.github.com", "github.com"] },
+    });
   });
 
   it("passes the command's own exit code through", async () => {

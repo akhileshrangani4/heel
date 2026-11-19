@@ -1,4 +1,4 @@
-import { mkdirSync, statSync } from "node:fs";
+import { statSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { homedir } from "node:os";
@@ -20,7 +20,7 @@ import {
   type GoogleClient,
   googleRefresher,
 } from "./definitions/google/oauth.ts";
-import { stdioSandboxSpec } from "./definitions/mcp/settings.ts";
+import { sandboxLauncher } from "./definitions/mcp/launch.ts";
 import { UpstreamPool } from "./definitions/mcp/upstream.ts";
 import { UpstreamSignIns } from "./definitions/mcp/upstream-oauth.ts";
 import {
@@ -41,12 +41,18 @@ import { logAdminAlerts } from "./notify/admin-alerts.ts";
 import { Notifier } from "./notify/notifier.ts";
 import { notifySetup } from "./notify/setup.ts";
 import { probeSandbox, startSandboxed } from "./runner/index.ts";
-import { type ExposureFacts, exposureWarnings } from "./security/exposure.ts";
+import {
+  credentialDeliveryWarnings,
+  type ExposureFacts,
+  exposureWarnings,
+  type SandboxedAccount,
+} from "./security/exposure.ts";
 import { SqliteApprovalStore } from "./store/approvals.ts";
 import { type HeelDb, openStore } from "./store/db.ts";
 import { ensureInstall, ensureLocalOwner } from "./store/install.ts";
 import { SqlitePauseStore } from "./store/pauses.ts";
 import { OidcClient, oidcSettings } from "./teams/oidc.ts";
+import { isCliProvider, listAccounts } from "./vault/connect.ts";
 import { loadMasterKey, MasterKeyError } from "./vault/key.ts";
 import type { RefresherLookup } from "./vault/refresh.ts";
 import { loadSecret } from "./vault/secret-file.ts";
@@ -259,6 +265,17 @@ async function runClosers(closers: Closer[]): Promise<void> {
   if (errors.length > 1) throw new AggregateError(errors, "heel did not shut down cleanly");
 }
 
+/** Accounts whose credential a sandboxed program uses, for `credentialDeliveryWarnings`. */
+function sandboxedAccounts(db: HeelDb, orgId: string): SandboxedAccount[] {
+  return listAccounts(db, orgId)
+    .filter((account) => account.credentialDelivery !== null)
+    .map((account) => ({
+      alias: account.alias,
+      kind: isCliProvider(account.provider) ? "cli" : "mcp",
+      delivery: account.credentialDelivery,
+    }));
+}
+
 /** What `exposureWarnings` needs to know about this process and its home. */
 function exposureFacts(config: HeelConfig): ExposureFacts {
   let homeOwnerUid: number | null = null;
@@ -298,7 +315,10 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
     // Single-user install: OIDC sign-in (D13) creates users instead.
     ensureLocalOwner(store.db, orgId, now());
 
-    for (const warning of exposureWarnings(exposureFacts(config))) {
+    for (const warning of [
+      ...exposureWarnings(exposureFacts(config)),
+      ...credentialDeliveryWarnings(sandboxedAccounts(store.db, orgId)),
+    ]) {
       log.warn({ code: warning.code }, warning.message);
     }
 
@@ -412,15 +432,12 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         log,
         oauth: { db: store.db, vault: opening.vault, publicUrl: config.publicUrl, now },
         ...(sandbox.ok && {
-          launchStdio: (account, settings, credential) => {
-            // Each local server gets its own work directory, and nothing else of heel's.
-            const workRoot = join(config.home, "mcp", account.alias);
-            mkdirSync(workRoot, { recursive: true, mode: 0o700 });
-            return startSandboxed(
-              sandbox.host,
-              stdioSandboxSpec(settings, { workRoot, credential }),
-            );
-          },
+          launchStdio: sandboxLauncher({
+            host: sandbox.host,
+            home: config.home,
+            start: startSandboxed,
+            log,
+          }),
         }),
       });
       closers.push(() => upstream.close());

@@ -87,12 +87,28 @@ export const AdminRequestSchema = z.discriminatedUnion("method", [
           args: z.array(z.string().max(4_096)).max(64),
           egress: z.array(z.string().max(255)).max(32),
           credentialEnv: z.string().max(64).nullable(),
+          /** Hosts heel's egress proxy adds the credential for; the server gets a placeholder. */
+          credentialHosts: z.array(z.string().max(255)).max(32).optional(),
+          credentialAuth: z.string().max(128).nullable().optional(),
           mounts: z.array(z.string().max(4_096)).max(16),
         })
         .optional(),
     }),
   }),
   z.strictObject({ method: z.literal("account.list") }),
+  z.strictObject({
+    /**
+     * `heel account set`: where a local MCP server's credential goes, so an
+     * account connected with it in the environment can move it to heel's
+     * egress proxy without reconnecting.
+     */
+    method: z.literal("account.configure"),
+    params: z.strictObject({
+      alias: z.string().min(1).max(64),
+      credentialHosts: z.array(z.string().min(1).max(255)).min(1).max(32),
+      credentialAuth: z.string().max(128).nullable(),
+    }),
+  }),
   z.strictObject({
     /** `heel account share|unshare` (D13b): who besides its owner may use an account. */
     method: z.enum(["account.share", "account.unshare"]),
