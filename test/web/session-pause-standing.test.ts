@@ -52,6 +52,16 @@ describe("enrollment and sign-in", () => {
     expect(safeNext("/approvals/apr_1")).toBe("/approvals/apr_1");
     expect(safeNext("//evil.example/x")).toBe("/approvals");
     expect(safeNext("https://evil.example")).toBe("/approvals");
+    // Red-team round 3: dot segments that collapse into a scheme-relative URL.
+    for (const sneaky of [
+      "/.//evil.example/phish",
+      "/a/..//evil.example/x",
+      "/%2e//evil.example",
+      "/./%2F/evil.example",
+    ]) {
+      expect(safeNext(sneaky), sneaky).not.toMatch(/^\/\//);
+    }
+    expect(safeNext("/.//evil.example/phish")).toBe("/approvals");
     expect(safeNext("/sign-in")).toBe("/approvals");
     expect(safeNext(undefined)).toBe("/approvals");
   });
