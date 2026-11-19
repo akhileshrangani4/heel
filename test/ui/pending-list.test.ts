@@ -16,10 +16,26 @@ const render = (rows: Parameters<typeof pendingList>[0]["load"]) =>
 describe("PendingList", () => {
   it("links each request to its full page and shows agent, account and rule", () => {
     const doc = render({ ok: true, rows: PENDING_ROWS });
-    const hrefs = [...doc.querySelectorAll("tbody a")].map((a) => a.getAttribute("href"));
+    const hrefs = [...doc.querySelectorAll(".req-title a")].map((a) => a.getAttribute("href"));
     expect(hrefs).toEqual(PENDING_ROWS.map((r) => `/approvals/${r.id}`));
-    expect(text(doc.querySelector("caption"))).toBe("3 requests");
+    expect(text(doc.querySelector(".req-count"))).toBe("3 requests");
     expect(text(doc)).toContain("prod-merges-ask-admin (org-rules.yaml:8) (org)");
+  });
+
+  it("leads each card with heel's own sentence, the client, and the agent's reason as its words", () => {
+    const [first] = PENDING_ROWS;
+    if (first === undefined) throw new Error("no fixture");
+    const doc = render({
+      ok: true,
+      rows: [{ ...first, reason: "Sending Bob the renewal numbers." }],
+    });
+    expect(text(doc.querySelector(".req-title"))).toBe(
+      "inbox-bot wants to send an email from gmail-work to bob@vendor.com",
+    );
+    expect(text(doc.querySelector(".ap-meta"))).toContain("via Claude Code");
+    expect(text(doc.querySelector(".req-reason"))).toBe(
+      "inbox-bot says: Sending Bob the renewal numbers.",
+    );
   });
 
   it("I-56: the list has no decision controls at all; deciding happens on the request page", () => {

@@ -3,7 +3,8 @@ import type { ApprovalOrigin, ApprovalStatus } from "../../store/schema.ts";
 import { approvalStatusBadge } from "./approval-request.ts";
 import { formatPauseScope, formatRelative, formatRule } from "./format.ts";
 import { type Html, html } from "./html.ts";
-import { notice, type PauseNotice, scrollRegion, time } from "./layout.ts";
+import { notice, type PauseNotice, time } from "./layout.ts";
+import { clientLabel, type Headline } from "./summary.ts";
 
 export interface PendingRow {
   id: string;
@@ -20,6 +21,12 @@ export interface PendingRow {
   expiresAt: Date;
   /** Set when a pause covers this request: it can't be approved until resume (I-61). */
   pausedBy: PauseNotice | null;
+  /** heel's own sentence for the call, the same one the request page leads with. */
+  headline: Headline;
+  /** The agent's MCP client, as it named itself; null when unknown. */
+  client: string | null;
+  /** The agent's own reason (`heel_reason`), or null. */
+  reason: string | null;
 }
 
 export interface PendingListProps {
@@ -48,9 +55,10 @@ function stateNote(row: PendingRow, now: Date): Html {
 }
 
 /**
- * Requests waiting on, or recently decided by, this approver. Each row links
- * to the full approval page; deciding happens only there (spec: The approval
- * page), so the list has no decision controls at all.
+ * Requests waiting on, or recently decided by, this approver, as cards that
+ * lead with heel's own sentence for each call. Each links to the full
+ * approval page; deciding happens only there (spec: The approval page), so
+ * the list has no decision controls at all (I-56).
  */
 export function pendingList(props: PendingListProps): Html {
   const heading = html`<h1>Approvals</h1>`;
@@ -65,46 +73,48 @@ export function pendingList(props: PendingListProps): Html {
   const rows = props.load.rows;
   if (rows.length === 0) {
     return html`${heading}
-      <p>Nothing is waiting for you. New requests appear here and in your notifications.</p>`;
+      <div class="card req-empty">
+        <p><strong>Nothing is waiting for you.</strong></p>
+        <p class="muted">New requests appear here and in your notifications.</p>
+      </div>`;
   }
+  const waiting = rows.filter((row) => row.status === "pending").length;
   return html`${heading}
-    ${scrollRegion(
-      "Approval requests",
-      html`<table class="data">
-      <caption>
-        ${rows.length === 1 ? "1 request" : `${rows.length} requests`}
-      </caption>
-      <thead>
-        <tr>
-          <th scope="col">Request</th>
-          <th scope="col">Agent</th>
-          <th scope="col">Account</th>
-          <th scope="col">Rule</th>
-          <th scope="col">Requested</th>
-          <th scope="col">Status</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${rows.map(
-          (row) =>
-            html`<tr>
-              <th scope="row">
-                <a href="${row.href}">${row.action ?? row.tool}</a>
-                <div class="muted mono">${row.id}</div>
-              </th>
-              <td>${row.agent}</td>
-              <td>${row.account}</td>
-              <td>
-                ${formatRule(row.rule)}${row.origin === "org" ? html` <span class="muted">(org)</span>` : ""}
-              </td>
-              <td>${time(row.createdAt)}</td>
-              <td>
-                ${approvalStatusBadge(row.status)}
-                <div class="muted">${stateNote(row, props.now)}</div>
-              </td>
-            </tr>`,
-        )}
-      </tbody>
-    </table>`,
-    )}`;
+    <p class="muted req-count">
+      ${rows.length === 1 ? "1 request" : `${rows.length} requests`}${
+        waiting > 0 && waiting < rows.length ? `, ${waiting} waiting for you` : ""
+      }
+    </p>
+    <ul class="req-list" aria-label="Approval requests">
+      ${rows.map((row) => requestCard(row, props.now))}
+    </ul>`;
+}
+
+function requestCard(row: PendingRow, now: Date): Html {
+  const said = row.headline;
+  return html`<li class="card req" data-status="${row.status}">
+    <div class="ap-meta">
+      <span class="ap-agent">${row.agent}</span>
+      ${row.client === null ? "" : html`<span class="muted">via ${clientLabel(row.client)}</span>`}
+      <span class="muted">on ${row.account}</span>
+      <span class="muted">${formatRelative(row.createdAt, now)}</span>
+      ${approvalStatusBadge(row.status)}
+    </div>
+    <h2 class="req-title">
+      <a href="${row.href}"
+        >${said.agent} wants to <mark>${said.action}</mark> ${said.preposition}
+        <mark>${said.place}</mark>${said.rest}</a
+      >
+    </h2>
+    ${
+      row.reason === null
+        ? ""
+        : html`<p class="req-reason"><span class="muted">${row.agent} says:</span> ${row.reason}</p>`
+    }
+    <p class="req-foot muted">
+      ${stateNote(row, now)} · Rule
+      ${formatRule(row.rule)}${row.origin === "org" ? " (org)" : ""} ·
+      <span class="mono">${row.id}</span> · requested ${time(row.createdAt)}
+    </p>
+  </li>`;
 }
