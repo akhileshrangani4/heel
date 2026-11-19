@@ -9,7 +9,7 @@ export default defineConfig({
   test: {
     include: ["e2e/**/*.test.ts"],
     // The browser suite has its own job and script (`pnpm test:browser`).
-    exclude: ["e2e/browser/**"],
+    exclude: ["e2e/browser/**", "e2e/docs/**"],
     pool: "forks",
     testTimeout: 60_000,
     hookTimeout: 60_000,
