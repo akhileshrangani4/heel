@@ -52,6 +52,7 @@ describe("heel run", () => {
   it.each([
     [{ status: "ran", exitCode: 3, stdout: "", stderr: "" }, 3],
     [{ status: "pending", approvalId: "apr_1" }, 75],
+    [{ status: "busy", limit: "agent", message: "send this again" }, 75],
     [{ status: "denied", reason: "no_rule_matched" }, 77],
     [{ status: "expired", approvalId: "apr_1" }, 77],
     [{ status: "paused", scope: "all" }, 69],

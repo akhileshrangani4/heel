@@ -89,6 +89,7 @@ heel reads `$HEEL_HOME/heel.yaml`, or the file named by `HEEL_CONFIG` or `--conf
 | `oidc` | none | Sign-in through your identity provider, for teams. |
 | `notify` | web push | Where approval requests are sent: web push, email, Slack. |
 | `adapters.approval` | none | Approval adapters that add hints to the approval page; `jev` sends pending calls to TypeSafe. See [Hints](approvals.md#hints). |
+| `sandboxes.per_agent`, `sandboxes.total` | `4`; one per GiB of memory less one, from 2 to 16 | How many code-mode scripts and `heel run` commands may run at once, for one agent and for all of them. Each runs in its own sandbox, whose processes may each use up to 1 GiB, so without a limit one agent could take the host's memory. Over either limit, heel answers `busy` at once and runs nothing; the agent sends it again later. |
 | `log.level` | `info` | `debug`, `info`, `warn` or `error`. |
 
 [`examples/heel.yaml`](../examples/heel.yaml) is a commented starting point.

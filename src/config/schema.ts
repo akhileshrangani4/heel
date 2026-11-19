@@ -239,6 +239,18 @@ export const HeelConfigFileSchema = z.strictObject({
     })
     .prefault({}),
   notify: NotifySectionSchema.prefault({}),
+  /**
+   * How many sandboxes (code-mode scripts and `heel run` commands) may run
+   * at once, per agent and in all. A request over either is refused with
+   * `busy`. `total` defaults to one per GiB of the host's memory, less one,
+   * between 2 and 16.
+   */
+  sandboxes: z
+    .strictObject({
+      per_agent: z.int().min(1).max(1_000).default(4),
+      total: z.int().min(1).max(10_000).optional(),
+    })
+    .prefault({}),
   providers: z
     .strictObject({
       /**
@@ -361,6 +373,8 @@ export interface HeelConfig {
   adapters: { approval: { kind: "jev"; model: string; apiKeyFile: string | null }[] };
   audit: { siem: SiemConfig | null };
   notify: NotifyConfig;
+  /** Sandboxes at once; a null `total` means the host-memory default (gateway/sandbox-slots.ts). */
+  sandboxes: { perAgent: number; total: number | null };
   /** Null when the operator configured no Google client. */
   providers: { google: GoogleProviderConfig | null; microsoft: MicrosoftProviderConfig | null };
 }
@@ -409,6 +423,7 @@ export function resolveConfig(
     },
     audit: { siem: file.audit.siem ? resolveSiem(file.audit.siem, fromHome) : null },
     notify: resolveNotify(file.notify, new URL(file.public_url), fromHome),
+    sandboxes: { perAgent: file.sandboxes.per_agent, total: file.sandboxes.total ?? null },
     providers: {
       google: file.providers.google
         ? {

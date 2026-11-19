@@ -1,8 +1,10 @@
 import { mkdirSync, mkdtempSync, renameSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { PauseTarget } from "../../src/gateway/pipeline/ports.ts";
+import { SandboxSlots } from "../../src/gateway/sandbox-slots.ts";
+import type { SandboxOutcome } from "../../src/runner/run.ts";
 import { cliPipeline, GH_TEST_TOKEN } from "../helpers/cli-pipeline.ts";
 
 /** `/run` (D8b): the CLI runner's endpoint, through the real pipeline, with a fake sandbox. */
@@ -250,5 +252,89 @@ describe("/run", () => {
     });
     expect(result).toMatchObject({ status: "denied", reason: "unsupported" });
     expect(h.started).toEqual([]);
+  });
+});
+
+describe("/run's concurrency limits", () => {
+  /** Commands that run until the test ends them. */
+  function heldCommands() {
+    const ends: ((outcome: SandboxOutcome) => void)[] = [];
+    return {
+      done: () =>
+        new Promise<SandboxOutcome>((resolve) => {
+          ends.push(resolve);
+        }),
+      endAll: () => {
+        for (const end of ends.splice(0)) end({ kind: "exited", code: 0 });
+      },
+    };
+  }
+
+  const LIST = ["gh", "pr", "list", "-R", "acme/web"];
+
+  it("answers 429 busy over the agent's limit without starting a sandbox, and lets other agents run", async () => {
+    const slots = new SandboxSlots({ perAgent: 2, total: 10 });
+    const held = heldCommands();
+    const h = cliPipeline({ owner: ALLOW_GH, done: held.done, slots });
+    const running = [h.run({ argv: LIST, cwd: h.repo }), h.run({ argv: LIST, cwd: h.repo })];
+    await vi.waitFor(() => expect(h.started).toHaveLength(2));
+
+    const third = await h.run({ argv: LIST, cwd: h.repo });
+    expect(third.status).toBe(429);
+    expect(third.body).toMatchObject({ status: "busy", limit: "agent" });
+    expect(h.started).toHaveLength(2);
+
+    // Another agent isn't held back by the first one's limit.
+    const theirs = h.run({ argv: LIST, cwd: h.repo }, "other");
+    await vi.waitFor(() => expect(h.started).toHaveLength(3));
+    held.endAll();
+    expect((await theirs).body["status"]).toBe("ran");
+    expect((await Promise.all(running)).map((r) => r.body["status"])).toEqual(["ran", "ran"]);
+    expect(slots.inUse()).toBe(0);
+  });
+
+  it("refuses every agent once the overall limit is reached", async () => {
+    const slots = new SandboxSlots({ perAgent: 4, total: 1 });
+    const held = heldCommands();
+    const h = cliPipeline({ owner: ALLOW_GH, done: held.done, slots });
+    const first = h.run({ argv: LIST, cwd: h.repo });
+    await vi.waitFor(() => expect(h.started).toHaveLength(1));
+
+    const theirs = await h.run({ argv: LIST, cwd: h.repo }, "other");
+    expect(theirs.status).toBe(429);
+    expect(theirs.body).toMatchObject({ status: "busy", limit: "total" });
+    held.endAll();
+    await first;
+    const after = h.run({ argv: LIST, cwd: h.repo }, "other");
+    await vi.waitFor(() => expect(h.started).toHaveLength(2));
+    held.endAll();
+    expect((await after).body["status"]).toBe("ran");
+  });
+
+  it.each<[string, Parameters<typeof cliPipeline>[0], string]>([
+    ["ran", { owner: ALLOW_GH }, "ran"],
+    ["hit a limit", { owner: ALLOW_GH, outcome: { kind: "limit", limit: "time" } }, "error"],
+    ["was denied", { owner: "rules: []\n" }, "denied"],
+    ["needs approval", { owner: "rules:\n  - match: { command: gh }\n    then: ask\n" }, "pending"],
+  ])("frees the slot when the command %s", async (_name, options, status) => {
+    const slots = new SandboxSlots({ perAgent: 1, total: 1 });
+    const h = cliPipeline({ ...options, slots });
+    for (let i = 0; i < 2; i++) {
+      expect((await h.run({ argv: LIST, cwd: h.repo })).body["status"]).toBe(status);
+      expect(slots.inUse()).toBe(0);
+    }
+  });
+
+  it("frees the slot when the sandbox throws", async () => {
+    const slots = new SandboxSlots({ perAgent: 1, total: 1 });
+    const h = cliPipeline({
+      owner: ALLOW_GH,
+      done: () => Promise.reject(new Error("the sandbox crashed")),
+      slots,
+    });
+    for (let i = 0; i < 2; i++) {
+      expect((await h.run({ argv: LIST, cwd: h.repo })).body["status"]).not.toBe("busy");
+      expect(slots.inUse()).toBe(0);
+    }
   });
 });

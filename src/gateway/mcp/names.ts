@@ -37,7 +37,9 @@ export const RUN_CODE_TOOL: Tool = {
     "Run a Python script (Monty's subset) that calls your accounts as modules: `import gmail_work` then " +
     "`gmail_work.send(...)`. Every call is checked by heel on its own. A denial raises PermissionError " +
     "at the call. If a call needs approval or you're paused, the script stops there and the result says " +
-    "so, with what already ran; send the rest as a new script once it's approved. See heel_stubs for " +
+    "so, with what already ran; send the rest as a new script once it's approved. A `busy` status means " +
+    "heel already runs as many scripts as it allows at once, yours or all agents', so this one didn't " +
+    "start; send it again once one has finished. See heel_stubs for " +
     "the functions and their arguments.",
   inputSchema: {
     type: "object",
