@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { adminCall } from "../admin/client.ts";
-import { compileRulesText, type LoadedRules, loadRuleSet, rulesPaths } from "../config/rules.ts";
+import { compileRulesText, type LoadedRules, loadRuleFiles, rulesPaths } from "../config/rules.ts";
 import {
   formatYamlIssue,
   parseYamlDocument,
@@ -113,15 +113,16 @@ export async function rulesCommand(args: string[], io: CliIo): Promise<number> {
   }
 }
 
-/** The loaded rules, or null after printing every problem to stderr. */
+/**
+ * The loaded rules, or null after printing every problem to stderr. Warnings
+ * print with the errors, so one run shows everything to fix.
+ */
 function loadOrReport(io: CliIo, home: string): LoadedRules | null {
-  try {
-    return loadRuleSet(rulesPaths(home));
-  } catch (error) {
-    if (!(error instanceof YamlValidationError)) throw error;
-    io.stderr.write(formatInvalid("rules are invalid", error.issues));
-    return null;
-  }
+  const { errors, failed: _failed, ...loaded } = loadRuleFiles(rulesPaths(home));
+  if (errors.length === 0) return loaded;
+  io.stderr.write(formatInvalid("rules are invalid", errors));
+  for (const warning of loaded.warnings) io.stderr.write(`  warn  ${formatYamlIssue(warning)}\n`);
+  return null;
 }
 
 function readCases(io: CliIo, path: string): RulesCase[] | null {

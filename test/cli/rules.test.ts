@@ -90,6 +90,17 @@ describe("heel rules check", () => {
     expect(result.code).toBe(EXIT.dataErr);
     expect(result.stderr).toMatch(new RegExp(`${join(dir, "rules", "alice\\.yaml")}:\\d+:\\d+`));
   });
+
+  it("prints warnings alongside errors, so one run shows everything", async () => {
+    const dir = home({
+      "rules/alice.yaml": "rules: [\n",
+      "rules/bob.yml": allowSends,
+    });
+    const result = await heel(["rules", "check"], dir);
+    expect(result.code).toBe(EXIT.dataErr);
+    expect(result.stderr).toContain("heel: rules are invalid (1 problem):\n");
+    expect(result.stderr).toMatch(/\n {2}warn {2}.*bob\.yml.*ignored: rules files end in \.yaml/);
+  });
 });
 
 describe("heel rules test", () => {

@@ -1305,7 +1305,7 @@ cases:
 
 ## Load errors and warnings
 
-`heel rules check` reports these with the file, line and column. While a file has an error, heel keeps deciding with that file's last good rules:
+`heel rules check` reports these with the file, line and column: every error in every file, and every warning, in one run. While a file has an error, heel keeps deciding with that file's last good rules:
 
 - **A broken owner file** (`rules/alice.yaml`) holds back only Alice's edit. Every other person's edits, and edits to `org-rules.yaml`, still apply. If the broken file is new, it counts as missing until it loads.
 - **A broken `org-rules.yaml`** holds back every edit, since org rules bound everyone. heel keeps the whole last good set until it is fixed.
