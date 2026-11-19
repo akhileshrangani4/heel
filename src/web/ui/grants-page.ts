@@ -1,6 +1,6 @@
 import { ceremonyButton } from "./ceremony.ts";
 import { type Html, html } from "./html.ts";
-import { type FormTarget, notice, postForm, time } from "./layout.ts";
+import { type FormTarget, notice, postForm, scrollRegion, time } from "./layout.ts";
 
 /**
  * The Grants page (A4b): a person states a task, writes what the agent may
@@ -70,7 +70,9 @@ export function grantsPage(props: {
         optionsFrom: "grant-form",
       })}
     </form>
-    <table class="data">
+    ${scrollRegion(
+      "Grants",
+      html`<table class="data">
       <caption>Grants</caption>
       <thead>
         <tr>
@@ -102,5 +104,6 @@ export function grantsPage(props: {
           </tr>`,
         )}
       </tbody>
-    </table>`;
+    </table>`,
+    )}`;
 }

@@ -1,7 +1,7 @@
 import type { Mode } from "../../core/modes.ts";
 import { ceremonyButton } from "./ceremony.ts";
 import { type Html, html } from "./html.ts";
-import { badge, type FormTarget, notice, postForm } from "./layout.ts";
+import { badge, type FormTarget, notice, postForm, scrollRegion } from "./layout.ts";
 
 /**
  * The Modes page (A3): the org's default mode and each person's own, and
@@ -71,7 +71,9 @@ export function modesPage(props: {
         ? notice("ok", html`<p>${props.outcome.label} is now in ${props.outcome.mode} mode.</p>`)
         : ""
     }
-    <table class="data">
+    ${scrollRegion(
+      "Modes",
+      html`<table class="data">
       <caption>Modes</caption>
       <thead>
         <tr>
@@ -98,5 +100,6 @@ export function modesPage(props: {
           </tr>`;
         })}
       </tbody>
-    </table>`;
+    </table>`,
+    )}`;
 }
