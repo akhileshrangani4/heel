@@ -139,6 +139,73 @@ describe("connecting a Gmail account", () => {
   });
 });
 
+/** One account's row on the Connections page. */
+function rowOf(page: string, alias: string): string {
+  const start = page.indexOf(`<th scope="row" class="mono">${alias}</th>`);
+  expect(start).toBeGreaterThan(-1);
+  return page.slice(start, page.indexOf("</tr>", start));
+}
+
+describe("Connections without providers.google", () => {
+  it("names the config key and links the setup guide instead of a dead end", async () => {
+    const google = new FakeGoogle();
+    const h = humanPlaneHarness({ upstreamOAuth: { fetch: google.fetch } });
+    for (const [provider, alias] of [
+      ["gmail", "gmail-home"],
+      ["google-calendar", "cal-home"],
+      ["outlook", "outlook-home"],
+    ] as const) {
+      connectAccount(
+        h.t.db,
+        h.vault,
+        { orgId: h.t.orgId, ownerId: h.t.ownerId, provider, alias },
+        new Date(),
+      );
+    }
+    const owner = await h.signIn(await h.enroll());
+
+    const page = await (await h.fetch("/connections", { as: owner })).text();
+
+    for (const alias of ["gmail-home", "cal-home"]) {
+      const row = rowOf(page, alias);
+      expect(row).toContain("Needs your Google OAuth client");
+      expect(row).toContain("<code>providers.google</code>");
+      expect(row).toContain('href="https://useheel.dev/docs/google-sign-in"');
+      expect(row).not.toContain("Set up with <code>heel connect</code>");
+      expect(row).not.toContain('type="submit"');
+    }
+    const outlook = rowOf(page, "outlook-home");
+    expect(outlook).toContain("<code>providers.microsoft</code>");
+    expect(outlook).toContain('href="https://useheel.dev/docs/running#configuration"');
+  });
+
+  it("shows Sign in, and no setup hint, once the client is configured", async () => {
+    const { h } = setUp();
+    const owner = await h.signIn(await h.enroll());
+
+    const page = await (await h.fetch("/connections", { as: owner })).text();
+
+    expect(page).not.toContain("providers.google");
+    expect(rowOf(page, "gmail-home")).toContain('type="submit" class="btn btn-secondary"');
+  });
+
+  it("keys off the config, so a configured client gets no setup hint even while sign-in is off", async () => {
+    // No upstreamOAuth: the sign-in routes are off, as when the vault is closed.
+    const h = humanPlaneHarness({ providerClients: { google: TEST_GOOGLE_CLIENT } });
+    connectAccount(
+      h.t.db,
+      h.vault,
+      { orgId: h.t.orgId, ownerId: h.t.ownerId, provider: "gmail", alias: "gmail-home" },
+      new Date(),
+    );
+    const owner = await h.signIn(await h.enroll());
+
+    const page = await (await h.fetch("/connections", { as: owner })).text();
+
+    expect(rowOf(page, "gmail-home")).not.toContain("providers.google");
+  });
+});
+
 describe("the Google refresher", () => {
   const request = {
     accountId: "account_1",

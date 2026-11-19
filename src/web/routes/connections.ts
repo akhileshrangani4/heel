@@ -14,6 +14,7 @@ import {
   SignInError,
   startSignIn,
 } from "../../definitions/sign-in.ts";
+import { missingSignInSetup } from "../../definitions/sign-in-setup.ts";
 import { accountsOwnedBy } from "../../store/directory.ts";
 import { errorShape } from "../../util/error-shape.ts";
 import {
@@ -91,6 +92,11 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       status: account.status,
       signsIn:
         providers.has(account.provider) || (oauth !== null && isOAuthUpstream(account.settings)),
+      // From the config, not `providers`: that's also empty when the vault is closed.
+      setup: missingSignInSetup(account.provider, {
+        google: deps.providerClients.google !== null,
+        microsoft: deps.providerClients.microsoft !== null,
+      }),
     }));
     return renderPage(c, {
       title: "Connections",

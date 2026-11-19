@@ -1,6 +1,11 @@
 import { and, eq } from "drizzle-orm";
 import { exportAuditPage } from "../audit/export.ts";
 import {
+  type ConfiguredSignIns,
+  missingSignInSetup,
+  signInSetupFor,
+} from "../definitions/sign-in-setup.ts";
+import {
   AgentError,
   type AgentErrorCode,
   addAgent,
@@ -53,6 +58,12 @@ export interface AdminDeps {
   home?: string;
   /** `heel account set` changed how an account's server runs: stop the one running now. */
   onAccountConfigured?: (accountId: string) => void;
+  /**
+   * Which sign-in clients (`providers.google`, `providers.microsoft`) heel
+   * started with, so `heel connect gmail` can say when its owner can't sign
+   * in yet. Left out, connect says nothing about it.
+   */
+  signIns?: ConfiguredSignIns;
   now?: () => Date;
 }
 
@@ -117,6 +128,18 @@ function pauseKeyFor(db: HeelDb, orgId: string, params: PauseParams): PauseKey {
   }
 }
 
+/**
+ * Gmail, Calendar and Outlook sign in from the Connections page, which needs
+ * the operator's own client: whether that's possible yet. Null for other
+ * providers, and while the vault is closed, when nobody can sign in at all.
+ */
+function signInState(deps: AdminDeps, provider: string): "ready" | "needs_setup" | null {
+  if (deps.signIns === undefined || deps.vault === null || signInSetupFor(provider) === null) {
+    return null;
+  }
+  return missingSignInSetup(provider, deps.signIns) === null ? "ready" : "needs_setup";
+}
+
 function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminResponse {
   const { db, orgId } = deps;
   switch (request.method) {
@@ -164,7 +187,8 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
         ...(http === undefined ? {} : { http }),
         ...(cli === undefined ? {} : { cli }),
       };
-      return adminOk(connectAccount(db, deps.vault, input, now));
+      const connected = connectAccount(db, deps.vault, input, now);
+      return adminOk({ ...connected, signIn: signInState(deps, provider) });
     }
     case "account.list":
       return adminOk(listAccounts(db, orgId));

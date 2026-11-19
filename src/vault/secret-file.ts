@@ -39,6 +39,13 @@ export function loadSecret(
     if (hasErrnoCode(error, "ENOENT")) {
       throw new SecretFileError("missing", `no secret: set ${envName} or create ${file}`);
     }
+    // Most often a file another user (root, say) created: the fix is its owner.
+    if (hasErrnoCode(error, "EACCES") || hasErrnoCode(error, "EPERM")) {
+      throw new SecretFileError(
+        "insecure_permissions",
+        `${file} can't be read by the user heel runs as; it must be owned by that user, with chmod 600`,
+      );
+    }
     throw error;
   }
   try {
