@@ -31,7 +31,7 @@ An agent is useful because it can act, and dangerous for the same reason: what i
 | **A person, when a call falls outside them** | The call waits for its owner, who approves or denies it with a passkey. An approval can become a grant: this exact call, everything that rule asks about, or this run. | In v0.1 (grants for a run: planned) |
 | **A task stated up front** | Describe what a run is for. A model proposes narrow grants from your words alone, before the agent reads anything. You confirm them once, and the rules enforce them. | Planned |
 
-**A model never decides a live call.** Whoever shapes a call (say, an injected instruction in an email) could shape a model judging it too, so every decision comes from rules, grants and people. Checks you plug in beside the rules (your own security service, an OpenFGA store, a classifier) can stop a call but never let one through.
+**Rules decide every call, not a model.** Whoever shapes a call (say, an injected instruction in an email) could shape a model judging it too, so every allow, deny and ask comes from rules, grants and people. Checks you plug in beside the rules (your own security service, an OpenFGA store, a classifier) can stop a call but never let one through. heel uses a model in two places of its own, both on the safe side: `looks_like` can only hide a message, and hides it when unsure; optional hints are advice the approver reads, and can't approve or deny anything.
 
 ## Where this comes from
 
