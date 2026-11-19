@@ -60,8 +60,15 @@ export interface CompiledRule {
   conditions: readonly Condition<FieldRef>[];
   items: ItemsCheck | null;
   stateChecks: readonly StateCheck[];
-  /** Actions and tools this rule names literally; a persistence call needs one (I-70). */
-  names: { actions: ReadonlySet<string>; tools: ReadonlySet<string> };
+  /**
+   * Actions and tools this rule names literally; a persistence call needs one
+   * (I-70). Accounts too, so `heel rules check` can flag names that don't exist.
+   */
+  names: {
+    actions: ReadonlySet<string>;
+    tools: ReadonlySet<string>;
+    accounts: ReadonlySet<string>;
+  };
 }
 
 export type HideField = "from" | "to" | "subject" | "labels";
@@ -219,6 +226,7 @@ function compileRule(
     names: {
       actions: literalStrings(match.action),
       tools: literalStrings(match.tool),
+      accounts: literalStrings(match.account),
     },
   };
 }

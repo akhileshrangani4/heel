@@ -117,4 +117,19 @@ Tap **Pause** on the approval page, or run `heel pause --agent my-agent`. You ca
 - **Activity** shows every call, with its decision and the rule that made it, as they happen. It also suggests rules from what got asked or denied often.
 - **Grants** and **standing approvals** list what you've allowed beyond your rules, and let you revoke any of it.
 - **Modes** let a new rule, or a new agent, run in watch mode first: heel logs what the rule would have done, then you switch it to enforce.
-- **Rules:** edit the file and heel reloads it. Run `heel rules check` and `heel rules test` before you rely on a change. Editing a rule ends the grants made from it, so widening a rule asks again.
+- **Rules:** edit the file and heel reloads it. Run `heel rules check` and `heel rules test` before you rely on a change. Editing a rule ends the grants made from it, so widening a rule asks again. `heel rules check` also warns about names that match nothing, so the rule never fires:
+
+  ```text
+  warn  rules/owner.yaml:2: action "github.merges" doesn't exist, so this rule never matches. github actions: github.api, github.comment, ...
+  warn  rules/owner.yaml:2: no account named "gh-wrok", so this rule never matches until one is connected. Accounts: gh
+  ```
+
+  Actions are checked when they start with a built-in prefix (`email.`, `calendar.`, `github.`, `slack.`, `linear.`, `notion.`, `stripe.`); an HTTP account's own actions (`x-heel-action`) aren't flagged. Account names are checked only while heel is running; otherwise it prints `note  heel isn't running, so account names weren't checked`.
+- **A new key for an account:** after you rotate an API key or token with the provider, give heel the new one. Every setting stays as it is, and a local server picks it up on its next call:
+
+  ```sh
+  printf %s "$NEW_TOKEN" | heel account set github --credential-stdin
+  ```
+
+  Accounts that sign in with a provider (Gmail, Calendar, Outlook, MCP servers with OAuth) hold OAuth tokens instead; sign in again from the Connections page.
+- **Removing an account:** `heel account remove <alias>` deletes the account and its stored credential, and who it was shared with. Its pending approvals expire, and the standing approvals and grants that name it are revoked, so an account connected later under the same name starts with none of them. The Activity log keeps its rows. Revoke the credential with the provider too.

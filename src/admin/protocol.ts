@@ -130,6 +130,19 @@ export const AdminRequestSchema = z.discriminatedUnion("method", [
     }),
   }),
   z.strictObject({
+    /** `heel account set <alias> --credential-stdin`: a new API key or token, every setting kept. */
+    method: z.literal("account.credential"),
+    params: z.strictObject({
+      alias: z.string().min(1).max(64),
+      credential: StaticCredentialSchema,
+    }),
+  }),
+  z.strictObject({
+    /** `heel account remove <alias>`: the account, its credential, and what named it. */
+    method: z.literal("account.remove"),
+    params: z.strictObject({ alias: z.string().min(1).max(64) }),
+  }),
+  z.strictObject({
     /** `heel account share|unshare` (D13b): who besides its owner may use an account. */
     method: z.enum(["account.share", "account.unshare"]),
     params: z.strictObject({

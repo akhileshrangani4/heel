@@ -86,12 +86,19 @@ export const USAGE = `usage:
                                           needs no --credential-env, only its
                                           registry as --egress and --credential-host
   heel account list
+  heel account set <alias> --credential-stdin
+                                          replace an account's API key or token
+                                          (read from stdin); settings stay as they are
   heel account set <alias> (--credential-host <host>... [--credential-auth bearer|basic|header:<Name>]
                    | --credential-delivery env) [--credential-stdin]
                                           move a local MCP server's or a CLI's
                                           credential out of its sandbox, to heel's
                                           egress proxy (or, knowingly, into its
                                           environment)
+  heel account remove <alias>             delete an account and its stored
+                                          credential; ends its pending approvals,
+                                          and the standing approvals and grants
+                                          that name it
   heel account share|unshare <alias> --user <name> | --group <group>
                                           let another person's agents use an account
   heel account approvers <alias> [--repo <owner/name>] [--user <name>]... [--group <group>]...
@@ -473,7 +480,9 @@ async function connectCommand(args: string[], io: CliIo): Promise<number> {
 }
 
 /**
- * `heel account list`, `heel account set <alias> --credential-host <host>...
+ * `heel account list`, `heel account remove <alias>`,
+ * `heel account set <alias> --credential-stdin` (a new key, settings kept),
+ * `heel account set <alias> --credential-host <host>...
  * [--credential-auth <auth>]`, and sharing (D13b):
  * `heel account share|unshare <alias> --user <name> | --group <group>`,
  * `heel account approvers <alias> [--repo <owner/name>] [--user <name>]... [--group <group>]...`
@@ -514,9 +523,29 @@ async function accountCommand(args: string[], io: CliIo): Promise<number> {
       if (alias === undefined) throw new UsageError("missing account alias");
       const credentialHosts = values["credential-host"] ?? [];
       const delivery = deliveryFlag(values["credential-delivery"]);
+      if (
+        credentialHosts.length === 0 &&
+        delivery === null &&
+        values["credential-auth"] === undefined &&
+        values["credential-stdin"]
+      ) {
+        // Only a new key or token: every setting stays as it is.
+        const value = (await readAll(io.stdin)).replace(/\r?\n$/, "");
+        if (value === "") throw new UsageError("--credential-stdin read nothing from stdin");
+        print(
+          await admin(config, {
+            method: "account.credential",
+            params: { alias, credential: { type: "static", value } },
+          }),
+        );
+        io.stderr.write(
+          `Stored the new credential for "${alias}". Revoke the old one with the provider.\n`,
+        );
+        return EXIT.ok;
+      }
       if (credentialHosts.length === 0 && delivery !== "env") {
         throw new UsageError(
-          "give at least one --credential-host <host>, or --credential-delivery env",
+          "give --credential-stdin (a new key or token), at least one --credential-host <host>, or --credential-delivery env",
         );
       }
       let credential: { type: "static"; value: string } | undefined;
@@ -551,6 +580,16 @@ async function accountCommand(args: string[], io: CliIo): Promise<number> {
             `heel warns about this account at every start.\n`,
         );
       }
+      return EXIT.ok;
+    }
+    case "remove": {
+      if (alias === undefined) throw new UsageError("missing account alias");
+      const removed = await admin(config, { method: "account.remove", params: { alias } });
+      print(removed);
+      io.stderr.write(
+        `Removed "${alias}" and its stored credential. Agents can no longer use it; ` +
+          "revoke the credential with the provider too.\n",
+      );
       return EXIT.ok;
     }
     case "share":
