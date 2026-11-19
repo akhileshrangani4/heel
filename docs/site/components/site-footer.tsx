@@ -21,6 +21,12 @@ export function SiteFooter() {
           <a href={npmUrl} className={link}>
             npm
           </a>
+          <Link href="/privacy" className={link}>
+            privacy
+          </Link>
+          <Link href="/terms" className={link}>
+            terms
+          </Link>
         </span>
       </div>
     </footer>
