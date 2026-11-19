@@ -3,7 +3,13 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { OIDC_CALLBACK_PATH } from "../../config/schema.ts";
 import { OidcError, type OidcIdentity, type SignInStart } from "../../teams/oidc.ts";
 import { savePending, TooManySignIns, takePending, userForIdentity } from "../../teams/sign-in.ts";
-import { type HumanPlaneDeps, readSessionCookie, renderPage, setSessionCookie } from "../http.ts";
+import {
+  continuePage,
+  type HumanPlaneDeps,
+  readSessionCookie,
+  renderPage,
+  setSessionCookie,
+} from "../http.ts";
 import { endSession, startSession } from "../sessions.ts";
 import { clientScript } from "../ui/client.ts";
 import { oidcSignIn, type SignInNotice } from "../ui/sign-in.ts";
@@ -150,12 +156,4 @@ export function oidcRoutes(deps: HumanPlaneDeps): Hono {
   });
 
   return app;
-}
-
-const escapeHtml = (text: string) => text.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
-
-/** A page that goes on to `next` (a path on this site) by itself, with a link if it doesn't. */
-function continuePage(next: string): string {
-  const href = escapeHtml(next);
-  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=${href}"><title>Signed in</title></head><body><p>Signed in. <a href="${href}">Continue</a></p></body></html>`;
 }

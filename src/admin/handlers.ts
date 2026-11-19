@@ -177,9 +177,10 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
       };
       const connected = connectAccount(db, deps.vault, input, now);
       // Gmail, Calendar and Outlook sign in from the Connections page, which
-      // needs the operator's own client: say whether that's possible yet.
+      // needs the operator's own client: say whether that's possible yet. With
+      // the vault closed nobody can sign in, client or not, so say nothing.
       const signIn =
-        deps.signIns === undefined || signInSetupFor(provider) === null
+        deps.signIns === undefined || deps.vault === null || signInSetupFor(provider) === null
           ? null
           : missingSignInSetup(provider, deps.signIns) === null
             ? "ready"

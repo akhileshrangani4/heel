@@ -12,7 +12,7 @@ Why your own client: heel is self-hosted, so there is no shared heel app at Goog
 - The Google account you'll connect. A personal Gmail account works.
 - The address you open heel's approval page at. That's `http://localhost:7301` unless you set `public_url` in `heel.yaml`.
 
-**The short version:** create a Google Cloud project, turn on the Gmail API (and the Google Calendar API), set up the consent screen with yourself as a test user, create a "Web application" client with heel's redirect URI, put the client ID in `heel.yaml` and the secret in a file, restart heel, then sign in from the Connections page.
+**The short version:** create a Google Cloud project, turn on the Gmail API (and the Google Calendar API), set up the consent screen and add yourself as a test user, create a "Web application" client with heel's redirect URI, put the client ID in `heel.yaml` and the secret in a file, restart heel, then sign in from the Connections page.
 
 ## 1. Work out your redirect URI
 
@@ -31,7 +31,7 @@ Google sends you back to heel at this address after you sign in, and only to add
 - **It must match exactly:** scheme (`http` or `https`), host, and port. `localhost` and `127.0.0.1` are different addresses to Google.
 - **Only the scheme, host and port of `public_url` count.** A path in it (`https://example.com/heel`) is dropped: the URI is `https://example.com/oauth/google/callback`.
 - **It comes from `public_url`, not from `listen`.** If you moved the approval page off port 7301 with `listen.human`, set `public_url` to the new address too, or the redirect URI still says `localhost:7301`.
-- **Google allows plain `http` only for `localhost`.** Anywhere else, `public_url` must be `https://`, which heel requires anyway.
+- **Google allows plain `http` only for `localhost` (or `127.0.0.1`).** Anywhere else, `public_url` must be `https://`, which heel requires anyway.
 - **A client can list several redirect URIs.** Add both `http://localhost:7301/...` and your HTTPS address if you use both. If you change `public_url` later, add the new URI to the client.
 
 ## 2. Create a Google Cloud project
@@ -70,8 +70,8 @@ You don't need to add scopes under **Data Access**. heel asks for its scopes whe
 
 While an External app is in **Testing**, Google lets its sign-ins last 7 days: the refresh token expires, heel marks the account **Needs sign-in**, and calls on it fail until you sign in again. Pick one:
 
-- **Sign in again each week** from the Connections page (**Sign in again**). Nothing else changes.
-- **Publish the app:** on the **Audience** page, click **Publish app** to move it to **In production**. Sign-ins then last until you revoke them. Google hasn't verified your app, so its sign-in shows an unverified-app warning (see [Troubleshooting](#google-says-it-hasnt-verified-the-app)), and an unverified app can sign in at most 100 accounts in all. For your own accounts, that's fine. You don't need Google's verification to use your own client.
+- **Sign in again each week:** click **Sign in** next to the account on the Connections page. Nothing else changes.
+- **Publish the app:** on the **Audience** page, click **Publish app** to move it to **In production**. Sign-ins then last until you revoke them (Google still ends one that goes unused for 6 months, or when you change the account's password). Google hasn't verified your app, so its sign-in shows an unverified-app warning (see [Troubleshooting](#google-says-it-hasnt-verified-the-app)), and an unverified app can sign in at most 100 accounts in all. For your own accounts, that's fine. You don't need Google's verification to use your own client.
 - **Use Internal** if you have Google Workspace (above).
 
 ## 5. Create the OAuth client
@@ -94,10 +94,14 @@ heel reads the client ID from `heel.yaml` and the secret from a file or an envir
 - **A file (the default):** `$HEEL_HOME/google-client-secret`. It must be owned by the user heel runs as and readable only by it, or heel refuses to start. To write it without the secret landing in your shell history:
   ```sh
   printf 'Client secret: '; read -rs secret; echo
-  (umask 077; printf '%s\n' "$secret" > "$HEEL_HOME/google-client-secret"); unset secret
+  (umask 077; printf '%s\n' "$secret" > "${HEEL_HOME:?set HEEL_HOME first}/google-client-secret"); unset secret
   ```
+  Run it as the user that runs `heel serve` (not with `sudo`), in a shell where `HEEL_HOME` is set.
   To keep it somewhere else, set `client_secret_file` (relative paths are relative to `HEEL_HOME`).
-- **The environment:** `HEEL_GOOGLE_CLIENT_SECRET`. It takes precedence over the file. Use it with a secrets manager or a container platform's secrets. In Docker, a file in the `heel-data` volume (`/var/lib/heel/google-client-secret`) is better: `docker inspect` shows environment variables.
+- **The environment:** `HEEL_GOOGLE_CLIENT_SECRET`. It takes precedence over the file. Use it with a secrets manager or a container platform's secrets. In Docker, a file in the `heel-data` volume is better, since `docker inspect` shows environment variables. If your container is named `heel`, this writes it as the container's own user:
+  ```sh
+  docker exec -i heel sh -c 'umask 077; cat > /var/lib/heel/google-client-secret'   # paste the secret, then Ctrl-D
+  ```
 
 **Then the client ID.** Add this to `$HEEL_HOME/heel.yaml` (create the file if you don't have one):
 
@@ -168,7 +172,7 @@ Expected: it's your own client, and Google hasn't reviewed it. Check that the ap
 
 ### The account says Needs sign-in again after a week
 
-The app is in **Testing**, so Google expired the sign-in after 7 days. Click **Sign in again** on Connections. To stop it happening, publish the app or use Internal: see [Testing mode signs you out after 7 days](#testing-mode-signs-you-out-after-7-days).
+The app is in **Testing**, so Google expired the sign-in after 7 days. Click **Sign in** next to the account on Connections. To stop it happening, publish the app or use Internal: see [Testing mode signs you out after 7 days](#testing-mode-signs-you-out-after-7-days).
 
 ### "This account is alice@…; you signed in as bob@…"
 
@@ -182,11 +186,12 @@ heel hasn't loaded `providers.google`. Check the key is spelled as above in the 
 
 - `no secret: set HEEL_GOOGLE_CLIENT_SECRET or create …`: write the secret file ([step 6](#6-give-heel-the-client)) or set the variable.
 - `… is readable by other users; chmod 600 it`: run `chmod 600 "$HEEL_HOME/google-client-secret"`.
-- `… must be owned by the user heel runs as`: create the file as the user that runs `heel serve`.
+- `… can't be read by the user heel runs as` or `… must be owned by the user heel runs as`: the file was made by another user (with `sudo`, say). Delete it and write it again as the user that runs `heel serve`.
 
 ### "heel couldn't read the mailbox's address." or "heel couldn't read the primary calendar."
 
-The Gmail API (or the Google Calendar API) isn't turned on in this project: see [step 3](#3-turn-on-the-gmail-api-and-the-calendar-api). Turn it on, wait a minute, and sign in again.
+- **The Gmail API (or the Google Calendar API) isn't turned on** in this project: see [step 3](#3-turn-on-the-gmail-api-and-the-calendar-api). Turn it on, wait a minute, and sign in again.
+- **For Calendar, you unticked the permission to see your list of calendars.** heel needs it to find your primary calendar. Sign in again and allow every permission.
 
 ### "Google didn't accept the sign-in."
 
@@ -198,7 +203,7 @@ Remove the app's access at [myaccount.google.com/permissions](https://myaccount.
 
 ### Google sent me back to heel's sign-in page
 
-The browser has no heel session at the redirect URI's address. Open heel at exactly your `public_url` address (`localhost`, not `127.0.0.1`), sign in with your passkey, and start again from Connections.
+The browser has no heel session at the redirect URI's address, usually because you opened heel at a different one (`127.0.0.1` when `public_url` says `localhost`). Sign in with your passkey and heel finishes the sign-in. Next time, open heel at exactly your `public_url` address.
 
 ## Outlook
 
