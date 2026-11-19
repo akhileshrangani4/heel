@@ -23,15 +23,29 @@ export type Tone = "ok" | "error" | "warn" | "info";
 /** `light`/`dark` force a theme; `auto` follows the operating system. */
 export type Theme = "auto" | "light" | "dark";
 
+/**
+ * Every page, and the section of the top menu it sits under. The menu shows
+ * five sections; a section with more than one page shows them as tabs under
+ * the header, so the top row stays short on a phone and on a desktop.
+ */
 export const NAV = [
-  { id: "approvals", href: "/approvals", label: "Approvals" },
-  { id: "activity", href: "/activity", label: "Activity" },
-  { id: "agents", href: "/agents", label: "Agents" },
-  { id: "standing", href: "/standing", label: "Standing approvals" },
-  { id: "pause", href: "/pause", label: "Pause" },
-  { id: "connections", href: "/connections", label: "Connections" },
-  { id: "grants", href: "/grants", label: "Grants" },
-  { id: "modes", href: "/modes", label: "Modes" },
+  { id: "approvals", href: "/approvals", label: "Approvals", section: "approvals" },
+  { id: "activity", href: "/activity", label: "Activity", section: "activity" },
+  { id: "agents", href: "/agents", label: "Agents", section: "agents" },
+  { id: "standing", href: "/standing", label: "Standing approvals", section: "agents" },
+  { id: "grants", href: "/grants", label: "Grants", section: "agents" },
+  { id: "connections", href: "/connections", label: "Connections", section: "connections" },
+  { id: "pause", href: "/pause", label: "Pause", section: "settings" },
+  { id: "modes", href: "/modes", label: "Modes", section: "settings" },
+] as const;
+
+/** The top menu: one entry per section, opening its first page. */
+export const SECTIONS = [
+  { id: "approvals", label: "Approvals" },
+  { id: "activity", label: "Activity" },
+  { id: "agents", label: "Agents" },
+  { id: "connections", label: "Connections" },
+  { id: "settings", label: "Settings" },
 ] as const;
 
 export type NavId = (typeof NAV)[number]["id"];
@@ -105,19 +119,33 @@ export function pauseBanner(pause: PauseNotice): Html {
 }
 
 function header(viewer: Viewer, current: NavId | undefined): Html {
-  const links = NAV.map(
-    (item) =>
-      html`<li>
-        <a href="${item.href}"${item.id === current ? trusted(' aria-current="page"') : ""}
-          >${item.label}</a
-        >
-      </li>`,
-  );
+  const section = NAV.find((item) => item.id === current)?.section;
+  const links = SECTIONS.map((entry) => {
+    const first = NAV.find((item) => item.section === entry.id);
+    const here = entry.id === section;
+    return html`<li>
+      <a href="${first?.href ?? "/"}"${here ? trusted(' aria-current="page"') : ""}>${entry.label}</a>
+    </li>`;
+  });
   return html`<header class="site">
     <a class="brand" href="/approvals">heel</a>
     <nav aria-label="Main"><ul>${links}</ul></nav>
     <span class="who">${viewer.name} · ${viewer.role}</span>
   </header>`;
+}
+
+/** The pages of the current section, as tabs, when it has more than one. */
+function sectionTabs(current: NavId | undefined): Html | "" {
+  const section = NAV.find((item) => item.id === current)?.section;
+  const pages = NAV.filter((item) => item.section === section);
+  if (pages.length < 2) return "";
+  return html`<nav class="subnav" aria-label="Section"><ul>
+    ${pages.map(
+      (item) => html`<li>
+        <a href="${item.href}"${item.id === current ? trusted(' aria-current="page"') : ""}>${item.label}</a>
+      </li>`,
+    )}
+  </ul></nav>`;
 }
 
 /** The document every human-plane page renders into. */
@@ -143,6 +171,7 @@ export function page(props: PageProps): Html {
     ${props.viewer ? header(props.viewer, props.current) : ""}
     ${pause ? pauseBanner(pause) : ""}
     <main id="main" tabindex="-1">
+      ${props.viewer ? sectionTabs(props.current) : ""}
       <p id="heel-ceremony-status" role="status" aria-live="polite"></p>
       ${props.body}
     </main>
