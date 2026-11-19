@@ -13,6 +13,7 @@ import {
 import { type CaseResult, type RulesCase, RulesCasesFile, runCase } from "../core/rules/cases.ts";
 import type { RuleSet } from "../core/rules/evaluate.ts";
 import { renderRulesJsonSchema } from "../core/rules/schema.ts";
+import { readCommand } from "../definitions/cli/index.ts";
 import {
   actionsFor,
   BUILT_IN_ACTIONS,
@@ -98,7 +99,9 @@ export async function rulesCommand(args: string[], io: CliIo): Promise<number> {
       }
       const cases = readCases(io, casesPath);
       if (cases === null) return EXIT.dataErr;
-      const results = cases.map((testCase) => runCase(loaded.set, testCase, defaultUser.user));
+      const results = cases.map((testCase) =>
+        runCase(loaded.set, testCase, defaultUser.user, readCommand),
+      );
       io.stdout.write(formatCaseResults(results));
       return results.every((result) => result.outcome === "pass") ? EXIT.ok : EXIT.failed;
     }
@@ -349,7 +352,9 @@ async function draftCommand(
     if (cases === null) return EXIT.dataErr;
     const owners = new Map(loaded.set.owners);
     owners.set(user, compiled.file);
-    const results = cases.map((testCase) => runCase({ ...loaded.set, owners }, testCase, user));
+    const results = cases.map((testCase) =>
+      runCase({ ...loaded.set, owners }, testCase, user, readCommand),
+    );
     io.stdout.write(`\nCases against the draft:\n${formatCaseResults(results)}`);
     passed = results.every((result) => result.outcome === "pass");
   }
