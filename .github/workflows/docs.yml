@@ -62,7 +62,9 @@ jobs:
       - name: Deploy to production
         run: |
           # The project skips production builds without this mark, so a push
-          # to main (Vercel's GitHub app) can't publish the site; previews still build.
+          # to main can't publish the site. Vercel's GitHub app deploys nothing
+          # at all (docs/site/vercel.json): its per-push previews used up the
+          # account's 100 deployments a day, and then this deploy failed too.
           url=$(npx --yes vercel@62.2.0 deploy --prod --yes --token "$VERCEL_TOKEN" \
             --build-env HEEL_RELEASE_DEPLOY=1)
           echo "Deployed $url"
