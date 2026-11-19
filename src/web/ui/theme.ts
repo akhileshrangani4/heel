@@ -249,7 +249,13 @@ body:has(.ap){background:var(--page)}
 .conn-add pre.args{margin-top:.75rem}
 .story{border-top:4px solid var(--border);margin-top:2rem;padding-top:1rem}
 .visually-hidden{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
-.signin{max-width:28rem;margin:3rem auto}
+.signin{max-width:26rem;margin:10vh auto 3rem;padding:2rem 1.75rem;background:var(--bg);border:1px solid var(--line);border-radius:16px;box-shadow:0 20px 50px -30px rgb(0 0 0 / .35)}
+.signin::before{content:"heel";display:block;font-weight:700;font-size:1.05rem;letter-spacing:-.01em;margin-bottom:1.25rem}
+.signin h1{font-size:1.35rem}
+.signin .actions{margin:1.25rem 0}
+.signin .actions .btn{width:100%;justify-content:center;text-align:center;min-height:2.85rem}
+.signin > p.muted{font-size:.88rem}
+@media (max-width:36rem){.signin{margin:1.5rem auto;padding:1.5rem 1.25rem;border-radius:14px}}
 [role="status"]:empty{display:none}
 #heel-ceremony-status:not(:empty){position:fixed;left:1rem;right:1rem;bottom:1rem;max-width:56rem;margin:0 auto;z-index:20;padding:.75rem 1rem;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 30px -12px rgb(0 0 0 / .35);overflow-wrap:anywhere}
 body:has(#heel-ceremony-status:not(:empty)) main{padding-bottom:10rem}
