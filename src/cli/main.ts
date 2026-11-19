@@ -1167,6 +1167,9 @@ async function dispatch(argv: string[], io: CliIo): Promise<number> {
       return pauseCommand(rest, io);
     case "approvals":
       return approvalsCommand(rest, io);
+    case "resume":
+    case "unpause":
+      return resumeHint(io);
     case "rules":
       return rulesCommand(rest, io);
     case "audit":
@@ -1203,6 +1206,25 @@ async function dispatch(argv: string[], io: CliIo): Promise<number> {
         command === undefined ? "missing command" : `unknown command "${command}"`,
       );
   }
+}
+
+/**
+ * Resuming needs a passkey, so the CLI can't do it: an agent that can run
+ * `heel` on the host could otherwise lift a pause meant to stop it. Say where
+ * to go instead of "unknown command".
+ */
+function resumeHint(io: CliIo): number {
+  let where = "the Pause page";
+  try {
+    where = new URL("pause", configFrom(io, undefined).publicUrl.href.replace(/\/?$/, "/")).href;
+  } catch {
+    // No readable heel.yaml here: name the page without its address.
+  }
+  io.stderr.write(
+    `heel: resuming needs your passkey, so it happens on the approval page: ${where}\n` +
+      "List what is paused with: heel pause list\n",
+  );
+  return EXIT.usage;
 }
 
 /** The `heel` command. Returns the process exit code. */

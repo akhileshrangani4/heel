@@ -54,7 +54,7 @@ claude mcp add --transport http heel "http://127.0.0.1:7300/mcp?tools=direct" \
 }
 ```
 
-The agent now has one MCP server with every connected account's tools, named by alias (`gmail-work__send`, `github__merge`). Or give it one account at a time at `/mcp/<alias>`.
+The agent now has one MCP server with every connected account's tools, named by alias (`gmail-work__send`, `github__merge`). Or give it one account at a time at `/mcp/<alias>`. HTTP accounts and CLIs aren't MCP tools: the agent reaches them at `/http/<alias>` and with `heel run`, below.
 
 - **On Linux,** `/mcp` without `?tools=direct` is code mode: one `run_code` tool, where the agent writes a short Python script against typed modules (`gmail_work.search(...)`).
 - **Claude, ChatGPT or Grok connectors** sign in with OAuth. Set `agent_public_url` ([Running](running.md#configuration)) and add heel as a custom connector.

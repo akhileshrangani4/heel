@@ -88,6 +88,14 @@ describe("agentMcpUrl", () => {
 });
 
 describe("heel CLI", () => {
+  it("points heel resume at the Pause page, since resuming needs a passkey", async () => {
+    const result = await run(["resume"], { HEEL_HOME: heelHome() });
+    expect(result.code).toBe(EXIT.usage);
+    expect(result.stderr).toContain("resuming needs your passkey");
+    expect(result.stderr).toMatch(/http:\/\/localhost:\d+\/pause/);
+    expect(result.stderr).toContain("heel pause list");
+  });
+
   it("exits 64 with usage on an unknown command or flag", async () => {
     const unknownCommand = await run(["frobnicate"], {});
     expect(unknownCommand.code).toBe(EXIT.usage);
