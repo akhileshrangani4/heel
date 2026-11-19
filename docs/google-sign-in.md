@@ -8,7 +8,7 @@ Why your own client: heel is self-hosted, so there is no shared heel app at Goog
 
 **You'll need:**
 
-- heel installed and running (the [quick start](../README.md#quick-start)), with a passkey enrolled.
+- heel installed and running (the [quick start](quickstart.md)), with a passkey enrolled.
 - The Google account you'll connect. A personal Gmail account works.
 - The address you open heel's approval page at. That's `http://localhost:7301` unless you set `public_url` in `heel.yaml`.
 

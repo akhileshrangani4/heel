@@ -51,6 +51,7 @@ const GROUPS = [
       ["sandbox", "sandbox.md"],
       ["rules-reference", "rules-reference.md"],
       ["definitions", "definitions.md"],
+      ["hints", "hints.md"],
     ],
   ],
 ];

@@ -1,78 +1,60 @@
-# Approvals, grants and pause
+# Approvals
 
 [README](../README.md) · [Quickstart](quickstart.md) · [Connect accounts](connect.md) · [Connect your agent](agents.md) · [Rules](rules.md) · [Approvals](approvals.md) · [Running](running.md)
 
-When a rule says `ask`:
+When a rule says `ask`, the call waits for you. You see exactly what it will do, in plain words, and decide with your passkey. Nothing runs until you approve.
 
-1. **The agent gets an answer right away:** "pending approval" with an id (an MCP result, HTTP `202`, or a CLI exit code). Retrying the same call joins the same request.
-2. **The approver is notified** on their phone, Slack or email. The message only links to heel; replying approves nothing, so an agent with access to the same inbox can't approve.
-3. **They decide on heel's page** with a passkey, after seeing the tool, the account, the rule and the full arguments.
-4. **The call runs once,** when the agent re-sends it, after the rules are checked again. A late approval never runs a call the agent gave up on. Unapproved requests expire.
+## What you see
 
-**The agent can say why.** Every tool heel lists over MCP takes an optional `heel_reason`: one plain sentence from the agent. If the call needs approval, the page shows it under heel's own summary of what the call does, marked as the agent's words. heel removes it before anything else sees the call, so it never changes the arguments, which rule matches, or whether two calls are the same. The reason from the first call is kept, so a re-send with new wording joins the same request without changing what you're reading. In code mode, `run_code` takes one `heel_reason` for the whole script, and every call in it that needs approval shows that reason. Through the HTTP proxy the agent sends it as a `Heel-Reason` header, which heel never passes on to the API, and with `heel run` as `--reason "..."`. The page also names the app the agent connected with, such as Claude Code, as that app named itself when it connected; heel shows it and never decides on it. That name is only shown for MCP and code-mode calls. A request through the HTTP proxy says "via the HTTP proxy", and a `heel run` command says "via heel run", even when the same agent token also connects over MCP.
+Waiting requests are listed on the **Approvals** page, newest first, and you get a notification if you've turned them on. Each one leads with a sentence saying what the agent wants to do:
 
-An approval can become a **grant**, placed just above the rule that asked:
+![Two requests waiting: a pull request merge and an email](images/approvals.png)
 
-| Grant | Covers | Lasts |
-| --- | --- | --- |
-| This exact call | The same account, tool and arguments | Up to 30 days |
-| Everything this rule asks about | The rule's whole match, for this agent | Up to 30 days |
+Open one to see everything that will run: for an email, every recipient, the subject and the whole body. Recipients outside your domains are marked. The agent's own reason, if it gave one, is shown as its words, not heel's:
 
-Editing the rule ends its grants, so widening a rule asks again.
+![An email waiting for approval: To bob@vendor.com, subject Q3 invoice](images/approval-email.png)
 
-**Pause** stops one agent, one account or service, or everything, from `heel pause` or one tap on the approval page. Every call in scope returns "paused", even one already approved. Resuming needs a passkey, and nothing called during the pause is replayed.
+## Decide
+
+- **Approve once:** this exact call runs the next time the agent sends it, once.
+- **Approve for longer:** also allow this exact call, or everything the rule asks about, for this agent, for an hour up to 30 days. You aren't asked again while it lasts. Editing the rule ends it.
+- **Deny:** the agent gets "denied" when it sends the call again.
+
+Every decision asks for your passkey. The agent is told the call is waiting, checks back with `heel_status`, and sends it again once you've approved. A request nobody answers expires after 24 hours.
+
+Approvals for longer are listed under **Agents → Standing approvals**, where you can revoke any of them.
+
+**Grants** work the same way, ahead of time: on **Agents → Grants** you sign, with your passkey, a narrow allow for one agent and one task (say, label mail from one sender for the next hour). A grant only applies where nothing else matched or your rules would ask, never past a `deny`.
+
+## Approve from your phone
+
+Your phone has to reach heel's approval page over HTTPS, and heel has to know that address before you create your passkey, because a passkey is tied to the address it was made on. Only the approval page (port 7301) needs to be reachable; keep the agent port (7300) private.
+
+1. **Give the approval page an HTTPS address.**
+   - **Tailscale** (private to your devices): `tailscale serve --bg 7301` gives it `https://<machine>.<tailnet>.ts.net`.
+   - **Cloudflare Tunnel:** `cloudflared tunnel --url http://127.0.0.1:7301` for a quick try, or a named tunnel on your own domain.
+   - **A server** behind Caddy or nginx with TLS.
+2. **Tell heel the address** in `heel.yaml`, then restart heel:
+   ```yaml
+   public_url: https://heel.example.com
+   ```
+3. **Create your passkey on your phone.** `heel user enroll owner` now prints a link at that address. Open it on your phone.
+4. **Turn on notifications.** Add the page to your home screen (an iPhone only notifies for pages added this way), then select **Turn on notifications** on the Approvals page. Email and Slack can notify too: see `notify` in [Configuration](configuration.md).
+
+If you change `public_url` later, create your passkey again.
+
+## Stop everything
+
+Open **Settings → Pause** and pause what you need, or run `heel pause --agent my-agent` (or `--account`, or `--all`). Every call in scope stops at once, even one you already approved. Resuming needs your passkey, and nothing called during the pause is replayed.
+
+![The Pause page](images/pause.png)
 
 ## Rule changes
 
-An agent can also propose rules for your file with `heel_propose_rules`. They wait under **Rule changes** on the Approvals page, and nothing changes until you add them with your passkey. See [Your agent can propose rules](rules.md#your-agent-can-propose-rules).
+An agent can also propose rules for your file. They wait under **Rule changes** on the Approvals page, and nothing changes until you add them with your passkey. See [Your agent can propose rules](rules.md#your-agent-can-propose-rules).
+
+![A proposed rule: vendor-mail, with the agent's why and where it goes](images/proposal.png)
 
 ## Hints
 
-Hints are optional and off by default. heel works fully without them: every allow, deny and ask comes from your rules, grants and you, and nothing contacts TypeSafe unless you turn hints on.
-
-An approval adapter can add hints to a pending request, to help the approver notice what matters, like "asks someone for money" or "unlike this agent's recent calls". It can't approve or deny anything. Hints run after the request is already pending, they're stored next to it, and they only appear on the approval page, under the call, labeled with the adapter that gave them. The approver still reads the full arguments and decides.
-
-The built-in approval adapter is **Jev**, [TypeSafe](https://typesafe.ai)'s fast decision model. For each pending request, heel asks Jev a few yes-or-no questions:
-
-| Question | Hint when Jev is sure (above 0.7) |
-| --- | --- |
-| Do the arguments contain a password, API key, token or private key? | **check:** Contains what looks like a password, key or token. |
-| Do they contain a card, government ID or bank account number? | **check:** Contains a card, ID or bank account number. |
-| Do they ask someone for money, a payment or account access? | **check:** Asks someone for money, a payment or account access. |
-| Is this the same kind of action as the agent's recent calls? | **note:** Unlike this agent's recent calls (below 0.3). |
-
-Code turns the answers into hints:
-- **Sure of a risk:** a warning.
-- **Unsure of a risk (between 0.3 and 0.7):** nothing, since no hint is better than a guess.
-- **Every risk clearly absent and the call like recent work:** "Looks routine for this agent".
-- **The agent's first call:** heel says so itself, without asking Jev.
-- **Jev fails, times out or answers something unexpected:** the page says hints are unavailable. It never shows a guess.
-- **Jev hasn't answered yet** (it takes a second or two): the page says hints are on the way.
-
-### Set up hints
-
-1. **Get a TypeSafe API key.** Sign in to the [TypeSafe console](https://console.typesafe.ai) and create an API key. Each pending request costs one TypeSafe request (see TypeSafe's pricing). Allowed and denied calls cost nothing.
-2. **Give heel the key**, one of two ways:
-   - **A key file** at `$HEEL_HOME/typesafe-api-key`. This keeps the key out of your shell history: run the command, paste the key, press Enter, then Ctrl-D.
-     ```sh
-     (umask 077 && cat > "$HEEL_HOME/typesafe-api-key")
-     ```
-     The file must be readable only by you (mode `600`). heel refuses to start if anyone else can read it. To keep it somewhere else, set `api_key_file` (relative paths are under `$HEEL_HOME`).
-   - **The environment variable `HEEL_TYPESAFE_API_KEY`.** It takes precedence over the file. With Docker, pass `-e HEEL_TYPESAFE_API_KEY`, or mount the key file read-only and point `api_key_file` at it.
-3. **Turn the adapter on** in `$HEEL_HOME/heel.yaml`, then restart `heel serve`:
-   ```yaml
-   adapters:
-     approval:
-       - jev: { model: jev-latest }
-   ```
-   If the key is missing, heel won't start, and it says which variable or file to set.
-4. **Check it.** The next request that waits for you shows a **Hints** card under the call. For a second or two it says hints are on the way, then it shows Jev's hints, or "nothing to point out". If it says hints are unavailable, heel's log has the reason (`approval hints unavailable`). A `401`, for example, means the key is wrong.
-
-To turn hints off, remove the `adapters` block and restart. Requests stay exactly as they were. Hints never change a decision.
-
-**What leaves heel:** only for a call that's waiting for a person, heel sends TypeSafe one request with:
-- the agent's name, and the account, provider, tool and action of the call;
-- the call's arguments, as the agent sent them, such as an email's recipients and body. That includes anything sensitive the agent put there, which is what the first two questions look for. Arguments past 24,000 characters are cut, and the page then says only the first part was checked;
-- the account, tool, action and outcome (allowed, denied, asked) of the agent's last 15 calls, but not their arguments.
-
-heel's own credentials and the connected accounts' credentials are never sent. A request that's already decided or expired when hints run isn't sent at all.
+Optional advice under a waiting request, such as "asks someone for money". Hints never decide anything. See [Hints](hints.md).

@@ -76,7 +76,7 @@ public_url: https://heel-box.your-tailnet.ts.net              # the approval pag
 agent_public_url: https://heel-box.your-tailnet.ts.net:8443   # where agents connect
 ```
 
-`public_url` must be set before you enroll a passkey, since a passkey is tied to the address. A Cloudflare tunnel or a reverse proxy with TLS works the same way; [Approve from your phone](../README.md#approve-from-your-phone) has the options.
+`public_url` must be set before you enroll a passkey, since a passkey is tied to the address. A Cloudflare tunnel or a reverse proxy with TLS works the same way; [Approve from your phone](approvals.md#approve-from-your-phone) has the options.
 
 **3. Enroll and connect accounts on the server.** `heel user enroll <you>` and `heel connect …` run on the server, over its admin socket. Open the enrollment link on your phone and allow notifications.
 

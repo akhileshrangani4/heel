@@ -11,7 +11,7 @@ agent ──── HTTP ─┼──▶ heel ───────┼─▶ any 
                        └─ pending: a person approves on their phone
 ```
 
-heel is one process with two HTTP planes: the agent plane (port 7300), where agents call MCP, the HTTP proxy and `heel run`, and the human plane (port 7301), where people sign in and approve. Operators use the `heel` CLI over a local admin socket. Each connected account (`gmail-work`, `gmail-personal`, `github`) gets its own alias, and each agent its own heel token. To set one up, see the [quick start](../README.md#quick-start).
+heel is one process with two HTTP planes: the agent plane (port 7300), where agents call MCP, the HTTP proxy and `heel run`, and the human plane (port 7301), where people sign in and approve. Operators use the `heel` CLI over a local admin socket. Each connected account (`gmail-work`, `gmail-personal`, `github`) gets its own alias, and each agent its own heel token. To set one up, see the [quick start](quickstart.md).
 
 ## Every way an agent reaches a system
 
