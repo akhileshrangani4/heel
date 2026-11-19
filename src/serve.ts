@@ -454,6 +454,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         approvals: new SqliteApprovalStore(),
         pauses: new SqlitePauseStore(),
         rules,
+        ruleFiles: { paths: rules.paths, reload: () => logRulesOutcome(log, rules.reload()) },
         vapidPublicKey: notify.vapidPublicKey,
         agentPublicUrl: config.agentPublicUrl,
         upstreamOAuth: vault === null ? null : { signIns: upstreamSignIns, vault },

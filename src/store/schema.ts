@@ -465,6 +465,7 @@ export const CHALLENGE_PURPOSES = [
   "mode",
   "grant",
   "add_device",
+  "rules",
 ] as const;
 export type ChallengePurpose = (typeof CHALLENGE_PURPOSES)[number];
 
@@ -873,3 +874,54 @@ export const foldPreferences = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.userId, t.kind, t.section] })],
 );
+
+export const RULE_PROPOSAL_STATUSES = [
+  "pending",
+  "applied",
+  "rejected",
+  "superseded",
+  "expired",
+] as const;
+export type RuleProposalStatus = (typeof RULE_PROPOSAL_STATUSES)[number];
+
+/**
+ * Rules an agent proposed for its owner's file (roadmap 2.1). An agent can
+ * only add rules, and only to its owner's file; the owner applies them with a
+ * passkey. Rows are never edited after they're decided, so they are also the
+ * history of who proposed which rules and who applied them (2.4).
+ */
+export const ruleProposals = sqliteTable(
+  "rule_proposals",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    /** Whose rules file the rules would go into: always the proposing agent's owner. */
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => users.id),
+    agentId: text("agent_id")
+      .notNull()
+      .references(() => agents.id),
+    /** The proposed rules, as validated objects; heel writes the YAML, never the agent. */
+    rules: text("rules", { mode: "json" }).$type<ProposedRule[]>().notNull(),
+    /** The agent's own words on why, shown as its claim. */
+    reason: text("reason"),
+    status: text("status", { enum: RULE_PROPOSAL_STATUSES }).notNull(),
+    createdAt: createdAt(),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    decidedBy: text("decided_by").references(() => users.id),
+    decidedAt: integer("decided_at", { mode: "timestamp_ms" }),
+  },
+  (t) => [
+    index("rule_proposals_owner_status").on(t.ownerId, t.status),
+    check("rule_proposals_status", sql`"status" IN (${sqlList(RULE_PROPOSAL_STATUSES)})`),
+  ],
+);
+
+/** One rule an agent proposed, with its one-line why (roadmap 2.2). */
+export interface ProposedRule {
+  rule: Record<string, unknown>;
+  why: string | null;
+}

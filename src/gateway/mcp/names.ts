@@ -27,6 +27,54 @@ export const HEEL_STATUS_TOOL: Tool = {
   },
 };
 
+export const HEEL_PROPOSE_RULES = "heel_propose_rules";
+
+/**
+ * Proposing rules for the agent's owner (roadmap 2.1). heel's own, like
+ * `heel_status`: an account tool by this name is never listed.
+ */
+export const HEEL_PROPOSE_RULES_TOOL: Tool = {
+  name: HEEL_PROPOSE_RULES,
+  description:
+    "Propose rules for your owner's heel rules file, for when a call you need is denied or asks every time. " +
+    "Nothing changes until your owner reads them on heel's approval page and adds them with a passkey. " +
+    "They go first in the file, so they decide the calls they match. Give each rule a short why. " +
+    "A newer proposal replaces your earlier one that is still waiting. Rules reference: https://useheel.dev/docs/rules-reference",
+  inputSchema: {
+    type: "object",
+    properties: {
+      rules: {
+        type: "array",
+        minItems: 1,
+        maxItems: 20,
+        items: {
+          type: "object",
+          properties: {
+            rule: {
+              type: "object",
+              description:
+                "One rule as a heel rules file writes it: name (optional), match, then (allow, ask or deny). " +
+                'For example {"name": "read-repos", "match": {"action": "github.read"}, "then": "allow"}.',
+            },
+            why: {
+              type: "string",
+              description: "One plain sentence your owner reads: why you need this rule.",
+            },
+          },
+          required: ["rule"],
+          additionalProperties: false,
+        },
+      },
+      reason: {
+        type: "string",
+        description: "Optional. What you're working on that needs these rules.",
+      },
+    },
+    required: ["rules"],
+    additionalProperties: false,
+  },
+};
+
 export const RUN_CODE = "run_code";
 export const HEEL_STUBS = "heel_stubs";
 

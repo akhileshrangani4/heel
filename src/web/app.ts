@@ -10,6 +10,7 @@ import { modeRoutes } from "./routes/modes.ts";
 import { oauthRoutes } from "./routes/oauth.ts";
 import { oidcRoutes } from "./routes/oidc.ts";
 import { pauseRoutes } from "./routes/pause.ts";
+import { proposalRoutes } from "./routes/proposals.ts";
 import { pushRoutes } from "./routes/push.ts";
 import { signInRoutes } from "./routes/sign-in.ts";
 import { standingRoutes } from "./routes/standing.ts";
@@ -51,6 +52,7 @@ export function createHumanApp(deps: HumanPlaneDeps): Hono {
   app.route("/", enrollRoutes(deps));
   app.route("/", deviceRoutes(deps));
   app.route("/", approvalRoutes(deps));
+  app.route("/", proposalRoutes(deps));
   app.route("/", pauseRoutes(deps));
   app.route("/", standingRoutes(deps));
   app.route("/", pushRoutes(deps));

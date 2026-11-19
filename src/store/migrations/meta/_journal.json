@@ -162,6 +162,13 @@
       "when": 1795112261871,
       "tag": "0022_agent_token_expiry",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1795121766198,
+      "tag": "0023_rule_proposals",
+      "breakpoints": true
     }
   ]
 }

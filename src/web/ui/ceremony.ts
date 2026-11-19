@@ -28,7 +28,8 @@ export type CeremonyIntent =
   | "connect"
   | "mode"
   | "grant"
-  | "add-device";
+  | "add-device"
+  | "apply-rules";
 
 export interface CeremonyButtonProps {
   callback: CeremonyCallback;

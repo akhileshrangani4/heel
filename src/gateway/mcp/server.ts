@@ -12,9 +12,11 @@ import { type CallRecord, runScript, type ScriptStatus } from "../../codemode/ru
 import { accountModule } from "../../codemode/stubs.ts";
 import type { CodeWorker } from "../../codemode/worker.ts";
 import type { Logger } from "../../log.ts";
+import { ProposeRulesInput, proposeRules } from "../../proposals/rules.ts";
 import { approvalStatusForAgent } from "../../store/approvals.ts";
 import type { HeelDb } from "../../store/db.ts";
 import { type AccountRecord, findAccount } from "../../store/directory.ts";
+import { SqlitePauseStore } from "../../store/pauses.ts";
 import { agentTokens } from "../../store/schema.ts";
 import { accountsUsableBy } from "../../store/sharing.ts";
 import { errorShape } from "../../util/error-shape.ts";
@@ -22,11 +24,13 @@ import { isMcpProvider } from "../../vault/connect.ts";
 import type { AuthenticatedAgent } from "../agent-tokens.ts";
 import { TOKEN_WARNING_DAYS } from "../agents.ts";
 import type { Pipeline } from "../pipeline/pipeline.ts";
-import type { Definition, DefinitionRegistry } from "../pipeline/ports.ts";
+import type { Definition, DefinitionRegistry, PauseStore } from "../pipeline/ports.ts";
 import { type SandboxSlots, UNLIMITED_SLOT } from "../sandbox-slots.ts";
 import { clientNameFrom } from "./client-info.ts";
 import {
   directName,
+  HEEL_PROPOSE_RULES,
+  HEEL_PROPOSE_RULES_TOOL,
   HEEL_STATUS,
   HEEL_STATUS_TOOL,
   HEEL_STUBS,
@@ -71,7 +75,14 @@ export interface McpSurfaceDeps {
   codeWorker?: () => CodeWorker;
   /** How many scripts may run at once, shared with `heel run`; unlimited when absent. */
   slots?: SandboxSlots;
+  /** Pauses that stop an agent's proposals too; heel's own store when absent. */
+  pauses?: PauseStore;
+  /** Called after an agent proposes rules, to tell its owner. */
+  onRuleProposal?: (proposalId: string) => void;
 }
+
+/** heel's own tools, listed on every MCP scope. */
+const HEEL_TOOLS = [HEEL_STATUS_TOOL, HEEL_PROPOSE_RULES_TOOL];
 
 export interface McpSurface {
   /** Whether bare `/mcp` serves code mode: only with a sandboxed worker. */
@@ -87,6 +98,7 @@ export const RUN_ID_META_KEY = "heel/runId";
 type ListingAccount = { account: AccountRecord; tools: NonNullable<Definition["tools"]> };
 
 export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
+  const pauses = deps.pauses ?? new SqlitePauseStore();
   const now = deps.now ?? (() => new Date());
 
   /** Of the accounts an agent may use, those whose definition lists tools. */
@@ -104,17 +116,17 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
   ): Promise<Tool[]> {
     const listed = await tools(AbortSignal.timeout(10_000));
     return listed
-      .filter((tool) => tool.name !== HEEL_STATUS)
+      .filter((tool) => tool.name !== HEEL_STATUS && tool.name !== HEEL_PROPOSE_RULES)
       .map((tool) => listedTool(tool, rename(tool.name)));
   }
 
   async function listTools(agent: AuthenticatedAgent, scope: McpScope): Promise<Tool[]> {
-    if (scope.kind === "code") return [RUN_CODE_TOOL, HEEL_STUBS_TOOL, HEEL_STATUS_TOOL];
+    if (scope.kind === "code") return [RUN_CODE_TOOL, HEEL_STUBS_TOOL, ...HEEL_TOOLS];
     const accounts = accountsWithTools(agent);
     if (scope.kind === "account") {
       const listing = accounts.find(({ account }) => account.alias === scope.alias);
       const tools = listing === undefined ? [] : await accountTools(listing, (name) => name);
-      return [...tools, HEEL_STATUS_TOOL];
+      return [...tools, ...HEEL_TOOLS];
     }
     const perAccount = await Promise.all(
       accounts.map(async (listing) => {
@@ -131,7 +143,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
         }
       }),
     );
-    return [...perAccount.flat(), HEEL_STATUS_TOOL];
+    return [...perAccount.flat(), ...HEEL_TOOLS];
   }
 
   /** Every account the agent may use, as a Python module (spec: Code mode). */
@@ -234,6 +246,51 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     };
   }
 
+  /** Stores a rule proposal for the agent's owner; the target file is never the agent's choice. */
+  function proposeRulesTool(
+    agent: AuthenticatedAgent,
+    args: Record<string, unknown>,
+  ): CallToolResult {
+    const refuse = (body: Record<string, unknown>): CallToolResult => ({
+      isError: true,
+      content: [{ type: "text", text: JSON.stringify(body) }],
+      structuredContent: body,
+    });
+    const paused = pauses.find(deps.db, {
+      orgId: agent.orgId,
+      agentId: agent.agentId,
+      ownerId: agent.ownerId,
+      account: "",
+      provider: "",
+    });
+    if (paused !== null) return refuse({ status: "paused", scope: paused });
+    const input = ProposeRulesInput.safeParse(args);
+    if (!input.success) {
+      return refuse({
+        status: "invalid",
+        problems: input.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`),
+      });
+    }
+    const outcome = proposeRules(
+      deps.db,
+      { orgId: agent.orgId, ownerId: agent.ownerId, agentId: agent.agentId },
+      input.data,
+      now(),
+    );
+    if (!outcome.ok) return refuse({ status: "invalid", problems: outcome.problems });
+    deps.log.info({ agent: agent.agentName, proposal: outcome.proposalId }, "rules proposed");
+    deps.onRuleProposal?.(outcome.proposalId);
+    const answer = {
+      status: "proposed",
+      proposalId: outcome.proposalId,
+      expiresAt: outcome.expiresAt.toISOString(),
+      message:
+        "Your owner will see these rules on heel's approval page and can add them with a passkey. " +
+        "Nothing changes until then; calls they would allow are still decided by the current rules.",
+    };
+    return { content: [{ type: "text", text: JSON.stringify(answer) }], structuredContent: answer };
+  }
+
   function heelStatus(agent: AuthenticatedAgent, args: Record<string, unknown>): CallToolResult {
     const approvalId = typeof args["approval_id"] === "string" ? args["approval_id"] : "";
     const status = approvalStatusForAgent(deps.db, agent, approvalId, now());
@@ -257,6 +314,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
   ): Promise<CallToolResult> {
     const args = params.arguments ?? {};
     if (params.name === HEEL_STATUS) return heelStatus(agent, args);
+    if (params.name === HEEL_PROPOSE_RULES) return proposeRulesTool(agent, args);
     if (scope.kind === "code") {
       if (params.name === RUN_CODE)
         return runCode(agent, args, params._meta?.[RUN_ID_META_KEY], signal);

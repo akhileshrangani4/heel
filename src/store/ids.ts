@@ -16,6 +16,7 @@ export const ID_PREFIXES = {
   grant: "grt",
   share: "shr",
   approver: "apv",
+  ruleProposal: "rpr",
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;

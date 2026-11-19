@@ -16,11 +16,16 @@ const SEARCH_ALLOWED = `rules:
 `;
 
 describe("code mode over MCP", () => {
-  it("lists run_code, heel_stubs and heel_status, and nothing else", async () => {
+  it("lists run_code, heel_stubs and heel's own tools, and nothing else", async () => {
     const h = await mcpHarness({ owner: SEARCH_ALLOWED, codeWorker: () => new MontyWorker() });
     const client = await h.connect("/mcp");
     const { tools } = await client.listTools();
-    expect(tools.map((t) => t.name)).toEqual(["run_code", "heel_stubs", "heel_status"]);
+    expect(tools.map((t) => t.name)).toEqual([
+      "run_code",
+      "heel_stubs",
+      "heel_status",
+      "heel_propose_rules",
+    ]);
   });
 
   it("serves each account as a module, with its tools' stubs", async () => {

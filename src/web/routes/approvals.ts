@@ -31,6 +31,7 @@ import { html } from "../ui/html.ts";
 import { type PendingRow, pendingList } from "../ui/pending-list.ts";
 import { pushControl } from "../ui/push-control.ts";
 import { emailPreviewFrom, headline, httpPreviewFrom, mergePreviewFrom } from "../ui/summary.ts";
+import { proposalCardsFor } from "./proposals.ts";
 
 /**
  * The approval page (spec: The approval page). A person sees every request
@@ -188,12 +189,14 @@ export function approvalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     const session = c.get("session");
     const now = deps.now();
     const rows = listApprovalsFor(deps.db, session, now).map((r) => pendingRow(deps, r));
+    const changes = proposalCardsFor(deps, session, now);
     return renderPage(c, {
       title: "Approvals",
       viewer: viewerOf(session),
       current: "approvals",
       body: html`${recoveriesFor(session, now)}
-      ${pendingList({ now, load: { ok: true, rows } })}
+      ${pendingList({ now, load: { ok: true, rows }, ruleChangesWaiting: changes.count })}
+      ${changes.cards}
       ${pushControl({
         vapidPublicKey: deps.vapidPublicKey,
         devices: {

@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { FetchLike } from "@modelcontextprotocol/client";
 import type { Hono } from "hono";
+import { rulesPaths } from "../../src/config/rules.ts";
 import type { GoogleClient } from "../../src/definitions/google/oauth.ts";
 import { UpstreamSignIns } from "../../src/definitions/mcp/upstream-oauth.ts";
 import type { MicrosoftClient } from "../../src/definitions/microsoft/oauth.ts";
@@ -84,6 +85,8 @@ export function humanPlaneHarness(
     providerClients?: { google?: GoogleClient; microsoft?: MicrosoftClient };
     /** Turns on team sign-in (D13b). */
     oidc?: { client: () => Promise<OidcClient>; name: string };
+    /** Turns on adding proposed rules (roadmap 2.1), to the owner files under this home. */
+    rulesHome?: string;
   } = {},
 ): HumanPlaneHarness {
   const h = approvalHarness(options);
@@ -112,6 +115,9 @@ export function humanPlaneHarness(
     },
     watchFallback: false,
     ...(options.oidc === undefined ? {} : { oidc: options.oidc }),
+    ...(options.rulesHome === undefined
+      ? {}
+      : { ruleFiles: { paths: rulesPaths(options.rulesHome), reload: () => {} } }),
     now: () => h.clock.now,
   });
 
