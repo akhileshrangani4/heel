@@ -245,9 +245,6 @@ export default function RoadmapPage() {
             </li>
           ))}
         </ol>
-        <p className="mt-3 font-mono text-xs text-neutral-400">
-          phases 1 and 2 run in parallel; both gates pass before launch
-        </p>
       </section>
 
       {PHASES.map((phase, i) => (
