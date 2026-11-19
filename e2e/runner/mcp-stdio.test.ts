@@ -4,8 +4,10 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, onTestFinished } from "vitest";
 import { mcpPassthrough } from "../../src/definitions/mcp/passthrough.ts";
+import { MAX_MESSAGE_BYTES } from "../../src/definitions/mcp/sandbox-transport.ts";
 import { type StdioUpstream, stdioSandboxSpec } from "../../src/definitions/mcp/settings.ts";
 import { UpstreamPool } from "../../src/definitions/mcp/upstream.ts";
+import { UpstreamError } from "../../src/gateway/pipeline/ports.ts";
 import { createLogger } from "../../src/log.ts";
 import { probeSandbox, startSandboxed } from "../../src/runner/index.ts";
 import type { AccountRecord } from "../../src/store/directory.ts";
@@ -63,6 +65,7 @@ describe.skipIf(!probe.ok)("a local MCP server in the sandbox", () => {
     expect((await pool.listTools(account, signal)).map((tool) => tool.name)).toEqual([
       "echo",
       "token",
+      "big",
     ]);
     const echoed = await pool.callTool(account, "echo", { text: "from the sandbox" }, signal);
     expect(echoed).toMatchObject({ content: [{ text: "from the sandbox" }] });
@@ -84,5 +87,12 @@ describe.skipIf(!probe.ok)("a local MCP server in the sandbox", () => {
     );
     expect(JSON.stringify(result)).not.toContain(TOKEN);
     expect(JSON.stringify(result)).toContain("[redacted by heel]");
+
+    // A response larger than heel reads fails that call only; the server restarts for the next.
+    await expect(
+      pool.callTool(account, "big", { bytes: MAX_MESSAGE_BYTES + 1024 }, signal),
+    ).rejects.toBeInstanceOf(UpstreamError);
+    const after = await pool.callTool(account, "echo", { text: "after" }, signal);
+    expect(after).toMatchObject({ content: [{ text: "after" }] });
   });
 });

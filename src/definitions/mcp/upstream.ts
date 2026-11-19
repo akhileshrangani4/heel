@@ -5,11 +5,16 @@ import {
   type Tool,
   type Transport,
 } from "@modelcontextprotocol/client";
+import { UpstreamError } from "../../gateway/pipeline/ports.ts";
 import type { Logger } from "../../log.ts";
 import type { AccountRecord } from "../../store/directory.ts";
 import type { Secret } from "../../vault/secret.ts";
 import { type Vault, VaultError } from "../../vault/vault.ts";
-import { SandboxStdioTransport, type StdioProcess } from "./sandbox-transport.ts";
+import {
+  MessageTooLargeError,
+  SandboxStdioTransport,
+  type StdioProcess,
+} from "./sandbox-transport.ts";
 import { type StdioUpstream, type UpstreamSettings, upstreamSettings } from "./settings.ts";
 import { type UpstreamOAuthDeps, UpstreamOAuthProvider } from "./upstream-oauth.ts";
 
@@ -47,9 +52,14 @@ export interface UpstreamDeps {
   ) => Promise<StdioProcess>;
 }
 
+interface Connection {
+  client: Client;
+  transport: Transport;
+}
+
 export class UpstreamPool {
   readonly #deps: UpstreamDeps;
-  readonly #clients = new Map<string, Promise<Client>>();
+  readonly #clients = new Map<string, Promise<Connection>>();
 
   constructor(deps: UpstreamDeps) {
     this.#deps = deps;
@@ -100,38 +110,70 @@ export class UpstreamPool {
   }
 
   async close(): Promise<void> {
-    const clients = [...this.#clients.values()];
+    const connections = [...this.#clients.values()];
     this.#clients.clear();
-    await Promise.allSettled(clients.map(async (client) => (await client).close()));
+    await Promise.allSettled(connections.map(async (pending) => (await pending).client.close()));
   }
 
-  /** Runs `work` on the account's client; any failure drops the client so the next use reconnects. */
+  /**
+   * Runs `work` on the account's client. Any failure, or the connection
+   * closing on its own, drops the client so the next use reconnects.
+   */
   async #use<T>(account: AccountRecord, work: (client: Client) => Promise<T>): Promise<T> {
     let pending = this.#clients.get(account.id);
     if (pending === undefined) {
-      pending = this.#connect(account);
+      const created = this.#connect(account, () => {
+        if (this.#clients.get(account.id) === created) this.#clients.delete(account.id);
+      });
+      pending = created;
       this.#clients.set(account.id, pending);
     }
     try {
-      return await work(await pending);
+      return await work((await pending).client);
     } catch (error) {
       if (this.#clients.get(account.id) === pending) this.#clients.delete(account.id);
-      void pending.then((client) => client.close()).catch(() => {});
-      throw error;
+      void pending.then(({ client }) => client.close()).catch(() => {});
+      throw (await this.#withheld(account, pending)) ?? error;
     }
   }
 
-  async #connect(account: AccountRecord): Promise<Client> {
+  /**
+   * The error the agent gets when heel dropped the connection itself because
+   * the server sent more than heel reads; null for any other failure.
+   */
+  async #withheld(
+    account: AccountRecord,
+    pending: Promise<Connection>,
+  ): Promise<UpstreamError | null> {
+    const failure = await pending.then(
+      ({ transport }) => (transport instanceof SandboxStdioTransport ? transport.failure : null),
+      () => null,
+    );
+    if (!(failure instanceof MessageTooLargeError)) return null;
+    const megabytes = Math.round(failure.maxBytes / (1024 * 1024));
+    this.#deps.log.warn(
+      { account: account.alias, maxBytes: failure.maxBytes },
+      "upstream MCP server sent a message too large to read; stopped it, the next call starts it again",
+    );
+    return new UpstreamError(502, {
+      error: `the MCP server answered with more than ${megabytes} MB; heel withheld the response and stopped the server, which starts again on the next call. The call may have taken effect.`,
+    });
+  }
+
+  async #connect(account: AccountRecord, onClose: () => void): Promise<Connection> {
     const upstream = upstreamSettings(account.settings);
     if (upstream === null) throw new Error(`account ${account.alias} has no upstream settings`);
     const token = await this.credential(account);
     const client = new Client({ name: "heel", version: "0.1.0" });
-    await client.connect(await this.#transport(account, upstream, token));
+    // A server that exits, or a connection heel drops, must not fail the next call too.
+    client.onclose = onClose;
+    const transport = await this.#transport(account, upstream, token);
+    await client.connect(transport);
     this.#deps.log.info(
       { account: account.alias, transport: upstream.transport },
       "connected to upstream MCP server",
     );
-    return client;
+    return { client, transport };
   }
 
   async #transport(

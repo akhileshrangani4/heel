@@ -1,12 +1,19 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { PassThrough } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, onTestFinished } from "vitest";
 import { hidingFor, UNSURE_JUDGE } from "../../src/core/hide.ts";
 import { mcpPassthrough } from "../../src/definitions/mcp/passthrough.ts";
-import type { StdioProcess } from "../../src/definitions/mcp/sandbox-transport.ts";
+import {
+  MAX_MESSAGE_BYTES,
+  MessageTooLargeError,
+  SandboxStdioTransport,
+  type StdioProcess,
+} from "../../src/definitions/mcp/sandbox-transport.ts";
 import { stdioSandboxSpec, upstreamSettings } from "../../src/definitions/mcp/settings.ts";
 import { UpstreamPool } from "../../src/definitions/mcp/upstream.ts";
+import { UpstreamError } from "../../src/gateway/pipeline/ports.ts";
 import { MAX_WALL_TIME_MS } from "../../src/runner/plan.ts";
 import { findAccount } from "../../src/store/directory.ts";
 import { ConnectError, connectAccount } from "../../src/vault/connect.ts";
@@ -74,15 +81,22 @@ function setUp(options: { launch?: boolean } = {}) {
     },
     new Date(),
   );
+  const log = captureLogger();
+  let launches = 0;
   const pool = new UpstreamPool({
     vault,
-    log: captureLogger().logger,
-    ...(options.launch !== false && { launchStdio: launchChild }),
+    log: log.logger,
+    ...(options.launch !== false && {
+      launchStdio: (account, settings, credential) => {
+        launches++;
+        return launchChild(account, settings, credential);
+      },
+    }),
   });
   onTestFinished(() => pool.close());
   const account = findAccount(t.db, t.orgId, "local-notes");
   if (account === null) throw new Error("no account");
-  return { t, pool, account };
+  return { t, pool, account, log: log.output, launches: () => launches };
 }
 
 describe("local MCP servers", () => {
@@ -101,6 +115,7 @@ describe("local MCP servers", () => {
     expect((await pool.listTools(account, signal)).map((tool) => tool.name)).toEqual([
       "echo",
       "token",
+      "big",
     ]);
     const result = await definition.execute(
       { ...callFor(account), tool: "echo", args: { text: "hi" } },
@@ -117,6 +132,38 @@ describe("local MCP servers", () => {
     );
     expect(result).toMatchObject({ content: [{ text: "token: [redacted by heel]" }] });
     expect(JSON.stringify(result)).not.toContain(TOKEN);
+  });
+
+  it("fails only the call whose response is too large, and restarts the server for the next", async () => {
+    const { pool, account, log, launches } = setUp();
+    const definition = mcpPassthrough(account, pool);
+    const signal = AbortSignal.timeout(10_000);
+    const started = Date.now();
+
+    const failed = definition
+      .execute(
+        { ...callFor(account), tool: "big", args: { bytes: MAX_MESSAGE_BYTES + 1024 } },
+        signal,
+      )
+      .then(
+        () => null,
+        (error: unknown) => error,
+      );
+    const error = await failed;
+    expect(error).toBeInstanceOf(UpstreamError);
+    expect((error as UpstreamError).body).toEqual({
+      error: expect.stringMatching(/more than 10 MB/),
+    });
+    // Failed when the connection dropped, not when the call timed out.
+    expect(Date.now() - started).toBeLessThan(8_000);
+    expect(log()).toContain("too large to read");
+
+    const result = await definition.execute(
+      { ...callFor(account), tool: "echo", args: { text: "still here" } },
+      signal,
+    );
+    expect(result).toMatchObject({ content: [{ type: "text", text: "still here" }] });
+    expect(launches()).toBe(2);
   });
 
   it("denies calls when the host can't run the sandbox", async () => {
@@ -173,6 +220,59 @@ describe("local MCP servers", () => {
       stdioSandboxSpec({ transport: "stdio", ...STDIO }, { workRoot: "/w", credential: null })
         .network,
     ).toEqual({ kind: "none" });
+  });
+});
+
+describe("the stdio transport", () => {
+  it("drops the connection on a message too large to read, and reads nothing after it", async () => {
+    const stdout = new PassThrough();
+    const stderr = new PassThrough();
+    const stdin = new PassThrough();
+    let killed = false;
+    let exit: () => void = () => {};
+    const transport = new SandboxStdioTransport(
+      {
+        stdin,
+        stdout,
+        stderr,
+        done: new Promise<void>((resolve) => {
+          exit = resolve;
+        }),
+        kill: () => {
+          killed = true;
+        },
+      },
+      () => {},
+      1024,
+    );
+    const messages: unknown[] = [];
+    const errors: Error[] = [];
+    let closes = 0;
+    transport.onmessage = (message) => messages.push(message);
+    transport.onerror = (error) => errors.push(error);
+    transport.onclose = () => closes++;
+    await transport.start();
+
+    // Over the cap with no newline yet: before the fix this threw out of the data handler.
+    expect(() => stdout.emit("data", Buffer.from("x".repeat(2048)))).not.toThrow();
+    // What follows could be the tail of that message dressed as an answer; it is never read.
+    stdout.emit(
+      "data",
+      Buffer.from(`${JSON.stringify({ jsonrpc: "2.0", id: 1, result: { content: [] } })}\n`),
+    );
+
+    expect(messages).toEqual([]);
+    expect(errors.map((error) => error.name)).toEqual(["MessageTooLargeError"]);
+    expect(transport.failure).toBeInstanceOf(MessageTooLargeError);
+    expect(killed).toBe(true);
+    expect(closes).toBe(1);
+    await expect(transport.send({ jsonrpc: "2.0", id: 2, method: "ping" })).rejects.toBeInstanceOf(
+      MessageTooLargeError,
+    );
+    // The process exiting afterwards doesn't close it twice.
+    exit();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(closes).toBe(1);
   });
 });
 
