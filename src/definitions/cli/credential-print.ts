@@ -67,6 +67,15 @@ export const CREDENTIAL_PRINT_FORMS: readonly CredentialPrintForm[] = [
  */
 export const KUBECTL_OUTPUT_OF_SECRET = "kubectl <verb> secret --output";
 
+/**
+ * gh's `--jq`/`-q` filter runs jq with the process environment loaded, so
+ * `$ENV.GH_TOKEN` or `env` reads the token, and any transform of it (reversed,
+ * split, re-encoded) gets past the output scrub. Refused on every command
+ * that takes it, whatever the expression. `--template` is Go's text/template
+ * with gh's formatting helpers, none of which reads the environment or a file.
+ */
+export const GH_JQ = "gh --jq";
+
 /** The form `args` matches, if the command would print a credential. */
 export function credentialPrintForm(
   cli: KnownCli,
@@ -77,6 +86,7 @@ export function credentialPrintForm(
     (candidate) => candidate.cli === cli && samePath(candidate.path, args.path),
   );
   if (form !== undefined && formApplies(form, args)) return form;
+  if (cli === "gh" && args.flags["jq"] !== undefined) return { id: GH_JQ, cli, path: args.path };
   if (cli === "kubectl" && printsObjects(args.flags["output"]) && mayNameSecrets(args)) {
     return { id: KUBECTL_OUTPUT_OF_SECRET, cli, path: args.path, whenSecrets: true };
   }
