@@ -55,6 +55,8 @@ describe("the top menu (1.11)", () => {
     expect(await (await h.fetch("/activity", { as: admin })).text()).not.toContain(
       'class="subnav"',
     );
+  });
+});
 
 describe("the Connections page (1.11)", () => {
   it("shows one next step per card, and none for a ready account", async () => {
