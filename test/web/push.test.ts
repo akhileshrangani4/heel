@@ -8,7 +8,7 @@ import { humanPlaneHarness, TEST_VAPID_PUBLIC_KEY } from "../helpers/human-plane
  */
 
 const SUBSCRIPTION = {
-  endpoint: "https://push.example.com/send/phone-1",
+  endpoint: "https://fcm.googleapis.com/fcm/send/phone-1",
   // Placeholder values in the base64url alphabet; not real keys.
   keys: { p256dh: "test-p256dh-key", auth: "test-auth-secret" },
 };
@@ -95,6 +95,20 @@ describe("device subscriptions", () => {
   it.each([
     ["a non-https endpoint", { ...SUBSCRIPTION, endpoint: "http://push.example.com/1" }],
     ["missing keys", { endpoint: SUBSCRIPTION.endpoint }],
+    // Red-team round 3: heel POSTs to the endpoint, so only browsers' push services.
+    [
+      "an endpoint that isn't a push service",
+      { ...SUBSCRIPTION, endpoint: "https://attacker.example/collect/1" },
+    ],
+    ["an internal host", { ...SUBSCRIPTION, endpoint: "https://10.0.0.5:8443/admin/reset" }],
+    [
+      "a look-alike host",
+      { ...SUBSCRIPTION, endpoint: "https://fcm.googleapis.com.evil.example/x" },
+    ],
+    [
+      "a push host on another port",
+      { ...SUBSCRIPTION, endpoint: "https://fcm.googleapis.com:8443/x" },
+    ],
     ["keys that aren't base64url", { ...SUBSCRIPTION, keys: { p256dh: "<script>", auth: "x" } }],
   ])("refuses %s", async (_label, body) => {
     const h = humanPlaneHarness();
@@ -116,5 +130,54 @@ describe("device subscriptions", () => {
     });
 
     expect(findPushSubscription(h.t.db, SUBSCRIPTION.endpoint)).not.toBeNull();
+  });
+
+  it("doesn't move someone else's device to a new person", async () => {
+    const h = humanPlaneHarness();
+    const owner = await h.signIn(await h.enroll());
+    await h.fetch("/push/subscribe", { as: owner, ...postJson(SUBSCRIPTION) });
+    h.addUser("sam", "member");
+    const sam = await h.signIn(await h.enroll("sam"));
+
+    const taken = await h.fetch("/push/subscribe", { as: sam, ...postJson(SUBSCRIPTION) });
+
+    expect(taken.status).toBe(400);
+    expect(findPushSubscription(h.t.db, SUBSCRIPTION.endpoint)?.userId).toBe(h.t.ownerId);
+  });
+
+  it("keeps at most ten devices a person, dropping the oldest", async () => {
+    const h = humanPlaneHarness();
+    const owner = await h.signIn(await h.enroll());
+    for (let i = 0; i < 12; i++) {
+      h.clock.advance(1000);
+      const body = { ...SUBSCRIPTION, endpoint: `https://fcm.googleapis.com/fcm/send/phone-${i}` };
+      expect((await h.fetch("/push/subscribe", { as: owner, ...postJson(body) })).status).toBe(200);
+    }
+    const kept = pushSubscriptionsOf(h.t.db, h.t.ownerId).map((s) => s.endpoint);
+    expect(kept).toHaveLength(10);
+    expect(kept).not.toContain("https://fcm.googleapis.com/fcm/send/phone-0");
+    expect(kept).not.toContain("https://fcm.googleapis.com/fcm/send/phone-1");
+  });
+
+  it("shows how many devices get notifications, and turns them all off", async () => {
+    const h = humanPlaneHarness();
+    const owner = await h.signIn(await h.enroll());
+    await h.fetch("/push/subscribe", { as: owner, ...postJson(SUBSCRIPTION) });
+    const page = await (await h.fetch("/approvals", { as: owner })).text();
+    expect(page).toContain("1 device gets notifications for you.");
+    expect(page).toContain('action="/push/unsubscribe-all"');
+
+    const csrf = page.match(/name="csrf" value="([^"]+)"/)?.[1] ?? "";
+    const off = await h.fetch("/push/unsubscribe-all", {
+      as: owner,
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ csrf }).toString(),
+    });
+    expect(off.status).toBe(303);
+    expect(pushSubscriptionsOf(h.t.db, h.t.ownerId)).toEqual([]);
+    expect(
+      await (await h.fetch(off.headers.get("location") ?? "", { as: owner })).text(),
+    ).toContain("Notifications are off on 1 device.");
   });
 });

@@ -1,9 +1,14 @@
 import { readFileSync } from "node:fs";
 import { Hono } from "hono";
-import { removePushSubscription, savePushSubscription } from "../../store/notifications.ts";
+import {
+  removeAllPushSubscriptions,
+  removePushSubscription,
+  savePushSubscription,
+} from "../../store/notifications.ts";
 import {
   type HumanPlaneDeps,
   jsonBody,
+  requireCsrfField,
   requireCsrfHeader,
   requireSession,
   type SignedInEnv,
@@ -69,6 +74,33 @@ function icon(size: 180 | 512): Uint8Array<ArrayBuffer> {
 }
 
 /** A push endpoint must be an https URL, and its keys base64url. */
+/**
+ * The browsers' own push services. heel POSTs to a subscription's endpoint
+ * for every request, so any other host would let whoever subscribes point
+ * heel at their own server, or at one inside your network.
+ */
+const PUSH_SERVICE_HOSTS = [
+  "fcm.googleapis.com", // Chrome, Edge on Android, most Chromium browsers
+  "android.googleapis.com",
+  "updates.push.services.mozilla.com", // Firefox
+  ".push.services.mozilla.com",
+  "web.push.apple.com", // Safari, and web apps on iPhone and iPad
+  ".push.apple.com",
+  ".notify.windows.com", // Edge on Windows
+] as const;
+
+export function isPushService(url: URL): boolean {
+  if (url.protocol !== "https:" || url.port !== "" || url.username !== "" || url.password !== "") {
+    return false;
+  }
+  const host = url.hostname.toLowerCase();
+  return PUSH_SERVICE_HOSTS.some((allowed) =>
+    allowed.startsWith(".")
+      ? host.endsWith(allowed) && host.length > allowed.length
+      : host === allowed,
+  );
+}
+
 function subscriptionFrom(body: Record<string, unknown> | null) {
   const endpoint = stringField(body, "endpoint");
   const keys = body?.["keys"];
@@ -78,7 +110,7 @@ function subscriptionFrom(body: Record<string, unknown> | null) {
   const auth = stringField(keyFields, "auth");
   const base64url = /^[A-Za-z0-9_-]+={0,2}$/;
   if (endpoint === undefined || p256dh === undefined || auth === undefined) return null;
-  if (!URL.canParse(endpoint) || new URL(endpoint).protocol !== "https:") return null;
+  if (!URL.canParse(endpoint) || !isPushService(new URL(endpoint))) return null;
   if (!base64url.test(p256dh) || !base64url.test(auth)) return null;
   return { endpoint, p256dh, auth };
 }
@@ -106,12 +138,13 @@ export function pushRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     const subscription = subscriptionFrom(await jsonBody(c));
     if (subscription === null)
       return c.json({ ok: false, message: "That isn't a push subscription." }, 400);
-    savePushSubscription(deps.db, {
+    const saved = savePushSubscription(deps.db, {
       orgId: session.orgId,
       userId: session.userId,
       ...subscription,
       now: deps.now(),
     });
+    if (!saved) return c.json({ ok: false, message: "That isn't a push subscription." }, 400);
     return c.json({ ok: true });
   });
 
@@ -120,6 +153,11 @@ export function pushRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     // Only the person's own devices; someone else's endpoint reads as already gone.
     removePushSubscription(deps.db, endpoint, c.get("session").userId);
     return c.json({ ok: true });
+  });
+
+  app.post("/push/unsubscribe-all", signedIn, requireCsrfField(), (c) => {
+    const removed = removeAllPushSubscriptions(deps.db, c.get("session").userId);
+    return c.redirect(`/approvals?notifications-off=${removed}`, 303);
   });
 
   return app;

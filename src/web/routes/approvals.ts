@@ -9,6 +9,7 @@ import {
 } from "../../store/approvals.ts";
 import { foldsFor, isFoldName, rememberFold } from "../../store/folds.ts";
 import { hintsFor } from "../../store/hints.ts";
+import { pushSubscriptionsOf } from "../../store/notifications.ts";
 import { type Decision, decisionBinding, decisionFromBinding } from "../decisions.ts";
 import {
   type HumanPlaneDeps,
@@ -193,7 +194,16 @@ export function approvalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       current: "approvals",
       body: html`${recoveriesFor(session, now)}
       ${pendingList({ now, load: { ok: true, rows } })}
-      ${pushControl({ vapidPublicKey: deps.vapidPublicKey })} ${addDeviceControl()}`,
+      ${pushControl({
+        vapidPublicKey: deps.vapidPublicKey,
+        devices: {
+          count: pushSubscriptionsOf(deps.db, session.userId).length,
+          turnOff: { action: "/push/unsubscribe-all", csrfToken: session.csrfToken },
+          turnedOff: /^\d+$/.test(c.req.query("notifications-off") ?? "")
+            ? Number(c.req.query("notifications-off"))
+            : null,
+        },
+      })} ${addDeviceControl()}`,
       script: clientScript(session.csrfToken),
     });
   });
