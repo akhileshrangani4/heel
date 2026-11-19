@@ -24,7 +24,7 @@ type StateResultInput = z.output<typeof StateResult>;
 
 const count = z.int().nonnegative();
 
-const CaseCall = z.strictObject({
+const CaseCallFields = z.strictObject({
   agent: z.string().min(1),
   account: z.string().min(1),
   provider: z.string().min(1).optional(),
@@ -62,8 +62,45 @@ const CaseCall = z.strictObject({
       argv: z.array(z.string()),
     })
     .optional(),
+  /**
+   * The command as `heel run` gets it. heel derives `cli`, `tool`, `action`,
+   * `kind`, `repo` and `persistence` from it the way `heel run` does, so the
+   * case can't describe a command heel would read differently.
+   */
+  argv: z.array(z.string()).min(1).optional(),
+});
+
+/** What `argv` derives; giving one of them as well would contradict heel's own reading. */
+const DERIVED_FROM_ARGV = ["cli", "tool", "action", "kind", "repo", "persistence"] as const;
+
+const CaseCall = CaseCallFields.superRefine((call, ctx) => {
+  if (call.argv === undefined) return;
+  for (const key of DERIVED_FROM_ARGV) {
+    if (call[key] !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: [key],
+        message: `heel derives ${key} from argv; remove one of them`,
+      });
+    }
+  }
 });
 type CaseCallInput = z.output<typeof CaseCall>;
+
+/** What heel reads from a command line, or why `heel run` would refuse it. */
+export type CommandReading =
+  | {
+      ok: true;
+      cli: CliFields;
+      action?: string;
+      kind?: "read" | "write";
+      repo?: string;
+      persistence?: true;
+    }
+  | { ok: false; message: string };
+
+/** Reads a command line as `heel run` does; supplied by the caller, since parsers live with the definitions. */
+export type ReadCommand = (argv: readonly [string, ...string[]]) => CommandReading;
 
 /**
  * Which rule decided: a number is that rule's position in the user's file,
@@ -110,12 +147,17 @@ class CaseInputError extends Error {
  * Runs one case. `defaultUser` is the user whose rules apply when the case
  * names none; null when there is no single obvious one.
  */
-export function runCase(set: RuleSet, testCase: RulesCase, defaultUser: string | null): CaseResult {
+export function runCase(
+  set: RuleSet,
+  testCase: RulesCase,
+  defaultUser: string | null,
+  readCommand?: ReadCommand,
+): CaseResult {
   try {
     const owner = caseOwner(set, testCase.user ?? defaultUser);
     const evaluation = evaluate(set, {
       owner,
-      facts: caseFacts(testCase.call),
+      facts: caseFacts(testCase.call, readCommand),
       mode: "enforce",
       state: (check, rule) => caseState(testCase, check, rule),
       counted: (_rule, per) => testCase.counts?.[per] ?? 0,
@@ -163,7 +205,34 @@ function caseOwner(set: RuleSet, user: string | null): string {
   return "";
 }
 
-export function caseFacts(call: CaseCallInput): RuleFacts {
+export function caseFacts(call: CaseCallInput, readCommand?: ReadCommand): RuleFacts {
+  const facts = givenFacts(call);
+  if (call.argv !== undefined) return { ...facts, ...commandFacts(call.argv, readCommand) };
+  // An HTTP call's tool is its method and path, the OpenAPI template when one matched.
+  if (call.http !== undefined && facts.tool === undefined && facts.http !== undefined) {
+    return { ...facts, tool: `${facts.http.method} ${facts.http.pathTemplate ?? facts.http.path}` };
+  }
+  return facts;
+}
+
+function commandFacts(argv: readonly string[], readCommand?: ReadCommand): Partial<RuleFacts> {
+  const [command, ...rest] = argv;
+  if (command === undefined) throw new CaseInputError("argv is empty");
+  if (readCommand === undefined) throw new CaseInputError("argv cases need heel's command parsers");
+  const read = readCommand([command, ...rest]);
+  if (!read.ok) throw new CaseInputError(`heel run refuses this command: ${read.message}`);
+  const { cli } = read;
+  return {
+    cli,
+    tool: [cli.command, cli.verb, cli.subcommand].filter((p) => p !== undefined).join(" "),
+    ...(read.action !== undefined && { action: read.action }),
+    ...(read.kind !== undefined && { kind: read.kind }),
+    ...(read.repo !== undefined && { repo: read.repo }),
+    ...(read.persistence !== undefined && { persistence: true }),
+  };
+}
+
+function givenFacts(call: CaseCallInput): RuleFacts {
   return {
     agent: call.agent,
     account: call.account,

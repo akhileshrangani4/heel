@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { type RulesCase, RulesCasesFile, runCase } from "../../src/core/rules/cases.ts";
 import type { RuleSet } from "../../src/core/rules/evaluate.ts";
+import { readCommand } from "../../src/definitions/cli/index.ts";
 import { OWNER, ruleSet } from "./helpers.ts";
 
 /** One case, validated the way `heel rules test` validates a cases file. */
@@ -248,5 +249,76 @@ describe("provider field values in rules", () => {
     expect(() =>
       ruleSet({ owner: `rules:\n  - match: { ${condition} }\n    then: deny\n` }),
     ).toThrow();
+  });
+});
+
+describe("cases written as argv", () => {
+  const gh = ruleSet({
+    owner: `
+rules:
+  - name: reads
+    match: { provider: "cli:gh", kind: read }
+    then: allow
+  - name: api
+    match: { tool: gh api }
+    then: ask
+  - name: merges
+    match: { action: github.merge, repo: acme/web }
+    then: ask
+`,
+  });
+  const call = (argv: string[]) => ({ agent: "a", account: "gh", provider: "cli:gh", argv });
+  const decide = (argv: string[], expectRule: string, decision = "ask") =>
+    runCase(
+      gh,
+      caseOf({ call: call(argv), expect: { decision, rule: expectRule } }),
+      OWNER,
+      readCommand,
+    );
+
+  it("derives the facts heel run would, from the command line", () => {
+    expect(decide(["gh", "pr", "view", "1", "-R", "acme/web"], "reads", "allow").outcome).toBe(
+      "pass",
+    );
+    expect(decide(["gh", "api", "repos/acme/web"], "api").outcome).toBe("pass");
+    expect(decide(["gh", "-R", "Acme/Web", "pr", "merge", "7"], "merges").outcome).toBe("pass");
+  });
+
+  it("reports a command heel run would refuse", () => {
+    const result = decide(["gh", "auth", "token"], "reads");
+    expect(result).toMatchObject({ outcome: "error" });
+    expect(result.outcome === "error" && result.message).toMatch(/refuses this command/);
+    expect(decide(["gh", "pr", "view", "1"], "reads")).toMatchObject({
+      outcome: "error",
+      message: expect.stringContaining("-R"),
+    });
+  });
+
+  it("refuses a case that also states what argv derives", () => {
+    expect(() =>
+      caseOf({
+        call: { ...call(["gh", "pr", "view"]), kind: "read" },
+        expect: { decision: "allow" },
+      }),
+    ).toThrow(/derives kind from argv/);
+  });
+
+  it("names an HTTP call's tool by its method and path", () => {
+    const http = ruleSet({
+      owner: 'rules:\n  - match: { tool: "GET /users/{id}" }\n    then: allow\n',
+    });
+    const result = runCase(
+      http,
+      caseOf({
+        call: {
+          agent: "a",
+          account: "api",
+          http: { method: "get", path: "/users/7", path_template: "/users/{id}" },
+        },
+        expect: { decision: "allow" },
+      }),
+      OWNER,
+    );
+    expect(result.outcome).toBe("pass");
   });
 });

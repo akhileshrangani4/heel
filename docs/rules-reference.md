@@ -874,10 +874,11 @@ cases:
 
 `expect.rule` is a rule's `name`, its 1-based position in the user's file (`3`), `org:<n>` for the org file, or `default` for the default deny. `expect.reason` is one of the [deny reasons](#how-a-call-is-decided).
 
-The `call` is what the rules see, written as heel would derive it. Nothing is derived for you:
+The `call` is what the rules see, written as heel would derive it:
 
-- **Copy the fields a real call has** from the [service tables](#built-in-services): a rule on `provider` needs `provider` in the case, and `kind` and `action` belong only on calls that really have them (an unmapped `gh` command has neither).
-- **`tool` isn't built from `cli` or `http`.** Give it yourself: `tool: gh secret set`, or `tool: "DELETE /contacts/{id}"`.
+- **For a command, give `argv`** and heel reads it the way `heel run` does: `cli`, `tool`, `action`, `kind`, `repo` and `persistence` come from the command line, so the case can't describe a command heel would read differently. A command `heel run` refuses (`gh auth token`, a `gh` command without `-R`) fails the case with the reason. Giving one of those keys beside `argv` is an error. heel doesn't call GitHub here, so a `gh pr merge` has no `args.base` and is never `github.workflow.merge`; add `args: { base: main }` yourself when a rule reads it.
+- **For an HTTP call, `tool` is built** from `http` when you leave it out: the method and the template, or the path (`GET /users/{id}`).
+- **For anything else, copy the fields a real call has** from the [service tables](#built-in-services): a rule on `provider` needs `provider` in the case, and `kind` and `action` belong only on calls that really have them.
 - **`repo` and `method` are normalized** as on a real call (lower-case repo, upper-case method). Other values are used as written.
 - **`counts` applies to every counting rule** the call reaches, whatever its other conditions.
 
@@ -894,7 +895,8 @@ The `call` is what the rules see, written as heel would derive it. Nothing is de
 | `args` | any | What `args.*` reads. |
 | `persistence` | `true` or `false` | The call outlives heel. |
 | `http` | mapping | `method`, `path` (required); `path_template`, `query`, `body`. |
-| `cli` | mapping | `command`, `argv` (required); `verb`, `subcommand`, `flags`. |
+| `argv` | list of text | A command as `heel run` gets it (`[gh, pr, merge, "12", -R, acme/web]`); heel derives the command's fields from it. |
+| `cli` | mapping | `command`, `argv` (required); `verb`, `subcommand`, `flags`. Prefer `argv` above. |
 
 ### A worked example
 
