@@ -295,7 +295,10 @@ function compileCondition<F>(
     checks.push({ op, values: new Set(values.map((v, j) => operand(v, [...at, op, j]))) });
   }
   if (ops.matches !== undefined) {
-    const regex = compileRegex(ops.matches, [...at, "matches"], report);
+    // repo and method are normalized on the call (lower and upper case), so a
+    // pattern on them ignores case; changing the pattern's own letters would
+    // change escapes such as \D into \d.
+    const regex = compileRegex(ops.matches, [...at, "matches"], report, cased !== undefined);
     if (regex !== null) checks.push({ op: "matches", source: ops.matches, regex });
   }
   for (const op of ["any_domain_in", "all_domain_in"] as const) {
@@ -329,9 +332,14 @@ function isScalarList(value: Scalar | readonly Scalar[]): value is readonly Scal
  * Patterns use RE2 syntax and match the whole value (anchored), so a rule
  * can't hang heel on a crafted input and `prod` never matches `nonprod`.
  */
-function compileRegex(source: string, at: IssuePath, report: Report): RE2JS | null {
+function compileRegex(
+  source: string,
+  at: IssuePath,
+  report: Report,
+  caseInsensitive = false,
+): RE2JS | null {
   try {
-    return RE2JS.compile(source);
+    return RE2JS.compile(source, caseInsensitive ? RE2JS.CASE_INSENSITIVE : 0);
   } catch (error) {
     if (!(error instanceof RE2JSException)) throw error;
     report(at, `invalid RE2 pattern: ${error.message}`);
