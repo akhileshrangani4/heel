@@ -35,8 +35,10 @@ function blocks(markdown: string): Block[] {
   const found: Block[] = [];
   const lines = markdown.split("\n");
   for (let i = 0; i < lines.length; i++) {
-    const open = /^```(\w+)(?: title="([^"]+)")?$/.exec(lines[i] ?? "");
-    if (open === null) continue;
+    const line = lines[i] ?? "";
+    if (!line.startsWith("```")) continue;
+    const open = /^```(\w+)(?: title="([^"]+)")?$/.exec(line);
+    if (open === null) throw new Error(`line ${i + 1}: a fence the test can't read: ${line}`);
     const start = i;
     const body: string[] = [];
     for (i += 1; i < lines.length && lines[i] !== "```"; i++) body.push(lines[i] ?? "");
@@ -105,6 +107,9 @@ function examples(all: readonly Block[]): Example[] {
           };
           found.push(current);
         }
+        if (current.files.has(block.title)) {
+          throw new Error(`line ${block.line}: a second ${block.title} before any cases`);
+        }
         current.files.set(block.title, block.body);
       } else if (block.title === "cases.yaml") {
         if (current === null) throw new Error(`line ${block.line}: cases with no rules above them`);
@@ -154,6 +159,8 @@ describe("docs/rules-reference.md examples", () => {
       const result = await heel(["rules", "check"], home);
       if (example.checkOutput !== null) {
         expect(result.output).toBe(example.checkOutput);
+        const invalid = example.checkOutput.startsWith("heel: rules are invalid");
+        expect(result.code).toBe(invalid ? EXIT.dataErr : EXIT.ok);
       } else {
         expect(result.code).toBe(EXIT.ok);
         expect(result.output).not.toContain("warn");
@@ -166,6 +173,8 @@ describe("docs/rules-reference.md examples", () => {
       const result = await heel(["rules", "test", cases], home);
       if (example.testOutput !== null) {
         expect(result.output).toBe(example.testOutput);
+        const allPassed = / 0 failed\n$/.test(example.testOutput);
+        expect(result.code).toBe(allPassed ? EXIT.ok : EXIT.failed);
       } else {
         expect(result.output).not.toMatch(/^(FAIL|ERROR)/m);
         expect(result.code).toBe(EXIT.ok);

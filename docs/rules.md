@@ -5,8 +5,8 @@
 Rules are a file you can read, review and test. A call no rule matches is denied. This page is the tour; the [rules reference](rules-reference.md) has every key, operator, action and edge case, with recipes you can copy. Rules are checked in this order, and the first match decides:
 
 1. **Organization rules.** These can only deny or ask, so nothing below can loosen them.
-2. **Grants and standing approvals.** They can turn an `ask` from your own rules into `allow`, and a grant can also allow a call no rule matched. Neither gets past a `deny` or an org `ask`.
-3. **Your rules,** top to bottom.
+2. **Your rules,** top to bottom.
+3. **Grants and standing approvals,** only when your rules end in an `ask` (or, for a grant, when nothing matched). They can turn that into `allow`, but never get past a `deny` or an org `ask`.
 
 ```yaml
 rules:

@@ -58,7 +58,7 @@ const COMMON_MAIL: Readonly<Record<string, ToolFacts>> = {
   send: mailSend,
   reply: { action: "`email.send`", sees: `${recipients}, \`all_in_thread\`` },
   reply_all: { action: "`email.send`", sees: `${recipients}, \`all_in_thread\`` },
-  forward: mailSend,
+  forward: { action: "`email.send`", sees: `${recipients}, \`all_in_thread\`` },
   create_draft: draft,
   update_draft: draft,
   delete_draft: { action: "`email.draft`", sees: "" },
@@ -68,7 +68,7 @@ const COMMON_MAIL: Readonly<Record<string, ToolFacts>> = {
 const items = "`items` (messages)";
 const filter: ToolFacts = {
   action: "`email.filter`; `email.send` when it forwards",
-  sees: "`recipients` (the forward address) when it forwards; persistence",
+  sees: "when it forwards: `recipients` (the forward address), and persistence",
 };
 
 const calendarRead = { action: "", sees: "`calendar`" };
@@ -111,7 +111,7 @@ export const SERVICES: readonly Service[] = [
       archive: { action: "`email.remove`", sees: items },
       move: {
         action:
-          "`email.remove` into Deleted Items, Junk, Archive, Recoverable Items or a hidden folder, else `email.label`",
+          "`email.remove` into Deleted Items, Junk, Archive, Recoverable Items, a folder inside them, or a hidden folder; else `email.label`. Moves into Sent Items, Drafts or Outbox are refused.",
         sees: items,
       },
       delete: { action: "`email.remove`", sees: items },
@@ -183,7 +183,7 @@ export const SERVICES: readonly Service[] = [
         sees: "`repo`, `args.branch`, `args.path`; persistence for `github.workflow.push`",
       },
     },
-    note: "`repo` is `owner/name` in lower case. A request to `/http/<account>/...` for a REST path no tool covers becomes the unlisted tool `github_api`: action `github.api`, persistence, and no `repo` or `kind`.",
+    note: "`repo` is `owner/name` in lower case. A request to `/http/<account>/...` for a REST path no tool covers becomes the unlisted tool `github_api`: action `github.api`, kind `write`, persistence, and no `repo`.",
   },
   {
     title: "Slack",

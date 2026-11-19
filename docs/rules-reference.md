@@ -173,7 +173,7 @@ Every key in a `match` must hold (AND). A key whose field the call doesn't have 
 | `argv` | text list | CLI: the whole command line, with the command name at index 0. | `argv: { any_of: [--force] }` |
 | `channel` | Slack channel id | The channel a Slack call touches. | `channel: C0123ABCD` |
 | `external` | `true` or `false` | Slack: the channel reaches another organization (Slack Connect, DMs). | `external: true` |
-| `team` | Linear team key | Compared in upper case, so `eng` is `ENG`. | `team: eng` |
+| `team` | Linear team key | Values are upper-cased, so `team: eng` is `ENG`. Write `matches` patterns in upper case. | `team: eng` |
 | `project` | Linear project id | The project's UUID, not its URL slug. | `project: 3f2b1c4e-8a9d-4e7f-b6a1-2c3d4e5f6a7b` |
 | `parent` | Notion page or database id | The page or database a page sits under, or `workspace`. | `parent: workspace` |
 | `amount` | number | Stripe: in the currency's smallest unit (cents). | `amount: { max: 5000 }` |
@@ -243,8 +243,8 @@ Which operators each key takes:
 
 ### Details that matter
 
-- **Case matters.** Text is compared exactly, so `method: get` never matches a `GET` call. heel lower-cases `repo` on the call, so write repos in lower case: `repo: Acme/Web` never matches. Addresses and domains are the exception: both sides are lower-cased first.
-- **Types matter.** `args.number: 42` matches the number 42, not the text `"42"`. HTTP query values and CLI flag values are always text, so write `query.limit: "100"`, and `max` on them never holds.
+- **Case matters.** Text is compared exactly, so `method: get` never matches a `GET` call. heel lower-cases `repo` on the call, so write repos in lower case: `repo: Acme/Web` never matches. Addresses and domains are the exception: both sides are lower-cased first, except a `matches` pattern, which runs on the lower-cased address as written, so write it in lower case.
+- **Types matter.** `args.number: 42` matches the number 42, not the text `"42"`. HTTP query values and CLI flag values are always text, so write `query.limit: "100"`. `max` never holds on one of them, but on a repeated parameter or flag (a list) it limits how many there are.
 - **`matches` is the whole value.** Patterns are [RE2](https://github.com/google/re2/wiki/Syntax) and anchored at both ends: `matches: "web"` doesn't match `acme/web`, but `matches: ".*web"` does. Quote patterns in YAML.
 - **Shorthand on a list is set equality.** `recipients: sam@company.com` holds only when Sam is the only recipient. `argv: publish` never holds, because `argv` also holds the command name. Use `any_of` or `one_of` instead.
 - **Paths walk through arrays.** `args.messages.id` reads `id` from every element of `args.messages`. An element without `id` makes "every element" checks fail, so a batch with one odd entry doesn't slip through.
@@ -293,6 +293,7 @@ cases:
 
 - **What counts:** only calls heel let run (allowed, approved and re-sent, or let through in watch mode), from the same agent, that match this rule's other conditions. Denied calls and calls waiting for approval don't count.
 - **Items per call:** the messages a mail call moves, labels or removes (a thread counts its messages), an issue plus its sub-issues for a Linear delete, and 1 for everything else.
+- **Per agent:** a limit counts one agent at a time. Two agents on the same account each get their own count.
 - **Run ids** come from the agent: `_meta["heel/runId"]` over MCP, the `Heel-Run-Id` header over HTTP, `HEEL_RUN_ID` for `heel run`, or `run_id` in code mode. An agent can start a new run whenever it likes, so always pair a `per: run` limit with a `per: hour` limit on the same action below it. `heel rules check` warns when you don't.
 - Put limits above the rule that allows the call, so the limit is checked first.
 
@@ -376,10 +377,12 @@ cases:
 
 ## Calls that outlive heel
 
-Some calls leave something behind that keeps acting after you revoke heel: a Gmail filter or Outlook rule that forwards mail, a scheduled Slack message, a pushed or merged GitHub workflow, a raw GitHub API call, and `gh` deploy keys, SSH keys, secrets and variables. For these:
+Some calls leave something behind that keeps acting after you revoke heel: a Gmail filter or Outlook rule that forwards mail, a scheduled Slack message, a pushed or merged GitHub workflow (through the GitHub service or `gh pr merge`), a raw API call through the GitHub service (`github_api`), and `gh` deploy keys, SSH keys, secrets and variables. For these:
 
 - **A rule must name them** by `action` or `tool`, as plain text (shorthand, `equals`, `one_of` or `any_of`). With no such rule, the call is denied (`persistence_unnamed`).
 - **A broad rule can deny them but never allow or ask.** `match: {}` with `then: allow`, or `action: { matches: "github\\..*" }`, skips them.
+- **Naming the action is enough.** A forwarding filter is `email.send`, so a rule `action: email.send` with `then: allow` admits one whose forward address passes the rule's other conditions.
+- **`gh api` is not one of them.** Through `heel run` it is `github.api` with no persistence, so a broad `gh` allow lets it through. Deny or ask for it by name (`tool: gh api`) above any broad `gh` rule.
 
 ```yaml title="rules/owner.yaml"
 rules:
@@ -415,7 +418,7 @@ These change what happens around your rules, not the rules file itself.
 | **Standing approval** | Approving an `ask` with "keep allowing this" lets that agent's calls under that rule run without asking. | Only for an `ask` from your own rules, never an org `ask`. It is tied to the rule's `match` and `then`: edit the rule and it ends. |
 | **Grant** | A narrow `allow` for one agent and one task, which you sign with your passkey. It is one `match`, in the same language as a rule, and must name an action or tool. | Consulted only when your rules end in an `ask` or nothing matched. Never overrides a `deny` or an org `ask`. |
 | **`watch: true` on a rule** | heel logs what the rule would have decided, then carries on as if it hadn't matched. | The rule never decides. |
-| **Watch mode** (`heel serve --watch`, or the shadow and record modes) | Calls your rules would deny or ask about run anyway, and Activity shows what would have happened. | Org rules, hard denies, pause, hiding and the fail-closed denies still hold. |
+| **Watch mode** (`heel serve --watch`, or the shadow and record modes) | Calls your rules would deny or ask about run anyway, and Activity shows what would have happened. | Org rules, hard denies, pause, hiding, the fail-closed denies, and unnamed calls that outlive heel still hold. |
 
 `heel rules test` evaluates rules alone, in enforce mode, with no grants or standing approvals. [Approvals, grants and pause](approvals.md) and [Using heel](using-heel.md) cover the rest.
 
@@ -443,8 +446,9 @@ Each built-in service maps its tools to actions, so one rule covers the same thi
 
 - **Kind `read` is set only here**, by the service's own definition, never by an argument or a tool name.
 - **Built-in mail and calendar reads have no action.** Match them with `kind: read`, or `tool`.
+- **`args.*` reads the arguments as heel will run them.** For most tools these are the tool's own input arguments, as the agent sees them listed; the tables name the ones heel adds or rewrites (such as `args.base` on a merge).
 - **Your own MCP servers, HTTP APIs and other CLIs** have none of this: see the sections after these tables.
-- **A request to a built-in service's own REST path** through `/http/<account>/...` becomes the same tool call, with the same action and fields.
+- **Gmail and GitHub also answer at `/http/<account>/...`:** a request to their own REST paths becomes the same tool call, with the same action and fields.
 
 <!-- generated by pnpm gen:rules-reference: begin -->
 
@@ -462,7 +466,7 @@ Provider `gmail`.
 | `send` | write | `email.send` | `recipients` |
 | `reply` | write | `email.send` | `recipients`, `all_in_thread` |
 | `reply_all` | write | `email.send` | `recipients`, `all_in_thread` |
-| `forward` | write | `email.send` | `recipients` |
+| `forward` | write | `email.send` | `recipients`, `all_in_thread` |
 | `create_draft` | write | `email.draft` | `recipients` |
 | `update_draft` | write | `email.draft` | `recipients` |
 | `delete_draft` | write | `email.draft` |   |
@@ -472,7 +476,7 @@ Provider `gmail`.
 | `trash_thread` | write | `email.remove` | `items` (messages in the thread) |
 | `modify_labels` | write | `email.remove` when it adds TRASH or SPAM or removes INBOX, else `email.label` | `items` (messages) |
 | `list_filters` | read | none |   |
-| `create_filter` | write | `email.filter`; `email.send` when it forwards | `recipients` (the forward address) when it forwards; persistence |
+| `create_filter` | write | `email.filter`; `email.send` when it forwards | when it forwards: `recipients` (the forward address), and persistence |
 
 ### Outlook
 
@@ -489,17 +493,17 @@ Provider `outlook`. Outlook's `calendar` is the calendar id, or the mailbox's ad
 | `send` | write | `email.send` | `recipients` |
 | `reply` | write | `email.send` | `recipients`, `all_in_thread` |
 | `reply_all` | write | `email.send` | `recipients`, `all_in_thread` |
-| `forward` | write | `email.send` | `recipients` |
+| `forward` | write | `email.send` | `recipients`, `all_in_thread` |
 | `create_draft` | write | `email.draft` | `recipients` |
 | `update_draft` | write | `email.draft` | `recipients` |
 | `delete_draft` | write | `email.draft` |   |
 | `send_draft` | write | `email.send` | `recipients`, `all_in_thread` |
 | `trash` | write | `email.remove` | `items` (messages) |
 | `archive` | write | `email.remove` | `items` (messages) |
-| `move` | write | `email.remove` into Deleted Items, Junk, Archive, Recoverable Items or a hidden folder, else `email.label` | `items` (messages) |
+| `move` | write | `email.remove` into Deleted Items, Junk, Archive, Recoverable Items, a folder inside them, or a hidden folder; else `email.label`. Moves into Sent Items, Drafts or Outbox are refused. | `items` (messages) |
 | `delete` | write | `email.remove` | `items` (messages) |
 | `set_categories` | write | `email.label` | `items` (messages) |
-| `create_rule` | write | `email.filter`; `email.send` when it forwards | `recipients` (the forward address) when it forwards; persistence |
+| `create_rule` | write | `email.filter`; `email.send` when it forwards | when it forwards: `recipients` (the forward address), and persistence |
 | `list_calendars` | read | none |   |
 | `list_events` | read | none | `calendar` |
 | `get_event` | read | none |   |
@@ -522,7 +526,7 @@ Provider `google-calendar`. `calendar` is the calendar id in lower case, or the 
 
 ### GitHub
 
-Provider `github`. `repo` is `owner/name` in lower case. A request to `/http/<account>/...` for a REST path no tool covers becomes the unlisted tool `github_api`: action `github.api`, persistence, and no `repo` or `kind`.
+Provider `github`. `repo` is `owner/name` in lower case. A request to `/http/<account>/...` for a REST path no tool covers becomes the unlisted tool `github_api`: action `github.api`, kind `write`, persistence, and no `repo`.
 
 | Tool | Kind | Action | Rules also see |
 | --- | --- | --- | --- |
@@ -630,7 +634,7 @@ An MCP server you connect (`heel connect mcp`) is passed through as it is. heel 
 - **`provider` is `mcp:<alias>`**, `account` is the alias, and `tool` is the server's own tool name (without the `<alias>__` prefix the agent sees).
 - **There is no `action` and no `kind`.** `kind: read` never covers these tools; name them with `tool`.
 - **`args.<path>` reads the tool's arguments** exactly as the agent sent them.
-- **A tool that appears later** (the server adds one mid-run) is denied until a rule names it, like anything else no rule matches.
+- **A tool that appears later** (the server adds one mid-run) is matched like any other: a broad rule such as `match: { account: jira }` covers it, so prefer naming tools.
 - heel can allow or deny a call but can't hide items from what comes back.
 
 ```yaml title="rules/owner.yaml"
@@ -718,7 +722,7 @@ A CLI account (`heel connect cli`) runs one command for the agent through `heel 
 | `verb`, `subcommand`, `flags.<name>` | `gh` and `kubectl` only, parsed the way the tool itself parses them. `gh -R acme/web pr merge 12` has `verb: pr`, `subcommand: merge`, `flags.repo: acme/web`. Flags use their long names. |
 | `action`, `kind`, `repo` | `gh` and `kubectl` only: see [gh](#gh) and [kubectl](#kubectl). |
 
-For any other command, rules see only `command`, `argv` and `tool`, so match on `argv` with `any_of`, `one_of`, `matches` or `max`. heel refuses, before any rule, a `gh` or `kubectl` command line it can't parse, one that would print a credential, and one that points the tool at another server or identity.
+For `gh`, a pull request or issue URL argument also sets `repo`. For any other command, rules see only `command`, `argv` and `tool`, so match on `argv` with `any_of`, `one_of`, `matches` or `max`. heel refuses, before any rule, a `gh` or `kubectl` command line it can't parse, one that would print a credential, and one that points the tool at another server or identity.
 
 ```yaml title="rules/owner.yaml"
 rules:
@@ -806,6 +810,8 @@ heel: rules are invalid (2 problems):
   ~/.heel/rules/owner.yaml:4:26: rules.1.match.recipients: all_in_thread is a state check heel has only for action email.send; name that action in this rule (I-23)
 ```
 
+`heel rules draft "<words>"` asks a configured model for a draft rules file and prints it with a diff; it never saves it.
+
 `heel rules schema` prints the JSON Schema for editors (also at [`schema/heel-rules.schema.json`](../schema/heel-rules.schema.json)), so an editor with YAML support can complete keys and flag mistakes as you type.
 
 ### heel rules test
@@ -834,7 +840,12 @@ cases:
 
 `expect.rule` is a rule's `name`, its 1-based position in the user's file (`3`), `org:<n>` for the org file, or `default` for the default deny. `expect.reason` is one of the [deny reasons](#how-a-call-is-decided).
 
-The `call` is what the rules see. Nothing is filled in for you: a rule on `provider` needs `provider` in the case.
+The `call` is what the rules see, written as heel would derive it. Nothing is derived for you:
+
+- **Copy the fields a real call has** from the [service tables](#built-in-services): a rule on `provider` needs `provider` in the case, and `kind` and `action` belong only on calls that really have them (an unmapped `gh` command has neither).
+- **`tool` isn't built from `cli` or `http`.** Give it yourself: `tool: gh secret set`, or `tool: "DELETE /contacts/{id}"`.
+- **Values aren't normalized.** heel lower-cases `repo` on a real call, but a case's `repo` is used as written, so write it in lower case.
+- **`counts` applies to every counting rule** the call reaches, whatever its other conditions.
 
 | Key | Type | Notes |
 | --- | --- | --- |
@@ -1001,7 +1012,7 @@ cases:
     expect: { decision: allow, rule: sends }
 ```
 
-### At most 20 emails an hour
+### At most 20 emails an hour, per agent
 
 ```yaml title="rules/owner.yaml"
 rules:
@@ -1260,13 +1271,13 @@ cases:
 
 ## Load errors and warnings
 
-`heel rules check` reports these with the file, line and column. heel refuses a file with errors and keeps its last good rules.
+`heel rules check` reports these with the file, line and column. While any file has an error, heel keeps all of its last good rules: one person's broken file holds back everyone's edits until it is fixed.
 
 | Message | Fix |
 | --- | --- |
 | `unknown match key "..."` | A typo, or a key from another tool. Use one of the [match keys](#match-keys). |
 | `org rules can only deny or ask (I-12)` | `allow` belongs in a person's own file. |
-| `Invalid option: expected one of "allow"`, `"deny"`, `"ask"` | `then` takes only those three. |
+| `Invalid option: expected one of "allow"\|"deny"\|"ask"` | `then` takes only those three. |
 | `... needs at least one operator` | An empty mapping, such as `repo: {}`. |
 | `invalid RE2 pattern` | Fix the pattern; RE2 has no backreferences or lookaround. |
 | `not a domain` / `not an email address` | A domain or address operand doesn't parse. |
@@ -1282,4 +1293,4 @@ Warnings don't stop the rules from loading:
 | `a per: run limit doesn't apply to calls without a run id` | Add a `per: hour` rule for the same action below it. |
 | `ignored: rules files end in .yaml` | Rename `rules/<user>.yml` to `.yaml`. |
 
-Shape errors (a wrong type, a misspelled `then`) are reported first; fix them and run `heel rules check` again to see the rest.
+Shape errors (a wrong type, a misspelled `then`) are reported first; fix them and run `heel rules check` again to see the rest. Warnings are only shown once there are no errors.
