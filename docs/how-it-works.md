@@ -1,6 +1,6 @@
 # How heel works
 
-[README](../README.md) · [Using heel](using-heel.md) · [Why heel](why.md) · [How it works](how-it-works.md) · [Rules](rules.md) · [Approvals](approvals.md) · [Running](running.md)
+[README](../README.md) · [Using heel](using-heel.md) · [Why heel](why.md) · [How it works](how-it-works.md) · [Rules](rules.md) · [Rules reference](rules-reference.md) · [Approvals](approvals.md) · [Running](running.md)
 
 ```
             MCP ─┐                 ┌─▶ any MCP server
@@ -44,4 +44,4 @@ heel is one process with two HTTP planes: the agent plane (port 7300), where age
 
 Gmail, Outlook, Calendar, GitHub, Slack, Linear, Notion and Stripe. Tools that leave something behind after you revoke the agent (forwarding rules, new OAuth grants, scheduled automations, webhooks) are denied until you allow them by name.
 
-Rules and hiding are in [rules.md](rules.md); approvals, grants and pause in [approvals.md](approvals.md).
+Rules and hiding are in [rules.md](rules.md), and every key and action in the [rules reference](rules-reference.md); approvals, grants and pause in [approvals.md](approvals.md).

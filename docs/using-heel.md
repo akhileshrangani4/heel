@@ -1,6 +1,6 @@
 # Using heel
 
-[README](../README.md) · [Why heel](why.md) · [How it works](how-it-works.md) · [Rules](rules.md) · [Approvals](approvals.md) · [Running](running.md)
+[README](../README.md) · [Why heel](why.md) · [How it works](how-it-works.md) · [Rules](rules.md) · [Rules reference](rules-reference.md) · [Approvals](approvals.md) · [Running](running.md)
 
 This is what working with heel looks like day to day: what you set up once, what your agent sees, and what you see when it needs you. [Running heel](running.md) covers installing and configuring it.
 
@@ -27,7 +27,7 @@ In a second terminal:
    ```
    Gmail and Google Calendar sign in through your own Google OAuth client, set as `providers.google` in `heel.yaml`. Create it first: [Set up Google sign-in for heel](google-sign-in.md) takes about 5 minutes, once.
    Any MCP server, any HTTP API with an OpenAPI file, and any CLI can go behind heel. `heel --help` lists the forms.
-3. **Write your rules** in `$HEEL_HOME/rules/owner.yaml` ([Rules](rules.md)). If you're unsure where to start, run `heel serve --watch` for a while. Every call runs, and the Activity page shows what each rule would have done.
+3. **Write your rules** in `$HEEL_HOME/rules/owner.yaml` ([Rules](rules.md), and the [rules reference](rules-reference.md) for every key, action and recipe). If you're unsure where to start, run `heel serve --watch` for a while. Every call runs, and the Activity page shows what each rule would have done.
 4. **Add the agent.** `heel agent add my-agent` prints its heel token, once, and the MCP URL. That token is the only credential the agent gets. If it will use CLIs through `heel run`, also give it a workdir: `heel agent workdir my-agent /home/me/code` ([Run CLIs with heel run](heel-run.md)).
 
 ## 2. Connect your agent
@@ -117,4 +117,4 @@ Tap **Pause** on the approval page, or run `heel pause --agent my-agent`. You ca
 - **Activity** shows every call, with its decision and the rule that made it, as they happen. It also suggests rules from what got asked or denied often.
 - **Grants** and **standing approvals** list what you've allowed beyond your rules, and let you revoke any of it.
 - **Modes** let a new rule, or a new agent, run in watch mode first: heel logs what the rule would have done, then you switch it to enforce.
-- **Rules:** edit the file and heel reloads it. Run `heel rules check` and `heel rules test` before you rely on a change. Editing a rule ends the grants made from it, so widening a rule asks again.
+- **Rules:** edit the file and heel reloads it. Run `heel rules check` and `heel rules test` before you rely on a change ([how](rules-reference.md#testing-rules)). Editing a rule ends the grants made from it, so widening a rule asks again.
