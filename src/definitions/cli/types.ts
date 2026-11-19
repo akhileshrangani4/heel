@@ -15,6 +15,11 @@ export type CliRefusal =
   | { readonly kind: "prints_credentials"; readonly form: string }
   /** The command would talk to another endpoint or as another identity, or log credentials. */
   | { readonly kind: "redirects_endpoint"; readonly option: string }
+  /**
+   * An argument names a repo heel can't pin to the one rules check: a URL
+   * form gh reads that heel doesn't, or a repo other than `-R`'s.
+   */
+  | { readonly kind: "ambiguous_repo"; readonly argument: string }
   /** The command runs git in the agent's checkout with the credential set. */
   | { readonly kind: "runs_repo_code"; readonly command: string };
 
