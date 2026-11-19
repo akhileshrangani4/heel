@@ -26,6 +26,7 @@ import { clientScript } from "../ui/client.ts";
 import { html } from "../ui/html.ts";
 import { type PendingRow, pendingList } from "../ui/pending-list.ts";
 import { pushControl } from "../ui/push-control.ts";
+import { emailPreviewFrom, mergePreviewFrom } from "../ui/summary.ts";
 
 /**
  * The approval page (spec: The approval page). A person sees every request
@@ -82,8 +83,9 @@ function requestView(
     rule: row.rule,
     reason: row.reason,
     args: row.call.args,
-    // The rendered email view and count windows arrive with the email definitions (D9).
-    email: null,
+    // Built from the stored call, never from what the agent said about it.
+    email: emailPreviewFrom(row.call.action ?? null, row.call.args),
+    merge: mergePreviewFrom(row.call.action ?? null, row.call.args),
     items: row.call.items,
     counts: [],
     createdAt: row.createdAt,

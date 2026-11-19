@@ -29,8 +29,10 @@ import {
   EXPIRED_ROWS,
   EXPIRED_STANDING,
   FAILING_TESTS,
+  GENERIC_REQUEST,
   HINTED_REQUEST,
   HINTS_UNAVAILABLE_REQUEST,
+  MERGE_REQUEST,
   NOW,
   ORG_REQUEST,
   PASSING_TESTS,
@@ -277,6 +279,11 @@ export const STORIES: readonly Story[] = [
     ok: true,
     request: HINTS_UNAVAILABLE_REQUEST,
   }),
+  approval("merge", "A GitHub merge, with the agent's reason", {
+    ok: true,
+    request: MERGE_REQUEST,
+  }),
+  approval("generic", "A tool with no dedicated view", { ok: true, request: GENERIC_REQUEST }),
   approval("error", "The request couldn't be loaded", { ok: false, message: LOAD_ERROR }),
   approval("executed", "Ran once", { ok: true, request: EXECUTED_REQUEST }),
   approval(

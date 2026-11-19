@@ -57,6 +57,7 @@ export const PENDING_REQUEST: ApprovalRequestView = {
     body: LONG_BODY,
     attachments: [{ name: "q4-pricing.pdf", type: "application/pdf", size: 482_133 }],
   },
+  merge: null,
   email: {
     from: "alice@company.com",
     to: ["bob@vendor.com"],
@@ -106,6 +107,46 @@ export const EXECUTED_REQUEST: ApprovalRequestView = {
 };
 
 /** An org ask: approved once by an admin, never standing (Q-A7). */
+/** A GitHub merge, pinned to its head commit, with the agent's reason. */
+export const MERGE_REQUEST: ApprovalRequestView = {
+  ...PENDING_REQUEST,
+  id: "apr_Mrg4hT8wQe1",
+  agent: "release-bot",
+  runId: null,
+  account: "github",
+  provider: "github",
+  surface: "mcp",
+  tool: "merge_pull_request",
+  action: "github.merge",
+  rule: { name: "prod-merges-ask", file: "rules/alice.yaml", line: 21 },
+  reason: "CI passed and Sam approved the review, so merging the billing fix before the release.",
+  args: { repo: "acme/web", number: 1234, method: "squash", sha: "9f2c4e1a7b", base: "main" },
+  email: null,
+  merge: { repo: "acme/web", number: 1234, base: "main", method: "squash", sha: "9f2c4e1a7b" },
+  counts: [],
+  items: 1,
+};
+
+/** A tool with no dedicated view: its arguments read as rows. */
+export const GENERIC_REQUEST: ApprovalRequestView = {
+  ...PENDING_REQUEST,
+  id: "apr_Gen2kP9xVb3",
+  agent: "billing-bot",
+  runId: null,
+  account: "stripe",
+  provider: "stripe",
+  surface: "mcp",
+  tool: "create_refund",
+  action: "stripe.refund",
+  rule: { name: "refunds-ask", file: "rules/alice.yaml", line: 40 },
+  reason: null,
+  args: { payment_intent: "pi_3Q8k2L", amount: 4500, reason: "requested_by_customer" },
+  email: null,
+  merge: null,
+  counts: [],
+  items: 1,
+};
+
 export const ORG_REQUEST: ApprovalRequestView = {
   ...PENDING_REQUEST,
   id: "apr_Org9fT3kLw2",

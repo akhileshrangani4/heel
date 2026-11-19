@@ -64,7 +64,8 @@ a{color:var(--accent)}
 .skip:focus{left:1rem;top:1rem;z-index:10}
 .site{display:flex;flex-wrap:wrap;gap:1rem 2rem;align-items:center;padding:.75rem 1.5rem;border-bottom:1px solid var(--border);background:var(--surface)}
 .site .brand{font-weight:700;font-size:1.1rem;color:var(--text);text-decoration:none}
-.site nav ul{display:flex;gap:1rem;list-style:none;margin:0;padding:0}
+.site nav{max-width:100%;overflow-x:auto}
+.site nav ul{display:flex;gap:1rem;list-style:none;margin:0;padding:0;white-space:nowrap}
 .site nav a{text-decoration:none;padding:.25rem .125rem}
 .site nav a[aria-current="page"]{font-weight:700;text-decoration:underline;text-underline-offset:.3em}
 .site .who{margin-left:auto;color:var(--muted)}
@@ -122,6 +123,53 @@ textarea{width:100%;min-height:5rem}
 .diff li[data-op="add"]{background:var(--add-bg)}
 .diff li[data-op="remove"]{background:var(--remove-bg)}
 .diff .sign{display:inline-block;width:1.25rem;font-weight:700}
+body:has(.ap){background:var(--surface)}
+.ap{max-width:44rem;margin:0 auto}
+.ap .card{background:var(--bg);border-radius:12px;margin:.75rem 0}
+.ap-head{padding:1.1rem 1.25rem}
+.ap-meta{display:flex;flex-wrap:wrap;align-items:center;gap:.25rem .75rem;font-size:.9rem}
+.ap-meta .badge{margin-left:auto}
+.ap-agent{font-weight:600}
+.ap-title{font-size:1.35rem;line-height:1.35;margin:.6rem 0 0;letter-spacing:-.01em;overflow-wrap:anywhere}
+.ap-title mark{background:var(--surface);color:inherit;border-radius:6px;padding:0 .3rem}
+.ap .reason{margin:.9rem 0 0}
+.ap-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:.5rem;list-style:none;margin:1rem 0 0;padding:0}
+.ap-fact{background:var(--surface);border-radius:8px;padding:.5rem .7rem;display:flex;flex-direction:column;min-width:0}
+.ap-fact span{color:var(--muted);font-size:.8rem}
+.ap-fact strong{font-weight:600;font-size:.95rem;overflow-wrap:anywhere}
+.ap-card-head{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;margin-bottom:.25rem}
+.ap-card-head h2{font-size:1rem;margin:0}
+.ap-card-head .muted{font-size:.85rem}
+.ap-row{display:grid;grid-template-columns:minmax(5.5rem,max-content) minmax(0,1fr);gap:.75rem;padding:.6rem 0;border-top:1px solid var(--border);align-items:start}
+.ap-card-head + .ap-row{border-top:0}
+.ap-key{color:var(--muted);font-size:.9rem;overflow-wrap:anywhere}
+.ap-row pre.body{max-height:16rem;overflow:auto}
+.ap-domains,.ap-addresses{list-style:none;margin:0;padding:0;display:grid;gap:.35rem}
+.ap-addresses{margin-top:.4rem;font-size:.9rem}
+.ap-chip{display:inline-block;background:var(--surface);border-radius:6px;padding:0 .45rem;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem;overflow-wrap:anywhere}
+.ap-chip.is-outside{box-shadow:inset 0 0 0 1px var(--warn)}
+.ap-outside{color:var(--warn);font-size:.8rem;font-weight:600}
+.ap-fold summary,.ap-details summary,.ap-more summary{cursor:pointer}
+.ap-details details + details{border-top:1px solid var(--border);margin-top:.75rem;padding-top:.75rem}
+.ap-details summary{font-weight:600}
+.ap-details dl.facts{margin-top:.75rem}
+.ap-details pre.args{margin-top:.5rem}
+.ap-decide{position:sticky;bottom:0;margin:.75rem 0 1rem;padding:.75rem;background:var(--bg);border:1px solid var(--border);border-radius:12px;box-shadow:0 10px 30px -18px rgb(0 0 0 / .45)}
+.ap-bar{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem .75rem}
+.ap-bar [data-heel-ceremony="deny"]{order:-1;background:transparent;color:var(--danger)}
+.ap .btn{border-radius:9px}
+.ap-bar [data-heel-ceremony="approve-once"]{order:2}
+.ap-note{flex:1;margin:0;color:var(--muted);font-size:.85rem;text-align:center;min-width:10rem}
+.ap-more{margin-top:.5rem}
+.ap-more summary{color:var(--muted);font-size:.9rem}
+.ap-more fieldset{margin:.75rem 0 0}
+@media (max-width:36rem){
+  main:has(.ap){padding:1rem .75rem}
+  .ap-title{font-size:1.15rem}
+  .ap-row{grid-template-columns:1fr;gap:.25rem}
+  .ap-bar .btn{flex:1}
+  .ap-note{order:3;flex-basis:100%}
+}
 .story{border-top:4px solid var(--border);margin-top:2rem;padding-top:1rem}
 .visually-hidden{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 .signin{max-width:28rem;margin:3rem auto}

@@ -12,20 +12,16 @@ import {
 } from "./format.ts";
 import { flag, type Html, html } from "./html.ts";
 import { badge, notice, type PauseNotice, scrollRegion, type Tone, time } from "./layout.ts";
+import {
+  argumentLines,
+  type EmailPreview,
+  groupByDomain,
+  headline,
+  homeDomain,
+  type MergePreview,
+} from "./summary.ts";
 
-/** The rendered email view shown beside the raw arguments for `email.send`. */
-export interface EmailPreview {
-  from: string;
-  to: readonly string[];
-  cc: readonly string[];
-  bcc: readonly string[];
-  subject: string;
-  /** Shown as text. An HTML body is shown as its source, never rendered. */
-  body: string;
-  bodyFormat: "text" | "html";
-  /** Listed by name, type and size, never inlined (Q-N4). */
-  attachments: readonly { name: string; type: string; size: number }[];
-}
+export type { EmailPreview, MergePreview } from "./summary.ts";
 
 /** A count condition on the deciding rule, with this call's items included (I-24). */
 export interface CountWindow {
@@ -56,6 +52,8 @@ export interface ApprovalRequestView {
   /** The canonical, post-rewrite arguments: exactly what will run. */
   args: unknown;
   email: EmailPreview | null;
+  /** The merge view, for `github.merge`; null for anything else. */
+  merge: MergePreview | null;
   items: number;
   counts: readonly CountWindow[];
   createdAt: Date;
@@ -102,59 +100,135 @@ export function approvalStatusBadge(status: ApprovalStatus): Html {
   return badge(label, tone);
 }
 
-function addressList(addresses: readonly string[]): Html {
+/** Recipients by domain: every domain named, outsiders marked, every address on the page. */
+function recipients(addresses: readonly string[], home: string | null): Html {
   if (addresses.length === 0) return html`<span class="muted">none</span>`;
-  return html`<ul class="mono">
-    ${addresses.map((address) => html`<li>${address}</li>`)}
+  return html`<ul class="ap-domains">
+    ${groupByDomain(addresses, home).map((group) => {
+      const outside = group.outside ? html` <span class="ap-outside">outside</span>` : "";
+      if (group.addresses.length <= 3) {
+        return html`<li>
+          ${group.addresses.map((a) => html`<span class="ap-chip${group.outside ? " is-outside" : ""}">${a}</span> `)}${outside}
+        </li>`;
+      }
+      return html`<li>
+        <details class="ap-fold">
+          <summary>
+            <strong>${group.addresses.length} people</strong> at
+            <span class="mono">${group.domain}</span>${outside}
+          </summary>
+          <ul class="ap-addresses mono">
+            ${group.addresses.map((a) => html`<li>${a}</li>`)}
+          </ul>
+        </details>
+      </li>`;
+    })}
   </ul>`;
 }
 
 function emailView(email: EmailPreview, headingId: string): Html {
+  const home = homeDomain(email.from);
   const attachments =
     email.attachments.length === 0
-      ? html`<p class="muted">No attachments.</p>`
-      : scrollRegion(
-          "Attachments",
-          html`<table class="data">
-          <caption>
-            Attachments (not opened by heel)
-          </caption>
-          <thead>
-            <tr>
-              <th scope="col">Name</th>
-              <th scope="col">Type</th>
-              <th scope="col">Size</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${email.attachments.map(
-              (a) =>
-                html`<tr>
-                  <td class="mono">${a.name}</td>
-                  <td class="mono">${a.type}</td>
-                  <td>${formatBytes(a.size)}</td>
-                </tr>`,
-            )}
-          </tbody>
-        </table>`,
-        );
-  return html`<section class="card" aria-labelledby="${headingId}">
-    <h2 id="${headingId}">Email</h2>
-    <dl class="facts">
-      <dt>From</dt>
-      <dd class="mono">${email.from}</dd>
-      <dt>To</dt>
-      <dd>${addressList(email.to)}</dd>
-      <dt>Cc</dt>
-      <dd>${addressList(email.cc)}</dd>
-      <dt>Bcc</dt>
-      <dd>${addressList(email.bcc)}</dd>
-      <dt>Subject</dt>
-      <dd>${email.subject}</dd>
-    </dl>
-    <h3>Body${email.bodyFormat === "html" ? " (HTML source, not rendered)" : ""}</h3>
-    <pre class="body">${email.body}</pre>
-    ${attachments}
+      ? ""
+      : html`<div class="ap-row">
+          <span class="ap-key">Files</span>
+          ${scrollRegion(
+            "Attachments",
+            html`<table class="data">
+              <caption>
+                Attachments (not opened by heel)
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Name</th>
+                  <th scope="col">Type</th>
+                  <th scope="col">Size</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${email.attachments.map(
+                  (a) =>
+                    html`<tr>
+                      <td class="mono">${a.name}</td>
+                      <td class="mono">${a.type}</td>
+                      <td>${formatBytes(a.size)}</td>
+                    </tr>`,
+                )}
+              </tbody>
+            </table>`,
+          )}
+        </div>`;
+  const forwarded =
+    email.forwarded === undefined
+      ? ""
+      : html`<div class="ap-row">
+          <span class="ap-key">Forwards</span>
+          <div>
+            <pre class="body">${email.forwarded.text}</pre>
+            ${
+              email.forwarded.attachments.length === 0
+                ? ""
+                : html`<p class="muted">
+                    With ${email.forwarded.attachments.join(", ")} (not opened by heel)
+                  </p>`
+            }
+          </div>
+        </div>`;
+  return html`<section class="card ap-card" aria-labelledby="${headingId}">
+    <div class="ap-card-head">
+      <h2 id="${headingId}">The email</h2>
+      <span class="muted">exactly what will be sent</span>
+    </div>
+    <div class="ap-row"><span class="ap-key">From</span><span class="mono">${email.from}</span></div>
+    <div class="ap-row"><span class="ap-key">To</span>${recipients(email.to, home)}</div>
+    <div class="ap-row"><span class="ap-key">Cc</span>${recipients(email.cc, home)}</div>
+    <div class="ap-row"><span class="ap-key">Bcc</span>${recipients(email.bcc, home)}</div>
+    <div class="ap-row"><span class="ap-key">Subject</span><strong>${email.subject}</strong></div>
+    <div class="ap-row">
+      <span class="ap-key">Body</span>
+      <div>
+        ${email.bodyFormat === "html" ? html`<p class="muted">HTML source, not rendered</p>` : ""}
+        <pre class="body">${email.body}</pre>
+      </div>
+    </div>
+    ${forwarded} ${attachments}
+  </section>`;
+}
+
+function mergeView(merge: MergePreview, headingId: string): Html {
+  return html`<section class="card ap-card" aria-labelledby="${headingId}">
+    <div class="ap-card-head"><h2 id="${headingId}">The merge</h2></div>
+    <div class="ap-row"><span class="ap-key">Repo</span><span class="mono">${merge.repo}</span></div>
+    <div class="ap-row"><span class="ap-key">Pull request</span><span>#${merge.number}</span></div>
+    ${merge.base === null ? "" : html`<div class="ap-row"><span class="ap-key">Into</span><span class="mono">${merge.base}</span></div>`}
+    ${merge.method === null ? "" : html`<div class="ap-row"><span class="ap-key">Method</span><span>${merge.method}</span></div>`}
+    ${
+      merge.sha === null
+        ? ""
+        : html`<div class="ap-row">
+            <span class="ap-key">Commit</span>
+            <span><span class="mono">${merge.sha}</span>
+              <span class="muted">: GitHub refuses the merge if the branch moved past it</span></span>
+          </div>`
+    }
+  </section>`;
+}
+
+/** Every top-level argument as a readable row, for tools without their own view. */
+function argumentsView(request: ApprovalRequestView, headingId: string): Html {
+  return html`<section class="card ap-card" aria-labelledby="${headingId}">
+    <div class="ap-card-head">
+      <h2 id="${headingId}">What it will run</h2>
+      <span class="mono muted">${request.tool}</span>
+    </div>
+    ${argumentLines(request.args).map(
+      (line) =>
+        html`<div class="ap-row">
+          <span class="ap-key mono">${line.name}</span>
+          ${line.block ? html`<pre class="body">${line.value}</pre>` : html`<span class="mono">${line.value}</span>`}
+        </div>`,
+    )}
   </section>`;
 }
 
@@ -176,7 +250,7 @@ function countsView(request: ApprovalRequestView): Html {
 function reasonView(request: ApprovalRequestView): Html | "" {
   if (request.reason === null) return "";
   return html`<figure class="reason">
-    <figcaption>${request.agent} says</figcaption>
+    <figcaption>${request.agent} says (its own words; heel didn't check them)</figcaption>
     <blockquote>${request.reason}</blockquote>
   </figure>`;
 }
@@ -189,8 +263,8 @@ const HINT_LABEL: Record<HintTone, string> = { warn: "check", note: "note", ok: 
 function hintsView(request: ApprovalRequestView): Html | "" {
   if (request.hints.length === 0) return "";
   const id = `hints-${request.id}`;
-  return html`<section class="card" aria-labelledby="${id}">
-    <h2 id="${id}">Hints</h2>
+  return html`<section class="card ap-card" aria-labelledby="${id}">
+    <div class="ap-card-head"><h2 id="${id}">Hints</h2></div>
     <p class="muted">Advice from ${request.hints.map((h) => h.adapter).join(", ")}. It can't approve or deny anything: you decide.</p>
     ${request.hints.map(({ adapter, result }) =>
       result.status === "pending"
@@ -213,14 +287,8 @@ function statusNotice(request: ApprovalRequestView, now: Date): Html {
   const decided = request.decision;
   switch (request.status) {
     case "pending":
-      return notice(
-        "info",
-        html`<p>
-          Waiting for a decision. Expires ${time(request.expiresAt)}
-          (${formatRelative(request.expiresAt, now)}). Nothing runs until the agent re-sends the
-          identical call after you approve.
-        </p>`,
-      );
+      // The header carries the expiry and the decision bar says what approving does.
+      return html``;
     case "approved":
       return notice(
         "ok",
@@ -331,14 +399,11 @@ function decisionControls(
         Resume first; you can still deny.
       </p>`
       : "";
-  return html`<section aria-labelledby="decide-${request.id}">
-    <h2 id="decide-${request.id}">Decide</h2>
+  // DOM order is approve once, approve as standing, deny; CSS puts deny first on the bar.
+  return html`<section class="ap-decide" aria-labelledby="decide-${request.id}">
+    <h2 id="decide-${request.id}" class="visually-hidden">Decide</h2>
     ${lockNote}
-    <p id="${helpId}" class="muted">
-      Every decision asks for your passkey. The page never decides on a click alone.
-    </p>
-    ${standingOptions(request, fieldsetId, approveLocked)}
-    <div class="actions">
+    <div class="ap-bar">
       ${ceremonyButton({
         callback: onDecide,
         intent: "approve-once",
@@ -348,20 +413,6 @@ function decisionControls(
         disabled: approveLocked,
         describedBy: helpId,
       })}
-      ${
-        request.origin === "org"
-          ? ""
-          : ceremonyButton({
-              callback: onDecide,
-              intent: "approve-standing",
-              label: "Approve as standing",
-              tone: "secondary",
-              binding,
-              disabled: approveLocked,
-              describedBy: helpId,
-              optionsFrom: fieldsetId,
-            })
-      }
       ${ceremonyButton({
         callback: onDecide,
         intent: "deny",
@@ -371,7 +422,31 @@ function decisionControls(
         disabled: expired,
         describedBy: helpId,
       })}
+      <p id="${helpId}" class="ap-note">
+        Every decision asks for your passkey. Nothing runs until you approve and the agent sends
+        the same call again.
+      </p>
     </div>
+    ${
+      request.origin === "org"
+        ? standingOptions(request, fieldsetId, approveLocked)
+        : html`<details class="ap-more">
+            <summary>Approve for longer</summary>
+            ${standingOptions(request, fieldsetId, approveLocked)}
+            <div class="actions">
+              ${ceremonyButton({
+                callback: onDecide,
+                intent: "approve-standing",
+                label: "Approve as standing",
+                tone: "secondary",
+                binding,
+                disabled: approveLocked,
+                describedBy: helpId,
+                optionsFrom: fieldsetId,
+              })}
+            </div>
+          </details>`
+    }
   </section>`;
 }
 
@@ -389,46 +464,84 @@ export function approvalRequest(props: ApprovalRequestProps): Html {
       )}`;
   }
   const request = props.load.request;
-  return html`<h1>
-      ${request.action ?? request.tool} on ${request.account} ${approvalStatusBadge(request.status)}
-    </h1>
-    <p class="muted mono">${request.id}</p>
+  const said = headline(request);
+  const view =
+    request.email !== null
+      ? emailView(request.email, `email-${request.id}`)
+      : request.merge !== null
+        ? mergeView(request.merge, `merge-${request.id}`)
+        : argumentsView(request, `what-${request.id}`);
+  const windows = request.counts.map(
+    (w) =>
+      html`<li class="ap-fact">
+        <span>This ${w.per}</span><strong>${plural(w.total, "item")}</strong>
+      </li>`,
+  );
+  return html`<article class="ap">
+    <header class="card ap-head">
+      <div class="ap-meta">
+        <span class="ap-agent">${request.agent}</span>
+        <span class="muted">on ${request.account}</span>
+        <span class="muted">${request.runId === null ? "no run id" : html`run <span class="mono">${request.runId}</span>`}</span>
+        <span class="muted">${formatRelative(request.createdAt, props.now)}</span>
+        ${approvalStatusBadge(request.status)}
+      </div>
+      <h1 class="ap-title">
+        ${said.agent} wants to <mark>${said.action}</mark> ${said.preposition}
+        <mark>${said.place}</mark>${said.rest}
+      </h1>
+      ${reasonView(request)}
+      <ul class="ap-facts">
+        <li class="ap-fact">
+          <span>Asked by rule</span><strong>${request.rule.name ?? formatRule(request.rule)}</strong>
+        </li>
+        ${windows}
+        <li class="ap-fact">
+          <span>${request.status === "pending" ? "Expires" : "Requested"}</span>
+          <strong>${formatRelative(request.status === "pending" ? request.expiresAt : request.createdAt, props.now)}</strong>
+        </li>
+      </ul>
+    </header>
     ${statusNotice(request, props.now)}
-    ${reasonView(request)}
-    <section class="card" aria-labelledby="call-${request.id}">
-      <h2 id="call-${request.id}">Call</h2>
-      <dl class="facts">
-        <dt>Agent</dt>
-        <dd>${request.agent}</dd>
-        <dt>Run</dt>
-        <dd class="mono">${request.runId ?? html`<span class="muted">none</span>`}</dd>
-        <dt>Account</dt>
-        <dd>${request.account} <span class="muted">(${request.provider})</span></dd>
-        <dt>Action</dt>
-        <dd class="mono">${request.action ?? html`<span class="muted">none</span>`}</dd>
-        <dt>Tool</dt>
-        <dd class="mono">${request.tool} <span class="muted">via ${request.surface}</span></dd>
-        <dt>Rule</dt>
-        <dd>
-          ${formatRule(request.rule)}
-          <span class="muted">(${request.origin === "org" ? "org rules" : "owner's rules"})</span>
-        </dd>
-        <dt>Counts</dt>
-        <dd>${countsView(request)}</dd>
-        <dt>Requested</dt>
-        <dd>${time(request.createdAt)}</dd>
-        <dt>Expires</dt>
-        <dd>${time(request.expiresAt)} (${formatRelative(request.expiresAt, props.now)})</dd>
-      </dl>
-    </section>
+    ${view}
     ${hintsView(request)}
-    ${request.email ? emailView(request.email, `email-${request.id}`) : ""}
-    <section aria-labelledby="args-${request.id}">
-      <h2 id="args-${request.id}">Full arguments</h2>
-      <p class="muted">Exactly what runs, after heel's own rewrites. Nothing is shortened.</p>
-      <pre class="args" tabindex="0" aria-labelledby="args-${request.id}">${formatArguments(
-        request.args,
-      )}</pre>
+    <section class="card ap-card ap-details" aria-label="Details">
+      <details>
+        <summary>Rule and call details</summary>
+        <dl class="facts">
+          <dt>Agent</dt>
+          <dd>${request.agent}</dd>
+          <dt>Run</dt>
+          <dd class="mono">${request.runId ?? html`<span class="muted">none</span>`}</dd>
+          <dt>Account</dt>
+          <dd>${request.account} <span class="muted">(${request.provider})</span></dd>
+          <dt>Action</dt>
+          <dd class="mono">${request.action ?? html`<span class="muted">none</span>`}</dd>
+          <dt>Tool</dt>
+          <dd class="mono">${request.tool} <span class="muted">via ${request.surface}</span></dd>
+          <dt>Rule</dt>
+          <dd>
+            ${formatRule(request.rule)}
+            <span class="muted">(${request.origin === "org" ? "org rules" : "owner's rules"})</span>
+          </dd>
+          <dt>Counts</dt>
+          <dd>${countsView(request)}</dd>
+          <dt>Requested</dt>
+          <dd>${time(request.createdAt)}</dd>
+          <dt>Expires</dt>
+          <dd>${time(request.expiresAt)} (${formatRelative(request.expiresAt, props.now)})</dd>
+          <dt>Request</dt>
+          <dd class="mono">${request.id}</dd>
+        </dl>
+      </details>
+      <details>
+        <summary id="args-${request.id}">Full arguments, exactly what runs</summary>
+        <p class="muted">After heel's own rewrites. Nothing is shortened.</p>
+        <pre class="args" tabindex="0" aria-labelledby="args-${request.id}">${formatArguments(
+          request.args,
+        )}</pre>
+      </details>
     </section>
-    ${decisionControls(request, props.pause, props.onDecide)}`;
+    ${decisionControls(request, props.pause, props.onDecide)}
+  </article>`;
 }
