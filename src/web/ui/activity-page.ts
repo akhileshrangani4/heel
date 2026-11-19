@@ -28,7 +28,7 @@ export function activityRow(row: ActivityRow): Html {
   return html`<tr data-id="${String(row.id)}">
     <td>${time(row.at)}</td>
     <td>${badge(row.kind.replaceAll("_", " "), KIND_TONE[row.kind] ?? "muted")}${
-      row.mode === null ? "" : html` <span class="muted">(${row.mode})</span>`
+      row.mode === null || row.mode === "enforce" ? "" : html` <span class="muted">(watch)</span>`
     }</td>
     <td class="mono">${row.account}</td>
     <td class="mono">${row.action ?? row.tool}</td>
