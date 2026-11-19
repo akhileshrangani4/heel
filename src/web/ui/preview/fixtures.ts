@@ -4,6 +4,7 @@ import type { ActivePause } from "../pause-control.ts";
 import type { PendingRow } from "../pending-list.ts";
 import type { DiffLine, RuleTestResult, WatchEntry } from "../rules-page.ts";
 import type { StandingRow } from "../standing-approval-list.ts";
+import { emailPreviewFrom, headline } from "../summary.ts";
 
 /**
  * Fixture props for the preview harness and the render tests. Every value is
@@ -203,8 +204,11 @@ export const AGENT_PAUSE: PauseNotice = {
   since: minutes(-30),
 };
 
-function row(id: string, over: Partial<PendingRow> & Pick<PendingRow, "status">): PendingRow {
-  return {
+function row(
+  id: string,
+  over: Partial<Omit<PendingRow, "headline">> & Pick<PendingRow, "status">,
+): PendingRow {
+  const base: Omit<PendingRow, "headline"> = {
     id,
     href: `/approvals/${id}`,
     origin: "owner",
@@ -216,7 +220,29 @@ function row(id: string, over: Partial<PendingRow> & Pick<PendingRow, "status">)
     createdAt: minutes(-12),
     expiresAt: hours(23.8),
     pausedBy: null,
+    client: "claude-code",
+    reason: null,
     ...over,
+  };
+  const email =
+    base.action === "email.send"
+      ? emailPreviewFrom(base.action, {
+          from: "alice@company.com",
+          to: ["bob@vendor.com"],
+          subject: "Q4 renewal",
+          body: "Hi Bob,",
+        })
+      : null;
+  return {
+    ...base,
+    headline: headline({
+      agent: base.agent,
+      action: base.action,
+      tool: base.tool,
+      account: base.account,
+      email,
+      merge: null,
+    }),
   };
 }
 
