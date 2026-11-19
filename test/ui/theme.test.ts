@@ -31,8 +31,20 @@ const PAIRS = [
   ["banner-text", "banner-bg", 4.5],
   ["text", "add-bg", 4.5],
   ["text", "remove-bg", 4.5],
-  // Non-text UI: the focus ring needs 3:1 against the page (WCAG 1.4.11).
+  ["text", "page", 4.5],
+  ["muted", "page", 4.5],
+  ["link", "bg", 4.5],
+  ["link", "page", 4.5],
+  // Badges and notices: status text on its own tint.
+  ["ok", "ok-bg", 4.5],
+  ["warn", "warn-bg", 4.5],
+  ["danger", "danger-bg", 4.5],
+  ["info", "info-bg", 4.5],
+  ["text", "warn-bg", 4.5],
+  ["text", "danger-bg", 4.5],
+  // Non-text UI: the focus ring and input borders need 3:1 (WCAG 1.4.11).
   ["focus", "bg", 3],
+  ["border", "bg", 3],
 ] as const;
 
 describe("theme", () => {
