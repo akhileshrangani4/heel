@@ -66,6 +66,11 @@ interface StandingRowView {
 
 export const USAGE = `usage:
   heel serve [--watch]                    start the agent, human and admin planes
+  heel status                             what heel is doing: agents, accounts,
+                                          pauses and requests waiting for you
+  heel tui                                a live full-screen view of requests,
+                                          activity, agents and accounts; Enter
+                                          opens a request in the browser
   heel vault init                         create the master key file
   heel agent add <name> [--owner <user>] [--expires <days>d|never]
                                           add an agent; prints its token once. The
@@ -1049,6 +1054,57 @@ function asksForHelp(rest: readonly string[]): boolean {
   return own.includes("--help") || own.includes("-h");
 }
 
+/** `heel tui`: the full-screen view (src/cli/tui.ts). Needs a terminal. */
+async function tuiCommand(args: string[], io: CliIo): Promise<number> {
+  const { values, positionals } = parseOrUsage(() =>
+    parseArgs({ args, options: CONFIG_OPTION, allowPositionals: true, strict: true }),
+  );
+  if (positionals.length > 0) throw new UsageError(`unexpected argument "${positionals[0]}"`);
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    io.stderr.write("heel: heel tui needs a terminal. For plain text, run: heel status\n");
+    return EXIT.usage;
+  }
+  const { runTui } = await import("./tui.ts");
+  return runTui(configFrom(io, values.config));
+}
+
+/** `heel status`: the same picture as the TUI's header, as plain lines. */
+async function statusCommand(args: string[], io: CliIo): Promise<number> {
+  const { values, positionals } = parseOrUsage(() =>
+    parseArgs({ args, options: CONFIG_OPTION, allowPositionals: true, strict: true }),
+  );
+  if (positionals.length > 0) throw new UsageError(`unexpected argument "${positionals[0]}"`);
+  const config = configFrom(io, values.config);
+  const ping = (await admin(config, { method: "ping" })) as { version?: string; vault?: string };
+  const approvals = (await admin(config, { method: "approvals.list" })) as {
+    status: string;
+    summary: string;
+    url: string;
+  }[];
+  const agents = (await admin(config, { method: "agent.list" })) as { revokedAt: string | null }[];
+  const accounts = (await admin(config, { method: "account.list" })) as { status: string }[];
+  const pauses = (await admin(config, { method: "pause.list" })) as {
+    scope: string;
+    targetName: string;
+  }[];
+  const waiting = approvals.filter((a) => a.status === "pending");
+  const lines = [
+    `heel ${ping.version ?? ""} is running${ping.vault === "unavailable" ? ", but the vault is closed (no master key)" : ""}.`,
+    `  Agents:    ${agents.filter((a) => a.revokedAt === null).length}`,
+    `  Accounts:  ${accounts.length}${
+      accounts.some((a) => a.status !== "active")
+        ? ` (${accounts.filter((a) => a.status !== "active").length} need sign-in)`
+        : ""
+    }`,
+    `  Paused:    ${pauses.length === 0 ? "nothing" : pauses.map((p) => (p.scope === "global" ? "everything" : `${p.scope} ${p.targetName}`)).join(", ")}`,
+    `  Waiting:   ${waiting.length === 0 ? "nothing" : `${waiting.length} request${waiting.length === 1 ? "" : "s"}`}`,
+    ...waiting.slice(0, 5).map((a) => `    ${a.summary}\n      ${a.url}`),
+    ...(waiting.length > 5 ? [`    and ${waiting.length - 5} more: heel tui`] : []),
+  ];
+  io.stdout.write(`${lines.join("\n")}\n`);
+  return EXIT.ok;
+}
+
 async function dispatch(argv: string[], io: CliIo): Promise<number> {
   const [command, ...rest] = argv;
   if (command !== undefined && command !== "help" && asksForHelp(rest)) {
@@ -1088,6 +1144,10 @@ async function dispatch(argv: string[], io: CliIo): Promise<number> {
     }
     case "run":
       return runCommand(rest, io, { fetch, cwd: () => io.cwd?.() ?? process.cwd() });
+    case "tui":
+      return tuiCommand(rest, io);
+    case "status":
+      return statusCommand(rest, io);
     case "help": {
       const usage = rest[0] === undefined ? null : usageFor(rest[0]);
       io.stdout.write(usage ?? USAGE);
