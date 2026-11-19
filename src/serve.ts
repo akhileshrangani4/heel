@@ -292,6 +292,7 @@ function exposureFacts(config: HeelConfig): ExposureFacts {
     uid: process.getuid?.() ?? null,
     homeOwnerUid,
     userHome: homedir(),
+    container: process.env["HEEL_CONTAINER"] === "1",
   };
 }
 
@@ -320,7 +321,8 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
       ...exposureWarnings(exposureFacts(config)),
       ...credentialDeliveryWarnings(sandboxedAccounts(store.db, orgId)),
     ]) {
-      log.warn({ code: warning.code }, warning.message);
+      if (warning.level === "info") log.info({ code: warning.code }, warning.message);
+      else log.warn({ code: warning.code }, warning.message);
     }
 
     const rules = startRules(options, closers);

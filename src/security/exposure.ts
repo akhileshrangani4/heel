@@ -23,6 +23,12 @@ export interface ExposureFacts {
   homeOwnerUid: number | null;
   /** The running user's home directory. */
   userHome: string;
+  /**
+   * Running in heel's OCI image (it sets HEEL_CONTAINER=1). Inside a
+   * container, 0.0.0.0 is the only way to be reachable at all; who can reach
+   * the ports is decided by `docker run -p`, which heel can't see.
+   */
+  container: boolean;
 }
 
 export interface ExposureWarning {
@@ -31,7 +37,10 @@ export interface ExposureWarning {
     | "human_plane_exposed"
     | "same_user_as_agents"
     | "credential_in_sandbox"
-    | "credential_delivery_refused";
+    | "credential_delivery_refused"
+    | "container_ports";
+  /** "info" for a reminder about a setup that is fine when done as the docs say. */
+  level?: "info";
   message: string;
 }
 
@@ -88,6 +97,13 @@ export function isLoopbackHost(host: string): boolean {
   return LOOPBACK.has(host) || host.startsWith("127.");
 }
 
+const WILDCARD = new Set(["0.0.0.0", "::", "[::]"]);
+
+/** Every interface: inside a container, the only bind the host can publish. */
+function isWildcardHost(host: string): boolean {
+  return WILDCARD.has(host);
+}
+
 /**
  * Strictly inside: `~/.heel` is inside `~`. A service user whose home *is*
  * HEEL_HOME (the OCI image's `heel` user, /var/lib/heel) is the setup the
@@ -101,7 +117,20 @@ function inside(path: string, dir: string): boolean {
 export function exposureWarnings(facts: ExposureFacts): ExposureWarning[] {
   const warnings: ExposureWarning[] = [];
   const { agent, human } = facts.listen;
-  if (!isLoopbackHost(agent.host)) {
+  // In the image, 0.0.0.0 is required and the -p flag decides exposure, so a
+  // warning would fire on every correct setup. Say what matters once instead.
+  const containerBind = (host: string) => facts.container && isWildcardHost(host);
+  if (containerBind(agent.host) || containerBind(human.host)) {
+    warnings.push({
+      code: "container_ports",
+      level: "info",
+      message:
+        "in a container: who can reach heel's ports depends on how they are published. " +
+        "Publish them to the host's loopback (-p 127.0.0.1:7300:7300 -p 127.0.0.1:7301:7301), " +
+        "or to a private network such as Tailscale; a bare -p 7300:7300 opens them to the network.",
+    });
+  }
+  if (!isLoopbackHost(agent.host) && !containerBind(agent.host)) {
     warnings.push({
       code: "agent_plane_exposed",
       message:
@@ -111,7 +140,7 @@ export function exposureWarnings(facts: ExposureFacts): ExposureWarning[] {
         "(-p 127.0.0.1:7300:7300).",
     });
   }
-  if (!isLoopbackHost(human.host)) {
+  if (!isLoopbackHost(human.host) && !containerBind(human.host)) {
     warnings.push({
       code: "human_plane_exposed",
       message:
