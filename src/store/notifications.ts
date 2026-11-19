@@ -146,7 +146,15 @@ export function findPushSubscription(db: HeelQuery, endpoint: string): PushSubsc
   );
 }
 
-/** Stores a device's subscription for a person. A device that subscribes again replaces its keys. */
+/** How many devices one person may have notifications on; the oldest is dropped past it. */
+export const MAX_PUSH_SUBSCRIPTIONS = 10;
+
+/**
+ * Stores a device's subscription for a person. A device that subscribes
+ * again replaces its keys. An endpoint that already belongs to someone else
+ * isn't moved (false): taking it would silence their device. Past
+ * MAX_PUSH_SUBSCRIPTIONS the person's oldest devices are dropped.
+ */
 export function savePushSubscription(
   db: HeelQuery,
   input: {
@@ -157,7 +165,9 @@ export function savePushSubscription(
     auth: string;
     now: Date;
   },
-): void {
+): boolean {
+  const existing = findPushSubscription(db, input.endpoint);
+  if (existing !== null && existing.userId !== input.userId) return false;
   db.insert(pushSubscriptions)
     .values({
       endpoint: input.endpoint,
@@ -169,9 +179,21 @@ export function savePushSubscription(
     })
     .onConflictDoUpdate({
       target: pushSubscriptions.endpoint,
-      set: { userId: input.userId, p256dh: input.p256dh, auth: input.auth, createdAt: input.now },
+      set: { p256dh: input.p256dh, auth: input.auth, createdAt: input.now },
     })
     .run();
+  const mine = pushSubscriptionsOf(db, input.userId).sort(
+    (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+  );
+  for (const old of mine.slice(MAX_PUSH_SUBSCRIPTIONS)) {
+    removePushSubscription(db, old.endpoint, input.userId);
+  }
+  return true;
+}
+
+/** Turns notifications off on every device of a person; how many there were. */
+export function removeAllPushSubscriptions(db: HeelQuery, userId: string): number {
+  return db.delete(pushSubscriptions).where(eq(pushSubscriptions.userId, userId)).run().changes;
 }
 
 /** Removes a subscription; `userId` limits it to that person's own devices when given. */

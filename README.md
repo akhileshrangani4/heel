@@ -167,6 +167,7 @@ Your phone has to reach heel's approval page over HTTPS, and heel has to know th
    ```
 3. **Enroll from your phone.** `heel user enroll owner` now prints a link at that address. Open it on your phone and register a passkey.
 4. **Turn on notifications.** Add the approval page to your home screen (an iPhone only shows web notifications for a page added this way), then allow notifications. Email and Slack can notify too: see `notify` in [Running heel](docs/running.md#configuration).
+   The Approvals page shows how many devices get notifications for you, with **Turn off on all devices**. heel accepts subscriptions only from browsers' own push services (Chrome, Firefox, Safari, Edge), at most ten devices a person.
 
 If you change `public_url` later, enroll again.
 
