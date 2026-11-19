@@ -45,7 +45,7 @@ You can put any MCP server behind heel with `heel connect mcp`, and heel checks 
 | Calls that outlive heel | Marked, and refused unless a rule names them | Not known, so a broad allow covers them |
 | Hiding mail | Hidden items never reach the agent | Not possible; heel can allow or deny, not filter what comes back |
 | What the approver reads | A plain summary: "send an email to Bob and 40 others at vendor.com" | The tool name and its JSON arguments |
-| The credential | Held by heel | For a remote server, sent by heel; for a local server, kept outside its sandbox when you name its hosts ([Running](running.md#credentials-stay-outside-the-sandbox)) |
+| The credential | Held by heel | For a remote server, sent by heel; for a local server, kept outside its sandbox when you name its hosts ([Running](sandbox.md#credentials-stay-outside-the-sandbox)) |
 
 A raw MCP server is still useful: it gets you heel's approvals, pause, audit and counts on day one. When a service matters, a definition is what lets your rules say what you mean.
 

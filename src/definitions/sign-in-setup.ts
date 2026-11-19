@@ -28,7 +28,7 @@ const GOOGLE: SignInSetup = {
 const MICROSOFT: SignInSetup = {
   label: "Microsoft",
   configKey: "providers.microsoft",
-  docsUrl: `${DOCS_URL}/running#configuration`,
+  docsUrl: `${DOCS_URL}/configuration`,
 };
 
 /** Which client a provider's accounts sign in through, or null for one that doesn't sign in. */

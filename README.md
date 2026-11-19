@@ -45,7 +45,7 @@ heel agent add my-agent                     # prints the agent's token (once) an
 
 **Gmail and Google Calendar need your own Google OAuth client first.** heel is self-hosted, so it signs these accounts in through a client you create in Google Cloud and add to `heel.yaml` as `providers.google`. It takes about 5 minutes, once: follow [Set up Google sign-in for heel](docs/google-sign-in.md). Then run `heel connect gmail --as gmail-work` and sign in from the Connections page. GitHub works without it (with the [`gh` CLI](https://cli.github.com) signed in), so you can finish the quick start first and add Gmail after.
 
-- **This setup is for trying heel out.** It runs as your own user, so a local agent with a shell (Claude Code, Codex) could read heel's key and edit its rules. For daily use, run heel on another machine, as its own user, or in Docker: see [Keep agents out of heel's files](docs/running.md#keep-agents-out-of-heels-files).
+- **This setup is for trying heel out.** It runs as your own user, so a local agent with a shell (Claude Code, Codex) could read heel's key and edit its rules. For daily use, run heel on another machine, as its own user, or in Docker: see [Keep agents out of heel's files](docs/running.md#choose-where-heel-runs).
 - **Approving:** on `localhost`, you approve on this computer, with a passkey (Touch ID, say). To approve from your phone, give heel an HTTPS address first: see [Approve from your phone](#approve-from-your-phone).
 - **Every account gets an alias** (`gmail-work`, `github`), and the agent only sees the alias. Any MCP server, any HTTP API with an OpenAPI file, and any CLI can go behind heel. `heel --help` lists the forms.
 - **The agent's heel token is its only credential.**
@@ -166,7 +166,7 @@ Your phone has to reach heel's approval page over HTTPS, and heel has to know th
    public_url: https://heel.example.com
    ```
 3. **Enroll from your phone.** `heel user enroll owner` now prints a link at that address. Open it on your phone and register a passkey.
-4. **Turn on notifications.** Add the approval page to your home screen (an iPhone only shows web notifications for a page added this way), then allow notifications. Email and Slack can notify too: see `notify` in [Running heel](docs/running.md#configuration).
+4. **Turn on notifications.** Add the approval page to your home screen (an iPhone only shows web notifications for a page added this way), then allow notifications. Email and Slack can notify too: see `notify` in [Running heel](docs/configuration.md).
    The Approvals page shows how many devices get notifications for you, with **Turn off on all devices**. heel accepts subscriptions only from browsers' own push services (Chrome, Firefox, Safari, Edge), at most ten devices a person.
 
 If you change `public_url` later, enroll again.
