@@ -267,7 +267,12 @@ function compileCondition<F>(
   const ops: OperatorInput = isOperatorInput(raw) ? raw : { equals: raw };
   const checks: Check[] = [];
   const cased = CASED_FIELDS[key];
+  // A query parameter or a CLI flag's value is always text on the call, so a
+  // number in the rule means its text: `query.limit: 100` matches `?limit=100`.
+  // (A bare flag is `true`, which stays a boolean; a JSON body keeps its numbers.)
+  const textual = key.startsWith("query.") || key.startsWith("flags.");
   const operand = (value: Scalar, path: IssuePath): Scalar => {
+    if (textual && typeof value === "number") return String(value);
     // A call's repo is lower case and its method upper case; a rule written
     // `repo: Acme/Web` or `method: get` means the same and must match it.
     if (cased !== undefined && typeof value === "string") return cased(value);
