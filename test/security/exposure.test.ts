@@ -7,6 +7,7 @@ const SAFE: ExposureFacts = {
   uid: 990,
   homeOwnerUid: 990,
   userHome: "/var/lib/heel-user",
+  container: false,
 };
 
 const codes = (facts: ExposureFacts) => exposureWarnings(facts).map((w) => w.code);
@@ -45,5 +46,25 @@ describe("exposureWarnings", () => {
     expect(
       codes({ ...SAFE, uid: null, homeOwnerUid: null, home: "C:/h", userHome: "C:/" }),
     ).toEqual([]);
+  });
+
+  it("in heel's image, 0.0.0.0 gives one reminder about -p instead of two warnings", () => {
+    const wildcard = {
+      agent: { host: "0.0.0.0", port: 7300 },
+      human: { host: "0.0.0.0", port: 7301 },
+    };
+    const warnings = exposureWarnings({ ...SAFE, container: true, listen: wildcard });
+    expect(warnings.map((w) => [w.code, w.level])).toEqual([["container_ports", "info"]]);
+    expect(warnings[0]?.message).toContain("-p 127.0.0.1:7300:7300");
+    // A named address in a container still warns: that isn't the image's bind.
+    expect(
+      codes({
+        ...SAFE,
+        container: true,
+        listen: { agent: { host: "10.0.0.5", port: 7300 }, human: SAFE.listen.human },
+      }),
+    ).toEqual(["agent_plane_exposed"]);
+    // Loopback in a container says nothing.
+    expect(codes({ ...SAFE, container: true })).toEqual([]);
   });
 });
