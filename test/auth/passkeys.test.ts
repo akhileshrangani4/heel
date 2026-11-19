@@ -15,6 +15,7 @@ import {
   relyingPartyFor,
 } from "../../src/web/passkeys.ts";
 import { SoftAuthenticator } from "../helpers/authenticator.ts";
+import { attribute, humanPlaneHarness } from "../helpers/human-plane.ts";
 import { type TestStore, testStore } from "../helpers/store.ts";
 
 const PUBLIC_URL = new URL("https://heel.example.com");
@@ -559,5 +560,29 @@ describe("passkey assertions", () => {
         now: T0,
       }),
     ).toEqual({ ok: false, reason: "user_disabled" });
+  });
+});
+
+describe("passkey sign-in options", () => {
+  it("name this heel's own passkeys, so the browser doesn't offer another heel's", async () => {
+    const h = humanPlaneHarness();
+    await h.enroll();
+    const page = await (await h.fetch("/sign-in")).text();
+    const challengeId = attribute(page, "data-challenge-id");
+    const response = await h.fetch("/sign-in/options", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ challengeId }),
+    });
+    const { options } = (await response.json()) as {
+      options: { allowCredentials?: { id: string }[] };
+    };
+    const ids = h.t.db
+      .select({ id: passkeys.id })
+      .from(passkeys)
+      .all()
+      .map((p) => p.id);
+    expect(ids).toHaveLength(1);
+    expect(options.allowCredentials?.map((c) => c.id)).toEqual(ids);
   });
 });

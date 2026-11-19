@@ -347,10 +347,19 @@ export class Passkeys {
   async signInOptions(
     row: ChallengeRow,
   ): Promise<OptionsResult<PublicKeyCredentialRequestOptionsJSON>> {
+    // Name this heel's own passkeys. Every heel on one machine shares the RP
+    // ID `localhost`, so with none named the browser also offers passkeys made
+    // for another heel, which this one would refuse. Their ids aren't secret:
+    // heel accepts no other passkeys anyway.
+    const own = this.#db
+      .select({ id: passkeys.id, transports: passkeys.transports })
+      .from(passkeys)
+      .where(eq(passkeys.orgId, row.orgId))
+      .all();
     return {
       ok: true,
       challengeId: row.id,
-      options: await this.#requestOptions(Buffer.from(row.challenge, "base64url"), []),
+      options: await this.#requestOptions(Buffer.from(row.challenge, "base64url"), own),
     };
   }
 
@@ -363,7 +372,6 @@ export class Passkeys {
       challenge: new Uint8Array(challenge),
       userVerification: "required",
       timeout: 120_000,
-      // Sign-in names no credential: the authenticator offers its discoverable passkeys.
       ...(allow.length === 0
         ? {}
         : { allowCredentials: allow.map((p) => ({ id: p.id, transports: p.transports })) }),
