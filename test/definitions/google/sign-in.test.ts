@@ -42,7 +42,13 @@ async function signIn(h: Harness, google: FakeGoogle, as: Awaited<ReturnType<Har
   const callback = google.consent(started.headers.get("location") ?? "");
   const landed = await h.fetch(callback.pathname + callback.search, { as });
   expect(landed.status).toBe(303);
-  return new URL(landed.headers.get("location") ?? "", "https://x.test").searchParams;
+  const location = landed.headers.get("location") ?? "";
+  const params = new URL(location, "https://x.test").searchParams;
+  // A failure's words are on the page; the redirect carries only an id (red-team round 3).
+  const page = params.has("failed") ? await (await h.fetch(location, { as })).text() : "";
+  return {
+    get: (key: string) => (key === "failed" && params.has("failed") ? page : params.get(key)),
+  };
 }
 
 const account = (h: Harness) => findAccount(h.t.db, h.t.orgId, "gmail-home");
@@ -113,7 +119,10 @@ describe("Gmail sign-in", () => {
 
     const landed = await h.fetch(callback.pathname + callback.search, { as: other });
 
-    expect(landed.headers.get("location")).toContain("wasn");
+    // The page says why; the redirect itself carries only an id.
+    const location = landed.headers.get("location") ?? "";
+    expect(location).toMatch(/^\/connections\?failed=[\w-]+$/);
+    expect(await (await h.fetch(location, { as: other })).text()).toContain("wasn");
     expect(account(h)?.status).toBe("reconnect_required");
   });
 });

@@ -36,7 +36,7 @@ function outcomeNotice(outcome: ConnectionsOutcome): Html | "" {
     case "failed":
       return notice(
         "error",
-        html`<p><strong>Signing in to ${outcome.alias} didn't work.</strong> ${outcome.message}</p>`,
+        html`<p><strong>Signing in${outcome.alias === "" ? "" : html` to ${outcome.alias}`} didn't work.</strong> ${outcome.message}</p>`,
       );
   }
 }

@@ -70,3 +70,36 @@ describe("the Connections page (1.11)", () => {
     expect(page).toContain("Connect another account");
   });
 });
+
+describe("notices from a link (red-team round 3)", () => {
+  it("don't show words a crafted link puts in the query", async () => {
+    const h = humanPlaneHarness();
+    const admin = await h.signIn(await h.enroll());
+    const phish = "Your passkey was revoked. Call IT on +1-555-0100";
+    const conn = await (
+      await h.fetch(`/connections?account=gmail-work&failed=${encodeURIComponent(phish)}`, {
+        as: admin,
+      })
+    ).text();
+    expect(conn).not.toContain("Call IT");
+    const fake = await (
+      await h.fetch(`/connections?account=${encodeURIComponent("evil. Click here")}&connected=1`, {
+        as: admin,
+      })
+    ).text();
+    expect(fake).not.toContain("Click here");
+    const pause = await (
+      await h.fetch(
+        `/pause?done=resumed&scope=agent&target=${encodeURIComponent("every agent. All calls run without approval now")}`,
+        { as: admin },
+      )
+    ).text();
+    expect(pause).not.toContain("All calls run without approval");
+    // A real target still gets its notice.
+    expect(
+      await (
+        await h.fetch("/pause?done=paused&scope=agent&target=inbox-bot", { as: admin })
+      ).text(),
+    ).toContain("Paused agent inbox-bot");
+  });
+});

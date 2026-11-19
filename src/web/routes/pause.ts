@@ -42,10 +42,21 @@ function isPauseScope(value: unknown): value is PauseScope {
 }
 
 /** The result of the last pause or resume, carried in the redirect's query string. */
-function outcomeFrom(query: Record<string, string>): PauseOutcome {
+/**
+ * The notice after a pause or resume, from the redirect's query. The target
+ * must name something real (an agent, account or person here; a provider
+ * id), so a crafted link can't make heel's notice say something else.
+ */
+function outcomeFrom(deps: HumanPlaneDeps, query: Record<string, string>): PauseOutcome {
   const scope = query["scope"];
   if (!isPauseScope(scope)) return { kind: "none" };
   const target = query["target"] || null;
+  if (scope === "provider" && !/^[a-z0-9][a-z0-9:-]{0,63}$/.test(target ?? "")) {
+    return { kind: "none" };
+  }
+  if (scope !== "global" && pauseKeyByName(deps.db, deps.orgId, scope, target ?? "") === null) {
+    return { kind: "none" };
+  }
   switch (query["done"]) {
     case "paused":
       return { kind: "paused", scope, target };
@@ -104,7 +115,7 @@ export function pauseRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       viewer: viewerOf(session),
       current: "pause",
       body: pauseControl({
-        outcome: outcomeFrom(c.req.query()),
+        outcome: outcomeFrom(deps, c.req.query()),
         load: {
           ok: true,
           active: activePauses(deps, session),
