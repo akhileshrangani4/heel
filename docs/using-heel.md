@@ -114,6 +114,8 @@ Tap **Pause** on the approval page, or run `heel pause --agent my-agent`. You ca
 
 ## Using the `heel` command
 
+- **`heel status`** says what heel is doing in a few lines: how many agents and accounts, what's paused, and the requests waiting for you with a link to each.
+- **`heel tui`** is a live full-screen view on the machine heel runs on, refreshing every two seconds. Tabs `1` to `4` show Requests, Activity, Agents and Accounts. `↑`/`↓` select, **Enter** opens the selected request's approval page in your browser (deciding still needs your passkey there), **`p`** pauses the selected agent after you confirm with `y`, and **`q`** quits. Set `NO_COLOR` for no colour.
 - `heel help` lists every command; `heel <command> --help` (or `heel help <command>`) shows just that one. A usage error prints the line that went wrong and that command's usage, not the whole list.
 - `heel agent list`, `heel account list`, `heel pause list` and `heel approvals list` print a table with names:
 

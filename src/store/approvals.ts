@@ -252,6 +252,23 @@ export function approverIds(
   return accountApproverIds(db, row.orgId, row.account, row.call.repo);
 }
 
+/** Every request in the org from the last day, newest first: the admin socket's view. */
+export function listOrgApprovals(db: HeelQuery, orgId: string, now: Date): ApprovalRecord[] {
+  const since = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  return db
+    .select({
+      row: approvals,
+      agentName: agents.name,
+      decidedByName: userNameOf(approvals.decidedBy),
+    })
+    .from(approvals)
+    .innerJoin(agents, eq(agents.id, approvals.agentId))
+    .where(and(eq(approvals.orgId, orgId), gt(approvals.expiresAt, since)))
+    .orderBy(desc(approvals.createdAt), desc(sql`approvals.rowid`))
+    .all()
+    .map((found) => ({ ...found, status: statusAt(found.row, now) }));
+}
+
 /** Requests this person may decide, newest first, including ones decided in the last day. */
 export function listApprovalsFor(db: HeelQuery, approver: Approver, now: Date): ApprovalRecord[] {
   const approversByScope = new Map<string, string[]>();

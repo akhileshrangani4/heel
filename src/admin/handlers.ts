@@ -16,7 +16,8 @@ import {
   setWorkRoots,
   workRootsByName,
 } from "../gateway/agents.ts";
-import { listStanding, revokeStanding } from "../store/approvals.ts";
+import { readActivity } from "../store/activity.ts";
+import { listOrgApprovals, listStanding, revokeStanding } from "../store/approvals.ts";
 import type { HeelDb } from "../store/db.ts";
 import { LOCAL_OWNER_NAME } from "../store/install.ts";
 import { setUserEmail } from "../store/notifications.ts";
@@ -39,6 +40,12 @@ import {
 import { removeAccount, setAccountCredential } from "../vault/manage.ts";
 import type { Vault } from "../vault/vault.ts";
 import { createEnrollment, EnrollmentError } from "../web/passkeys.ts";
+import {
+  emailPreviewFrom,
+  headline,
+  httpPreviewFrom,
+  mergePreviewFrom,
+} from "../web/ui/summary.ts";
 import {
   type AdminErrorCode,
   type AdminRequest,
@@ -276,6 +283,48 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
     case "pause": {
       const key = pauseKeyFor(db, orgId, request.params);
       return adminOk({ ...key, ...pause(db, orgId, key, ADMIN_SOCKET_ACTOR, now) });
+    }
+    case "approvals.list": {
+      return adminOk(
+        listOrgApprovals(db, orgId, now).map(({ row, agentName, status }) => {
+          const said = headline({
+            agent: agentName,
+            action: row.call.action ?? null,
+            tool: row.tool,
+            account: row.account,
+            email: emailPreviewFrom(row.call.action ?? null, row.call.args),
+            merge: mergePreviewFrom(row.call.action ?? null, row.call.args),
+            http: httpPreviewFrom(row.call),
+          });
+          return {
+            id: row.id,
+            agent: agentName,
+            account: row.account,
+            status,
+            summary: `${said.agent} wants to ${said.action} ${said.preposition} ${said.place}${said.rest}`,
+            reason: row.reason,
+            createdAt: row.createdAt.toISOString(),
+            expiresAt: row.expiresAt.toISOString(),
+            url: new URL(`/approvals/${encodeURIComponent(row.id)}`, deps.publicUrl).href,
+          };
+        }),
+      );
+    }
+    case "activity.list": {
+      const { afterId, limit } = request.params;
+      return adminOk(
+        readActivity(db, { orgId, ownerIds: null, afterId, limit }).map((row) => ({
+          id: row.id,
+          at: row.at.toISOString(),
+          kind: row.kind,
+          mode: row.mode,
+          agentId: row.agentId,
+          account: row.account,
+          action: row.action ?? row.tool,
+          rule: row.rule === null ? null : (row.rule.name ?? `${row.rule.file}:${row.rule.line}`),
+          reason: row.reason,
+        })),
+      );
     }
     case "pause.list": {
       // Agents and owners are stored by id; people read them by name.

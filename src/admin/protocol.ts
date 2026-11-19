@@ -203,6 +203,16 @@ export const AdminRequestSchema = z.discriminatedUnion("method", [
     ]),
   }),
   z.strictObject({ method: z.literal("pause.list") }),
+  /** `heel tui` and `heel status`: requests from the last day, newest first, with heel's sentence. */
+  z.strictObject({ method: z.literal("approvals.list") }),
+  z.strictObject({
+    /** `heel tui`: the newest audit rows, or the ones after `afterId` for a live tail. */
+    method: z.literal("activity.list"),
+    params: z.strictObject({
+      afterId: z.number().int().min(0).optional(),
+      limit: z.number().int().min(1).max(500).default(100),
+    }),
+  }),
   z.strictObject({
     /** `heel approvals revoke <id>`: revoking a standing approval only tightens. */
     method: z.literal("standing.revoke"),
