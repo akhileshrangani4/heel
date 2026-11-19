@@ -37,6 +37,13 @@ describe("Google Calendar tools", () => {
     ).toEqual(["list_calendars", "list_events", "get_event"]);
   });
 
+  it("calendar.read covers every read, and only reads", async () => {
+    const h = setUp("rules:\n  - match: { action: calendar.read }\n    then: allow\n");
+    expect(await h.call("list_calendars", {})).toMatchObject({ status: "allowed" });
+    expect(await h.call("get_event", { event_id: "e1" })).toMatchObject({ status: "allowed" });
+    expect(await h.call("create_event", MEETING)).toMatchObject({ status: "denied" });
+  });
+
   it("creating an event: the attendees are the recipients, and Google is asked to email them", async () => {
     const h = setUp();
     expect(await h.call("create_event", MEETING)).toMatchObject({ status: "allowed" });

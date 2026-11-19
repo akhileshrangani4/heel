@@ -88,7 +88,7 @@ const listCalendars = outlookTool({
   description: "List this mailbox's calendars, with their ids.",
   args: z.strictObject({}),
   readOnly: true,
-  prepare: async (_box, args) => ({ args }),
+  prepare: async (_box, args) => ({ args, action: "calendar.read" }),
   run: (box, _args, signal) => box.client.listCalendars(signal),
   show: async (
     _box,
@@ -117,7 +117,7 @@ const listEvents = outlookTool({
     if (args.page_token !== undefined && !args.page_token.startsWith(`${GRAPH_API_BASE}me/`)) {
       return { deny: "unsupported" as const };
     }
-    return { args, calendar: calendarFact(box, args.calendar_id) };
+    return { args, action: "calendar.read", calendar: calendarFact(box, args.calendar_id) };
   },
   run: (box, args, signal) =>
     box.client.calendarView(
@@ -141,7 +141,7 @@ const getEvent = outlookTool({
   description: "Read one event.",
   args: z.strictObject({ event_id: OutlookId }),
   readOnly: true,
-  prepare: async (_box, args) => ({ args }),
+  prepare: async (_box, args) => ({ args, action: "calendar.read" }),
   run: (box, args, signal) => box.client.getEvent(args.event_id, signal),
   show: async (_box, event: GraphEvent) => shown(event),
 });

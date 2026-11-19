@@ -579,3 +579,17 @@ describe("CLI and HTTP fields", () => {
     },
   ]);
 });
+
+describe("rule values are normalized like the call's", () => {
+  it("matches repo in any case and method in any case", () => {
+    expect(allowedBy("{ repo: Acme/Web }", facts({ repo: "acme/web" }))).toBe(true);
+    expect(
+      allowedBy("{ repo: { one_of: [Acme/API, ACME/Web] } }", facts({ repo: "acme/web" })),
+    ).toBe(true);
+    expect(allowedBy("{ repo: Acme/Web }", facts({ repo: "acme/api" }))).toBe(false);
+    const get = facts({ http: { method: "GET", path: "/", query: {} } });
+    expect(allowedBy("{ method: get }", get)).toBe(true);
+    expect(allowedBy("{ method: { one_of: [get, head] } }", get)).toBe(true);
+    expect(allowedBy("{ method: post }", get)).toBe(false);
+  });
+});

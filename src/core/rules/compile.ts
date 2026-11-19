@@ -250,6 +250,12 @@ function dottedField(key: string): FieldRef | null {
   return null;
 }
 
+/** Fields whose call values heel normalizes; literal rule values get the same treatment. */
+const CASED_FIELDS: Readonly<Record<string, (value: string) => string>> = {
+  repo: (value) => value.toLowerCase(),
+  method: (value) => value.toUpperCase(),
+};
+
 function compileCondition<F>(
   key: string,
   raw: ConditionInput,
@@ -260,7 +266,11 @@ function compileCondition<F>(
 ): { condition: Condition<F>; allInThread: boolean } {
   const ops: OperatorInput = isOperatorInput(raw) ? raw : { equals: raw };
   const checks: Check[] = [];
+  const cased = CASED_FIELDS[key];
   const operand = (value: Scalar, path: IssuePath): Scalar => {
+    // A call's repo is lower case and its method upper case; a rule written
+    // `repo: Acme/Web` or `method: get` means the same and must match it.
+    if (cased !== undefined && typeof value === "string") return cased(value);
     if (!addresses) return value;
     const address = typeof value === "string" ? normalizeAddress(value) : null;
     if (address === null) {
