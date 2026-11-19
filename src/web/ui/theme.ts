@@ -145,8 +145,14 @@ fieldset{border:1px solid var(--line);border-radius:10px;padding:.75rem 1rem;mar
 legend{font-weight:600;padding:0 .25rem}
 label{cursor:pointer}
 .choice{display:flex;gap:.5rem;align-items:baseline;margin:.25rem 0}
-select,textarea,input[type="text"],input:not([type]){font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:.45rem .6rem}
+select,textarea,input[type="text"],input[type="url"],input[type="email"],input[type="search"],input:not([type]){font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:.45rem .6rem}
 textarea{width:100%;min-height:5rem}
+.paste-form{display:grid;gap:.5rem;margin:.75rem 0;max-width:40rem}
+.paste-form label{font-weight:600}
+.paste-form input{width:100%;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem}
+.paste-form .btn{justify-self:start}
+.steps{padding-left:1.25rem}
+.steps > li{margin:0 0 1.25rem}
 .diff{margin:0;padding:0;list-style:none;border:1px solid var(--border);border-radius:4px;overflow:hidden}
 .diff li{padding:0 .75rem;white-space:pre-wrap;overflow-wrap:anywhere;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem}
 .diff li[data-op="add"]{background:var(--add-bg)}

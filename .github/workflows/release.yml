@@ -155,6 +155,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: The package installs and serves
         run: pnpm package:smoke
+      - name: Put heel's Google client in the build
+        # Repository secrets, kept out of git (scripts/inject-google-client.ts).
+        env:
+          HEEL_GOOGLE_CLIENT_ID: ${{ secrets.HEEL_GOOGLE_CLIENT_ID }}
+          HEEL_GOOGLE_CLIENT_SECRET: ${{ secrets.HEEL_GOOGLE_CLIENT_SECRET }}
+        run: node scripts/inject-google-client.ts
       - name: Pack the tarball that's published
         run: |
           pnpm build

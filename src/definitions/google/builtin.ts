@@ -8,8 +8,10 @@ import { Secret } from "../../vault/secret.ts";
  * the package. It sends people back to a loopback address on heel's own
  * host (see web/loopback.ts), never to `public_url`.
  *
- * Empty until heel's project is set up: then heel needs the operator's own
- * client, as before. An operator's `providers.google` always wins.
+ * The values are filled in only in release builds, from repository secrets
+ * (scripts/inject-google-client.ts), so they stay out of git. A build from a
+ * checkout leaves them empty and needs the operator's own client, as before.
+ * An operator's `providers.google` always wins.
  */
 const CLIENT_ID = "";
 const CLIENT_SECRET = "";

@@ -17,13 +17,13 @@ heel knows these services' tools, so rules can name what a call does (`action: g
 | **Linear** | `heel connect linear --as linear --credential-stdin` | A personal API key (`lin_api_…`) |
 | **Notion** | `heel connect notion --as notion --credential-stdin` | An internal integration secret |
 | **Stripe** | `heel connect stripe --as stripe --credential-stdin` | A restricted key (`rk_…`) with only what the agent needs |
-| **Gmail** | `heel connect gmail --as gmail-work` | Sign in from the Connections page |
-| **Google Calendar** | `heel connect google-calendar --as calendar` | Sign in from the Connections page |
+| **Gmail** | `heel connect gmail --as gmail-work` | Sign in with Google from the Connections page, no setup |
+| **Google Calendar** | `heel connect google-calendar --as calendar` | Sign in with Google from the Connections page, no setup |
 | **Outlook** (mail and calendar) | `heel connect outlook --as outlook` | Sign in from the Connections page |
 
 `--credential-stdin` reads the credential from standard input, so it never lands in your shell history: pipe it in, or paste it and press Ctrl-D.
 
-**Gmail, Google Calendar and Outlook** sign in with OAuth, through your own Google or Microsoft app (set in `heel.yaml` as `providers.google` or `providers.microsoft`). [Set up Google sign-in](google-sign-in.md) takes about 5 minutes, once. After `heel connect`, open **Connections** and select **Sign in**.
+**Gmail and Google Calendar** sign in with heel's own Google sign-in: after `heel connect`, open **Connections** and select **Sign in** ([details](google-sign-in.md), including heel on another machine). **Outlook** signs in through your own Microsoft app, set in `heel.yaml` as `providers.microsoft`.
 
 ## Any MCP server
 

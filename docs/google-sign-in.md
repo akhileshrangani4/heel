@@ -1,20 +1,31 @@
-# Set up Google sign-in for heel
+# Google sign-in
 
 [README](../README.md) · [Quickstart](quickstart.md) · [Connect accounts](connect.md) · [Connect your agent](agents.md) · [Rules](rules.md) · [Approvals](approvals.md) · [Running](running.md)
 
-Gmail and Google Calendar accounts sign in to heel through your own Google OAuth client, so you need to create one first. Setting it up takes about 5 minutes, once, in the Google Cloud console. One client covers every Gmail and Calendar account you connect.
+Gmail and Google Calendar accounts sign in with Google from heel's **Connections** page. heel brings its own Google sign-in, so there's nothing to set up.
 
-Why your own client: heel is self-hosted, so there is no shared heel app at Google. Your client is yours alone, and the tokens it gets stay in your heel's vault.
+## Sign in
 
-**You'll need:**
+1. Connect the account: `heel connect gmail --as gmail-work` (or `google-calendar --as calendar`).
+2. On **Connections**, select **Sign in** next to it, then **Continue to Google**.
+3. Sign in with the Google account and allow what heel asks for ([why each permission](#what-heel-asks-google-for-and-why)).
+   - **Google may say it hasn't verified heel yet.** Select **Advanced**, then **Go to heel**. Your data still goes only to your own heel.
+4. **On the computer heel runs on,** you land back on Connections with the account connected.
+   **On another device, or with heel in Docker,** Google's last page won't load: its address starts with `http://127.0.0.1`. Copy that address from the address bar, paste it into the box on heel's sign-in page, and select **Finish signing in**.
 
-- heel installed and running (the [quick start](quickstart.md)), with a passkey enrolled.
-- The Google account you'll connect. A personal Gmail account works.
-- The address you open heel's approval page at. That's `http://localhost:7301` unless you set `public_url` in `heel.yaml`.
+Google sends you back to an address on heel's own machine, so this works without `public_url` or an HTTPS address. Each sign-in is protected by PKCE and works once, for the person who started it.
 
-**The short version:** create a Google Cloud project, turn on the Gmail API (and the Google Calendar API), set up the consent screen and add yourself as a test user, create a "Web application" client with heel's redirect URI, put the client ID in `heel.yaml` and the secret in a file, restart heel, then sign in from the Connections page.
+heel's own Google sign-in comes with the npm package and the Docker image. A heel built from a git checkout doesn't have it: use [your own client](#use-your-own-google-client).
 
-## 1. Work out your redirect URI
+**Until Google verifies heel,** Google shows the warning in step 3 and allows at most 100 people to sign in with heel's client. If that's a problem for you, use your own client instead.
+
+## Use your own Google client
+
+Your own OAuth client in Google Cloud works too, and wins over heel's when it's set: for a team past Google's limit, a Workspace that only allows approved apps, or to keep everything under your own project. It takes about 10 minutes, once. One client covers every Gmail and Calendar account.
+
+**The short version:** create a Google Cloud project, turn on the Gmail API (and the Google Calendar API), set up the consent screen, create a "Web application" client with heel's redirect URI, put the client ID in `heel.yaml` and the secret in a file, restart heel, then sign in from the Connections page. You'll need the address you open heel's approval page at: `http://localhost:7301` unless you set `public_url`.
+
+### 1. Work out your redirect URI
 
 Google sends you back to heel at this address after you sign in, and only to addresses you list on the client. heel builds it from `public_url`:
 
@@ -31,14 +42,14 @@ Google sends you back to heel at this address after you sign in, and only to add
 - **It must match exactly:** scheme, host and port. `localhost` and `127.0.0.1` are different to Google, and plain `http` only works for `localhost`.
 - **It comes from `public_url`,** not from `listen`, and only its scheme, host and port count. If you change `public_url` later, add the new URI to the client too; a client can list several.
 
-## 2. Create a Google Cloud project
+### 2. Create a Google Cloud project
 
 1. Open the [Google Cloud console](https://console.cloud.google.com/) and sign in. Any Google account works; it doesn't have to be the one you'll connect.
 2. Go to **Menu > IAM & Admin > Create a Project**.
 3. Enter a **Project name**, such as `heel`, and click **Create**.
 4. Make sure the new project is selected in the project picker at the top of the console before you go on.
 
-## 3. Turn on the Gmail API (and the Calendar API)
+### 3. Turn on the Gmail API (and the Calendar API)
 
 1. Go to **Menu > APIs & Services > Library**.
 2. Search for **Gmail API**, open it, and click **Enable**.
@@ -46,7 +57,7 @@ Google sends you back to heel at this address after you sign in, and only to add
 
 Without the API turned on, the sign-in fails at the last step: heel reads the account's address through it.
 
-## 4. Set up the consent screen
+### 4. Set up the consent screen
 
 This is the page Google shows when you sign in.
 
@@ -63,7 +74,7 @@ This is the page Google shows when you sign in.
 
 You don't need to add scopes under **Data Access**. heel asks for its scopes when you sign in.
 
-### Testing mode signs you out after 7 days
+#### Testing mode signs you out after 7 days
 
 While an External app is in **Testing**, Google lets its sign-ins last 7 days: the refresh token expires, heel marks the account **Needs sign-in**, and calls on it fail until you sign in again. Pick one:
 
@@ -71,7 +82,7 @@ While an External app is in **Testing**, Google lets its sign-ins last 7 days: t
 - **Publish the app:** on the **Audience** page, click **Publish app** to move it to **In production**. Sign-ins then last until you revoke them (Google still ends one that goes unused for 6 months, or when you change the account's password). Google hasn't verified your app, so its sign-in shows an unverified-app warning (see [Troubleshooting](#google-says-it-hasnt-verified-the-app)), and an unverified app can sign in at most 100 accounts in all. For your own accounts, that's fine. You don't need Google's verification to use your own client.
 - **Use Internal** if you have Google Workspace (above).
 
-## 5. Create the OAuth client
+### 5. Create the OAuth client
 
 1. Go to **Menu > Google Auth platform > Clients** and click **Create client**.
 2. **Application type:** **Web application**. (Not "Desktop app": heel is a web server that Google redirects back to.)
@@ -82,7 +93,7 @@ While an External app is in **Testing**, Google lets its sign-ins last 7 days: t
 
 Changes to a client can take a few minutes to apply. If sign-in fails with `redirect_uri_mismatch` right after you add a URI, wait and try again.
 
-## 6. Give heel the client
+### 6. Give heel the client
 
 heel reads the client ID from `heel.yaml` and the secret from a file or an environment variable. There's no key for the secret in `heel.yaml`, so it never ends up in a config file you might share or commit.
 
@@ -117,7 +128,7 @@ heel: no secret: set HEEL_GOOGLE_CLIENT_SECRET or create /Users/you/.heel/google
 
 **Restart heel** (stop `heel serve` and start it again). heel reads `providers` only when it starts.
 
-## 7. Connect and sign in
+### 7. Connect and sign in
 
 1. Add the account, if you haven't already:
    ```sh
@@ -199,6 +210,10 @@ Google refused heel's code exchange. Usually the client secret is wrong (a typo,
 ### "Google sent no refresh token. Remove heel's access and try again."
 
 Remove the app's access at [myaccount.google.com/permissions](https://myaccount.google.com/permissions), then click **Sign in** again.
+
+### "That isn't the address Google sent you to for this sign-in."
+
+The pasted address has to be the one Google's last page tried to open, for the sign-in you started on that page: it starts with `http://127.0.0.1:` and has `state=` and `code=` in it. A sign-in lasts 10 minutes; after that, start again from Connections.
 
 ### Google sent me back to heel's sign-in page
 
