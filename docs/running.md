@@ -96,6 +96,61 @@ docker exec -i heel heel connect github --as github --credential-stdin < github-
 - **Master key:** it lives in the `heel-data` volume (`/var/lib/heel/master.key`), so anyone who can read the volume, which means anyone with Docker access, can read the key. Losing the volume and your copy of the key loses every stored credential.
 - **Versions:** every release is tagged `ghcr.io/akhileshrangani4/heel:<version>`, and the newest is also tagged `latest`. To build the image yourself, run `docker build -t heel .` from a checkout.
 
+## One heel for every machine
+
+You can run one heel on an always-on machine (a VPS, a Mac mini, a home server) and point the agents on every computer you use at it. Your accounts are connected once, your rules live in one place, and every approval comes to the same phone. It is also the safest setup, since no agent runs where heel's files are (see [Keep agents out of heel's files](#keep-agents-out-of-heels-files)).
+
+**1. Start heel on the server.** Install it [with npm](#with-npm) or [with Docker](#with-docker) and run `heel init`, then `heel serve`. Keep both planes on `127.0.0.1`: the next step puts HTTPS in front of them.
+
+**2. Give both planes an HTTPS address.** With Tailscale, only your own devices can reach them:
+
+```sh
+tailscale serve --bg --https=443 7301     # the approval page
+tailscale serve --bg --https=8443 7300    # the agent plane
+```
+
+Then set both addresses in heel.yaml and restart heel:
+
+```yaml
+public_url: https://heel-box.your-tailnet.ts.net              # the approval page
+agent_public_url: https://heel-box.your-tailnet.ts.net:8443   # where agents connect
+```
+
+`public_url` must be set before you enroll a passkey, since a passkey is tied to the address. A Cloudflare tunnel or a reverse proxy with TLS works the same way; [Approve from your phone](../README.md#approve-from-your-phone) has the options.
+
+**3. Enroll and connect accounts on the server.** `heel user enroll <you>` and `heel connect …` run on the server, over its admin socket. Open the enrollment link on your phone and allow notifications.
+
+**4. Add one agent per machine and tool.** A separate token for each lets you see which machine made a call, and pause or rotate one without touching the others:
+
+```sh
+heel agent add laptop-claude --owner <you>
+heel agent add desktop-codex --owner <you>
+```
+
+**5. Point each agent at the server.** In the agent's MCP settings on each computer, use `agent_public_url` and that agent's token:
+
+```json
+{
+  "mcpServers": {
+    "heel": {
+      "url": "https://heel-box.your-tailnet.ts.net:8443/mcp",
+      "headers": { "Authorization": "Bearer heel_…" }
+    }
+  }
+}
+```
+
+On a server that isn't Linux (a Mac mini), add `?tools=direct` to the URL: code mode needs [the sandbox](#the-sandbox). Each call is decided by your rules on the server and asks your phone when a rule says `ask`, wherever the agent runs.
+
+What to know:
+
+- **`heel run` needs the same directory on the server.** It runs commands in heel's sandbox, on heel's own copy of the agent's working directory, so an agent on your laptop can't `heel run` in a laptop checkout (see [the directory has to be the same on both sides](heel-run.md#the-directory-has-to-be-the-same-on-both-sides)). Use the GitHub service over MCP from other machines instead, or run that agent on the server.
+- **The `heel` CLI works on the server only.** `heel status`, `heel tui`, `heel pause` and the rest talk to the admin socket. Over SSH they work as usual; from other machines, use the approval page.
+- **Local MCP servers run on the server.** A `heel connect mcp --command …` server starts where heel runs, so its files and tools are the server's.
+- **If the server is down, every call fails.** Nothing on the laptops can reach your accounts without it, which is the point. Keep it on a machine that stays up.
+
+A second option is planned: `heel login` on each machine, with your connections in an end-to-end encrypted vault that every machine's heel can open, so no single server has to stay up ([roadmap](https://useheel.dev/roadmap)).
+
 ## Configuration
 
 heel reads `$HEEL_HOME/heel.yaml`, or the file named by `HEEL_CONFIG` or `--config`. Every key is optional, and relative paths resolve against `HEEL_HOME`. The ones you're most likely to set:
