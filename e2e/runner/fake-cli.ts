@@ -30,6 +30,7 @@ import {
   readlinkSync,
   writeFileSync,
 } from "node:fs";
+import { createServer as createHttpServer } from "node:http";
 import { connect, type Socket } from "node:net";
 import { join } from "node:path";
 import { connect as tlsConnect } from "node:tls";
@@ -260,6 +261,28 @@ async function tunnelled(
   }
 }
 
+/** Node's fetch to a server on the sandbox's own loopback, which the proxy must not swallow. */
+function loopbackFetch(): Promise<string> {
+  return new Promise((resolve) => {
+    const server = createHttpServer((_req, res) => res.end("loopback ok"));
+    // `::1`: the test allowlists 127.0.0.1 on the host, so that address must go through the proxy, and the sandbox has no /etc/hosts for `localhost`.
+    server.listen(0, "::1", async () => {
+      const address = server.address();
+      const port = typeof address === "object" && address !== null ? address.port : 0;
+      try {
+        const response = await fetch(`http://[::1]:${port}/`);
+        resolve(`${response.status} ${await response.text()}`);
+      } catch (error) {
+        resolve(
+          `error: ${error instanceof Error ? `${error.message} ${String(error.cause)}` : String(error)}`,
+        );
+      } finally {
+        server.close();
+      }
+    });
+  });
+}
+
 /**
  * The red team's sweep: everything this program can find that might be the
  * credential (its environment, every file under /heel, HOME, /tmp and the
@@ -374,7 +397,13 @@ async function hunt(credentialVar: string, target: string, out: string): Promise
         `error: ${error instanceof Error ? `${error.message} ${String(error.cause)}` : String(error)}`,
     ),
   };
-  const report = { placeholder, env: process.env, files, proc, requests };
+  const report = {
+    placeholder,
+    env: process.env,
+    files,
+    proc,
+    requests: { ...requests, loopback: await loopbackFetch() },
+  };
   writeFileSync(out, JSON.stringify(report));
   return report;
 }

@@ -17,7 +17,7 @@
  *   no heel state, and no network unless egress is on.
  */
 import { posix } from "node:path";
-import { EgressConfigError, isAllowlisted, parseEgressAllow } from "./egress.ts";
+import { EgressConfigError, isAllowlisted, parseEgressAllow, parseHostPort } from "./egress.ts";
 import { type CredentialAuth, PLACEHOLDER_PREFIX } from "./intercept.ts";
 import type { SeccompArch } from "./seccomp.ts";
 
@@ -129,6 +129,19 @@ export const SANDBOX_RUN = "/heel/run";
 export const SANDBOX_TMP = "/tmp";
 export const SANDBOX_RELAY = "/heel/relay.ts";
 export const SANDBOX_EGRESS_SOCKET = `${SANDBOX_RUN}/egress.sock`;
+/** The sandbox's own loopback names, reached directly rather than through the proxy. */
+const LOOPBACK_NAMES = ["localhost", "127.0.0.1", "::1"];
+
+/**
+ * `NO_PROXY` for a sandbox: its own loopback, so Node's env proxy doesn't
+ * send a server talking to itself out to heel. A loopback name the egress
+ * list allows (a service on the host's loopback) is left out: that one must
+ * go through the proxy, the only route to the host.
+ */
+export function sandboxNoProxy(allow: readonly string[]): string {
+  const allowed = new Set(allow.map((entry) => parseHostPort(entry, 443)?.host));
+  return LOOPBACK_NAMES.filter((name) => !allowed.has(name)).join(",");
+}
 /** The CA bundle a sandbox with credential hosts trusts. */
 export const SANDBOX_CA_FILE = "ca.pem";
 export const SANDBOX_CA_PATH = `${SANDBOX_RUN}/${SANDBOX_CA_FILE}`;
@@ -376,6 +389,7 @@ export function sandboxEnv(
   };
   if (egress) {
     const proxy = `http://127.0.0.1:${RELAY_PORT}`;
+    const noProxy = sandboxNoProxy(spec.network?.kind === "egress" ? spec.network.allow : []);
     Object.assign(env, {
       HTTPS_PROXY: proxy,
       HTTP_PROXY: proxy,
@@ -383,6 +397,9 @@ export function sandboxEnv(
       http_proxy: proxy,
       // Node's fetch and http ignore the proxy variables without it, and there is no other route.
       NODE_USE_ENV_PROXY: "1",
+      // Loopback is the sandbox's own network namespace; the proxy would refuse it anyway.
+      NO_PROXY: noProxy,
+      no_proxy: noProxy,
     });
   }
   if (trust) for (const name of TRUST_ENV) env[name] = SANDBOX_CA_PATH;

@@ -123,6 +123,8 @@ describe.skipIf(!probe.ok)("credentials added at heel's egress proxy, under bubb
     expect(report.requests["h2Only"]).toMatch(/^error: /);
     expect(report.requests["websocket"]).toMatch(/^HTTP\/1\.1 101 /);
     expect(report.requests["fetch"]).toMatch(/^200 /);
+    // NO_PROXY keeps the sandbox's own loopback out of the proxy.
+    expect(report.requests["loopback"]).toBe("200 loopback ok");
     // The reflected request came back with the token scrubbed by the proxy.
     expect(report.requests["auth"]).toContain("[redacted by heel]");
     expect(events.filter((event) => event.injected).length).toBeGreaterThanOrEqual(3);

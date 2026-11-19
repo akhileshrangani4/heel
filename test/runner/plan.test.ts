@@ -15,6 +15,7 @@ import {
   type SandboxSpec,
   SandboxSpecError,
   sandboxEnv,
+  sandboxNoProxy,
   secretsOf,
   TRUST_ENV,
 } from "../../src/runner/plan.ts";
@@ -300,7 +301,20 @@ describe("sandboxEnv", () => {
 
   it("points both proxy spellings at the relay only with egress", () => {
     const proxy = `http://127.0.0.1:${RELAY_PORT}`;
-    expect(sandboxEnv(SPEC, true)).toMatchObject({ HTTPS_PROXY: proxy, https_proxy: proxy });
+    expect(sandboxEnv(SPEC, true)).toMatchObject({
+      HTTPS_PROXY: proxy,
+      https_proxy: proxy,
+      NODE_USE_ENV_PROXY: "1",
+      // Node's env proxy would otherwise send the sandbox's own loopback to heel's proxy.
+      NO_PROXY: "localhost,127.0.0.1,::1",
+      no_proxy: "localhost,127.0.0.1,::1",
+    });
+  });
+
+  it("leaves an allowlisted loopback address out of NO_PROXY: it's the host's, reached through the proxy", () => {
+    const spec = { ...SPEC, network: { kind: "egress", allow: ["127.0.0.1:8443"] } } as const;
+    expect(sandboxEnv(spec, true)).toMatchObject({ NO_PROXY: "localhost,::1" });
+    expect(sandboxNoProxy(["[::1]:9", "localhost:80", "127.0.0.1"])).toBe("");
     expect(sandboxEnv(SPEC, false)).not.toHaveProperty("HTTPS_PROXY");
   });
 });
