@@ -44,4 +44,6 @@ heel is one process with two HTTP planes: the agent plane (port 7300), where age
 
 Gmail, Outlook, Calendar, GitHub, Slack, Linear, Notion and Stripe. Tools that leave something behind after you revoke the agent (forwarding rules, new OAuth grants, scheduled automations, webhooks) are denied until you allow them by name.
 
+What a definition does, why it gives you better rules than a raw MCP server, and how to describe your own API the same way: [Built-in services, and your own](definitions.md).
+
 Rules and hiding are in [rules.md](rules.md), and every key and action in the [rules reference](rules-reference.md); approvals, grants and pause in [approvals.md](approvals.md).

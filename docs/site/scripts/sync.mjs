@@ -28,6 +28,7 @@ const PAGES = [
   ["how-it-works", "how-it-works.md"],
   ["rules", "rules.md"],
   ["rules-reference", "rules-reference.md"],
+  ["definitions", "definitions.md"],
   ["approvals", "approvals.md"],
   ["running", "running.md"],
   ["incidents", "incidents.md"],
