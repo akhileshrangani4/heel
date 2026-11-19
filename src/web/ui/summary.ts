@@ -259,7 +259,7 @@ export function headline(input: {
     agent,
     action:
       http !== null && (input.action === null || ACTION_PHRASES[input.action] === undefined)
-        ? `send ${http.method} ${http.path}`
+        ? `call ${http.method} ${http.path}${input.action === null ? "" : ` (${input.action})`}`
         : actionPhrase(input.action, input.tool),
     preposition: "on",
     place: input.account,
