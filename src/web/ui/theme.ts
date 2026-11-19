@@ -219,6 +219,18 @@ body:has(.ap){background:var(--page)}
 .conn-name{font-size:1rem;margin:0;overflow-wrap:anywhere}
 .conn-kind{margin:.1rem 0 0;font-size:.88rem}
 .conn-step{border-top:1px solid var(--line);padding-top:.75rem;font-size:.9rem}
+.pause-status{display:flex;flex-direction:column;gap:.5rem}
+.pause-status p{margin:0}
+.pause-all{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap}
+.pause-all h3,.pause-groups h3{margin:0 0 .15rem;font-size:1rem}
+.pause-all p{margin:0}
+.pause-groups{display:grid;gap:.75rem;grid-template-columns:repeat(auto-fit,minmax(17rem,1fr));align-items:start}
+.pause-groups .card{margin:0}
+.pause-list{list-style:none;margin:.25rem 0 0;padding:0}
+.pause-list li{display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap;padding:.55rem 0;border-top:1px solid var(--line)}
+.pause-list li:first-child{border-top:0}
+.pause-list li > div:first-child{display:flex;flex-direction:column}
+.pause-resume{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
 .conn-add h2{font-size:1rem;margin:0 0 .25rem}
 .conn-add pre.args{margin-top:.75rem}
 .story{border-top:4px solid var(--border);margin-top:2rem;padding-top:1rem}
