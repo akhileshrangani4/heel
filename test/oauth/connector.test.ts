@@ -326,4 +326,31 @@ describe("the token endpoint", () => {
     ).toBe(400);
     expect((await register({ redirect_uris: ["http://evil.example/cb"] })).status).toBe(400);
   });
+
+  it("names on the consent page the agent the passkey will really connect (red-team round 3)", async () => {
+    const h = humanPlaneHarness();
+    const owner = await h.signIn(await h.enroll());
+    // Any app can register under any name, including an existing agent's.
+    const registered = await h.fetch("/oauth/register", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "" },
+      body: JSON.stringify({ client_name: "inbox-bot", redirect_uris: [REDIRECT] }),
+    });
+    const { client_id: clientId } = (await registered.json()) as { client_id: string };
+    const authorize = new URL("/oauth/authorize", PUBLIC_URL);
+    for (const [key, value] of Object.entries({
+      response_type: "code",
+      client_id: clientId,
+      redirect_uri: REDIRECT,
+      code_challenge: "c".repeat(43),
+      code_challenge_method: "S256",
+      state: "s1",
+    })) {
+      authorize.searchParams.set(key, value);
+    }
+    const page = await (await h.fetch(authorize.pathname + authorize.search, { as: owner })).text();
+    const said = page.replace(/<[^>]+>/g, "").replace(/\s+/g, " ");
+    expect(said).toContain("as a new agent inbox-bot-2.");
+    expect(said).not.toContain("as a new agent inbox-bot.");
+  });
 });

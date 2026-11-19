@@ -1,11 +1,12 @@
 import { Hono } from "hono";
-import { agentNameFor, isCodeChallenge, redirectWith } from "../../oauth/rules.ts";
+import { isCodeChallenge, redirectWith } from "../../oauth/rules.ts";
 import {
   agentForClient,
   type ClientRow,
   findClient,
   issueCode,
   OAuthError,
+  plannedAgentForClient,
   redeemCode,
   refreshTokens,
   registerClient,
@@ -165,11 +166,23 @@ export function oauthRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       });
     if (!read.ok) return page({ kind: "invalid", message: read.message });
     const { client, request } = read;
+    const planned = plannedAgentForClient(deps.db, {
+      orgId: deps.orgId,
+      ownerId: session.userId,
+      client,
+    });
+    if (planned === null) {
+      return page({
+        kind: "invalid",
+        message: "heel couldn't find a free agent name for this app.",
+      });
+    }
     return page({
       kind: "ask",
       clientName: client.name,
       redirectHost: new URL(request.redirectUri).host,
-      agentName: agentNameFor(client.name),
+      agentName: planned.name,
+      newAgent: !planned.existing,
       request,
       declineHref: redirectWith(request.redirectUri, {
         error: "access_denied",

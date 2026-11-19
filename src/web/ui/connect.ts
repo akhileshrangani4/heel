@@ -18,8 +18,10 @@ export type ConnectProps =
       clientName: string;
       /** Where heel sends the person back; the host is the part to check. */
       redirectHost: string;
-      /** The agent this connection will act as. */
+      /** The agent this connection will act as: the name it will really have. */
       agentName: string;
+      /** A new agent, rather than this app's existing one. */
+      newAgent?: boolean;
       request: ConnectRequest;
       /** Sends the person back to the client with `access_denied`. */
       declineHref: string;
@@ -43,8 +45,9 @@ export function connectPage(props: ConnectProps): Html {
     <h1>Connect ${props.clientName}?</h1>
     <p id="connect-help">
       An app that calls itself <strong>${props.clientName}</strong>, returning to
-      <span class="mono">${props.redirectHost}</span>, wants to use your accounts through heel as the
-      agent <strong class="mono">${props.agentName}</strong>.
+      <span class="mono">${props.redirectHost}</span>, wants to use your accounts through heel as
+      ${props.newAgent === false ? "its agent" : "a new agent"} <strong class="mono">${props.agentName}</strong>.
+      The app chose its own name; check the address it returns to.
     </p>
     <ul>
       <li>Every call it makes goes through your rules: some run, some wait for you, some are denied.</li>
