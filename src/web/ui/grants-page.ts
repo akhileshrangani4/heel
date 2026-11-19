@@ -1,6 +1,6 @@
 import { ceremonyButton } from "./ceremony.ts";
 import { type Html, html } from "./html.ts";
-import { type FormTarget, notice, postForm, scrollRegion, time } from "./layout.ts";
+import { type FormTarget, notice, postForm, time } from "./layout.ts";
 
 /**
  * The Grants page (A4b): a person states a task, writes what the agent may
@@ -47,7 +47,8 @@ export function grantsPage(props: {
       you sign each one with your passkey.
     </p>
     ${outcome}
-    <form id="grant-form" class="stack" onsubmit="return false">
+    <form id="grant-form" class="card grant-form" onsubmit="return false">
+      <h2>Grant something new</h2>
       <label for="grant-agent">Agent</label>
       <select id="grant-agent" name="agent">
         ${props.agents.map((a) => html`<option value="${a.id}">${a.name}</option>`)}
@@ -70,40 +71,32 @@ export function grantsPage(props: {
         optionsFrom: "grant-form",
       })}
     </form>
-    ${scrollRegion(
-      "Grants",
-      html`<table class="data">
-      <caption>Grants</caption>
-      <thead>
-        <tr>
-          <th scope="col">Agent</th>
-          <th scope="col">Task</th>
-          <th scope="col">Allows</th>
-          <th scope="col">Ends</th>
-          <th scope="col">Revoke</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${props.grants.map(
-          (g) => html`<tr>
-            <th scope="row">${g.agent}</th>
-            <td>${g.task}</td>
-            <td class="mono">${g.match}</td>
-            <td>${g.state === "live" ? time(g.expiresAt) : g.state}</td>
-            <td>
-              ${
-                g.state === "live"
-                  ? postForm(
-                      props.revoke,
-                      { id: g.id },
-                      html`<button type="submit" class="btn btn-secondary">Revoke</button>`,
-                    )
-                  : ""
-              }
-            </td>
-          </tr>`,
-        )}
-      </tbody>
-    </table>`,
-    )}`;
+    <h2>Grants</h2>
+    ${
+      props.grants.length === 0
+        ? html`<p class="muted">No grants yet.</p>`
+        : html`<ul class="req-list" aria-label="Grants">
+            ${props.grants.map(
+              (g) => html`<li class="card req" data-status="${g.state}">
+                <div class="ap-meta">
+                  <span class="ap-agent">${g.agent}</span>
+                  <span class="muted">${g.state === "live" ? html`ends ${time(g.expiresAt)}` : g.state}</span>
+                </div>
+                <h3 class="req-title">${g.task}</h3>
+                <div class="req-foot-row">
+                  <p class="req-foot"><span class="muted">Allows</span> <code>${g.match}</code></p>
+                  ${
+                    g.state === "live"
+                      ? postForm(
+                          props.revoke,
+                          { id: g.id },
+                          html`<button type="submit" class="btn btn-secondary" aria-label="Revoke the grant for ${g.agent}: ${g.task}">Revoke</button>`,
+                        )
+                      : ""
+                  }
+                </div>
+              </li>`,
+            )}
+          </ul>`
+    }`;
 }
