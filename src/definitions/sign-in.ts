@@ -34,9 +34,17 @@ export interface ProviderSignIn {
   label: string;
   /** Where the provider sends the person back. */
   callbackPath: string;
-  authorizeUrl(input: { state: string; challenge: string }): URL;
+  /** The OAuth client this signs in with, stored with the tokens so they refresh with it. */
+  clientId: string;
+  /**
+   * Set for a client that sends people back to a loopback address on heel's
+   * host (heel's built-in Google client): each sign-in gets its own, which
+   * the caller passes to `authorizeUrl` and `exchange` alike.
+   */
+  loopback?: true;
+  authorizeUrl(input: { state: string; challenge: string; redirectUri?: string }): URL;
   /** Exchanges the code; throws `SignInError` for a sign-in heel refuses. */
-  exchange(input: { code: string; verifier: string }): Promise<OAuthTokens>;
+  exchange(input: { code: string; verifier: string; redirectUri?: string }): Promise<OAuthTokens>;
   /** The mailbox the access token opens, lower-cased. */
   mailbox(accessToken: string, signal: AbortSignal): Promise<string>;
 }
@@ -69,13 +77,25 @@ export function startSignIn(
   provider: ProviderSignIn,
   account: AccountRecord,
   userId: string,
-): URL {
-  const state = deps.signIns.open({ accountId: account.id, userId }, deps.now());
+  /** A loopback provider's redirect for this sign-in; the exchange reuses it. */
+  redirectUri?: string,
+): { url: URL; state: string } {
+  const state = deps.signIns.open(
+    { accountId: account.id, userId, ...(redirectUri === undefined ? {} : { redirectUri }) },
+    deps.now(),
+  );
   const pending = deps.signIns.get(state, deps.now());
   if (pending === null) throw new Error("the sign-in expired before it started");
   const { verifier, challenge } = pkcePair();
   pending.verifier = verifier;
-  return provider.authorizeUrl({ state, challenge });
+  return {
+    url: provider.authorizeUrl({
+      state,
+      challenge,
+      ...(redirectUri === undefined ? {} : { redirectUri }),
+    }),
+    state,
+  };
 }
 
 /**
@@ -90,7 +110,11 @@ export async function finishSignIn(
 ): Promise<{ mailbox: string }> {
   const code = callback.get("code");
   if (code === null) throw new SignInError("No code came back; the sign-in was cancelled.");
-  const tokens = await provider.exchange({ code, verifier: pending.verifier });
+  const tokens = await provider.exchange({
+    code,
+    verifier: pending.verifier,
+    ...(pending.redirectUri === undefined ? {} : { redirectUri: pending.redirectUri }),
+  });
   if (tokens.refreshToken === undefined) {
     throw new SignInError(
       `${provider.label} sent no refresh token. Remove heel's access and try again.`,
@@ -123,6 +147,7 @@ export async function finishSignIn(
     refreshToken: tokens.refreshToken,
     ...(tokens.expiresAt === undefined ? {} : { expiresAt: tokens.expiresAt }),
     ...(tokens.scope === undefined ? {} : { scope: tokens.scope }),
+    clientId: provider.clientId,
   });
   return { mailbox };
 }

@@ -40,13 +40,13 @@ export type GoogleClient = ConfidentialClient;
 /** Pure: the URL that starts a sign-in. */
 export function googleAuthorizeUrl(
   client: Pick<GoogleClient, "clientId" | "redirectUri">,
-  input: { state: string; challenge: string },
+  input: { state: string; challenge: string; redirectUri?: string },
   scopes: readonly string[] = GMAIL_SCOPES,
 ): URL {
   const url = new URL(GOOGLE_AUTHORIZE_URL);
   url.search = new URLSearchParams({
     client_id: client.clientId,
-    redirect_uri: client.redirectUri.toString(),
+    redirect_uri: input.redirectUri ?? client.redirectUri.toString(),
     response_type: "code",
     scope: scopes.join(" "),
     access_type: "offline",
@@ -142,16 +142,23 @@ export const CALENDAR_PROFILE: GoogleProfile = {
   address: primaryCalendar,
 };
 
-/** Google's part of signing an account in, for one kind of account. */
+/**
+ * Google's part of signing an account in, for one kind of account. With
+ * `loopback`, the client is heel's built-in desktop client: each sign-in
+ * passes its own loopback redirect, and `client.redirectUri` is unused.
+ */
 export function googleSignIn(
   deps: { fetch: FetchFn; now: () => Date },
   client: GoogleClient,
   callbackPath: string,
   profile: GoogleProfile = GMAIL_PROFILE,
+  options: { loopback?: boolean } = {},
 ): ProviderSignIn {
   return {
     label: "Google",
     callbackPath,
+    clientId: client.clientId,
+    ...(options.loopback === true ? { loopback: true as const } : {}),
     authorizeUrl: (input) => googleAuthorizeUrl(client, input, profile.scopes),
     async exchange(input) {
       const tokens = await exchangeCode(deps, GOOGLE_TOKEN_URL, client, input);

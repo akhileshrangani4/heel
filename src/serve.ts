@@ -15,6 +15,7 @@ import { type ReloadOutcome, RulesHolder, watchRules } from "./config/rules-relo
 import type { OidcConfig } from "./config/schema.ts";
 import { type HeelConfig, humanPlaneUrlProblem, type ListenAddress } from "./config/schema.ts";
 import { formatYamlIssue } from "./config/yaml.ts";
+import { builtInGoogleClient } from "./definitions/google/builtin.ts";
 import {
   GOOGLE_CLIENT_SECRET_ENV,
   type GoogleClient,
@@ -374,13 +375,24 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
     // (D9b). A configured client whose secret is missing stops the boot,
     // rather than letting every account of that provider lapse.
     const providerClients = loadProviderClients(config, options.env);
+    // heel's own Google client (roadmap 1.14), for when heel.yaml names none.
+    const builtInGoogle = builtInGoogleClient();
     const approvalAdapters = loadApprovalAdapters(config, options.env);
-    const refreshers: RefresherLookup = (provider) => {
-      if (
-        (provider === "gmail" || provider === "google-calendar") &&
-        providerClients.google !== null
-      ) {
-        return googleRefresher({ fetch, now }, providerClients.google);
+    const refreshers: RefresherLookup = (provider, clientId) => {
+      if (provider === "gmail" || provider === "google-calendar") {
+        // Tokens refresh with the client that issued them. Tokens without a
+        // recorded client predate the built-in one, so they're the operator's.
+        if (builtInGoogle !== null && clientId === builtInGoogle.clientId) {
+          return googleRefresher(
+            { fetch, now },
+            { ...builtInGoogle, redirectUri: new URL("http://127.0.0.1") },
+          );
+        }
+        const own = providerClients.google;
+        if (own !== null && (clientId === undefined || clientId === own.clientId)) {
+          return googleRefresher({ fetch, now }, own);
+        }
+        return undefined;
       }
       if (provider === "outlook" && providerClients.microsoft !== null) {
         return microsoftRefresher({ fetch, now }, providerClients.microsoft);
@@ -404,7 +416,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         // The pool exists only once the agent plane is up; until then nothing is running to stop.
         onAccountConfigured: (accountId) => evictLocalServer(accountId),
         signIns: {
-          google: providerClients.google !== null,
+          google: providerClients.google !== null || builtInGoogle !== null,
           microsoft: providerClients.microsoft !== null,
         },
       }),
@@ -460,6 +472,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         upstreamOAuth: vault === null ? null : { signIns: upstreamSignIns, vault },
         watchFallback: watch,
         providerClients,
+        builtInGoogle,
         oidc: teamSignIn(config.oidc, options.env, now),
         hiddenCounts: () => hideCounts.snapshot(),
         now,

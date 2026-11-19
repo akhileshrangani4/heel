@@ -27,7 +27,13 @@ import {
   type SignedInEnv,
   viewerOf,
 } from "../http.ts";
+import { LoopbackRedirects } from "../loopback.ts";
 import { type ConnectionsOutcome, connectionsPage } from "../ui/connections.ts";
+import { loopbackSignInPage } from "../ui/loopback-sign-in.ts";
+
+/** Where heel's built-in Google client finishes a sign-in, and where a pasted address goes. */
+export const GOOGLE_LOOPBACK_PATH = "/connections/google/return";
+const GOOGLE_PASTE_PATH = "/connections/google/paste";
 
 /**
  * Connections (D5c): the accounts a person owns, and OAuth sign-in for remote
@@ -98,6 +104,8 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
   const signedIn = requireSession(deps);
   const oauth = deps.upstreamOAuth;
   const failures = new FailureNotes(deps.now);
+  const builtIn = deps.builtInGoogle;
+  const loopbacks = new LoopbackRedirects(new URL(GOOGLE_LOOPBACK_PATH, deps.publicUrl));
   // Sign-in for built-in mail accounts, by account provider; only for the
   // providers the operator configured a client for.
   const providers = new Map<string, ProviderSignIn>();
@@ -109,6 +117,18 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       providers.set(
         "google-calendar",
         googleSignIn(http, google, GOOGLE_CALLBACK_PATH, CALENDAR_PROFILE),
+      );
+    } else if (builtIn != null) {
+      // heel's own desktop client: each sign-in gets its own loopback redirect.
+      const client = { ...builtIn, redirectUri: new URL("http://127.0.0.1") };
+      const loopback = { loopback: true };
+      providers.set(
+        "gmail",
+        googleSignIn(http, client, GOOGLE_LOOPBACK_PATH, GMAIL_PROFILE, loopback),
+      );
+      providers.set(
+        "google-calendar",
+        googleSignIn(http, client, GOOGLE_LOOPBACK_PATH, CALENDAR_PROFILE, loopback),
       );
     }
     if (microsoft !== null) {
@@ -126,7 +146,7 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
         providers.has(account.provider) || (oauth !== null && isOAuthUpstream(account.settings)),
       // From the config, not `providers`: that's also empty when the vault is closed.
       setup: missingSignInSetup(account.provider, {
-        google: deps.providerClients.google !== null,
+        google: deps.providerClients.google !== null || builtIn != null,
         microsoft: deps.providerClients.microsoft !== null,
       }),
     }));
@@ -152,8 +172,29 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       (a) => a.alias === alias,
     );
     const provider = account === undefined ? undefined : providers.get(account.provider);
+    if (account !== undefined && provider !== undefined && provider.loopback === true) {
+      const redirectUri = await loopbacks.open(account.id);
+      const { url, state } = startSignIn(
+        { signIns: oauth.signIns, now: deps.now },
+        provider,
+        account,
+        session.userId,
+        redirectUri,
+      );
+      return renderPage(c, {
+        title: "Sign in with Google",
+        viewer: viewerOf(session),
+        current: "connections",
+        body: loopbackSignInPage({
+          alias: account.alias,
+          google: url.toString(),
+          paste: { action: GOOGLE_PASTE_PATH, csrfToken: session.csrfToken },
+          state,
+        }),
+      });
+    }
     if (account !== undefined && provider !== undefined) {
-      const url = startSignIn(
+      const { url } = startSignIn(
         { signIns: oauth.signIns, now: deps.now },
         provider,
         account,
@@ -226,6 +267,43 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     return c.redirect(back({ account: alias, connected: "1" }), 303);
   });
 
+  // A browser that isn't on heel's host can't load the loopback redirect; the
+  // person pastes its address here instead. Only an address for this
+  // sign-in's own listener, for a sign-in this person started, goes on to
+  // the callback, which checks everything again.
+  app.post(GOOGLE_PASTE_PATH, signedIn, requireCsrfField(), async (c) => {
+    const session = c.get("session");
+    const state = (await formField(c, "state")) ?? "";
+    const address = ((await formField(c, "address")) ?? "").trim();
+    const pending = oauth?.signIns.get(state, deps.now()) ?? null;
+    const pasted = URL.parse(address);
+    const ownListener =
+      pending !== null &&
+      pending.userId === session.userId &&
+      pending.redirectUri !== undefined &&
+      pasted !== null &&
+      pasted.origin === new URL(pending.redirectUri).origin &&
+      pasted.pathname === "/" &&
+      pasted.searchParams.get("state") === state;
+    if (!ownListener || pasted === null) {
+      return c.redirect(
+        back({
+          failed: failures.add(
+            "",
+            "That isn't the address Google sent you to for this sign-in. Start the sign-in again and paste the address of the page that didn't load.",
+          ),
+        }),
+        303,
+      );
+    }
+    const forward = new URLSearchParams();
+    for (const key of ["code", "state", "error"]) {
+      const value = pasted.searchParams.get(key);
+      if (value !== null) forward.set(key, value);
+    }
+    return c.redirect(`${GOOGLE_LOOPBACK_PATH}?${forward}`, 303);
+  });
+
   // One route per callback path; Gmail and Google Calendar share Google's.
   const callbackPaths = new Set([...providers.values()].map((p) => p.callbackPath));
   for (const callbackPath of callbackPaths) {
@@ -249,11 +327,13 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
         provider === undefined ||
         provider.callbackPath !== callbackPath
       ) {
+        if (pending !== null && provider?.loopback === true) loopbacks.close(pending.accountId);
         return c.redirect(
           back({ failed: failures.add("", "That sign-in expired or wasn't yours. Start again.") }),
           303,
         );
       }
+      if (provider.loopback === true) loopbacks.close(account.id);
       try {
         const { mailbox } = await finishSignIn(
           { db: deps.db, vault: oauth.vault },

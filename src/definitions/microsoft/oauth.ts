@@ -132,6 +132,7 @@ export function microsoftSignIn(
   return {
     label: "Microsoft",
     callbackPath,
+    clientId: client.clientId,
     authorizeUrl: (input) => microsoftAuthorizeUrl(client, input),
     async exchange(input) {
       const tokens = await exchangeCode(deps, endpoint(client, "token"), client, {

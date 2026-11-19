@@ -37,7 +37,11 @@ export class RefreshUnavailableError extends Error {
  */
 export type OAuthRefresher = (request: OAuthRefreshRequest) => Promise<OAuthTokens>;
 
-/** Finds the refresher for a provider; undefined when it has none. */
-export type RefresherLookup = (provider: string) => OAuthRefresher | undefined;
+/**
+ * Finds the refresher for a provider and the client that issued the tokens
+ * (absent for tokens stored before heel recorded it); undefined when there's
+ * none, which asks the owner to sign in again.
+ */
+export type RefresherLookup = (provider: string, clientId?: string) => OAuthRefresher | undefined;
 
 export const noRefreshers: RefresherLookup = () => undefined;

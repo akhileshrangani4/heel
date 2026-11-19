@@ -55,7 +55,7 @@ export async function exchangeCode(
   deps: { fetch: FetchFn; now: () => Date },
   tokenUrl: string,
   client: ConfidentialClient,
-  input: { code: string; verifier: string; extra?: Record<string, string> },
+  input: { code: string; verifier: string; redirectUri?: string; extra?: Record<string, string> },
 ): Promise<OAuthTokens | null> {
   const response = await postToken(deps.fetch, tokenUrl, {
     grant_type: "authorization_code",
@@ -63,7 +63,7 @@ export async function exchangeCode(
     code_verifier: input.verifier,
     client_id: client.clientId,
     client_secret: client.clientSecret.reveal(),
-    redirect_uri: client.redirectUri.toString(),
+    redirect_uri: input.redirectUri ?? client.redirectUri.toString(),
     ...input.extra,
   });
   if (!response.ok) return null;
