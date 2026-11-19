@@ -143,7 +143,13 @@ describe("ApprovalRequest", () => {
 
   it("shows an HTTP request's body decoded, so the approver reads what will be written", () => {
     const doc = render(HTTP_REQUEST);
-    expect(text(doc.querySelector("h1"))).toBe("ops-bot wants to send PUT /items/5 on api");
+    // The operation the account's OpenAPI file names comes after what it calls.
+    expect(text(doc.querySelector("h1"))).toBe(
+      "ops-bot wants to call PUT /items/5 (item.write) on api",
+    );
+    expect(text(render({ ...HTTP_REQUEST, action: null }).querySelector("h1"))).toBe(
+      "ops-bot wants to call PUT /items/5 on api",
+    );
     const card = text(doc.querySelector("section[aria-labelledby^='http-']"));
     expect(card).toContain("attacker@evil.example");
     expect(card).toContain("99999");
