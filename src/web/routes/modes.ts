@@ -82,7 +82,12 @@ export function modeRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     const query = c.req.query();
     const outcome: ModesOutcome =
       isMode(query["switched"]) && query["owner"] !== undefined
-        ? { kind: "switched", label: label(all, query["owner"]), mode: query["switched"] }
+        ? {
+            kind: "switched",
+            ownerId: query["owner"],
+            label: label(all, query["owner"]),
+            mode: query["switched"],
+          }
         : { kind: "none" };
     return renderPage(c, {
       title: "Modes",
