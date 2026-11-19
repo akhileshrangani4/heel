@@ -53,20 +53,23 @@ function scopeText(row: StandingRow): Html {
   }
 }
 
-function stateCell(row: StandingRow, now: Date): Html {
+/** The state as a pill, for the card's top line. */
+function stateBadge(row: StandingRow): Html {
   const { label, tone } = STATE_BADGE[row.state];
-  const detail =
-    row.state === "active"
-      ? html`Ends ${time(row.expiresAt)} (${formatRelative(row.expiresAt, now)})${
-          row.paused ? html`. Paused: calls in scope return “paused” anyway` : ""
-        }`
-      : row.state === "revoked" && row.revoked
-        ? html`by ${row.revoked.by} at ${time(row.revoked.at)}`
-        : row.state === "expired"
-          ? html`Ended ${time(row.expiresAt)}`
-          : html`Kept for the record; it no longer matches`;
-  return html`${badge(label, tone)}
-    <div class="muted">${detail}</div>`;
+  return badge(label, tone);
+}
+
+/** When it ends, or how it ended, for the card's footer. */
+function stateDetail(row: StandingRow, now: Date): Html {
+  return row.state === "active"
+    ? html`Ends ${time(row.expiresAt)} (${formatRelative(row.expiresAt, now)})${
+        row.paused ? html`. Paused: calls in scope return “paused” anyway` : ""
+      }`
+    : row.state === "revoked" && row.revoked
+      ? html`Revoked by ${row.revoked.by} at ${time(row.revoked.at)}`
+      : row.state === "expired"
+        ? html`Ended ${time(row.expiresAt)}`
+        : html`Kept for the record; it no longer matches`;
 }
 
 /**
@@ -101,15 +104,16 @@ export function standingApprovalList(props: StandingApprovalListProps): Html {
       ${rows.map(
         (row) => html`<li class="card req" data-status="${row.state}">
           <div class="ap-meta">
+            ${stateBadge(row)}
             <span class="ap-agent">${row.agent}</span>
             <span class="muted">on ${row.account}</span>
             <span class="muted">by ${row.createdBy}, ${time(row.createdAt)}</span>
-            <span class="req-state">${stateCell(row, props.now)}</span>
           </div>
           <h2 class="req-title">${scopeText(row)}</h2>
           <div class="req-foot-row">
             <p class="req-foot muted">
-              Rule ${formatRule(row.rule)} · <span class="mono">${row.id}</span>
+              ${stateDetail(row, props.now)} · Rule ${formatRule(row.rule)} ·
+              <span class="mono">${row.id}</span>
             </p>
             ${
               row.state === "active"

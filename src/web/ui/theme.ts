@@ -204,13 +204,16 @@ body:has(.ap){background:var(--page)}
   .site{padding:.6rem 1rem 0;gap:.4rem 1rem}
   .site .who{display:none}
   .site nav{flex-basis:100%}
-  .site nav ul{flex-wrap:nowrap;justify-content:space-between;gap:0}
+  .site nav ul{flex-wrap:nowrap;justify-content:space-between;gap:0;margin:0 -.4rem}
   .site nav a{padding:.35rem .4rem;font-size:.85rem}
   main{padding:1rem}
   table.data{min-width:34rem}
 }
 .req-list{list-style:none;margin:.75rem 0 2rem;padding:0;display:grid;gap:.75rem}
 .req{margin:0}
+.req .ap-meta{display:block;line-height:1.75}
+.req .ap-meta > *{display:inline-block;white-space:nowrap;margin-right:.75rem}
+.req .ap-meta .badge{float:right;margin:0 0 0 .75rem;line-height:1.5}
 .req-title{font-size:1.1rem;line-height:1.4;margin:.5rem 0 0;font-weight:600;overflow-wrap:anywhere}
 .req-title a{color:var(--text);text-decoration:none}
 .req-title a:hover{text-decoration:underline}
@@ -221,7 +224,6 @@ body:has(.ap){background:var(--page)}
 .req-count{margin:0}
 .req-foot-row{display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap;margin-top:.5rem}
 .req-foot-row .req-foot{margin:0;overflow-wrap:anywhere}
-.ap-meta .req-state{margin-left:auto;font-size:.85rem}
 .grant-form{display:grid;gap:.4rem .75rem;grid-template-columns:minmax(7rem,max-content) minmax(0,1fr);align-items:center}
 .grant-form h2{grid-column:1/-1;font-size:1rem;margin:0 0 .25rem}
 .grant-form label{color:var(--muted);font-size:.9rem}
@@ -255,9 +257,29 @@ body:has(.ap){background:var(--page)}
 .pause-resume{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
 .conn-add h2{font-size:1rem;margin:0 0 .25rem}
 .conn-add pre.args{margin-top:.75rem}
+@media (max-width:22rem){.site nav ul{margin:0 -.25rem}.site nav a{font-size:.78rem;padding:.35rem .25rem}}
 .story{border-top:4px solid var(--border);margin-top:2rem;padding-top:1rem}
 .visually-hidden{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
-.signin{max-width:28rem;margin:3rem auto}
+body:has(.auth){background-color:var(--page);background-image:radial-gradient(circle,rgb(0 0 0 / .07) 1px,transparent 1px);background-size:22px 22px}
+:root[data-theme="dark"] body:has(.auth){background-image:radial-gradient(circle,rgb(255 255 255 / .06) 1px,transparent 1px)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) body:has(.auth){background-image:radial-gradient(circle,rgb(255 255 255 / .06) 1px,transparent 1px)}}
+main:has(.auth){max-width:none;padding:0}
+.auth{position:relative;max-width:1100px;margin:0 auto;padding:4rem 1.25rem 3rem;display:flex;flex-direction:column;align-items:center;text-align:center;min-height:100vh}
+.auth-dog{margin:0;text-align:left;font-size:.75rem;line-height:1.25;color:var(--muted);white-space:pre;overflow:visible;background:none;border:0;padding:0}
+.auth-word{margin:1rem 0 0;font-size:clamp(3.5rem,11vw,5.5rem);line-height:1;font-weight:600;letter-spacing:-.06em}
+.auth-tag{margin:.6rem 0 2rem;font-size:1.1rem;color:var(--muted)}
+.auth-foot{margin:1.25rem 0 0;font-size:.78rem;color:var(--muted)}
+.sticker{position:absolute;display:none;border:1px solid;border-radius:6px;padding:.2rem .6rem;font:500 .75rem ui-monospace,SFMono-Regular,Menlo,monospace;box-shadow:0 1px 2px rgb(0 0 0 / .06)}
+.sticker-allow{top:7rem;left:12%;transform:rotate(-6deg);color:var(--ok);background:var(--ok-bg);border-color:color-mix(in srgb,var(--ok) 35%,transparent)}
+.sticker-deny{top:10rem;right:12%;transform:rotate(8deg);color:var(--danger);background:var(--danger-bg);border-color:color-mix(in srgb,var(--danger) 35%,transparent)}
+.sticker-ask{top:21rem;left:17%;transform:rotate(4deg);color:var(--warn);background:var(--warn-bg);border-color:color-mix(in srgb,var(--warn) 35%,transparent)}
+@media (min-width:56rem){.sticker{display:block}}
+.signin{width:100%;max-width:25rem;margin:0;padding:1.75rem;text-align:left;background:var(--bg);border:1px solid var(--line);border-radius:16px;box-shadow:0 24px 60px -28px rgb(0 0 0 / .45)}
+.signin h1{font-size:1.35rem}
+.signin .actions{margin:1.25rem 0}
+.signin .actions .btn{width:100%;justify-content:center;text-align:center;min-height:2.85rem;border-radius:999px}
+.signin > p.muted{font-size:.88rem}
+@media (max-width:36rem){.auth{padding-top:2.5rem}.signin{padding:1.4rem 1.25rem;border-radius:14px}}
 [role="status"]:empty{display:none}
 #heel-ceremony-status:not(:empty){position:fixed;left:1rem;right:1rem;bottom:1rem;max-width:56rem;margin:0 auto;z-index:20;padding:.75rem 1rem;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 30px -12px rgb(0 0 0 / .35);overflow-wrap:anywhere}
 body:has(#heel-ceremony-status:not(:empty)) main{padding-bottom:10rem}

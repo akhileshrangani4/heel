@@ -54,7 +54,7 @@ const DECISIONS_NEED_PASSKEY = html`<p class="muted">
 /** Team installs: sign in through the organization's OIDC provider. */
 export function oidcSignIn(props: OidcSignInProps): Html {
   return html`<div class="signin">
-    <h1>Sign in to heel</h1>
+    <h1>Sign in</h1>
     ${signInNotice(props.notice)}
     <p>Use your organization account.</p>
     <div class="actions">
@@ -68,7 +68,7 @@ export function oidcSignIn(props: OidcSignInProps): Html {
 export function passkeySignIn(props: PasskeySignInProps): Html {
   if (!props.enrolled) {
     return html`<div class="signin">
-      <h1>Sign in to heel</h1>
+      <h1>Sign in</h1>
       ${signInNotice(props.notice)}
       ${notice(
         "info",
@@ -81,7 +81,7 @@ export function passkeySignIn(props: PasskeySignInProps): Html {
     </div>`;
   }
   return html`<div class="signin">
-    <h1>Sign in to heel</h1>
+    <h1>Sign in</h1>
     ${signInNotice(props.notice)}
     <p id="passkey-help">This install is single-user. Sign in with the passkey you enrolled.</p>
     <div class="actions">
