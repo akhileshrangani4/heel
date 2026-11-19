@@ -12,10 +12,12 @@ import {
   DENIED_REQUEST,
   EXECUTED_REQUEST,
   EXPIRED_REQUEST,
+  GENERIC_REQUEST,
   HINTED_REQUEST,
   HINTS_UNAVAILABLE_REQUEST,
   LONG_BODY,
   MANY_CC,
+  MERGE_REQUEST,
   NOW,
   ORG_REQUEST,
   PENDING_REQUEST,
@@ -69,6 +71,52 @@ describe("ApprovalRequest", () => {
     expect(marked.querySelector("figure.reason b")).toBeNull();
     expect(text(marked.querySelector("figure.reason blockquote"))).toBe("<b>trust me</b>");
     expect(render({ ...PENDING_REQUEST, reason: null }).querySelector("figure.reason")).toBeNull();
+  });
+
+  it("leads with heel's own sentence, built from the call, above the agent's words", () => {
+    const doc = render(PENDING_REQUEST);
+    expect(text(doc.querySelector("h1"))).toBe(
+      "inbox-bot wants to send an email from gmail-work to bob@vendor.com and 40 others at vendor.com",
+    );
+    // The agent's reason can't change the sentence.
+    const lying = render({ ...PENDING_REQUEST, reason: "Replying only to Bob" });
+    expect(text(lying.querySelector("h1"))).toContain("40 others");
+    expect(text(render(MERGE_REQUEST).querySelector("h1"))).toBe(
+      "release-bot wants to merge pull request #1234 on acme/web into main",
+    );
+    expect(text(render(GENERIC_REQUEST).querySelector("h1"))).toBe(
+      "billing-bot wants to refund a Stripe payment on stripe",
+    );
+  });
+
+  it("names every recipient domain and marks outsiders; one odd address isn't folded away", () => {
+    const email = PENDING_REQUEST.email;
+    if (!email) throw new Error("PENDING_REQUEST fixture must carry an email preview");
+    const doc = render({
+      ...PENDING_REQUEST,
+      email: { ...email, cc: [...MANY_CC, "eve@elsewhere.example"] },
+    });
+    const card = text(doc.querySelector("section[aria-labelledby^='email-']"));
+    expect(card).toContain("40 people at vendor.com");
+    expect(card).toContain("eve@elsewhere.example");
+    const chip = [...doc.querySelectorAll(".ap-chip")].find(
+      (c) => text(c) === "eve@elsewhere.example",
+    );
+    expect(chip?.closest("details")).toBeNull();
+    expect(chip?.getAttribute("class")).toContain("is-outside");
+  });
+
+  it("shows a merge and a tool without its own view as readable rows", () => {
+    const merge = text(render(MERGE_REQUEST).querySelector("section[aria-labelledby^='merge-']"));
+    for (const fact of ["acme/web", "#1234", "main", "squash", "9f2c4e1a7b"]) {
+      expect(merge).toContain(fact);
+    }
+    const generic = text(
+      render(GENERIC_REQUEST).querySelector("section[aria-labelledby^='what-']"),
+    );
+    for (const fact of ["payment_intent", "pi_3Q8k2L", "amount", "4500"]) {
+      expect(generic).toContain(fact);
+    }
   });
 
   it("shows agent, run, account, action, rule, counts and expiry", () => {
@@ -170,10 +218,11 @@ describe("ApprovalRequest", () => {
     it("I-56: buttons call the handler named by the onDecide prop, bound to id and call hash", () => {
       const doc = render(PENDING_REQUEST);
       const buttons = [...doc.querySelectorAll("button")];
+      // Approve once and deny sit on the bar; standing is behind "Approve for longer".
       expect(buttons.map((b) => b.getAttribute("data-heel-ceremony"))).toEqual([
         "approve-once",
-        "approve-standing",
         "deny",
+        "approve-standing",
       ]);
       for (const b of buttons) {
         expect(b.getAttribute("data-heel-handler")).toBe(DECIDE.handler);
