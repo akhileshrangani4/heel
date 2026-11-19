@@ -28,11 +28,8 @@ Google sends you back to heel at this address after you sign in, and only to add
 | `public_url: https://heel.example.com` | `https://heel.example.com/oauth/google/callback` |
 | Tailscale, `public_url: https://mybox.tail1234.ts.net` | `https://mybox.tail1234.ts.net/oauth/google/callback` |
 
-- **It must match exactly:** scheme (`http` or `https`), host, and port. `localhost` and `127.0.0.1` are different addresses to Google.
-- **Only the scheme, host and port of `public_url` count.** A path in it (`https://example.com/heel`) is dropped: the URI is `https://example.com/oauth/google/callback`.
-- **It comes from `public_url`, not from `listen`.** If you moved the approval page off port 7301 with `listen.human`, set `public_url` to the new address too, or the redirect URI still says `localhost:7301`.
-- **Google allows plain `http` only for `localhost` (or `127.0.0.1`).** Anywhere else, `public_url` must be `https://`, which heel requires anyway.
-- **A client can list several redirect URIs.** Add both `http://localhost:7301/...` and your HTTPS address if you use both. If you change `public_url` later, add the new URI to the client.
+- **It must match exactly:** scheme, host and port. `localhost` and `127.0.0.1` are different to Google, and plain `http` only works for `localhost`.
+- **It comes from `public_url`,** not from `listen`, and only its scheme, host and port count. If you change `public_url` later, add the new URI to the client too; a client can list several.
 
 ## 2. Create a Google Cloud project
 

@@ -2,11 +2,19 @@
 
 [README](../README.md) · [Quickstart](quickstart.md) · [Connect accounts](connect.md) · [Connect your agent](agents.md) · [Rules](rules.md) · [Approvals](approvals.md) · [Running](running.md)
 
-Rules are a file you can read, review and test. A call no rule matches is denied. This page is the tour; the [rules reference](rules-reference.md) has every key, operator, action and edge case, with recipes you can copy. Rules are checked in this order, and the first match decides:
+Rules decide what your agent's calls do: run, ask you, or never run. They're a YAML file you can read, review and test, at `~/.heel/rules/owner.yaml`. `heel init` starts you with two: reads run, and everything else asks you.
+
+This page is the tour. The [rules reference](rules-reference.md) has every key, operator and action, with recipes to copy.
+
+## How heel decides
+
+The first rule that matches decides, and a call no rule matches is denied. Rules are checked in this order:
 
 1. **Organization rules.** These can only deny or ask, so nothing below can loosen them.
 2. **Your rules,** top to bottom.
 3. **Standing approvals and intent grants,** only when your rules end in an `ask` (or, for an intent grant, when nothing matched). They can turn that into `allow`, but never get past a `deny` or an org `ask`.
+
+## A rules file
 
 ```yaml
 rules:
@@ -53,6 +61,8 @@ rules:
     then: ask
 ```
 
+## What a rule can check
+
 | Part of a rule | What it does |
 | --- | --- |
 | **Actions** | Built-in definitions map tools from different servers to one action. `email.send` covers send, reply, reply-all and forward on Gmail and Outlook, with `recipients` meaning to, cc and bcc together. For a server heel doesn't know, rules use its own tool and argument names. |
@@ -60,8 +70,7 @@ rules:
 | **State checks** | Look something up first, with heel's own read access, and only exist for services heel knows. `all_in_thread`: every recipient was on a message you sent in that thread. `checks: passing`: reads the pull request's status and passes the checked commit to GitHub's merge, so the merge fails if new commits landed. |
 | **Counts** | Count `items` (messages, files, records), not calls, so one `batch_delete` of 1,000 messages counts as 1,000, including the call being checked. `per: run` uses the run id the agent sends, so pair it with a `per: hour` limit, which the agent can't reset. |
 
-- **Try before enforcing.** `heel serve --watch` lets calls through and logs what each rule would have done. One new rule can run that way on its own with `watch: true`.
-- **Describe a rule in words.** A model drafts the YAML for you to read and save. It never sees a live call.
+**Not sure where to start?** Run in [Watch mode](#try-rules-before-enforcing-them) for a few days, then turn what Activity shows into rules. Or let your agent [propose them](#your-agent-can-propose-rules).
 
 ## Try rules before enforcing them
 
@@ -76,6 +85,8 @@ Pause, org rules, hidden mail and calls heel can't check safely hold in every mo
 ## Editing rules
 
 Edit the file and heel reloads it on its own. Before you rely on a change, run `heel rules check` (it reports every problem and names that match nothing) and `heel rules test` with your cases ([how](rules-reference.md#testing-rules)). Editing a rule ends the standing approvals made from it, so a widened rule asks again.
+
+**Describe a rule in words** with `heel rules draft "merges to main ask"`: a model you configure drafts the YAML and a diff for you to read and save. It never sees a live call, and never saves anything itself.
 
 ## Your agent can propose rules
 
@@ -92,6 +103,8 @@ When a call your agent needs keeps asking, or is denied, it can propose rules in
   ]
 }
 ```
+
+![A proposed rule: vendor-mail, with the agent's why and where it goes](images/proposal.png)
 
 - **Nothing changes until you add them.** The proposal shows up under **Rule changes** on the Approvals page. Its page shows each rule with the agent's why, which of your rules they come before, and the whole file after the change. **Add these rules** asks for your passkey; **Reject** doesn't.
 - **They go first in your file,** above your own rules, each with a `# Proposed by <agent>: <why>` comment. The first rule that matches decides, so a proposed `allow` decides a call that one of your rules would have asked about. The page says so.
