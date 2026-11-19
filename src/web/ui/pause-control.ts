@@ -2,7 +2,7 @@ import type { PauseScope } from "../../core/call.ts";
 import { type CeremonyCallback, ceremonyButton } from "./ceremony.ts";
 import { formatPauseScope, plural } from "./format.ts";
 import { type Html, html } from "./html.ts";
-import { type FormTarget, notice, postForm, scrollRegion, time } from "./layout.ts";
+import { badge, type FormTarget, notice, postForm, time } from "./layout.ts";
 
 export interface ActivePause {
   scope: PauseScope;
@@ -62,40 +62,33 @@ function pauseButton(
   paused: boolean,
 ): Html {
   const what = formatPauseScope(scope, target);
-  if (paused) return html`<span class="muted">Paused</span>`;
+  if (paused) return badge("Paused", "warn");
+  const label = scope === "global" ? "Pause everything" : "Pause";
   return postForm(
     form,
     { scope, target: target ?? "" },
-    html`<button type="submit" class="btn btn-danger">Pause ${what}</button>`,
+    html`<button type="submit" class="btn btn-danger" aria-label="Pause ${what}">${label}</button>`,
   );
 }
 
 function activeList(active: readonly ActivePause[], onResume: CeremonyCallback): Html {
   if (active.length === 0) {
-    return html`<p>Nothing is paused. Every call goes through the rules as usual.</p>`;
+    return html`<div class="card pause-status">
+      ${badge("Running", "ok")}
+      <p>Nothing is paused. Every call goes through the rules as usual.</p>
+    </div>`;
   }
-  return scrollRegion(
-    "Active pauses",
-    html`<table class="data">
-    <caption>
-      ${plural(active.length, "active pause")}
-    </caption>
-    <thead>
-      <tr>
-        <th scope="col">Scope</th>
-        <th scope="col">Paused by</th>
-        <th scope="col">Since</th>
-        <th scope="col">Resume</th>
-      </tr>
-    </thead>
-    <tbody>
+  return html`<div class="card pause-status is-paused">
+    <p>${badge(plural(active.length, "active pause"), "warn")}</p>
+    <ul class="pause-list">
       ${active.map((pause) => {
         const helpId = `resume-help-${pauseKey(pause)}`;
-        return html`<tr>
-          <th scope="row">${formatPauseScope(pause.scope, pause.target)}</th>
-          <td>${pause.pausedBy}</td>
-          <td>${time(pause.pausedAt)}</td>
-          <td>
+        return html`<li>
+          <div>
+            <strong>${formatPauseScope(pause.scope, pause.target)}</strong>
+            <span class="muted">by ${pause.pausedBy}, since ${time(pause.pausedAt)}</span>
+          </div>
+          <div class="pause-resume">
             ${ceremonyButton({
               callback: onResume,
               intent: "resume",
@@ -104,13 +97,12 @@ function activeList(active: readonly ActivePause[], onResume: CeremonyCallback):
               binding: { scope: pause.scope, target: pause.target ?? "" },
               describedBy: helpId,
             })}
-            <div class="muted" id="${helpId}">Passkey required to resume.</div>
-          </td>
-        </tr>`;
+            <span class="muted" id="${helpId}">Passkey required to resume.</span>
+          </div>
+        </li>`;
       })}
-    </tbody>
-  </table>`,
-  );
+    </ul>
+  </div>`;
 }
 
 function outcomeNotice(outcome: PauseOutcome): Html | "" {
@@ -168,15 +160,20 @@ export function pauseControl(props: PauseControlProps): Html {
   }
   const { active, agents, accounts, canPauseAll } = props.load;
   const allPaused = isActive(active, "global", null);
-  const rows = (scope: "agent" | "account", names: readonly string[]): Html[] =>
-    names.map(
-      (name) =>
-        html`<tr>
-          <th scope="row">${name}</th>
-          <td>${scope}</td>
-          <td>${pauseButton(props.pauseForm, scope, name, allPaused || isActive(active, scope, name))}</td>
-        </tr>`,
-    );
+  const group = (title: string, scope: "agent" | "account", names: readonly string[]): Html =>
+    names.length === 0
+      ? html``
+      : html`<div class="card">
+          <h3>${title}</h3>
+          <ul class="pause-list">
+            ${names.map(
+              (name) => html`<li>
+                <strong class="mono">${name}</strong>
+                ${pauseButton(props.pauseForm, scope, name, allPaused || isActive(active, scope, name))}
+              </li>`,
+            )}
+          </ul>
+        </div>`;
   return html`${heading} ${outcomeNotice(props.outcome)}
     <section aria-labelledby="pause-active">
       <h2 id="pause-active">Paused now</h2>
@@ -185,24 +182,17 @@ export function pauseControl(props: PauseControlProps): Html {
     <section aria-labelledby="pause-new">
       <h2 id="pause-new">Pause</h2>
       <p class="muted">One tap. No passkey is needed to stop calls.</p>
-      ${canPauseAll ? html`<div class="actions">${pauseButton(props.pauseForm, "global", null, allPaused)}</div>` : ""}
-      ${scrollRegion(
-        "Agents and accounts",
-        html`<table class="data">
-        <caption>
-          Agents and accounts
-        </caption>
-        <thead>
-          <tr>
-            <th scope="col">Name</th>
-            <th scope="col">Kind</th>
-            <th scope="col">Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rows("agent", agents)} ${rows("account", accounts)}
-        </tbody>
-      </table>`,
-      )}
+      ${
+        canPauseAll
+          ? html`<div class="card pause-all">
+              <div>
+                <h3>Everything</h3>
+                <p class="muted">Every agent and every account, at once.</p>
+              </div>
+              ${pauseButton(props.pauseForm, "global", null, allPaused)}
+            </div>`
+          : ""
+      }
+      <div class="pause-groups">${group("Agents", "agent", agents)} ${group("Accounts", "account", accounts)}</div>
     </section>`;
 }
