@@ -98,13 +98,13 @@ export function activityPage(props: {
     ${props.nextBefore === null ? "" : html`<p><a href="/activity?${params({ before: String(props.nextBefore) })}">Older</a></p>`}
     <h2>Suggested rules</h2>
     <p class="muted">
-      Drawn from shadow and record mode: calls your rules would have stopped, grouped by account and
+      Drawn from Watch mode: calls your rules would have stopped, grouped by account and
       action. Suggestions are only text. Read them, edit them, and add the ones you want to your rules
       file. Sends are suggested as ask, never allow.
     </p>
     ${
       props.suggestions.length === 0
-        ? html`<p class="muted">Nothing yet. Run in shadow or record mode for a while.</p>`
+        ? html`<p class="muted">Nothing yet. Run in Watch mode for a while.</p>`
         : html`<pre class="mono">${props.suggestions.map((s) => s.yaml).join("\n")}</pre>`
     }`;
 }
