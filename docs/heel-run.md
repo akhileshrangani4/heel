@@ -22,7 +22,7 @@ Run these as heel's operator, with the same `HEEL_HOME` as `heel serve`. For hee
 gh auth token | heel connect cli gh --as gh --bin /usr/bin/gh --credential-stdin
 ```
 
-`--bin` is the CLI's path **on heel's host**: a real file (not a symlink) outside every workdir. The sandbox sees that file, `/usr` and the host's `/bin` and `/lib*` links into it, the CA certificates, and its own empty `HOME` and `/tmp`. For any other CLI, and for npm, see the CLI forms in [Using heel](agents.md).
+`--bin` is the CLI's path **on heel's host**: a real file (not a symlink) outside every workdir. The sandbox sees that file, `/usr` and the host's `/bin` and `/lib*` links into it, the CA certificates, and its own empty `HOME` and `/tmp`. For any other CLI, and for npm, see [Sandbox and credentials](sandbox.md#connecting-a-cli-or-a-local-mcp-server).
 
 ### 2. Allow it in your rules
 
@@ -58,22 +58,8 @@ heel agent workdir my-agent /home/me/code
 | Remove them all | `heel agent workdir my-agent --clear` |
 
 - **Setting replaces the list.** To add a directory, name the ones you already have too.
-- **Listing changes nothing.** With no workdirs, it prints:
-  ```
-  "my-agent" has no workdirs, so heel run refuses its commands.
-  Add one with: heel agent workdir my-agent <dir>
-  ```
-- **Each one is checked on heel's host**, when you set it. It must be an absolute path to a directory that exists there. heel stores it with symlinks resolved, so the list can show a different spelling (if `/home/me/code` is a link to `/data/code`, the list says `/data/code`).
-- **Some directories can't be workdirs:** `/`, `/home`, `/tmp` and `/var` themselves, anything inside `/usr`, `/etc`, `/bin`, `/sbin`, `/lib`, `/lib32`, `/lib64`, `/libx32`, `/proc`, `/sys`, `/dev`, `/boot`, `/root`, `/run` or `/heel` (the sandbox's own), anything that overlaps heel's own home, and anything that overlaps a workdir of another person's agent.
-
-When heel refuses one, nothing changes:
-
-```
-heel: not a usable work root: /home/me/code/nope (it doesn't exist) (invalid)
-heel: not a usable work root: code (an absolute, normalized path) (invalid)
-heel: not a usable work root: /tmp (a system directory) (invalid)
-heel: not a usable work root: /home/me/.heel (it overlaps heel's own files) (invalid)
-```
+- **Each one must be an absolute path to a directory on heel's host.** heel stores it with symlinks resolved.
+- **System directories can't be workdirs** (`/`, `/home`, `/tmp`, anything in `/usr`, `/etc` and the like), nor anything overlapping heel's own home or another person's agent's workdir. heel says which rule a refused directory broke, and changes nothing.
 
 ## Point the agent at heel
 
@@ -216,7 +202,7 @@ heel then warns at startup that the agent port listens on `heel:7300`, not just 
 
 Or run the agent with `--network container:heel` and `HEEL_URL=http://127.0.0.1:7300`, which needs no change to heel.yaml.
 
-## What the agent gets back
+## Troubleshooting
 
 When the command ran, `heel run` prints its output and exits with its exit code. When it didn't, it prints a `heel:` line to stderr (followed by the usage text, for a usage error), and the exit code says why:
 
@@ -240,7 +226,7 @@ The `heel:` lines you're most likely to see while setting up:
 | `{"status":"denied","reason":"unknown_host",…}` | `HEEL_URL` uses a name heel doesn't serve. | [Listen on that name](#point-the-agent-at-heel), or use `127.0.0.1`. |
 | `{"status":"denied","reason":"no_rule_matched",…}` | No rule matches the command. | Add a rule. |
 | `{"status":"denied","reason":"unsupported",…}` | heel can't check this command: for gh, often a repo command without `-R`. | Add `-R <owner>/<repo>`. |
-| `{"status":"error","reason":"sandbox_unavailable"}` (exit 70) | heel's host can't run the sandbox (macOS, or Docker without the options above). | `heel serve`'s log says why. See [The sandbox](sandbox.md). |
+| `{"status":"error","reason":"sandbox_unavailable"}` (exit 70) | heel's host can't run the sandbox (macOS, or Docker without the options above). | `heel serve`'s log says why. See [Sandbox and credentials](sandbox.md). |
 | `{"status":"error","detail":"couldn't reach heel: fetch failed"}` (exit 70) | Nothing answers at `HEEL_URL`. | Check that heel is running, and the port. |
 | `{"status":"denied","reason":"token_refused",...}` (exit 77) | heel refused `HEEL_TOKEN`: a typo, or a token since rotated or revoked. | Set the token `heel agent add` or `heel agent rotate` printed. |
 | `{"status":"denied","reason":"token_expired",...}` (exit 77) | The agent's token expired (tokens last 90 days unless `--expires` said otherwise). | Run `heel agent rotate <agent>` on heel's side and set the new token. |

@@ -71,4 +71,4 @@ Add `--json` for every field, ids included, for scripts.
 | 69 | heel isn't running. |
 | 78 | `heel.yaml`, or a file it names, is missing or invalid. |
 
-`heel run` has its own: 75 needs approval, 77 denied, 69 paused, 70 heel couldn't run it. See [heel run](heel-run.md#what-the-agent-gets-back).
+`heel run` has its own: 75 needs approval, 77 denied, 69 paused, 70 heel couldn't run it. See [heel run](heel-run.md#troubleshooting).
