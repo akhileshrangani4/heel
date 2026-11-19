@@ -601,5 +601,22 @@ describe("rule values are normalized like the call's", () => {
     expect(allowedBy("{ repo: { matches: 'Acme/.*' } }", facts({ repo: "acme/web" }))).toBe(true);
     expect(allowedBy("{ repo: { matches: 'acme/\\D+' } }", facts({ repo: "acme/web" }))).toBe(true);
     expect(allowedBy("{ repo: { matches: 'Acme/API' } }", facts({ repo: "acme/web" }))).toBe(false);
+    // The same for every field heel stores in one case.
+    expect(allowedBy("{ team: { matches: 'eng|ops' } }", facts({ fields: { team: "ENG" } }))).toBe(
+      true,
+    );
+    expect(
+      allowedBy("{ currency: { matches: 'USD|EUR' } }", facts({ fields: { currency: "usd" } })),
+    ).toBe(true);
+    expect(
+      allowedBy("{ recipients: { matches: '.*@Vendor\\.com' } }", rcpt("bob@vendor.com")),
+    ).toBe(true);
+    expect(allowedBy("{ team: { matches: 'OPS' } }", facts({ fields: { team: "ENG" } }))).toBe(
+      false,
+    );
+    // Fields heel passes through as they are keep their case.
+    expect(allowedBy("{ tool: { matches: 'Send_.*' } }", facts({ tool: "send_email" }))).toBe(
+      false,
+    );
   });
 });

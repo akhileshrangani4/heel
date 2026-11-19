@@ -173,7 +173,7 @@ Every key in a `match` must hold (AND). A key whose field the call doesn't have 
 | `argv` | text list | CLI: the whole command line, with the command name at index 0. | `argv: { any_of: [--force] }` |
 | `channel` | Slack channel id | The channel a Slack call touches. | `channel: C0123ABCD` |
 | `external` | `true` or `false` | Slack: the channel reaches another organization (Slack Connect, DMs). | `external: true` |
-| `team` | Linear team key | Values are upper-cased, so `team: eng` is `ENG`. Write `matches` patterns in upper case. | `team: eng` |
+| `team` | Linear team key | Values are upper-cased, so `team: eng` is `ENG`. A `matches` pattern ignores case. | `team: eng` |
 | `project` | Linear project id | The project's UUID, not its URL slug. | `project: 3f2b1c4e-8a9d-4e7f-b6a1-2c3d4e5f6a7b` |
 | `parent` | Notion page or database id | The page or database a page sits under, or `workspace`. | `parent: workspace` |
 | `amount` | number | Stripe: in the currency's smallest unit (cents). | `amount: { max: 5000 }` |
@@ -243,7 +243,7 @@ Which operators each key takes:
 
 ### Details that matter
 
-- **Case matters,** except where heel normalizes. Text is compared exactly, but heel lower-cases `repo` and upper-cases `method` on the call and in your rule's literal values alike, so `repo: Acme/Web` and `method: get` match. A `matches` pattern on `repo` or `method` ignores case for the same reason, so `repo: { matches: "Acme/.*" }` matches `acme/web`. Addresses and domains are the exception: both sides are lower-cased first, except a `matches` pattern, which runs on the lower-cased address as written, so write it in lower case.
+- **Case matters,** except where heel normalizes. Text is compared exactly, but heel lower-cases `repo` and upper-cases `method` and `team` on the call and in your rule's literal values alike, so `repo: Acme/Web`, `method: get` and `team: eng` match. Addresses and domains are lower-cased on both sides too. A `matches` pattern ignores case on every field heel stores in one case (`repo`, `method`, `team`, `currency`, `project`, `parent` and `recipients`), so `repo: { matches: "Acme/.*" }` matches `acme/web` and `team: { matches: "eng|ops" }` matches `ENG`. On every other field, `matches` is case-sensitive.
 - **Types matter.** `args.number: 42` matches the number 42, not the text `"42"`. HTTP query values, form body values and CLI flag values are always text; for `query.*` and `flags.*` heel reads a number you write as its text, so `query.limit: 100` matches `?limit=100` (in a form body, write `"100"`). `max` never holds on one of them, but on a repeated parameter or flag (a list) it limits how many there are.
 - **`matches` is the whole value.** Patterns are [RE2](https://github.com/google/re2/wiki/Syntax) and anchored at both ends: `matches: "web"` doesn't match `acme/web`, but `matches: ".*web"` does. Quote patterns in YAML.
 - **Shorthand on a list is set equality.** `recipients: sam@company.com` holds only when Sam is the only recipient. `argv: publish` never holds, because `argv` also holds the command name. Use `any_of` or `one_of` instead.
