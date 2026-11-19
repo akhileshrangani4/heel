@@ -377,12 +377,12 @@ cases:
 
 ## Calls that outlive heel
 
-Some calls leave something behind that keeps acting after you revoke heel: a Gmail filter or Outlook rule that forwards mail, a scheduled Slack message, a pushed or merged GitHub workflow (through the GitHub service or `gh pr merge`), a raw API call through the GitHub service (`github_api`), and `gh` deploy keys, SSH keys, secrets and variables. For these:
+Some calls leave something behind that keeps acting after you revoke heel: a Gmail filter or Outlook rule that forwards mail, a scheduled Slack message, a pushed or merged GitHub workflow (through the GitHub service or `gh pr merge`), a raw API call (`github_api` through the GitHub service, or `gh api` through `heel run`), and `gh` deploy keys, SSH keys, secrets and variables. For these:
 
 - **A rule must name them** by `action` or `tool`, as plain text (shorthand, `equals`, `one_of` or `any_of`). With no such rule, the call is denied (`persistence_unnamed`).
 - **A broad rule can deny them but never allow or ask.** `match: {}` with `then: allow`, or `action: { matches: "github\\..*" }`, skips them.
 - **Naming the action is enough.** A forwarding filter is `email.send`, so a rule `action: email.send` with `then: allow` admits one whose forward address passes the rule's other conditions.
-- **`gh api` is not one of them.** Through `heel run` it is `github.api` with no persistence, so a broad `gh` allow lets it through. Deny or ask for it by name (`tool: gh api`) above any broad `gh` rule.
+- **`gh api` is one of them**, read or write, since heel can't tell what a raw call does. A broad `gh` allow skips it; name it (`tool: gh api` or `action: github.api`) to ask for it or allow it.
 
 ```yaml title="rules/owner.yaml"
 rules:
@@ -613,7 +613,7 @@ A CLI account for `gh` has provider `cli:gh`. A command that takes `-R` must be 
 | `github.merge` | write | `gh pr merge` |
 | `github.api` | write | `gh api` |
 
-Persistence, with no action, so only a rule naming the `tool` (`tool: gh secret set`) admits them: `gh repo deploy-key add`, `gh ssh-key add`, `gh secret set`, `gh variable set`.
+Persistence, so only a rule naming the `tool` (`tool: gh secret set`), or for `gh api` its action `github.api`, admits them: `gh api`, `gh repo deploy-key add`, `gh ssh-key add`, `gh secret set`, `gh variable set`.
 
 Always refused, because they run code from the checkout with the token set: `gh pr checkout`, `gh repo clone`, `gh repo sync`.
 
@@ -760,7 +760,7 @@ cases:
     call: { agent: a, account: k8s, action: kubectl.delete, kind: write, cli: { command: kubectl, verb: delete, flags: { namespace: staging }, argv: [kubectl, -n, staging, delete, pod, web-1] } }
     expect: { decision: ask, rule: kubectl-writes }
   - name: gh api asks, whatever it calls
-    call: { agent: a, account: gh, provider: "cli:gh", tool: gh api, action: github.api, kind: write, cli: { command: gh, verb: api, argv: [gh, api, /user] } }
+    call: { agent: a, account: gh, provider: "cli:gh", tool: gh api, action: github.api, kind: write, persistence: true, cli: { command: gh, verb: api, argv: [gh, api, /user] } }
     expect: { decision: ask, rule: gh-api-asks }
   - name: gh pr view is a read
     call: { agent: a, account: gh, provider: "cli:gh", tool: gh pr view, action: github.read, kind: read, repo: acme/web, cli: { command: gh, verb: pr, subcommand: view, flags: { repo: acme/web }, argv: [gh, pr, view, "7", -R, acme/web] } }

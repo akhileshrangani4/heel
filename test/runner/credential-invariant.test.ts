@@ -111,7 +111,9 @@ describe("I-75: the credential never enters the sandbox", () => {
   async function ghLeaves(argv: string[]): Promise<void> {
     const token = randomToken();
     const h = cliPipeline({
-      owner: "rules:\n  - match: { command: gh }\n    then: allow\n",
+      // gh api is persistence (I-70): a broad gh allow skips it, so it is named too.
+      owner:
+        "rules:\n  - match: { tool: gh api }\n    then: allow\n  - match: { command: gh }\n    then: allow\n",
       credential: token,
     });
     const answer = await h.run({ argv, cwd: h.repo });

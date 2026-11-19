@@ -213,3 +213,29 @@ describe("gh: the repo rules check is the repo gh acts on", () => {
     ]);
   });
 });
+
+describe("gh api through heel run (I-70)", () => {
+  it("a broad gh allow doesn't admit it; a rule naming it does", async () => {
+    const broad = cliPipeline({ owner: "rules:\n  - match: { command: gh }\n    then: allow\n" });
+    const write = [
+      "gh",
+      "api",
+      "-X",
+      "PUT",
+      "repos/acme/web/contents/.github/workflows/x.yml",
+      "-f",
+      "content=x",
+    ];
+    expect(await broad.run({ argv: write, cwd: broad.repo })).toMatchObject({
+      status: 403,
+      body: { reason: "persistence_unnamed" },
+    });
+    expect(broad.started).toEqual([]);
+
+    const named = cliPipeline({
+      owner: "rules:\n  - match: { action: github.api }\n    then: allow\n",
+    });
+    const answer = await named.run({ argv: ["gh", "api", "/user"], cwd: named.repo });
+    expect(answer.body["status"]).toBe("ran");
+  });
+});

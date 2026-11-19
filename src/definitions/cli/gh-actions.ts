@@ -91,10 +91,15 @@ export const GH_ACTIONS: Readonly<Record<string, GhCommandMapping>> = {
 
 /**
  * Commands that create access outliving a revoked credential (I-70): deploy
- * keys, account SSH keys, and Actions secrets and variables. Denied unless a
- * rule names them.
+ * keys, account SSH keys, Actions secrets and variables, and `gh api`, which
+ * can do any of those. Denied unless a rule names them.
  */
 export const GH_PERSISTENCE: ReadonlySet<string> = new Set([
+  // A raw REST or GraphQL call: heel can't tell what it does, so, like the
+  // GitHub service's github_api, only a rule naming github.api (or the gh
+  // command itself) lets it through. A broad gh allow would otherwise let
+  // it write .github/workflows/ or add keys.
+  "api",
   "repo deploy-key add",
   "ssh-key add",
   "secret set",

@@ -208,8 +208,12 @@ describe("gh: action map", () => {
 });
 
 describe("gh: what heel refuses before rules", () => {
-  it("I-70: deploy keys, SSH keys, secrets and variables are persistence", () => {
+  it("I-70: deploy keys, SSH keys, secrets, variables and raw gh api calls are persistence", () => {
     for (const args of [
+      // heel can't tell what a raw call does, so a read is persistence too.
+      ["api", "/user"],
+      ["api", "-X", "PUT", "repos/acme/web/contents/.github/workflows/x.yml", "-f", "content=x"],
+      ["api", "graphql", "-f", "query=x"],
       ["repo", "deploy-key", "add", "k.pub"],
       ["ssh-key", "add", "k.pub"],
       ["secret", "set", "TOKEN", "--body", "x"],
