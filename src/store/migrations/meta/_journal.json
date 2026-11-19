@@ -141,6 +141,13 @@
       "when": 1795065120872,
       "tag": "0019_fold_preferences",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1795065421407,
+      "tag": "0020_agent_client",
+      "breakpoints": true
     }
   ]
 }

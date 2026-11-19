@@ -7,6 +7,7 @@ import {
   Server,
   type Tool,
 } from "@modelcontextprotocol/server";
+import { eq } from "drizzle-orm";
 import { runScript } from "../../codemode/run.ts";
 import { accountModule } from "../../codemode/stubs.ts";
 import type { CodeWorker } from "../../codemode/worker.ts";
@@ -14,12 +15,14 @@ import type { Logger } from "../../log.ts";
 import { approvalStatusForAgent } from "../../store/approvals.ts";
 import type { HeelDb } from "../../store/db.ts";
 import { type AccountRecord, findAccount } from "../../store/directory.ts";
+import { agentTokens } from "../../store/schema.ts";
 import { accountsUsableBy } from "../../store/sharing.ts";
 import { errorShape } from "../../util/error-shape.ts";
 import { isMcpProvider } from "../../vault/connect.ts";
 import type { AuthenticatedAgent } from "../agent-tokens.ts";
 import type { Pipeline } from "../pipeline/pipeline.ts";
 import type { Definition, DefinitionRegistry } from "../pipeline/ports.ts";
+import { clientNameFrom } from "./client-info.ts";
 import {
   directName,
   HEEL_STATUS,
@@ -252,6 +255,26 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     return toolResult(result, { account: target.alias, tool: target.tool, native });
   }
 
+  /**
+   * Records the client an `initialize` names on the token it came with, so a
+   * later request can say "via Claude Code". Best effort: a body that isn't
+   * JSON is left for the SDK to refuse.
+   */
+  async function noteClient(request: Request, agent: AuthenticatedAgent): Promise<void> {
+    if (request.method !== "POST") return;
+    const body: unknown = await request
+      .clone()
+      .json()
+      .catch(() => null);
+    const name = clientNameFrom(body);
+    if (name === null || name === agent.clientName) return;
+    deps.db
+      .update(agentTokens)
+      .set({ clientName: name })
+      .where(eq(agentTokens.id, agent.tokenId))
+      .run();
+  }
+
   const handler: McpHttpHandler = createMcpHandler(({ authInfo }) => {
     const context = authInfo?.extra as { agent: AuthenticatedAgent; scope: McpScope } | undefined;
     // `serve` always passes these; reaching here without them is a bug in heel, not a caller error.
@@ -270,8 +293,9 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
 
   return {
     codeMode: deps.codeWorker !== undefined,
-    serve: (request, agent, scope) =>
-      handler.fetch(request, {
+    serve: async (request, agent, scope) => {
+      await noteClient(request, agent);
+      return handler.fetch(request, {
         // Pass-through to the factory; the SDK never reads it as a credential.
         authInfo: {
           token: agent.agentId,
@@ -279,7 +303,8 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
           scopes: [],
           extra: { agent, scope },
         },
-      }),
+      });
+    },
     close: () => handler.close(),
   };
 }

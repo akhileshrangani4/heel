@@ -190,6 +190,8 @@ export interface ApprovalRequest {
   origin: ApprovalOrigin;
   /** The agent's own reason (CallRequest.reason), or null when it gave none. */
   reason: string | null;
+  /** The agent's MCP client, self-reported (AuthenticatedAgent.clientName), or null. */
+  client: string | null;
 }
 
 export interface ApprovalStore {

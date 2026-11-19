@@ -292,6 +292,8 @@ interface DecideInput {
   adapters: Map<string, AdapterOutcome[]>;
   /** The agent's reason, stored on a new request only (CallRequest.reason). */
   reason: string | null;
+  /** The agent's MCP client, stored on a new request only. */
+  client: string | null;
 }
 
 type Decided =
@@ -416,6 +418,7 @@ class DecisionPipeline implements Pipeline {
       states: new Map(),
       adapters: new Map(),
       reason: request.reason ?? null,
+      client: agent.clientName ?? null,
     });
     if (decided.kind === "final") {
       if (decided.requestedApprovalId !== undefined) {
@@ -887,6 +890,7 @@ class DecisionPipeline implements Pipeline {
         ruleHash: rule.hash,
         origin: rule.layer,
         reason: input.reason,
+        client: input.client,
       },
       at,
     );

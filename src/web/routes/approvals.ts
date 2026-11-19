@@ -85,6 +85,7 @@ function requestView(
     action: row.call.action ?? null,
     rule: row.rule,
     reason: row.reason,
+    client: row.client,
     args: row.call.args,
     // Built from the stored call, never from what the agent said about it.
     email: emailPreviewFrom(row.call.action ?? null, row.call.args),
