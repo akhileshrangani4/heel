@@ -19,21 +19,38 @@ const repo = join(site, "..", "..");
 const out = join(site, "content", "docs");
 const GITHUB = "https://github.com/akhileshrangani4/heel/blob/main/";
 
-/** The sidebar, in order: [page, file in docs/]. */
-const PAGES = [
-  ["using-heel", "using-heel.md"],
-  ["heel-run", "heel-run.md"],
-  ["google-sign-in", "google-sign-in.md"],
-  ["why", "why.md"],
-  ["how-it-works", "how-it-works.md"],
-  ["rules", "rules.md"],
-  ["rules-reference", "rules-reference.md"],
-  ["definitions", "definitions.md"],
-  ["approvals", "approvals.md"],
-  ["running", "running.md"],
-  ["incidents", "incidents.md"],
-  ["comparison", "comparison.md"],
+/** The sidebar, in groups and in order: [page, file in docs/]. `index` is the docs home. */
+const GROUPS = [
+  ["Get started", [["index", "introduction.md"], ["quickstart", "quickstart.md"]]],
+  [
+    "Guides",
+    [
+      ["using-heel", "using-heel.md"],
+      ["rules", "rules.md"],
+      ["approvals", "approvals.md"],
+      ["heel-run", "heel-run.md"],
+      ["google-sign-in", "google-sign-in.md"],
+      ["running", "running.md"],
+      ["incidents", "incidents.md"],
+    ],
+  ],
+  [
+    "Concepts",
+    [
+      ["how-it-works", "how-it-works.md"],
+      ["why", "why.md"],
+      ["comparison", "comparison.md"],
+    ],
+  ],
+  [
+    "Reference",
+    [
+      ["rules-reference", "rules-reference.md"],
+      ["definitions", "definitions.md"],
+    ],
+  ],
 ];
+const PAGES = GROUPS.flatMap(([, pages]) => pages);
 
 /** Page titles by docs file, from each page's H1. */
 const TITLES = new Map(
@@ -57,10 +74,16 @@ function links(markdown, from) {
     const anchor = hash ? `#${hash}` : "";
     if (resolved === "README.md") return `](/docs${anchor})`;
     const page = PAGES.find(([, file]) => resolved === `docs/${file}`);
-    if (page) return `](/docs/${page[0]}${anchor})`;
+    if (page) return `](${page[0] === "index" ? "/docs" : `/docs/${page[0]}`}${anchor})`;
+    if (resolved.startsWith("docs/images/")) return `](/docs-images/${resolved.split("/").pop()})`;
     if (resolved.startsWith("assets/")) return `](/${resolved.split("/").pop()})`;
     return `](${GITHUB}${resolved}${anchor})`;
   });
+}
+
+/** `<img src="images/x.png">` in a page, as the site serves it. */
+function images(markdown) {
+  return markdown.replace(/src="images\/([^"]+)"/g, 'src="/docs-images/$1"');
 }
 
 /** Front matter from the H1 and first paragraph; the H1 itself is dropped. */
@@ -79,7 +102,7 @@ function page(markdown, from, fallbackTitle) {
   const sentence = /^.*?[.!?](?=\s|$)/.exec(plain);
   const description = sentence ? sentence[0] : "";
   const yaml = (s) => JSON.stringify(s);
-  return `---\ntitle: ${yaml(title)}\ndescription: ${yaml(description)}\n---\n\n${links(text.trim(), from)}\n`;
+  return `---\ntitle: ${yaml(title)}\ndescription: ${yaml(description)}\n---\n\n${images(links(text.trim(), from))}\n`;
 }
 
 rmSync(out, { recursive: true, force: true });
@@ -90,22 +113,16 @@ for (const [slug, file] of PAGES) {
   writeFileSync(join(out, `${slug}.md`), page(text, join(repo, "docs"), slug));
 }
 
-const readme = readFileSync(join(repo, "README.md"), "utf8");
-const start = readme.indexOf("## Install");
-const end = readme.indexOf("## Docs");
-if (start < 0 || end < start) throw new Error("README.md has no ## Install ... ## Docs span");
-writeFileSync(
-  join(out, "index.md"),
-  page(
-    `# Get started\n\nInstall heel, start it, connect an account and give an agent its token.\n\n${readme.slice(start, end).trim()}\n`,
-    repo,
-    "Get started",
-  ),
-);
-
 writeFileSync(
   join(out, "meta.json"),
-  `${JSON.stringify({ title: "heel", pages: ["index", ...PAGES.map(([slug]) => slug)] }, null, 2)}\n`,
+  `${JSON.stringify(
+    {
+      title: "heel",
+      pages: GROUPS.flatMap(([group, pages]) => [`---${group}---`, ...pages.map(([slug]) => slug)]),
+    },
+    null,
+    2,
+  )}\n`,
 );
 
 const pub = join(site, "public");
@@ -120,4 +137,10 @@ for (const file of [
 ]) {
   copyFileSync(join(repo, file), join(pub, file.split("/").pop()));
 }
-console.error(`synced ${PAGES.length + 1} docs pages`);
+const shots = join(pub, "docs-images");
+rmSync(shots, { recursive: true, force: true });
+mkdirSync(shots, { recursive: true });
+for (const file of readdirSync(join(repo, "docs", "images"))) {
+  copyFileSync(join(repo, "docs", "images", file), join(shots, file));
+}
+console.error(`synced ${PAGES.length} docs pages`);
