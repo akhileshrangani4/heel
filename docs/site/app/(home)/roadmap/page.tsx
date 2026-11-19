@@ -14,11 +14,14 @@ const UPDATED = 'november 19, 2026';
 
 type Status = 'now' | 'next' | 'later' | 'exploring';
 
+/** Where one item stands: shipped, or started. No state means not started yet. */
+type ItemState = 'shipped' | 'started';
+
 type Phase = {
   status: Status;
   name: string;
   summary: string;
-  items: [string, string][];
+  items: [string, string, ItemState?][];
   gate?: string;
 };
 
@@ -32,29 +35,35 @@ const PHASES: Phase[] = [
       [
         'approvals you can read at a glance',
         'one plain sentence per request. an email shows to, cc, subject and body; ids and metadata fold away.',
+        'shipped',
       ],
       [
         'the agent says why',
         'a short reason from the agent at the top of every request. it informs you; it never decides.',
+        'shipped',
       ],
       [
         'it remembers what you look at',
         'fields you fold away stay folded the next time the same action asks.',
+        'shipped',
       ],
-      ['which agent, which session', 'every request names the agent, its session and where it runs.'],
+      ['which agent, which session', 'every request names the agent, its session and where it runs.', 'shipped'],
       [
         'a new web app',
         'every page redesigned around one design system, with clear navigation and no jargon.',
+        'shipped',
       ],
       [
         'a better cli, and a tui',
         'clearer commands, help and errors, plus a terminal ui for setup, activity and approvals. plain output stays for scripts and agents.',
+        'shipped',
       ],
       [
         'security hardening',
         'agents can’t read the vault or edit rules, and binding outside localhost warns loudly.',
+        'shipped',
       ],
-      ['expiring agent tokens', 'agent tokens renew on a schedule and revoke with one command.'],
+      ['expiring agent tokens', 'agent tokens renew on a schedule and revoke with one command.', 'shipped'],
       [
         'sign in with google, no setup',
         'connect gmail and calendar with one click. heel brings its own google client, and it works when heel runs on another machine too.',
@@ -62,10 +71,12 @@ const PHASES: Phase[] = [
       [
         'red-team rounds',
         'repeated attempts by ai models to read secrets, approve themselves or rewrite rules. every finding becomes a test.',
+        'shipped',
       ],
       [
         'plainer wording',
         'rules decide every call. the docs name the two places a model is involved: the hiding classifier and optional hints.',
+        'shipped',
       ],
     ],
     gate: 'someone who has never seen heel approves an email from their phone without asking what anything means.',
@@ -79,16 +90,19 @@ const PHASES: Phase[] = [
       [
         'proposals, not edits',
         'agents propose rules, connections and new agents. each waits as a draft until you approve it, and agents can’t write the rules file.',
+        'started',
       ],
       [
         'a reason on every rule',
         '“read: so I can review your repos.” “merge: needs you.” each line says what it’s for.',
+        'started',
       ],
       [
         'changes as a readable diff',
         '“may also email bob@company.com” instead of yaml. the file stays behind the scenes.',
+        'started',
       ],
-      ['change history', 'which agent proposed each change, who approved it and when.'],
+      ['change history', 'which agent proposed each change, who approved it and when.', 'started'],
       [
         'agents ask for connections',
         'an agent can request a new account. you finish it, and the agent never sees the secret.',
@@ -100,10 +114,12 @@ const PHASES: Phase[] = [
       [
         'guided setup',
         'pick how you’ll approve. heel starts the tunnel and turns on phone notifications.',
+        'started',
       ],
       [
         'remote first',
         'run heel on a server or an always-on mac, reach it from every agent over tailscale, and manage it from your laptop.',
+        'started',
       ],
       ['everything in the web app', 'anything the cli can do, the web app can do too.'],
     ],
@@ -203,12 +219,28 @@ function Badge({ status }: { status: Status }) {
   );
 }
 
-function Items({ items }: { items: [string, string][] }) {
+const itemTag: Record<ItemState, string> = {
+  shipped:
+    'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
+  started:
+    'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300',
+};
+
+function Items({ items }: { items: [string, string, ItemState?][] }) {
   return (
     <dl className="grid gap-x-10 gap-y-6 sm:grid-cols-2">
-      {items.map(([term, detail]) => (
+      {items.map(([term, detail, state]) => (
         <div key={term}>
-          <dt className="font-medium">{term}</dt>
+          <dt className="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium">
+            {term}
+            {state === undefined ? null : (
+              <span
+                className={`inline-block rounded-md border px-1.5 py-px font-mono text-[11px] font-medium ${itemTag[state]}`}
+              >
+                {state}
+              </span>
+            )}
+          </dt>
           <dd className="mt-1 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
             {detail}
           </dd>
