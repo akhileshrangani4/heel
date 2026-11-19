@@ -591,6 +591,11 @@ describe("rule values are normalized like the call's", () => {
     expect(allowedBy("{ method: get }", get)).toBe(true);
     expect(allowedBy("{ method: { one_of: [get, head] } }", get)).toBe(true);
     expect(allowedBy("{ method: post }", get)).toBe(false);
+    // Query and flag values are text on the call; a number in the rule means its text.
+    const limited = facts({ http: { method: "GET", path: "/", query: { limit: "100" } } });
+    expect(allowedBy("{ query.limit: 100 }", limited)).toBe(true);
+    expect(allowedBy("{ query.limit: { one_of: [50, 100] } }", limited)).toBe(true);
+    expect(allowedBy("{ query.limit: 50 }", limited)).toBe(false);
     // matches too, in either case, without changing what the pattern means.
     expect(allowedBy("{ method: { matches: 'get|head' } }", get)).toBe(true);
     expect(allowedBy("{ repo: { matches: 'Acme/.*' } }", facts({ repo: "acme/web" }))).toBe(true);
