@@ -54,6 +54,10 @@ export function safeNext(value: string | undefined, publicUrl?: URL): string {
   }
   if (resolved.origin !== base.origin) return HOME;
   if (resolved.pathname.startsWith("/sign-in")) return HOME;
+  // Resolving collapses dot segments: `/.//evil.example` becomes the path
+  // `//evil.example`, which a browser reads as another host. Check what is
+  // returned, not only what came in.
+  if (resolved.pathname.startsWith("//") || resolved.pathname.startsWith("/\\")) return HOME;
   return `${resolved.pathname}${resolved.search}${resolved.hash}`;
 }
 
