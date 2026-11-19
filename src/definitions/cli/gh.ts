@@ -77,11 +77,16 @@ export function normalizeGhRepo(value: string): string | undefined {
   if (host !== undefined && host !== "github.com") return undefined;
   let path = value;
   if (value.includes("://")) {
+    // WHATWG URL resolves `..`, `%2e` and `\` where Go's url.Parse doesn't, so heel and gh
+    // could read different paths from one value: refuse those.
+    if (/[\\%]|\/\.{1,2}(?:[/?#]|$)/.test(value)) return undefined;
     try {
-      path = new URL(value).pathname.replace(/^\/+/, "");
+      path = new URL(value).pathname.replace(/^\/+|\/+$/g, "");
     } catch {
       return undefined;
     }
+    // gh's FromURL takes exactly two path segments.
+    if (path.split("/").length !== 2) return undefined;
   } else if (host !== undefined) {
     path = value.slice(value.indexOf("/") + 1);
   }

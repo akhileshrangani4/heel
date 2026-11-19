@@ -124,6 +124,16 @@ describe("gh: action map", () => {
     expect(normalizeGhRepo("https://github.com/Acme/Web.git")).toBe("acme/web");
     expect(normalizeGhRepo("ghe.corp.com/acme/web")).toBeUndefined();
     expect(normalizeGhRepo("acme")).toBeUndefined();
+    // Paths WHATWG URL would rewrite but Go's url.Parse, and so gh, reads as written.
+    for (const value of [
+      "https://github.com/evil/../acme/web",
+      "https://github.com/evil/other\\..\\..\\acme\\web",
+      "https://github.com/evil/other/%2e%2e/%2e%2e/acme/web",
+      "https://github.com/acme/web/pull/1",
+    ]) {
+      expect(normalizeGhRepo(value), value).toBeUndefined();
+    }
+    expect(normalizeGhRepo("https://github.com/acme/web/")).toBe("acme/web");
     // pflag keeps the last value of a repeated string flag; so does heel.
     expect(gh("pr", "view", "1", "-R", "a/one", "-R", "b/two").repo).toBe("b/two");
   });
