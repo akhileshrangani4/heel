@@ -74,3 +74,19 @@ html > body[data-scroll-locked] {
     animation: none;
   }
 }
+
+/* Screenshots from heel's own app (docs/images). Phone screens stay phone-sized and
+   centered; wide-*.png are laptop screens and use the column. */
+.prose img[src*="/_next/"] {
+  display: block;
+  max-width: 300px;
+  height: auto;
+  margin: 1.5rem auto;
+  border: 1px solid var(--color-fd-border);
+  border-radius: 14px;
+  box-shadow: 0 12px 32px -16px rgb(0 0 0 / 0.25);
+}
+.prose img[src*="/_next/"][src*="wide-"] {
+  max-width: 100%;
+  border-radius: 8px;
+}
