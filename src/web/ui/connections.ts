@@ -1,7 +1,7 @@
 import type { SignInSetup } from "../../definitions/sign-in-setup.ts";
 import type { AccountStatus } from "../../store/schema.ts";
 import { type Html, html } from "./html.ts";
-import { badge, type FormTarget, notice, postForm } from "./layout.ts";
+import { badge, type FormTarget, notice, postForm, scrollRegion } from "./layout.ts";
 
 export interface ConnectionRow {
   alias: string;
@@ -58,7 +58,9 @@ export function connectionsPage(props: ConnectionsProps): Html {
   return html`<h1>Connections</h1>
     <p class="muted">The accounts your agents use through heel. Credentials stay in heel's vault.</p>
     ${outcomeNotice(props.outcome)}
-    <table class="data">
+    ${scrollRegion(
+      "Connections",
+      html`<table class="data">
       <caption>Your accounts</caption>
       <thead>
         <tr>
@@ -92,5 +94,6 @@ export function connectionsPage(props: ConnectionsProps): Html {
           </tr>`,
         )}
       </tbody>
-    </table>`;
+    </table>`,
+    )}`;
 }

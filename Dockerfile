@@ -30,6 +30,7 @@ COPY examples/heel.yaml /etc/heel/heel.yaml
 RUN ln -s /opt/heel/bin/heel.js /usr/local/bin/heel
 ENV HEEL_HOME=/var/lib/heel \
   HEEL_CONFIG=/etc/heel/heel.yaml \
+  HEEL_CONTAINER=1 \
   NODE_ENV=production
 USER heel
 VOLUME ["/var/lib/heel"]
