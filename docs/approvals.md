@@ -9,7 +9,7 @@ When a rule says `ask`:
 3. **They decide on heel's page** with a passkey, after seeing the tool, the account, the rule and the full arguments.
 4. **The call runs once,** when the agent re-sends it, after the rules are checked again. A late approval never runs a call the agent gave up on. Unapproved requests expire.
 
-**The agent can say why.** Every tool heel lists over MCP takes an optional `heel_reason`: one plain sentence from the agent. If the call needs approval, the page shows it under heel's own summary of what the call does, marked as the agent's words. heel removes it before anything else sees the call, so it never changes the arguments, which rule matches, or whether two calls are the same. The reason from the first call is kept, so a re-send with new wording joins the same request without changing what you're reading.
+**The agent can say why.** Every tool heel lists over MCP takes an optional `heel_reason`: one plain sentence from the agent. If the call needs approval, the page shows it under heel's own summary of what the call does, marked as the agent's words. heel removes it before anything else sees the call, so it never changes the arguments, which rule matches, or whether two calls are the same. The reason from the first call is kept, so a re-send with new wording joins the same request without changing what you're reading. The page also names the app the agent connected with, such as Claude Code, as that app named itself when it connected; heel shows it and never decides on it.
 
 An approval can become a **grant**, placed just above the rule that asked:
 

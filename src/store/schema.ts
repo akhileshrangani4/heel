@@ -118,6 +118,12 @@ export const agentTokens = sqliteTable(
     /** Null for a static token. */
     expiresAt: integer("expires_at", { mode: "timestamp_ms" }),
     createdAt: createdAt(),
+    /**
+     * The MCP client this token last connected with, as the client named
+     * itself in `initialize` (e.g. "claude-code"). Self-reported: shown to the
+     * approver as a label, never used to decide anything.
+     */
+    clientName: text("client_name"),
     revokedAt: integer("revoked_at", { mode: "timestamp_ms" }),
   },
   (t) => [
@@ -256,6 +262,8 @@ export const approvals = sqliteTable(
      * shift under someone reviewing it. Never part of `call` or `callHash`.
      */
     reason: text("reason"),
+    /** The agent's MCP client when the request opened (agentTokens.clientName); null if unknown. */
+    client: text("client"),
     status: text("status", { enum: APPROVAL_STATUSES }).notNull(),
     createdAt: createdAt(),
     expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),

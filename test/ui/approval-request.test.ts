@@ -130,6 +130,13 @@ describe("ApprovalRequest", () => {
     expect(remembered.querySelector("pre.body")?.textContent).toBe(LONG_BODY);
   });
 
+  it("says which client the agent used, or heel run, and nothing when it's unknown", () => {
+    const meta = (request: ApprovalRequestView) => text(render(request).querySelector(".ap-meta"));
+    expect(meta(PENDING_REQUEST)).toContain("via Claude Code");
+    expect(meta({ ...PENDING_REQUEST, client: null, surface: "cli" })).toContain("via heel run");
+    expect(meta({ ...PENDING_REQUEST, client: null, surface: "mcp" })).not.toContain("via");
+  });
+
   it("shows a merge and a tool without its own view as readable rows", () => {
     const merge = text(render(MERGE_REQUEST).querySelector("section[aria-labelledby^='merge-']"));
     for (const fact of ["acme/web", "#1234", "main", "squash", "9f2c4e1a7b"]) {

@@ -54,6 +54,8 @@ export interface AuthenticatedAgent {
   agentName: string;
   ownerId: string;
   tokenId: string;
+  /** The MCP client the token last connected with, self-reported; absent when unknown. */
+  clientName?: string | null;
 }
 
 export type AgentAuthResult =
@@ -87,6 +89,7 @@ export function authenticateAgent(
       agentRevokedAt: agents.revokedAt,
       ownerId: agents.ownerId,
       ownerDisabledAt: users.disabledAt,
+      clientName: agentTokens.clientName,
     })
     .from(agentTokens)
     .innerJoin(agents, eq(agents.id, agentTokens.agentId))
@@ -108,6 +111,7 @@ export function authenticateAgent(
       agentName: row.agentName,
       ownerId: row.ownerId,
       tokenId: row.tokenId,
+      clientName: row.clientName,
     },
   };
 }

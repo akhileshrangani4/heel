@@ -14,6 +14,7 @@ import { flag, type Html, html } from "./html.ts";
 import { badge, notice, type PauseNotice, scrollRegion, type Tone, time } from "./layout.ts";
 import {
   argumentLines,
+  clientLabel,
   type EmailPreview,
   groupByDomain,
   headline,
@@ -49,6 +50,8 @@ export interface ApprovalRequestView {
    * never what the call does: it's shown apart from heel's facts, as quoted words.
    */
   reason: string | null;
+  /** The MCP client the agent used, as that client named itself; null when unknown. */
+  client: string | null;
   /** The canonical, post-rewrite arguments: exactly what will run. */
   args: unknown;
   email: EmailPreview | null;
@@ -300,6 +303,20 @@ function countsView(request: ApprovalRequestView): Html {
   </ul>`;
 }
 
+/**
+ * How the agent reached heel: the MCP client it named (self-reported, so the
+ * title says so), or `heel run` for the CLI runner. Nothing for other surfaces.
+ */
+function viaView(request: ApprovalRequestView): Html | "" {
+  if (request.client !== null) {
+    return html`<span class="muted" title="As the client named itself when it connected"
+      >via ${clientLabel(request.client)}</span
+    >`;
+  }
+  if (request.surface === "cli") return html`<span class="muted">via heel run</span>`;
+  return "";
+}
+
 /** The agent's reason, quoted and attributed: the agent wrote it, heel didn't check it. */
 function reasonView(request: ApprovalRequestView): Html | "" {
   if (request.reason === null) return "";
@@ -536,6 +553,7 @@ export function approvalRequest(props: ApprovalRequestProps): Html {
     <header class="card ap-head">
       <div class="ap-meta">
         <span class="ap-agent">${request.agent}</span>
+        ${viaView(request)}
         <span class="muted">on ${request.account}</span>
         <span class="muted">${request.runId === null ? "no run id" : html`run <span class="mono">${request.runId}</span>`}</span>
         <span class="muted">${formatRelative(request.createdAt, props.now)}</span>

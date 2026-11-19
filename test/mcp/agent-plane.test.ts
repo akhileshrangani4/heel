@@ -294,6 +294,15 @@ describe("calling tools", () => {
     expect(h.upstream.calls).toEqual([{ name: "delete_note", arguments: { id: "n1" } }]);
   });
 
+  it("records the client the agent connected with on its request", async () => {
+    const h = await mcpHarness({ owner: READS_ALLOWED });
+    const client = await h.connect("/mcp/notes");
+
+    await client.callTool({ name: "delete_note", arguments: { id: "n1" } });
+
+    expect(h.t.db.select().from(approvals).get()?.client).toBe("test-agent");
+  });
+
   it("answers an unknown direct tool name with a protocol error", async () => {
     const h = await mcpHarness({ owner: READS_ALLOWED });
     const client = await h.connect("/mcp?tools=direct");

@@ -292,3 +292,25 @@ export function argumentLines(args: unknown): ArgumentLine[] {
       return { name, value: JSON.stringify(value, null, 2) ?? "", block: true };
     });
 }
+
+/**
+ * Display names for MCP clients people are likely to use (as they name
+ * themselves in `initialize`); anything else shows as it named itself.
+ */
+const KNOWN: Readonly<Record<string, string>> = {
+  "claude-code": "Claude Code",
+  "claude-ai": "Claude",
+  "codex-mcp-client": "Codex",
+  codex: "Codex",
+  cursor: "Cursor",
+  "cursor-vscode": "Cursor",
+  "Visual Studio Code": "VS Code",
+  windsurf: "Windsurf",
+  "gemini-cli-mcp-client": "Gemini CLI",
+  zed: "Zed",
+  t3code: "T3 Code",
+};
+
+export function clientLabel(name: string): string {
+  return KNOWN[name] ?? name;
+}
