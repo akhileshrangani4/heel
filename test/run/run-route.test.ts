@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, renameSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import type { PauseTarget } from "../../src/gateway/pipeline/ports.ts";
 import { cliPipeline, GH_TEST_TOKEN } from "../helpers/cli-pipeline.ts";
 
 /** `/run` (D8b): the CLI runner's endpoint, through the real pipeline, with a fake sandbox. */
@@ -44,6 +45,30 @@ describe("/run", () => {
     expect(await inject?.credential()).toBe(GH_TEST_TOKEN);
     // Still scrubbed from the output, in case an upstream echoes it.
     expect(spec?.secrets).toContain(GH_TEST_TOKEN);
+  });
+
+  it("stops injecting the token into a running command once a pause covers it", async () => {
+    let paused = false;
+    const targets: PauseTarget[] = [];
+    const h = cliPipeline({
+      owner: ALLOW_GH,
+      paused: (target) => {
+        targets.push(target);
+        return paused;
+      },
+    });
+    await h.run({ argv: ["gh", "pr", "list", "-R", "acme/web"], cwd: h.repo });
+    const network = h.started[0]?.network;
+    const inject = network?.kind === "egress" ? network.inject : undefined;
+    expect(await inject?.credential()).toBe(GH_TEST_TOKEN);
+    paused = true;
+    await expect(inject?.credential()).rejects.toThrow(/paused/);
+    // Asked about this call's own agent, owner, account and provider.
+    expect(targets[0]).toMatchObject({
+      agentId: h.agent.agentId,
+      ownerId: h.agent.ownerId,
+      account: "github",
+    });
   });
 
   it("injects the token only on GitHub's own hosts, never an extra egress host", async () => {

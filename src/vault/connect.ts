@@ -351,22 +351,33 @@ function stdioCredential(stdio: {
 /** What `heel account set` may change. */
 export interface ConfigureInput {
   credentialHosts: string[];
+  /** Null keeps the account's current auth (`bearer` if it had none). */
   credentialAuth: string | null;
+  /** A replacement static credential, e.g. after rotating one the server held. */
+  credential?: CredentialPayload | undefined;
 }
 
 export interface ConfiguredAccount {
   alias: string;
+  accountId: string;
   credentialDelivery: "proxy" | "env" | null;
+  /**
+   * The server held the credential in its environment until now, and it
+   * wasn't replaced here: rotate it, since anything the server ran could
+   * have copied it.
+   */
+  rotate: boolean;
 }
 
 /**
  * `heel account set <alias> --credential-host …`: moves a local MCP server's
  * credential out of its sandbox without reconnecting it. Settings only; the
- * stored credential is untouched. A running server keeps the environment it
- * started with until its next call, when heel starts it again.
+ * stored credential is untouched unless a replacement is given. The caller
+ * stops any running server, so the old environment doesn't outlive the change.
  */
 export function configureAccount(
   db: HeelDb,
+  vault: Vault | null,
   orgId: string,
   alias: string,
   input: ConfigureInput,
@@ -398,11 +409,25 @@ export function configureAccount(
       egress: upstream.egress,
       credentialEnv: upstream.credentialEnv,
       credentialHosts: input.credentialHosts,
-      credentialAuth: input.credentialAuth,
+      credentialAuth: input.credentialAuth ?? upstream.credentialAuth,
     }),
   };
+  if (input.credential !== undefined && vault === null) {
+    throw new ConnectError(
+      "vault_unavailable",
+      "the vault is not open (no master key), so credentials cannot be stored",
+    );
+  }
+  const before = credentialDelivery(upstream);
+  // The new credential first: if storing it fails, the account still runs as it did.
+  if (input.credential !== undefined) vault?.put(row.id, input.credential);
   db.update(accounts).set({ settings }).where(eq(accounts.id, row.id)).run();
-  return { alias, credentialDelivery: credentialDelivery(settings) };
+  return {
+    alias,
+    accountId: row.id,
+    credentialDelivery: credentialDelivery(settings),
+    rotate: before === "env" && input.credential === undefined,
+  };
 }
 
 /**

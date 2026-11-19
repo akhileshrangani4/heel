@@ -67,6 +67,7 @@ export const USAGE = `usage:
                                           credential stays with heel
   heel account list
   heel account set <alias> --credential-host <host>... [--credential-auth bearer|basic|header:<name>]
+                   [--credential-stdin]
                                           move a local MCP server's credential out of
                                           its sandbox, to heel's egress proxy
   heel account share|unshare <alias> --user <name> | --group <group>
@@ -109,6 +110,11 @@ const EnrollmentResult = z.object({
   activeFrom: z.string().nullable().optional(),
 });
 const PauseResult = z.object({ scope: z.string(), created: z.boolean() });
+const ConfiguredAccountResult = z.object({
+  alias: z.string(),
+  credentialDelivery: z.string().nullable(),
+  rotate: z.boolean(),
+});
 
 const AuditExportPageResult = z.object({
   lines: z.array(z.string()),
@@ -412,6 +418,7 @@ async function accountCommand(args: string[], io: CliIo): Promise<number> {
         repo: { type: "string" },
         "credential-host": { type: "string", multiple: true },
         "credential-auth": { type: "string" },
+        "credential-stdin": { type: "boolean" },
       },
       allowPositionals: true,
       strict: true,
@@ -435,15 +442,31 @@ async function accountCommand(args: string[], io: CliIo): Promise<number> {
       const credentialHosts = values["credential-host"] ?? [];
       if (credentialHosts.length === 0)
         throw new UsageError("give at least one --credential-host <host>");
-      print(
+      let credential: { type: "static"; value: string } | undefined;
+      if (values["credential-stdin"]) {
+        const value = (await readAll(io.stdin)).replace(/\r?\n$/, "");
+        if (value === "") throw new UsageError("--credential-stdin read nothing from stdin");
+        credential = { type: "static", value };
+      }
+      const configured = ConfiguredAccountResult.parse(
         await admin(config, {
           method: "account.configure",
-          params: { alias, credentialHosts, credentialAuth: values["credential-auth"] ?? null },
+          params: {
+            alias,
+            credentialHosts,
+            credentialAuth: values["credential-auth"] ?? null,
+            ...(credential === undefined ? {} : { credential }),
+          },
         }),
       );
-      io.stderr.write(
-        "A running server keeps its old environment until its next call, when heel starts it again.\n",
-      );
+      print(configured);
+      if (configured.rotate) {
+        io.stderr.write(
+          `Until now the server held this credential in its environment, where anything it ran could copy it. ` +
+            `Rotate it with the provider, then give heel the new one: ` +
+            `heel account set ${alias} --credential-host ... --credential-stdin\n`,
+        );
+      }
       return EXIT.ok;
     }
     case "share":

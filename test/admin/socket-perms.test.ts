@@ -357,7 +357,7 @@ describe("admin socket requests", () => {
           },
         }),
       ),
-    ).toEqual({ alias: "notes", credentialDelivery: "proxy" });
+    ).toMatchObject({ alias: "notes", credentialDelivery: "proxy", rotate: true });
     expect(resultOf(await call(path, { method: "account.list" }))).toMatchObject([
       { alias: "notes", credentialDelivery: "proxy" },
     ]);

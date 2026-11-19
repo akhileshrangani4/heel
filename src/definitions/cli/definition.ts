@@ -8,6 +8,7 @@ import type {
   HardDenyReason,
   NormalizeContext,
   Normalized,
+  PauseTarget,
 } from "../../gateway/pipeline/ports.ts";
 import { type CredentialAuth, newPlaceholder } from "../../runner/intercept.ts";
 import {
@@ -85,6 +86,12 @@ export interface CliDeps {
   workRoots(agentId: string): readonly string[];
   /** For the GitHub reads `gh pr merge` needs (D11). */
   fetch: FetchFn;
+  /**
+   * Whether a pause now covers this call's agent, owner, account or provider.
+   * heel's egress proxy asks before every request it adds the credential to,
+   * so a pause stops a command that is already running. Absent: never paused.
+   */
+  paused?: (target: PauseTarget) => boolean;
 }
 
 function refusalReason(refusals: readonly CliRefusal[]): HardDenyReason | null {
@@ -262,12 +269,19 @@ export function cliDefinition(account: AccountRecord, deps: CliDeps): Definition
         // Nothing ran; the result says so rather than leaving the outcome unknown.
         return notRun("workdir_moved", "the working directory moved after the decision");
       }
-      const { inject, ...spec } = credentialSpec(
-        settings,
-        await credential(),
-        credential,
-        call.repo,
-      );
+      const target: PauseTarget = {
+        orgId: call.orgId,
+        agentId: call.agentId,
+        ownerId: call.ownerId,
+        account: call.account,
+        provider: call.provider,
+      };
+      // Read for each request the proxy injects into; a pause since the decision stops it.
+      const current = async (): Promise<string> => {
+        if (deps.paused?.(target) === true) throw new Error("paused");
+        return credential();
+      };
+      const { inject, ...spec } = credentialSpec(settings, await credential(), current, call.repo);
       const process = await deps.start(
         sandbox,
         {

@@ -347,6 +347,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
     const opening = openVault(store.db, options, now, refreshers);
     const vault = opening.ok ? opening.vault : null;
 
+    let evictLocalServer: (accountId: string) => void = () => {};
     const admin = await startAdminServer({
       path: config.adminSocketPath,
       handle: createAdminHandler({
@@ -357,6 +358,8 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         publicUrl: config.publicUrl,
         home: config.home,
         now,
+        // The pool exists only once the agent plane is up; until then nothing is running to stop.
+        onAccountConfigured: (accountId) => evictLocalServer(accountId),
       }),
       log,
     });
@@ -427,9 +430,19 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
       if (!sandbox.ok) {
         log.warn({ reason: sandbox.reason }, `sandbox unavailable: ${sandbox.detail}`);
       }
+      const pauseStore = new SqlitePauseStore();
       const upstream = new UpstreamPool({
         vault: opening.vault,
         log,
+        // A pooled server's requests between calls: covered by global, owner, account or provider pauses.
+        paused: (account) =>
+          pauseStore.find(store.db, {
+            orgId: account.orgId,
+            agentId: "",
+            ownerId: account.ownerId,
+            account: account.alias,
+            provider: account.provider,
+          }) !== null,
         oauth: { db: store.db, vault: opening.vault, publicUrl: config.publicUrl, now },
         ...(sandbox.ok && {
           launchStdio: sandboxLauncher({
@@ -440,6 +453,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
           }),
         }),
       });
+      evictLocalServer = (accountId) => upstream.evict(accountId);
       closers.push(() => upstream.close());
       const looksLike = defaultLooksLikeJudge((error) =>
         log.error(
@@ -465,6 +479,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
           start: startSandboxed,
           workRoots: (agentId) => workRootsOf(store.db, agentId),
           fetch,
+          paused: (target) => pauseStore.find(store.db, target) !== null,
         },
       });
       const pipeline = createPipeline({

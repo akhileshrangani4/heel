@@ -107,6 +107,8 @@ export const AdminRequestSchema = z.discriminatedUnion("method", [
       alias: z.string().min(1).max(64),
       credentialHosts: z.array(z.string().min(1).max(255)).min(1).max(32),
       credentialAuth: z.string().max(128).nullable(),
+      /** A replacement credential, for one the server held in its environment until now. */
+      credential: StaticCredentialSchema.optional(),
     }),
   }),
   z.strictObject({

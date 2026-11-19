@@ -46,6 +46,13 @@ export interface UpstreamDeps {
   /** Where OAuth upstreams keep their state (D5c); absent when the vault is closed. */
   oauth?: UpstreamOAuthDeps;
   launchStdio?: StdioLauncher;
+  /**
+   * Whether a pause covers the account (global, its owner, its alias or its
+   * provider). A local server's credential is added at heel's egress proxy on
+   * the server's own requests, between calls too, so the proxy asks before
+   * each one. Absent: never paused.
+   */
+  paused?: (account: AccountRecord) => boolean;
 }
 
 /**
@@ -115,6 +122,14 @@ export class UpstreamPool {
       if (error instanceof VaultError && error.code === "no_credential") return null;
       throw error;
     }
+  }
+
+  /** Stops the account's server, if one is running; the next call starts it again. */
+  evict(accountId: string): void {
+    const pending = this.#clients.get(accountId);
+    if (pending === undefined) return;
+    this.#clients.delete(accountId);
+    void pending.then(({ client }) => client.close()).catch(() => {});
   }
 
   async close(): Promise<void> {
@@ -224,6 +239,8 @@ export class UpstreamPool {
     }
     // Read per use, so the egress proxy injects a refreshed token and stops when it's revoked.
     const current = async (): Promise<string> => {
+      if (this.#deps.paused?.(account) === true)
+        throw new Error(`account ${account.alias} is paused`);
       const fresh = await this.credential(account);
       if (fresh === null) throw new Error(`account ${account.alias} has no credential`);
       return fresh.reveal();
