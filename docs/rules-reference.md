@@ -1,6 +1,6 @@
 # Rules reference
 
-[README](../README.md) · [Using heel](using-heel.md) · [Why heel](why.md) · [How it works](how-it-works.md) · [Rules](rules.md) · [Rules reference](rules-reference.md) · [Approvals](approvals.md) · [Running](running.md)
+[README](../README.md) · [Quickstart](quickstart.md) · [Connect accounts](connect.md) · [Connect your agent](agents.md) · [Rules](rules.md) · [Approvals](approvals.md) · [Running](running.md)
 
 Everything a heel rules file can say, and exactly how heel reads it. [Rules and hiding](rules.md) is the short tour; this page is the one to keep open while you write rules. Every example on it is a complete file, and heel's test suite loads each one and runs its cases, so they all parse and behave as shown.
 
@@ -420,7 +420,7 @@ These change what happens around your rules, not the rules file itself.
 | **`watch: true` on a rule** | heel logs what the rule would have decided, then carries on as if it hadn't matched. | The rule never decides. |
 | **Watch mode** (`heel serve --watch`, or Watch on the Modes page for the org or one person; the default is Enforce) | Calls your rules would deny or ask about run anyway, and Activity shows what would have happened. | Org rules, hard denies, pause, hiding, the fail-closed denies, and unnamed calls that outlive heel still hold. |
 
-`heel rules test` evaluates rules alone, in Enforce mode, with no grants or standing approvals. [Approvals, grants and pause](approvals.md) and [Using heel](using-heel.md) cover the rest.
+`heel rules test` evaluates rules alone, in Enforce mode, with no grants or standing approvals. [Approvals, grants and pause](approvals.md) and [Connect your agent](agents.md) cover the rest.
 
 ```yaml title="rules/owner.yaml"
 rules:

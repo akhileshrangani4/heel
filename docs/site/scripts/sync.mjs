@@ -25,7 +25,8 @@ const GROUPS = [
   [
     "Guides",
     [
-      ["using-heel", "using-heel.md"],
+      ["connect", "connect.md"],
+      ["agents", "agents.md"],
       ["rules", "rules.md"],
       ["approvals", "approvals.md"],
       ["heel-run", "heel-run.md"],
@@ -45,6 +46,7 @@ const GROUPS = [
   [
     "Reference",
     [
+      ["cli", "cli.md"],
       ["rules-reference", "rules-reference.md"],
       ["definitions", "definitions.md"],
     ],

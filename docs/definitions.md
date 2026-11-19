@@ -1,6 +1,6 @@
 # Built-in services, and your own
 
-[README](../README.md) · [Using heel](using-heel.md) · [Rules](rules.md) · [Rules reference](rules-reference.md) · [How heel works](how-it-works.md)
+[README](../README.md) · [Quickstart](quickstart.md) · [Connect accounts](connect.md) · [Connect your agent](agents.md) · [Rules](rules.md) · [Approvals](approvals.md) · [Running](running.md)
 
 heel ships definitions for Gmail, Outlook, Google Calendar, GitHub, Slack, Linear, Notion and Stripe. A definition is ordinary code that says, for each tool an agent can call, what the call means. Nothing about them is special: this page shows what one does, why it gives you better rules than putting a raw MCP server behind heel, and how to get most of the same for your own API today.
 
