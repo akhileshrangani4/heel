@@ -219,6 +219,13 @@ body:has(.ap){background:var(--page)}
 .conn-name{font-size:1rem;margin:0;overflow-wrap:anywhere}
 .conn-kind{margin:.1rem 0 0;font-size:.88rem}
 .conn-step{border-top:1px solid var(--line);padding-top:.75rem;font-size:.9rem}
+.conn-name a{color:var(--text);text-decoration:none}
+.conn-name a:hover{text-decoration:underline}
+.agent-stats{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:.35rem}
+.agent-stats li{background:var(--surface);border-radius:8px;padding:.4rem .55rem;display:flex;flex-direction:column}
+.agent-stats strong{font-size:1.05rem}
+.agent-stats span{color:var(--muted);font-size:.75rem}
+.agent-foot{margin:0;font-size:.85rem;border-top:1px solid var(--line);padding-top:.6rem}
 .conn-add h2{font-size:1rem;margin:0 0 .25rem}
 .conn-add pre.args{margin-top:.75rem}
 .story{border-top:4px solid var(--border);margin-top:2rem;padding-top:1rem}
