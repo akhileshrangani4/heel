@@ -65,6 +65,9 @@ interface StandingRowView {
 }
 
 export const USAGE = `usage:
+  heel init [--home <dir>] [--yes]        set heel up: its home, master key, heel.yaml
+                                          and starter rules; changes nothing that's
+                                          already there
   heel serve [--watch]                    start the agent, human and admin planes
   heel status                             what heel is doing: agents, accounts,
                                           pauses and requests waiting for you
@@ -1054,6 +1057,39 @@ function asksForHelp(rest: readonly string[]): boolean {
   return own.includes("--help") || own.includes("-h");
 }
 
+/** `heel init`: a home, a master key, a small heel.yaml and starter rules (src/cli/init.ts). */
+async function initCommand(args: string[], io: CliIo): Promise<number> {
+  const { values, positionals } = parseOrUsage(() =>
+    parseArgs({
+      args,
+      options: { home: { type: "string" }, yes: { type: "boolean", short: "y" } },
+      allowPositionals: true,
+      strict: true,
+    }),
+  );
+  if (positionals.length > 0) throw new UsageError(`unexpected argument "${positionals[0]}"`);
+  const { chooseHome, confirm, initHome, initSummary } = await import("./init.ts");
+  const home = chooseHome(values.home, io.env);
+  const fromEnv = values.home === undefined && io.env["HEEL_HOME"] !== undefined;
+  if (values.yes !== true) {
+    if (!process.stdin.isTTY) {
+      throw new UsageError(
+        "heel init asks before writing; pass --yes to run it without a terminal",
+      );
+    }
+    io.stderr.write(
+      `heel will set itself up in ${home}: a master key, heel.yaml and starter rules. Nothing that's already there is changed.\n`,
+    );
+    if (!(await confirm("Go ahead?"))) {
+      io.stderr.write("Nothing was written.\n");
+      return EXIT.ok;
+    }
+  }
+  const steps = initHome(home);
+  io.stdout.write(initSummary(home, steps, fromEnv || home === io.env["HEEL_HOME"]));
+  return EXIT.ok;
+}
+
 /** `heel tui`: the full-screen view (src/cli/tui.ts). Needs a terminal. */
 async function tuiCommand(args: string[], io: CliIo): Promise<number> {
   const { values, positionals } = parseOrUsage(() =>
@@ -1144,6 +1180,8 @@ async function dispatch(argv: string[], io: CliIo): Promise<number> {
     }
     case "run":
       return runCommand(rest, io, { fetch, cwd: () => io.cwd?.() ?? process.cwd() });
+    case "init":
+      return initCommand(rest, io);
     case "tui":
       return tuiCommand(rest, io);
     case "status":
