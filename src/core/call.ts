@@ -53,6 +53,12 @@ export interface HttpFields {
   query: Record<string, string | string[]>;
   /** Parsed from JSON or form bodies; absent for any other content type. */
   body?: unknown;
+  /**
+   * A body was sent in a content type heel doesn't parse. A rule that checks
+   * `body.*` can't be decided, so the call is denied rather than the check
+   * read as false (which would let a broader rule below match).
+   */
+  bodyUnreadable?: true;
 }
 
 export interface Call {

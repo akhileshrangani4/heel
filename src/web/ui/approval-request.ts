@@ -17,6 +17,7 @@ import {
   clientLabel,
   type EmailPreview,
   groupByDomain,
+  type HttpPreview,
   headline,
   homeDomain,
   type MergePreview,
@@ -57,6 +58,8 @@ export interface ApprovalRequestView {
   email: EmailPreview | null;
   /** The merge view, for `github.merge`; null for anything else. */
   merge: MergePreview | null;
+  /** The HTTP proxy view, with the body decoded; null for other surfaces. */
+  http?: HttpPreview | null;
   items: number;
   counts: readonly CountWindow[];
   createdAt: Date;
@@ -269,6 +272,40 @@ function mergeView(merge: MergePreview, headingId: string): Html {
               <span class="muted">: GitHub refuses the merge if the branch moved past it</span></span>
           </div>`
     }
+  </section>`;
+}
+
+/** An HTTP proxy request, with its body decoded: what the API will receive. */
+function httpView(http: HttpPreview, headingId: string): Html {
+  const query = Object.entries(http.query);
+  const body =
+    http.body.kind === "none"
+      ? html`<span class="muted">none</span>`
+      : http.body.kind === "bytes"
+        ? html`<span class="muted"
+            >${formatBytes(http.body.size)} of ${http.body.contentType}, not text, so not shown</span
+          >`
+        : html`${
+            http.body.kind === "text"
+              ? html`<p class="muted">Sent as ${http.body.contentType}</p>`
+              : ""
+          }<pre class="body">${http.body.text}</pre>`;
+  return html`<section class="card ap-card" aria-labelledby="${headingId}">
+    <div class="ap-card-head">
+      <h2 id="${headingId}">The request</h2>
+      <span class="muted">exactly what the API receives</span>
+    </div>
+    <div class="ap-row">
+      <span class="ap-key">Request</span><span class="mono">${http.method} ${http.path}</span>
+    </div>
+    ${query.map(
+      ([name, value]) =>
+        html`<div class="ap-row">
+          <span class="ap-key mono">?${name}</span
+          ><span class="mono">${Array.isArray(value) ? value.join(", ") : value}</span>
+        </div>`,
+    )}
+    <div class="ap-row"><span class="ap-key">Body</span><div>${body}</div></div>
   </section>`;
 }
 
@@ -542,7 +579,9 @@ export function approvalRequest(props: ApprovalRequestProps): Html {
       ? emailView(request.email, `email-${request.id}`, folds)
       : request.merge !== null
         ? mergeView(request.merge, `merge-${request.id}`)
-        : argumentsView(request, `what-${request.id}`);
+        : request.http
+          ? httpView(request.http, `http-${request.id}`)
+          : argumentsView(request, `what-${request.id}`);
   const windows = request.counts.map(
     (w) =>
       html`<li class="ap-fact">

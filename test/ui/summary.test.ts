@@ -4,6 +4,7 @@ import {
   emailPreviewFrom,
   groupByDomain,
   homeDomain,
+  httpPreviewFrom,
   mergePreviewFrom,
   recipientPhrase,
 } from "../../src/web/ui/summary.ts";
@@ -113,5 +114,40 @@ describe("argumentLines", () => {
       { name: "c", value: long, block: true },
       { name: "d", value: '{\n  "n": 1\n}', block: true },
     ]);
+  });
+});
+
+describe("httpPreviewFrom", () => {
+  const b64 = (text: string) => Buffer.from(text).toString("base64");
+  const call = (args: Record<string, unknown>, body?: unknown) => ({
+    surface: "http",
+    args,
+    http: { method: "PUT", path: "/items/5", query: {}, ...(body === undefined ? {} : { body }) },
+  });
+
+  it("shows a parsed body as JSON, not the base64 the call carries", () => {
+    const sent = { transfer_to: "attacker@evil.example", amount: 99999 };
+    const preview = httpPreviewFrom(
+      call({ body: b64(JSON.stringify(sent)), contentType: "application/json" }, sent),
+    );
+    expect(preview?.body).toEqual({ kind: "json", text: JSON.stringify(sent, null, 2) });
+  });
+
+  it("decodes an unparsed text body, and only describes bytes that aren't text", () => {
+    expect(httpPreviewFrom(call({ body: b64("hello"), contentType: "text/plain" }))?.body).toEqual({
+      kind: "text",
+      text: "hello",
+      contentType: "text/plain",
+    });
+    const binary = Buffer.from([0xff, 0xfe, 0x00]).toString("base64");
+    expect(httpPreviewFrom(call({ body: binary, contentType: "image/png" }))?.body).toEqual({
+      kind: "bytes",
+      size: 3,
+      contentType: "image/png",
+    });
+  });
+
+  it("is null for calls that didn't come through the HTTP proxy", () => {
+    expect(httpPreviewFrom({ ...call({}), surface: "mcp" })).toBeNull();
   });
 });

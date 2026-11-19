@@ -15,6 +15,7 @@ import {
   GENERIC_REQUEST,
   HINTED_REQUEST,
   HINTS_UNAVAILABLE_REQUEST,
+  HTTP_REQUEST,
   LONG_BODY,
   MANY_CC,
   MERGE_REQUEST,
@@ -135,6 +136,14 @@ describe("ApprovalRequest", () => {
     expect(meta(PENDING_REQUEST)).toContain("via Claude Code");
     expect(meta({ ...PENDING_REQUEST, client: null, surface: "cli" })).toContain("via heel run");
     expect(meta({ ...PENDING_REQUEST, client: null, surface: "mcp" })).not.toContain("via");
+  });
+
+  it("shows an HTTP request's body decoded, so the approver reads what will be written", () => {
+    const doc = render(HTTP_REQUEST);
+    expect(text(doc.querySelector("h1"))).toBe("ops-bot wants to send PUT /items/5 on api");
+    const card = text(doc.querySelector("section[aria-labelledby^='http-']"));
+    expect(card).toContain("attacker@evil.example");
+    expect(card).toContain("99999");
   });
 
   it("shows a merge and a tool without its own view as readable rows", () => {

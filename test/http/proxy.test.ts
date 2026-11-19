@@ -385,6 +385,44 @@ describe("the proxy, against the review's attacks", () => {
     expect(h.seen[0]?.body).toBe('{"to":"ok"}');
   });
 
+  it("denies a body rule it can't decide: a body in a type heel doesn't parse", async () => {
+    const h = setUp(`rules:
+  - match: { action: tickets.create, body.danger: { equals: true } }
+    then: deny
+  - match: { action: tickets.create }
+    then: allow
+`);
+    // The same JSON bytes, relabelled so heel wouldn't parse them, were allowed before.
+    for (const type of ["text/plain", "text/json", "application/octet-stream"]) {
+      const response = await h.request("/http/tickets/tickets", {
+        method: "POST",
+        headers: { "content-type": type },
+        body: '{"danger":true}',
+      });
+      expect(response.status, type).toBe(403);
+      expect(await response.json(), type).toMatchObject({ reason: "body_unreadable" });
+    }
+    expect(h.seen).toEqual([]);
+
+    const json = await h.request("/http/tickets/tickets", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: '{"danger":false}',
+    });
+    expect(json.status).toBe(201);
+  });
+
+  it("still forwards an unparsed body when no rule above it reads the body", async () => {
+    const h = setUp(ALLOW_TICKETS);
+    const response = await h.request("/http/tickets/tickets", {
+      method: "POST",
+      headers: { "content-type": "application/octet-stream" },
+      body: "raw-bytes",
+    });
+    expect(response.status).toBe(201);
+    expect(h.seen[0]?.body).toBe("raw-bytes");
+  });
+
   it("drops an agent's copy of the query-auth parameter in any case", async () => {
     const h = setUp(ALLOW_ALL, { auth: "query:api_key" });
     await h.request("/http/tickets/items?API_KEY=mine&q=1");

@@ -32,6 +32,7 @@ import {
   GENERIC_REQUEST,
   HINTED_REQUEST,
   HINTS_UNAVAILABLE_REQUEST,
+  HTTP_REQUEST,
   MERGE_REQUEST,
   NOW,
   ORG_REQUEST,
@@ -284,6 +285,7 @@ export const STORIES: readonly Story[] = [
     request: MERGE_REQUEST,
   }),
   approval("generic", "A tool with no dedicated view", { ok: true, request: GENERIC_REQUEST }),
+  approval("http", "An HTTP proxy write, body decoded", { ok: true, request: HTTP_REQUEST }),
   approval("error", "The request couldn't be loaded", { ok: false, message: LOAD_ERROR }),
   approval("executed", "Ran once", { ok: true, request: EXECUTED_REQUEST }),
   approval(
