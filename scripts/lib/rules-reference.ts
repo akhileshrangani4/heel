@@ -307,7 +307,7 @@ function ghTable(): string {
   const lines = [
     "### gh",
     "",
-    "A CLI account for `gh` has provider `cli:gh`. A command that takes `-R` must be given it, and its value becomes `repo` (lower case). A `gh pr merge` that lands `.github/workflows/` or `.github/actions/` files is `github.workflow.merge` and persistence, like the GitHub service's merge.",
+    "A CLI account for `gh` has provider `cli:gh`. A command that takes `-R` must be given it, and its value becomes `repo` (lower case). A `gh pr merge` carries its base branch as `args.base`, read from GitHub. One that lands `.github/workflows/` or `.github/actions/` files is `github.workflow.merge` and persistence, like the GitHub service's merge.",
     "",
     row(["Action", "Kind", "Commands"]),
     row(["---", "---", "---"]),

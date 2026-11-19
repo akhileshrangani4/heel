@@ -18,6 +18,7 @@ interface FakeGitHub {
   required?: string[];
   files?: string[];
   pullState?: "open" | "closed";
+  base?: string;
   fail?: boolean;
 }
 
@@ -31,7 +32,7 @@ function github(state: FakeGitHub) {
     if (/^\/repos\/acme\/web\/pulls\/\d+$/.test(p)) {
       return Response.json({
         head: { sha: state.head ?? HEAD },
-        base: { ref: "main" },
+        base: { ref: state.base ?? "main" },
         state: state.pullState ?? "open",
         merged: false,
       });
@@ -58,7 +59,7 @@ function github(state: FakeGitHub) {
         statuses,
       });
     }
-    if (p === "/repos/acme/web/rules/branches/main") {
+    if (p === `/repos/acme/web/rules/branches/${state.base ?? "main"}`) {
       const required = state.required ?? [];
       return Response.json(
         required.length === 0
@@ -123,6 +124,29 @@ describe("gh pr merge", () => {
       cwd: h.repo,
     });
     expect(answer).toMatchObject({ status: 403, body: { reason: "unsupported" } });
+  });
+
+  it("passes the base branch as args.base, as the GitHub service does", async () => {
+    const rules = `rules:
+  - match: { action: github.merge, repo: acme/web, args.base: main }
+    then: ask
+  - match: { action: github.merge, repo: acme/web, checks: passing }
+    then: allow
+`;
+    const toMain = cliPipeline({ owner: rules, fetch: github({}).fetch });
+    const asked = await toMain.run({
+      argv: ["gh", "pr", "merge", "12", "-R", "acme/web"],
+      cwd: toMain.repo,
+    });
+    expect(asked.status).toBe(202);
+    expect(toMain.started).toEqual([]);
+
+    const toRelease = cliPipeline({ owner: rules, fetch: github({ base: "release-2" }).fetch });
+    const ran = await toRelease.run({
+      argv: ["gh", "pr", "merge", "12", "-R", "acme/web"],
+      cwd: toRelease.repo,
+    });
+    expect(ran.body["status"]).toBe("ran");
   });
 
   it("adds --match-head-commit with the head heel checked, and merges when checks pass", async () => {

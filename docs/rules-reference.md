@@ -600,7 +600,7 @@ Provider `stripe`. `amount` is in the currency's smallest unit (cents for `usd`)
 
 ### gh
 
-A CLI account for `gh` has provider `cli:gh`. A command that takes `-R` must be given it, and its value becomes `repo` (lower case). A `gh pr merge` that lands `.github/workflows/` or `.github/actions/` files is `github.workflow.merge` and persistence, like the GitHub service's merge.
+A CLI account for `gh` has provider `cli:gh`. A command that takes `-R` must be given it, and its value becomes `repo` (lower case). A `gh pr merge` carries its base branch as `args.base`, read from GitHub. One that lands `.github/workflows/` or `.github/actions/` files is `github.workflow.merge` and persistence, like the GitHub service's merge.
 
 | Action | Kind | Commands |
 | --- | --- | --- |
@@ -1110,7 +1110,7 @@ For `kubectl delete`, match `action: kubectl.delete`.
 
 ### Merges to main ask, other green merges run
 
-The GitHub service passes the pull request's base branch as `args.base`. `gh pr merge` through `heel run` doesn't carry the base branch, so those merges fall to the last rule and ask.
+Both the GitHub service and `gh pr merge` through `heel run` pass the pull request's base branch as `args.base`. For `gh`, heel reads it from GitHub when it pins the merge to the head commit, so an agent can't set it.
 
 ```yaml title="rules/owner.yaml"
 rules:
@@ -1118,7 +1118,7 @@ rules:
     match: { action: github.merge, args.base: main }
     then: ask
   - name: green-merges
-    match: { action: github.merge, provider: github, checks: passing }
+    match: { action: github.merge, checks: passing }
     then: allow
   - name: other-merges
     match: { action: github.merge }
@@ -1138,9 +1138,9 @@ cases:
     call: { agent: a, account: github, provider: github, action: github.merge, repo: acme/web, args: { repo: acme/web, number: 9, base: release-2 } }
     state: { checks: fail }
     expect: { decision: ask, rule: other-merges }
-  - name: gh pr merge has no base branch
-    call: { agent: a, account: gh, provider: "cli:gh", action: github.merge, repo: acme/web, cli: { command: gh, verb: pr, subcommand: merge, flags: { repo: acme/web }, argv: [gh, pr, merge, "9", -R, acme/web] } }
-    expect: { decision: ask, rule: other-merges }
+  - name: gh pr merge into main
+    call: { agent: a, account: gh, provider: "cli:gh", action: github.merge, repo: acme/web, args: { argv: [gh, pr, merge, "9", -R, acme/web], cwd: /work, base: main }, cli: { command: gh, verb: pr, subcommand: merge, flags: { repo: acme/web }, argv: [gh, pr, merge, "9", -R, acme/web] } }
+    expect: { decision: ask, rule: merges-to-main }
 ```
 
 A merge that changes `.github/workflows/` is `github.workflow.merge`, not `github.merge`, so none of these rules reach it: it stays denied until a rule names it.

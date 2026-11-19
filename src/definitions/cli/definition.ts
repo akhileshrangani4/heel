@@ -82,6 +82,14 @@ export const CliArgsSchema = z.strictObject({
 });
 export type CliArgs = z.output<typeof CliArgsSchema>;
 
+/**
+ * The arguments as heel runs them: what the agent sent, plus `base` on a
+ * `gh pr merge`, read from GitHub, so a rule can match `args.base: main` as
+ * it does for the GitHub service. An agent can't send `base` itself, since
+ * its input is checked against the strict CliArgsSchema.
+ */
+const CliRunArgsSchema = CliArgsSchema.extend({ base: z.string().optional() });
+
 export interface CliResult {
   exitCode: number;
   stdout: string;
@@ -157,7 +165,14 @@ export function cliDefinition(account: AccountRecord, deps: CliDeps): Definition
     argv: readonly string[],
     signal: AbortSignal,
   ): Promise<
-    | { ok: true; cli: CliFields; argv: string[]; targets: string[]; persistence: boolean }
+    | {
+        ok: true;
+        cli: CliFields;
+        argv: string[];
+        targets: string[];
+        base: string;
+        persistence: boolean;
+      }
     | { ok: false; reason: HardDenyReason }
   > {
     const { pull, repo } = normalized;
@@ -165,12 +180,14 @@ export function cliDefinition(account: AccountRecord, deps: CliDeps): Definition
       return { ok: false, reason: "unsupported" };
     }
     let sha: string;
+    let base: string;
     let persistence: boolean;
     try {
       const api = new GitHubApi(credential, deps.fetch);
       const head = await api.pullHead(repo, pull.number, signal);
       if (head.state !== "open" || head.merged) return { ok: false, reason: "unsupported" };
       sha = head.sha;
+      base = head.base;
       // Merging lands its files on the base branch: a workflow among them is persistence (I-70).
       persistence = (await api.pullFiles(repo, pull.number, signal)).some(isWorkflowPath);
     } catch (error) {
@@ -191,6 +208,7 @@ export function cliDefinition(account: AccountRecord, deps: CliDeps): Definition
       },
       argv: pinned,
       targets: [`${repo}#${pull.number}`],
+      base,
       persistence,
     };
   }
@@ -240,11 +258,12 @@ export function cliDefinition(account: AccountRecord, deps: CliDeps): Definition
       let cli = normalized.cli;
       let runArgv = argv;
       let targets: string[] | undefined;
+      let mergeBase: string | undefined;
       let mergePersistence = false;
       if (settings.command === "gh" && normalized.action === "github.merge") {
         const pinned = await pinMerge(normalized, argv, ctx.signal);
         if (!pinned.ok) return pinned;
-        ({ cli, argv: runArgv, targets } = pinned);
+        ({ cli, argv: runArgv, targets, base: mergeBase } = pinned);
         if (pinned.persistence) mergePersistence = true;
       }
       const tool = [cli.command, cli.verb, cli.subcommand].filter((p) => p !== undefined).join(" ");
@@ -254,7 +273,11 @@ export function cliDefinition(account: AccountRecord, deps: CliDeps): Definition
           ...base,
           tool,
           // What runs: the resolved directory, so a symlink swapped after the decision can't move it.
-          args: { argv: runArgv, cwd: dir },
+          args: {
+            argv: runArgv,
+            cwd: dir,
+            ...(mergeBase === undefined ? {} : { base: mergeBase }),
+          },
           cli,
           items: 1,
           ...(targets === undefined ? {} : { targets }),
@@ -290,7 +313,7 @@ export function cliDefinition(account: AccountRecord, deps: CliDeps): Definition
     },
 
     async execute(call, signal): Promise<CliResult> {
-      const { argv, cwd } = CliArgsSchema.parse(call.args);
+      const { argv, cwd } = CliRunArgsSchema.parse(call.args);
       const dir = await resolved(cwd);
       const workRoot = dir === null ? null : rootHolding(await liveRoots(call.agentId), dir);
       if (dir === null || workRoot === null || dir !== cwd) {
