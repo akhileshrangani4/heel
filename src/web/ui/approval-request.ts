@@ -85,6 +85,15 @@ export interface ApprovalRequestProps {
   pause: PauseNotice | null;
   /** Starts the passkey ceremony for approve, approve-as-standing and deny (I-56). */
   onDecide: CeremonyCallback;
+  /** The viewer's remembered sections for this kind of request; none by default. */
+  folds?: Folds;
+}
+
+/** What remembered folds are keyed by: the action, or `provider:tool` without one. */
+export function foldKind(
+  request: Pick<ApprovalRequestView, "action" | "provider" | "tool">,
+): string {
+  return request.action ?? `${request.provider}:${request.tool}`;
 }
 
 const STATUS_BADGE: Record<ApprovalStatus, { label: string; tone: Tone | "muted" }> = {
@@ -100,8 +109,39 @@ export function approvalStatusBadge(status: ApprovalStatus): Html {
   return badge(label, tone);
 }
 
+function lineCount(text: string): number {
+  return text === "" ? 0 : text.split("\n").length;
+}
+
+/** Sections the person opened or closed before on this kind of request (store/folds.ts). */
+export type Folds = ReadonlyMap<string, boolean>;
+
+/**
+ * A collapsible section the page remembers per kind of request. The client
+ * script posts a toggle; the server renders the remembered state next time.
+ */
+function fold(
+  folds: Folds,
+  section: string,
+  openByDefault: boolean,
+  summary: Html,
+  content: Html,
+  className = "ap-fold",
+): Html {
+  const open = folds.get(section) ?? openByDefault;
+  return html`<details class="${className}" data-heel-fold="${section}"${flag("open", open)}>
+    <summary>${summary}</summary>
+    ${content}
+  </details>`;
+}
+
 /** Recipients by domain: every domain named, outsiders marked, every address on the page. */
-function recipients(addresses: readonly string[], home: string | null): Html {
+function recipients(
+  field: string,
+  addresses: readonly string[],
+  home: string | null,
+  folds: Folds,
+): Html {
   if (addresses.length === 0) return html`<span class="muted">none</span>`;
   return html`<ul class="ap-domains">
     ${groupByDomain(addresses, home).map((group) => {
@@ -111,22 +151,24 @@ function recipients(addresses: readonly string[], home: string | null): Html {
           ${group.addresses.map((a) => html`<span class="ap-chip${group.outside ? " is-outside" : ""}">${a}</span> `)}${outside}
         </li>`;
       }
+      // Only groups of four or more fold, and the domain stays in the summary.
       return html`<li>
-        <details class="ap-fold">
-          <summary>
-            <strong>${group.addresses.length} people</strong> at
-            <span class="mono">${group.domain}</span>${outside}
-          </summary>
-          <ul class="ap-addresses mono">
+        ${fold(
+          folds,
+          `${field}:${group.domain}`,
+          false,
+          html`<strong>${group.addresses.length} people</strong> at
+            <span class="mono">${group.domain}</span>${outside}`,
+          html`<ul class="ap-addresses mono">
             ${group.addresses.map((a) => html`<li>${a}</li>`)}
-          </ul>
-        </details>
+          </ul>`,
+        )}
       </li>`;
     })}
   </ul>`;
 }
 
-function emailView(email: EmailPreview, headingId: string): Html {
+function emailView(email: EmailPreview, headingId: string, folds: Folds): Html {
   const home = homeDomain(email.from);
   const attachments =
     email.attachments.length === 0
@@ -165,7 +207,13 @@ function emailView(email: EmailPreview, headingId: string): Html {
       : html`<div class="ap-row">
           <span class="ap-key">Forwards</span>
           <div>
-            <pre class="body">${email.forwarded.text}</pre>
+            ${fold(
+              folds,
+              "forwarded",
+              true,
+              html`${plural(lineCount(email.forwarded.text), "line")}`,
+              html`<pre class="body">${email.forwarded.text}</pre>`,
+            )}
             ${
               email.forwarded.attachments.length === 0
                 ? ""
@@ -181,15 +229,21 @@ function emailView(email: EmailPreview, headingId: string): Html {
       <span class="muted">exactly what will be sent</span>
     </div>
     <div class="ap-row"><span class="ap-key">From</span><span class="mono">${email.from}</span></div>
-    <div class="ap-row"><span class="ap-key">To</span>${recipients(email.to, home)}</div>
-    <div class="ap-row"><span class="ap-key">Cc</span>${recipients(email.cc, home)}</div>
-    <div class="ap-row"><span class="ap-key">Bcc</span>${recipients(email.bcc, home)}</div>
+    <div class="ap-row"><span class="ap-key">To</span>${recipients("to", email.to, home, folds)}</div>
+    <div class="ap-row"><span class="ap-key">Cc</span>${recipients("cc", email.cc, home, folds)}</div>
+    <div class="ap-row"><span class="ap-key">Bcc</span>${recipients("bcc", email.bcc, home, folds)}</div>
     <div class="ap-row"><span class="ap-key">Subject</span><strong>${email.subject}</strong></div>
     <div class="ap-row">
       <span class="ap-key">Body</span>
       <div>
         ${email.bodyFormat === "html" ? html`<p class="muted">HTML source, not rendered</p>` : ""}
-        <pre class="body">${email.body}</pre>
+        ${fold(
+          folds,
+          "body",
+          true,
+          html`${plural(lineCount(email.body), "line")}`,
+          html`<pre class="body">${email.body}</pre>`,
+        )}
       </div>
     </div>
     ${forwarded} ${attachments}
@@ -464,10 +518,11 @@ export function approvalRequest(props: ApprovalRequestProps): Html {
       )}`;
   }
   const request = props.load.request;
+  const folds: Folds = props.folds ?? new Map();
   const said = headline(request);
   const view =
     request.email !== null
-      ? emailView(request.email, `email-${request.id}`)
+      ? emailView(request.email, `email-${request.id}`, folds)
       : request.merge !== null
         ? mergeView(request.merge, `merge-${request.id}`)
         : argumentsView(request, `what-${request.id}`);
@@ -477,7 +532,7 @@ export function approvalRequest(props: ApprovalRequestProps): Html {
         <span>This ${w.per}</span><strong>${plural(w.total, "item")}</strong>
       </li>`,
   );
-  return html`<article class="ap">
+  return html`<article class="ap" data-heel-fold-kind="${foldKind(request)}">
     <header class="card ap-head">
       <div class="ap-meta">
         <span class="ap-agent">${request.agent}</span>
@@ -506,9 +561,12 @@ export function approvalRequest(props: ApprovalRequestProps): Html {
     ${view}
     ${hintsView(request)}
     <section class="card ap-card ap-details" aria-label="Details">
-      <details>
-        <summary>Rule and call details</summary>
-        <dl class="facts">
+      ${fold(
+        folds,
+        "details",
+        false,
+        html`Rule and call details`,
+        html`<dl class="facts">
           <dt>Agent</dt>
           <dd>${request.agent}</dd>
           <dt>Run</dt>
@@ -532,15 +590,20 @@ export function approvalRequest(props: ApprovalRequestProps): Html {
           <dd>${time(request.expiresAt)} (${formatRelative(request.expiresAt, props.now)})</dd>
           <dt>Request</dt>
           <dd class="mono">${request.id}</dd>
-        </dl>
-      </details>
-      <details>
-        <summary id="args-${request.id}">Full arguments, exactly what runs</summary>
-        <p class="muted">After heel's own rewrites. Nothing is shortened.</p>
-        <pre class="args" tabindex="0" aria-labelledby="args-${request.id}">${formatArguments(
-          request.args,
-        )}</pre>
-      </details>
+        </dl>`,
+        "",
+      )}
+      ${fold(
+        folds,
+        "args",
+        false,
+        html`<span id="args-${request.id}">Full arguments, exactly what runs</span>`,
+        html`<p class="muted">After heel's own rewrites. Nothing is shortened.</p>
+          <pre class="args" tabindex="0" aria-labelledby="args-${request.id}">${formatArguments(
+            request.args,
+          )}</pre>`,
+        "",
+      )}
     </section>
     ${decisionControls(request, props.pause, props.onDecide)}
   </article>`;
