@@ -47,6 +47,7 @@ export const PENDING_REQUEST: ApprovalRequestView = {
   tool: "send",
   action: "email.send",
   rule: { name: "client-sends-ask", file: "rules/alice.yaml", line: 14 },
+  reason: "Sending Bob the Q4 renewal schedule and pricing he asked for in yesterday's thread.",
   args: {
     from: "alice@company.com",
     to: ["bob@vendor.com"],
@@ -116,6 +117,7 @@ export const ORG_REQUEST: ApprovalRequestView = {
   tool: "pr merge",
   action: "github.merge",
   rule: { name: "prod-merges-ask-admin", file: "org-rules.yaml", line: 8 },
+  reason: null,
   args: {
     argv: ["gh", "pr", "merge", "1234", "--squash", "--match-head-commit", "9f2c4e1"],
     cwd: "/srv/agents/ci-bot/acme-web",

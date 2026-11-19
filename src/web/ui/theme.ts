@@ -92,6 +92,9 @@ p{margin:.5rem 0}
 dl.facts{display:grid;grid-template-columns:minmax(8rem,max-content) 1fr;gap:.35rem 1.5rem;margin:0}
 dl.facts dt{color:var(--muted);font-weight:600}
 dl.facts dd{margin:0;overflow-wrap:anywhere}
+figure.reason{margin:1rem 0;padding:.25rem 0 .25rem 1rem;border-left:3px solid var(--border)}
+figure.reason figcaption{color:var(--muted);font-size:.9rem}
+figure.reason blockquote{margin:.25rem 0 0;overflow-wrap:anywhere}
 ul.hints{list-style:none;padding:0;margin:.5rem 0 0;display:grid;gap:.45rem}
 ul.hints li{display:flex;align-items:baseline;gap:.6rem}
 code,pre,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem}

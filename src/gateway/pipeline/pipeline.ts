@@ -290,6 +290,8 @@ interface DecideInput {
    * about. A restart that lands on a different rule or outcome asks again.
    */
   adapters: Map<string, AdapterOutcome[]>;
+  /** The agent's reason, stored on a new request only (CallRequest.reason). */
+  reason: string | null;
 }
 
 type Decided =
@@ -413,6 +415,7 @@ class DecisionPipeline implements Pipeline {
       owner,
       states: new Map(),
       adapters: new Map(),
+      reason: request.reason ?? null,
     });
     if (decided.kind === "final") {
       if (decided.requestedApprovalId !== undefined) {
@@ -877,7 +880,14 @@ class DecisionPipeline implements Pipeline {
     }
     const approvalId = this.#deps.approvals.request(
       tx,
-      { call, callHash: hash, rule: rule.ref, ruleHash: rule.hash, origin: rule.layer },
+      {
+        call,
+        callHash: hash,
+        rule: rule.ref,
+        ruleHash: rule.hash,
+        origin: rule.layer,
+        reason: input.reason,
+      },
       at,
     );
     appendAudit(tx, { kind: "ask", call, callHash: hash, rule: rule.ref, approvalId }, at);

@@ -48,6 +48,11 @@ export interface ApprovalRequestView {
   tool: string;
   action: string | null;
   rule: RuleRef;
+  /**
+   * The agent's own reason (MCP `heel_reason`), or null. What the agent claims,
+   * never what the call does: it's shown apart from heel's facts, as quoted words.
+   */
+  reason: string | null;
   /** The canonical, post-rewrite arguments: exactly what will run. */
   args: unknown;
   email: EmailPreview | null;
@@ -165,6 +170,15 @@ function countsView(request: ApprovalRequestView): Html {
     <li>${plural(request.items, "item")} in this call</li>
     ${windows}
   </ul>`;
+}
+
+/** The agent's reason, quoted and attributed: the agent wrote it, heel didn't check it. */
+function reasonView(request: ApprovalRequestView): Html | "" {
+  if (request.reason === null) return "";
+  return html`<figure class="reason">
+    <figcaption>${request.agent} says</figcaption>
+    <blockquote>${request.reason}</blockquote>
+  </figure>`;
 }
 
 /** What the request's status means for the approver, in one notice. */
@@ -380,6 +394,7 @@ export function approvalRequest(props: ApprovalRequestProps): Html {
     </h1>
     <p class="muted mono">${request.id}</p>
     ${statusNotice(request, props.now)}
+    ${reasonView(request)}
     <section class="card" aria-labelledby="call-${request.id}">
       <h2 id="call-${request.id}">Call</h2>
       <dl class="facts">

@@ -250,6 +250,12 @@ export const approvals = sqliteTable(
     rule: text("rule", { mode: "json" }).$type<RuleRef>().notNull(),
     /** Content hash of the rule that asked; a re-run is satisfied only by an ask from it. */
     ruleHash: text("rule_hash").notNull(),
+    /**
+     * The agent's reason as it gave it on the call that opened the request.
+     * A repeat that joins the request doesn't change it, so the text can't
+     * shift under someone reviewing it. Never part of `call` or `callHash`.
+     */
+    reason: text("reason"),
     status: text("status", { enum: APPROVAL_STATUSES }).notNull(),
     createdAt: createdAt(),
     expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),

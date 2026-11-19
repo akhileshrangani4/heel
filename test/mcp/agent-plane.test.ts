@@ -228,6 +228,72 @@ describe("calling tools", () => {
     ]);
   });
 
+  it("offers heel_reason on every account tool, but not on heel_status", async () => {
+    const h = await mcpHarness({ owner: READS_ALLOWED });
+    const client = await h.connect("/mcp/notes");
+
+    const { tools } = await client.listTools();
+
+    for (const tool of tools.filter((t) => t.name !== "heel_status")) {
+      expect(tool.inputSchema.properties).toHaveProperty("heel_reason");
+      expect(tool.inputSchema.required ?? []).not.toContain("heel_reason");
+    }
+    expect(tools.find((t) => t.name === "heel_status")?.inputSchema.properties).not.toHaveProperty(
+      "heel_reason",
+    );
+  });
+
+  it("takes heel_reason out of the arguments: the upstream and the audit never see it", async () => {
+    const h = await mcpHarness({ owner: READS_ALLOWED });
+    const client = await h.connect("/mcp/notes");
+
+    await client.callTool({
+      name: "search_notes",
+      arguments: { query: "q3", heel_reason: "Finding the Q3 notes you asked for" },
+    });
+
+    expect(h.upstream.calls).toEqual([{ name: "search_notes", arguments: { query: "q3" } }]);
+    expect(JSON.stringify(h.t.db.select().from(auditLog).all())).not.toContain("Q3 notes");
+  });
+
+  it("stores the first reason on the request; a re-send with new words joins it and runs once approved", async () => {
+    const h = await mcpHarness({ owner: READS_ALLOWED });
+    const client = await h.connect("/mcp/notes");
+
+    const first = await client.callTool({
+      name: "delete_note",
+      arguments: { id: "n1", heel_reason: "  Removing the duplicate note  " },
+    });
+    const again = await client.callTool({
+      name: "delete_note",
+      arguments: { id: "n1", heel_reason: "Cleaning up, as you asked" },
+    });
+    expect(decisionOf(again)["approvalId"]).toBe(decisionOf(first)["approvalId"]);
+    expect(h.notified).toHaveLength(1);
+
+    const rows = h.t.db.select().from(approvals).all();
+    expect(rows).toHaveLength(1);
+    const row = rows[0];
+    if (row === undefined) throw new Error("no approval row");
+    expect(row.reason).toBe("Removing the duplicate note");
+    expect(JSON.stringify(row.call)).not.toContain("heel_reason");
+
+    decideApproval(h.t.db, new SqliteApprovalStore(), new SqlitePauseStore(), {
+      approver: { orgId: h.t.orgId, userId: h.t.ownerId, role: "admin" },
+      approvalId: row.id,
+      callHash: row.callHash,
+      intent: "approve",
+      standing: null,
+      now: new Date(),
+    });
+    const rerun = await client.callTool({
+      name: "delete_note",
+      arguments: { id: "n1", heel_reason: "Yet another wording" },
+    });
+    expect(rerun.isError).toBeFalsy();
+    expect(h.upstream.calls).toEqual([{ name: "delete_note", arguments: { id: "n1" } }]);
+  });
+
   it("answers an unknown direct tool name with a protocol error", async () => {
     const h = await mcpHarness({ owner: READS_ALLOWED });
     const client = await h.connect("/mcp?tools=direct");
