@@ -141,6 +141,23 @@ export function clientScript(csrfToken: string | null): string {
     });
   }
 
+  // ── remembered folds (not a ceremony: presentation only, it decides nothing) ──
+  const foldRoot = document.querySelector("[data-heel-fold-kind]");
+  if (foldRoot && CSRF) {
+    const kind = foldRoot.getAttribute("data-heel-fold-kind");
+    for (const details of foldRoot.querySelectorAll("details[data-heel-fold]")) {
+      // Only a change from how the page rendered is remembered, so the
+      // browser's own toggle event for an initially open section saves nothing.
+      let last = details.open;
+      details.addEventListener("toggle", () => {
+        if (details.open === last) return;
+        last = details.open;
+        post("/approvals/folds", { kind, section: details.getAttribute("data-heel-fold"), open: details.open })
+          .catch(() => {});
+      });
+    }
+  }
+
   window.heelCeremony = {
     signIn: ({ binding, status }) =>
       run({

@@ -204,6 +204,49 @@ describe("the approval page", () => {
     expect(response.status).toBe(403);
   });
 
+  it("remembers which sections a person keeps open, per kind of request", async () => {
+    const { h, owner, approvalId } = await setUp();
+    const page = async () => (await h.fetch(`/approvals/${approvalId}`, { as: owner })).text();
+    expect(await page()).toMatch(/data-heel-fold="args"(?! open)/);
+
+    const saved = await h.fetch("/approvals/folds", {
+      as: owner,
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind: "email.send", section: "args", open: true }),
+    });
+    expect(saved.status).toBe(200);
+    expect(await page()).toMatch(/data-heel-fold="args" open/);
+
+    // Another kind of request keeps its own state.
+    await h.fetch("/approvals/folds", {
+      as: owner,
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind: "github.merge", section: "args", open: false }),
+    });
+    expect(await page()).toMatch(/data-heel-fold="args" open/);
+  });
+
+  it("refuses a fold without the CSRF token, or with names heel doesn't show", async () => {
+    const { h, owner } = await setUp();
+    const post = (body: unknown, csrf = true) =>
+      h.fetch("/approvals/folds", {
+        as: owner,
+        csrf,
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+    expect((await post({ kind: "email.send", section: "args", open: true }, false)).status).toBe(
+      403,
+    );
+    expect((await post({ kind: "email.send", section: "<b>", open: true })).status).toBe(400);
+    expect((await post({ kind: "email.send", section: "args", open: "yes" })).status).toBe(400);
+    expect((await h.fetch("/approvals/folds", { method: "POST" })).status).toBe(401);
+  });
+
   it("shows a request only to people who may decide it", async () => {
     const { h, approvalId } = await setUp();
     h.addUser("sam", "member");

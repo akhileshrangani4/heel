@@ -106,6 +106,30 @@ describe("ApprovalRequest", () => {
     expect(chip?.getAttribute("class")).toContain("is-outside");
   });
 
+  it("opens and closes sections as the person last left them for this kind of request", () => {
+    const fresh = render(PENDING_REQUEST);
+    const state = (doc: UiDocument, section: string) =>
+      doc.querySelector(`details[data-heel-fold="${section}"]`)?.hasAttribute("open");
+    expect(fresh.querySelector("article")?.getAttribute("data-heel-fold-kind")).toBe("email.send");
+    expect(state(fresh, "body")).toBe(true);
+    expect(state(fresh, "details")).toBe(false);
+    expect(state(fresh, "args")).toBe(false);
+    expect(state(fresh, "cc:vendor.com")).toBe(false);
+
+    const remembered = render(PENDING_REQUEST, {
+      folds: new Map([
+        ["body", false],
+        ["args", true],
+        ["cc:vendor.com", true],
+      ]),
+    });
+    expect(state(remembered, "body")).toBe(false);
+    expect(state(remembered, "args")).toBe(true);
+    expect(state(remembered, "cc:vendor.com")).toBe(true);
+    // Folded or not, everything is still on the page (I-57).
+    expect(remembered.querySelector("pre.body")?.textContent).toBe(LONG_BODY);
+  });
+
   it("shows a merge and a tool without its own view as readable rows", () => {
     const merge = text(render(MERGE_REQUEST).querySelector("section[aria-labelledby^='merge-']"));
     for (const fact of ["acme/web", "#1234", "main", "squash", "9f2c4e1a7b"]) {

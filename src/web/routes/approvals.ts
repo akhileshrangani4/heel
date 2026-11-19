@@ -7,6 +7,7 @@ import {
   getApproval,
   listApprovalsFor,
 } from "../../store/approvals.ts";
+import { foldsFor, isFoldName, rememberFold } from "../../store/folds.ts";
 import { hintsFor } from "../../store/hints.ts";
 import { type Decision, decisionBinding, decisionFromBinding } from "../decisions.ts";
 import {
@@ -21,7 +22,7 @@ import {
 } from "../http.ts";
 import { pauseNoticeFor } from "../pause-targets.ts";
 import type { SessionView } from "../sessions.ts";
-import { type ApprovalRequestView, approvalRequest } from "../ui/approval-request.ts";
+import { type ApprovalRequestView, approvalRequest, foldKind } from "../ui/approval-request.ts";
 import { clientScript } from "../ui/client.ts";
 import { html } from "../ui/html.ts";
 import { type PendingRow, pendingList } from "../ui/pending-list.ts";
@@ -37,6 +38,8 @@ import { emailPreviewFrom, mergePreviewFrom } from "../ui/summary.ts";
  *   that asked, and the exact arguments that will run.
  * - `POST /approvals/:id/challenge` issues a challenge naming the exact
  *   decision (see decisions.ts).
+ * - `POST /approvals/folds` remembers which sections of the page a person
+ *   keeps open for a kind of request. Presentation only; it decides nothing.
  * - `POST /approvals/:id/decide` verifies the signed challenge and records
  *   the decision it names. Approving runs nothing (I-53): the call runs only
  *   when the agent re-sends it.
@@ -182,6 +185,7 @@ export function approvalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       );
     }
     const pause = pauseNoticeFor(deps.db, record.row.call);
+    const view = requestView(record, pageHints(deps, record));
     return renderPage(c, {
       title: `Request from ${record.agentName}`,
       viewer: viewerOf(session),
@@ -189,12 +193,28 @@ export function approvalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       pause,
       body: approvalRequest({
         now,
-        load: { ok: true, request: requestView(record, pageHints(deps, record)) },
+        load: { ok: true, request: view },
         pause,
         onDecide: DECIDE_HANDLER,
+        folds: foldsFor(deps.db, session.userId, foldKind(view)),
       }),
       script: clientScript(session.csrfToken),
     });
+  });
+
+  app.post("/approvals/folds", signedIn, csrf, async (c) => {
+    const body = await jsonBody(c);
+    const kind = stringField(body, "kind");
+    const section = stringField(body, "section");
+    const open = body?.["open"];
+    if (kind === undefined || section === undefined || typeof open !== "boolean") {
+      return c.json({ ok: false, message: "Expected kind, section and open." }, 400);
+    }
+    if (!isFoldName(kind) || !isFoldName(section)) {
+      return c.json({ ok: false, message: "That isn't a section heel shows." }, 400);
+    }
+    rememberFold(deps.db, { userId: c.get("session").userId, kind, section, open }, deps.now());
+    return c.json({ ok: true });
   });
 
   app.post("/approvals/:id/challenge", signedIn, csrf, async (c) => {

@@ -132,6 +132,15 @@ describe("the approval page in a browser", () => {
     await page.goto(`${origin}/approvals/${approved}`);
     await page.getByText("bob@vendor.com").first().waitFor();
     await shot("request");
+
+    // Opening a section is remembered in heel: it's still open after a reload.
+    const args = page.locator('details[data-heel-fold="args"]');
+    expect(await args.evaluate((d) => (d as { open: boolean }).open)).toBe(false);
+    const saved = page.waitForResponse((r) => r.url().endsWith("/approvals/folds"));
+    await page.getByText("Full arguments, exactly what runs").click();
+    expect((await saved).status()).toBe(200);
+    await page.reload();
+    expect(await args.evaluate((d) => (d as { open: boolean }).open)).toBe(true);
     await page.getByRole("button", { name: "Approve once" }).click();
     await expect.poll(() => h.status(approved)).toBe("approved");
     await page.waitForLoadState("load");

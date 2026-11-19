@@ -830,3 +830,26 @@ export const approvalHints = sqliteTable(
     check("approval_hints_status", sql`"status" IN (${sqlList(HINT_STATUSES)})`),
   ],
 );
+
+/**
+ * How a person left the approval page's collapsible sections for one kind of
+ * request (an action such as `email.send`, or `provider:tool`), so the next
+ * request of that kind opens the same way on any device. Presentation only:
+ * it never hides a recipient domain or changes a decision (spec: The
+ * approval page).
+ */
+export const foldPreferences = sqliteTable(
+  "fold_preferences",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    /** `email.send`, or `provider:tool` for a call without an action. */
+    kind: text("kind").notNull(),
+    /** A section id the page names: `details`, `args`, `cc:vendor.com`, … */
+    section: text("section").notNull(),
+    open: integer("open", { mode: "boolean" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.kind, t.section] })],
+);
