@@ -39,6 +39,8 @@ interface AgentRow {
   owner: string;
   createdAt: string;
   revokedAt: string | null;
+  tokenExpiresAt: string | null;
+  hasToken: boolean;
 }
 interface AccountRow {
   alias: string;
@@ -65,12 +67,17 @@ interface StandingRowView {
 export const USAGE = `usage:
   heel serve [--watch]                    start the agent, human and admin planes
   heel vault init                         create the master key file
-  heel agent add <name> [--owner <user>]  add an agent; prints its token once
+  heel agent add <name> [--owner <user>] [--expires <days>d|never]
+                                          add an agent; prints its token once. The
+                                          token expires in 90 days unless --expires
+                                          says otherwise
   heel agent workdir <name>               list the directories heel run may work in
   heel agent workdir <name> <dir>...      set them (replaces the list); each <dir> is
                                           an absolute path that exists on heel's host
   heel agent workdir <name> --clear       remove them all: heel run is then refused
-  heel agent rotate <name>                replace an agent's token
+  heel agent rotate <name> [--expires <days>d|never]
+                                          replace an agent's token (renews it; no
+                                          passkey needed)
   heel agent revoke <name>                revoke an agent's token
   heel agent list
   heel connect <provider> --as <alias> [--owner <user>] [--credential-stdin]
@@ -157,7 +164,11 @@ ${RULES_USAGE}
 Every command takes --config <file>; the default is $HEEL_HOME/heel.yaml.
 `;
 
-const IssuedAgentResult = z.object({ name: z.string(), token: z.string() });
+const IssuedAgentResult = z.object({
+  name: z.string(),
+  token: z.string(),
+  expiresAt: z.string().nullable().default(null),
+});
 const ConnectedAccountResult = z.object({
   alias: z.string(),
   provider: z.string(),
@@ -327,6 +338,29 @@ function vaultCommand(args: string[], io: CliIo): number {
   return EXIT.ok;
 }
 
+/** `--expires 30d`, `--expires 90`, or `--expires never` (null). */
+function expiresFlag(text: string): number | null {
+  if (text === "never") return null;
+  const days = /^(\d{1,4})d?$/.exec(text);
+  const n = days === null ? Number.NaN : Number(days[1]);
+  if (!Number.isInteger(n) || n < 1 || n > 3650) {
+    throw new UsageError(
+      `--expires takes a number of days (such as 30d or 90d) or never, not "${text}"`,
+    );
+  }
+  return n;
+}
+
+/** Pure: the line `heel agent add` and `rotate` print about the new token's expiry. */
+export function expiresLine(name: string, expiresAt: string | null): string {
+  if (expiresAt === null) {
+    return (
+      "Expires: never (--expires never). Rotate it if it may have leaked: heel agent rotate " + name
+    );
+  }
+  return `Expires: ${expiresAt.slice(0, 10)}. Before then, get a new one with: heel agent rotate ${name}`;
+}
+
 async function agentCommand(args: string[], io: CliIo): Promise<number> {
   const { values, positionals } = parseOrUsage(() =>
     parseArgs({
@@ -336,6 +370,7 @@ async function agentCommand(args: string[], io: CliIo): Promise<number> {
         ...JSON_OPTION,
         owner: { type: "string" },
         clear: { type: "boolean" },
+        expires: { type: "string" },
       },
       allowPositionals: true,
       strict: true,
@@ -345,15 +380,24 @@ async function agentCommand(args: string[], io: CliIo): Promise<number> {
   if (values.clear === true && subcommand !== "workdir") {
     throw new UsageError("--clear is for heel agent workdir");
   }
+  if (values.expires !== undefined && subcommand !== "add" && subcommand !== "rotate") {
+    throw new UsageError("--expires is for heel agent add and heel agent rotate");
+  }
+  const expiry = values.expires === undefined ? {} : { expiresInDays: expiresFlag(values.expires) };
   const config = configFrom(io, values.config);
   switch (subcommand) {
     case "add": {
       const name = onePositional(rest, "agent name");
-      const params = { name, ...(values.owner === undefined ? {} : { owner: values.owner }) };
+      const params = {
+        name,
+        ...(values.owner === undefined ? {} : { owner: values.owner }),
+        ...expiry,
+      };
       const issued = IssuedAgentResult.parse(await admin(config, { method: "agent.add", params }));
       io.stdout.write(
         `Added agent "${issued.name}".\n` +
           `Token (shown once; heel keeps only its hash): ${issued.token}\n` +
+          `${expiresLine(issued.name, issued.expiresAt)}\n` +
           `MCP URL: ${agentMcpUrl(config.listen.agent, config.agentPublicUrl)}\n`,
       );
       return EXIT.ok;
@@ -381,11 +425,12 @@ async function agentCommand(args: string[], io: CliIo): Promise<number> {
     case "rotate": {
       const name = onePositional(rest, "agent name");
       const issued = IssuedAgentResult.parse(
-        await admin(config, { method: "agent.rotate", params: { name } }),
+        await admin(config, { method: "agent.rotate", params: { name, ...expiry } }),
       );
       io.stdout.write(
         `Rotated the token for "${issued.name}". The old token no longer works.\n` +
-          `Token (shown once): ${issued.token}\n`,
+          `Token (shown once): ${issued.token}\n` +
+          `${expiresLine(issued.name, issued.expiresAt)}\n`,
       );
       return EXIT.ok;
     }
@@ -406,11 +451,16 @@ async function agentCommand(args: string[], io: CliIo): Promise<number> {
         a.name,
         a.owner,
         a.revokedAt === null ? "active" : `revoked ${shortTime(a.revokedAt)}`,
+        a.revokedAt !== null || !a.hasToken
+          ? ""
+          : a.tokenExpiresAt === null
+            ? "never"
+            : shortTime(a.tokenExpiresAt),
         shortTime(a.createdAt),
       ]);
       io.stdout.write(
         formatTable(
-          ["name", "owner", "status", "added (UTC)"],
+          ["name", "owner", "status", "token expires (UTC)", "added (UTC)"],
           rows,
           "No agents yet. Add one: heel agent add <name>",
         ),

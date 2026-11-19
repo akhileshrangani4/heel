@@ -1,7 +1,8 @@
 import type { Suggestion } from "../../core/suggestions.ts";
+import { TOKEN_WARNING_DAYS } from "../../gateway/agents.ts";
 import type { ActivityRow, AgentActivity } from "../../store/activity.ts";
 import { type Html, html } from "./html.ts";
-import { badge, scrollRegion, time } from "./layout.ts";
+import { badge, notice, scrollRegion, time } from "./layout.ts";
 
 /**
  * The observability pages (A5): what agents did, as heel decided it. Every
@@ -108,9 +109,46 @@ export function activityPage(props: {
     }`;
 }
 
-export function agentsPage(props: { agents: readonly AgentActivity[]; sinceHours: number }): Html {
+/** A token's expiry for the Agents page: a date (warned within 14 days), never, or none. */
+function tokenCell(expiry: Date | "never" | null | undefined, now: Date): Html {
+  if (expiry === null || expiry === undefined) return html`<span class="muted">none</span>`;
+  if (expiry === "never") return html`<span class="muted">never</span>`;
+  const days = Math.ceil((expiry.getTime() - now.getTime()) / 86_400_000);
+  if (days <= 0) return badge("expired", "error");
+  if (days <= TOKEN_WARNING_DAYS) return html`${time(expiry)} ${badge(`in ${days}d`, "warn")}`;
+  return time(expiry);
+}
+
+export function agentsPage(props: {
+  agents: readonly AgentActivity[];
+  sinceHours: number;
+  /** Each agent's static token expiry: a date, "never", or null without one. */
+  tokens?: ReadonlyMap<string, Date | "never" | null>;
+  now?: Date;
+}): Html {
+  const now = props.now ?? new Date();
+  const expiring = props.agents.filter((a) => {
+    const t = props.tokens?.get(a.agentId);
+    return (
+      !a.revoked &&
+      t instanceof Date &&
+      t.getTime() - now.getTime() <= TOKEN_WARNING_DAYS * 86_400_000
+    );
+  });
   return html`<h1>Agents</h1>
     <p class="muted">Every agent you may see, and what it did in the last ${String(props.sinceHours)} hours.</p>
+    ${
+      expiring.length === 0
+        ? ""
+        : notice(
+            "warn",
+            html`<p>
+              ${expiring.length === 1 ? "One agent's token" : `${String(expiring.length)} agents' tokens`}
+              expire soon: ${expiring.map((a) => a.name).join(", ")}. Issue a new one with
+              <code>heel agent rotate &lt;agent&gt;</code> and update the agent's configuration.
+            </p>`,
+          )
+    }
     ${scrollRegion(
       "Agents",
       html`<table class="data">
@@ -126,6 +164,7 @@ export function agentsPage(props: { agents: readonly AgentActivity[]; sinceHours
             <th scope="col">Asked</th>
             <th scope="col">Would have stopped</th>
             <th scope="col">Accounts</th>
+            <th scope="col">Token expires</th>
           </tr>
         </thead>
         <tbody>
@@ -140,6 +179,7 @@ export function agentsPage(props: { agents: readonly AgentActivity[]; sinceHours
               <td>${String(a.asked)}</td>
               <td>${String(a.wouldHaveStopped)}</td>
               <td class="mono">${a.accounts.join(", ")}</td>
+              <td>${a.revoked ? "" : tokenCell(props.tokens?.get(a.agentId), now)}</td>
             </tr>`,
           )}
         </tbody>

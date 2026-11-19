@@ -28,7 +28,7 @@ In a second terminal:
    Gmail and Google Calendar sign in through your own Google OAuth client, set as `providers.google` in `heel.yaml`. Create it first: [Set up Google sign-in for heel](google-sign-in.md) takes about 5 minutes, once.
    Any MCP server, any HTTP API with an OpenAPI file, and any CLI can go behind heel. `heel --help` lists the forms.
 3. **Write your rules** in `$HEEL_HOME/rules/owner.yaml` ([Rules](rules.md), and the [rules reference](rules-reference.md) for every key, action and recipe). If you're unsure where to start, run `heel serve --watch` for a while. Every call runs, and the Activity page shows what each rule would have done.
-4. **Add the agent.** `heel agent add my-agent` prints its heel token, once, and the MCP URL. That token is the only credential the agent gets. If it will use CLIs through `heel run`, also give it a workdir: `heel agent workdir my-agent /home/me/code` ([Run CLIs with heel run](heel-run.md)).
+4. **Add the agent.** `heel agent add my-agent` prints its heel token, once, and the MCP URL. That token is the only credential the agent gets. It expires in 90 days; see [Agent tokens expire](#agent-tokens-expire). If it will use CLIs through `heel run`, also give it a workdir: `heel agent workdir my-agent /home/me/code` ([Run CLIs with heel run](heel-run.md)).
 
 ## 2. Connect your agent
 
@@ -135,6 +135,17 @@ Tap **Pause** on the approval page, or run `heel pause --agent my-agent`. You ca
   | 78 | heel.yaml, or a secret file it names, is missing or invalid. |
 
   `heel run` has its own: 75 needs approval, 77 denied, 69 paused, 70 heel couldn't run the command. [heel run](heel-run.md#what-the-agent-gets-back) has every case.
+
+## Agent tokens expire
+
+An agent's heel token works for 90 days. Claude Code, Codex and other MCP clients can't renew a pasted token on their own, so heel tells you well before it stops:
+
+- **From 14 days out,** `heel serve` logs a `token_expiring` warning at startup, the Agents page shows the date with a warning, and every tool result the agent gets ends with a line asking its person for a new token.
+- **To renew,** run `heel agent rotate my-agent`. It prints a new token, good for another 90 days, and the old one stops working at once. No passkey is needed. Put the new token in the agent's configuration.
+- **Choose the length** with `--expires` on `heel agent add` or `heel agent rotate`: `--expires 30d`, `--expires 365d`, or `--expires never` for a token that doesn't expire. `heel agent list` shows when each token expires.
+- **After it expires,** every call is refused with `"reason":"token_expired"` and a message saying to rotate it. Nothing else about the agent changes: its rules, grants and workdirs stay.
+- **Upgrading:** tokens issued before heel had expiry get 90 days from the upgrade.
+- Connectors that sign in with OAuth (`agent_public_url`) aren't affected: their tokens renew themselves.
 
 ## 6. Over time
 

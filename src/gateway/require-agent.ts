@@ -1,7 +1,12 @@
 import type { MiddlewareHandler } from "hono";
 import type { Logger } from "../log.ts";
 import type { HeelDb } from "../store/db.ts";
-import { type AuthenticatedAgent, authenticateAgent, isAgentTokenShape } from "./agent-tokens.ts";
+import {
+  type AgentAuthFailure,
+  type AuthenticatedAgent,
+  authenticateAgent,
+  isAgentTokenShape,
+} from "./agent-tokens.ts";
 
 export interface AgentPlaneEnv {
   Variables: { agent: AuthenticatedAgent };
@@ -32,10 +37,16 @@ export function requireAgent(deps: {
    */
   resourceMetadataUrl?: string;
 }): MiddlewareHandler<AgentPlaneEnv> {
-  const unauthorized = (): Response =>
-    new Response(null, {
+  /**
+   * The body says why in words a person can act on. Expired is told apart
+   * (the fix is a new token); unknown and revoked are not, so a guessed token
+   * learns nothing.
+   */
+  const unauthorized = (failure: AgentAuthFailure | "query" = "unknown"): Response =>
+    new Response(JSON.stringify(refusalBody(failure)), {
       status: 401,
       headers: {
+        "content-type": "application/json",
         "www-authenticate":
           deps.resourceMetadataUrl === undefined
             ? 'Bearer realm="heel"'
@@ -46,7 +57,7 @@ export function requireAgent(deps: {
     const url = new URL(c.req.url);
     if (queryCarriesAgentToken(url)) {
       deps.log.warn({ path: url.pathname }, "agent token sent in a query string; rejected");
-      return unauthorized();
+      return unauthorized("query");
     }
     let result: ReturnType<typeof authenticateAgent>;
     try {
@@ -65,9 +76,39 @@ export function requireAgent(deps: {
         { failure: result.failure, path: url.pathname },
         "agent authentication rejected",
       );
-      return unauthorized();
+      return unauthorized(result.failure);
     }
     c.set("agent", result.agent);
     return next();
   };
+}
+
+/** Pure: the JSON body of an agent-plane 401. */
+export function refusalBody(failure: AgentAuthFailure | "query"): {
+  status: "denied";
+  reason: "token_expired" | "token_refused";
+  message: string;
+} {
+  switch (failure) {
+    case "expired":
+      return {
+        status: "denied",
+        reason: "token_expired",
+        message:
+          "This agent token has expired. Whoever runs heel can issue a new one with `heel agent rotate <agent>`, then update this agent's configuration.",
+      };
+    case "query":
+      return {
+        status: "denied",
+        reason: "token_refused",
+        message: "Send the agent token in the Authorization header (Bearer), never in the URL.",
+      };
+    default:
+      return {
+        status: "denied",
+        reason: "token_refused",
+        message:
+          "heel didn't accept this agent token: it is missing, mistyped, or no longer valid. Check HEEL_TOKEN or this agent's configuration.",
+      };
+  }
 }
