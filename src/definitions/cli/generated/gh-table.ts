@@ -15,6 +15,7 @@ export const GH_TABLE: CommandTable = {
         ["custom-agent", "a", "value"],
         ["follow", "", "bool"],
         ["from-file", "F", "value"],
+        ["repo", "R", "value"],
       ],
     },
     "agent-task list": {
@@ -32,6 +33,7 @@ export const GH_TABLE: CommandTable = {
         ["jq", "q", "value"],
         ["json", "", "value"],
         ["log", "", "bool"],
+        ["repo", "R", "value"],
         ["template", "t", "value"],
         ["web", "w", "bool"],
       ],
@@ -177,11 +179,12 @@ export const GH_TABLE: CommandTable = {
         ["no-browser", "n", "bool"],
         ["projects", "p", "bool"],
         ["releases", "r", "bool"],
+        ["repo", "R", "value"],
         ["settings", "s", "bool"],
         ["wiki", "w", "bool"],
       ],
     },
-    cache: {},
+    cache: { persistent: [["repo", "R", "value"]] },
     "cache delete": {
       local: [
         ["all", "a", "bool"],
@@ -346,13 +349,14 @@ export const GH_TABLE: CommandTable = {
     "config list": { aliases: ["ls"], local: [["host", "h", "value"]] },
     "config set": { local: [["host", "h", "value"]] },
     copilot: { rawArgs: true },
-    discussion: {},
+    discussion: { local: [["repo", "R", "value"]] },
     "discussion comment": {
       local: [
         ["body", "b", "value"],
         ["body-file", "F", "value"],
         ["delete", "", "bool"],
         ["edit", "", "bool"],
+        ["repo", "R", "value"],
         ["yes", "", "bool"],
       ],
     },
@@ -362,6 +366,7 @@ export const GH_TABLE: CommandTable = {
         ["body-file", "F", "value"],
         ["category", "c", "value"],
         ["label", "l", "value"],
+        ["repo", "R", "value"],
         ["title", "t", "value"],
       ],
     },
@@ -372,6 +377,7 @@ export const GH_TABLE: CommandTable = {
         ["body-file", "F", "value"],
         ["category", "c", "value"],
         ["remove-label", "", "value"],
+        ["repo", "R", "value"],
         ["title", "t", "value"],
       ],
     },
@@ -387,6 +393,7 @@ export const GH_TABLE: CommandTable = {
         ["label", "l", "value"],
         ["limit", "L", "value"],
         ["order", "", "value"],
+        ["repo", "R", "value"],
         ["search", "S", "value"],
         ["sort", "", "value"],
         ["state", "s", "value"],
@@ -402,6 +409,7 @@ export const GH_TABLE: CommandTable = {
         ["json", "", "value"],
         ["limit", "L", "value"],
         ["order", "", "value"],
+        ["repo", "R", "value"],
         ["template", "t", "value"],
         ["web", "w", "bool"],
       ],
@@ -487,7 +495,7 @@ export const GH_TABLE: CommandTable = {
     "gpg-key add": { local: [["title", "t", "value"]] },
     "gpg-key delete": { local: [["yes", "y", "bool"]] },
     "gpg-key list": { aliases: ["ls"] },
-    issue: {},
+    issue: { persistent: [["repo", "R", "value"]] },
     "issue close": {
       local: [
         ["comment", "c", "value"],
@@ -607,7 +615,7 @@ export const GH_TABLE: CommandTable = {
         ["web", "w", "bool"],
       ],
     },
-    label: {},
+    label: { persistent: [["repo", "R", "value"]] },
     "label clone": { local: [["force", "f", "bool"]] },
     "label create": {
       local: [
@@ -1007,7 +1015,7 @@ export const GH_TABLE: CommandTable = {
         ["web", "w", "bool"],
       ],
     },
-    release: {},
+    release: { persistent: [["repo", "R", "value"]] },
     "release create": {
       aliases: ["new"],
       local: [
@@ -1095,7 +1103,7 @@ export const GH_TABLE: CommandTable = {
     },
     repo: {},
     "repo archive": { local: [["yes", "y", "bool"]] },
-    "repo autolink": {},
+    "repo autolink": { persistent: [["repo", "R", "value"]] },
     "repo autolink create": { aliases: ["new"], local: [["numeric", "n", "bool"]] },
     "repo autolink delete": { local: [["yes", "", "bool"]] },
     "repo autolink list": {
@@ -1143,7 +1151,7 @@ export const GH_TABLE: CommandTable = {
       ],
     },
     "repo delete": { local: [["yes", "", "bool"]] },
-    "repo deploy-key": {},
+    "repo deploy-key": { persistent: [["repo", "R", "value"]] },
     "repo deploy-key add": {
       local: [
         ["allow-write", "w", "bool"],
@@ -1223,6 +1231,7 @@ export const GH_TABLE: CommandTable = {
         ["jq", "q", "value"],
         ["json", "", "value"],
         ["ref", "", "value"],
+        ["repo", "R", "value"],
         ["template", "t", "value"],
       ],
     },
@@ -1234,10 +1243,16 @@ export const GH_TABLE: CommandTable = {
         ["json", "", "value"],
         ["output", "o", "value"],
         ["ref", "", "value"],
+        ["repo", "R", "value"],
         ["template", "t", "value"],
       ],
     },
-    "repo rename": { local: [["yes", "y", "bool"]] },
+    "repo rename": {
+      local: [
+        ["repo", "R", "value"],
+        ["yes", "y", "bool"],
+      ],
+    },
     "repo set-default": {
       local: [
         ["unset", "u", "bool"],
@@ -1261,7 +1276,7 @@ export const GH_TABLE: CommandTable = {
         ["web", "w", "bool"],
       ],
     },
-    ruleset: { aliases: ["rs"] },
+    ruleset: { aliases: ["rs"], persistent: [["repo", "R", "value"]] },
     "ruleset check": {
       local: [
         ["default", "", "bool"],
@@ -1284,7 +1299,7 @@ export const GH_TABLE: CommandTable = {
         ["web", "w", "bool"],
       ],
     },
-    run: {},
+    run: { persistent: [["repo", "R", "value"]] },
     "run cancel": { local: [["force", "", "bool"]] },
     "run delete": {},
     "run download": {
@@ -1499,7 +1514,7 @@ export const GH_TABLE: CommandTable = {
         ["web", "w", "bool"],
       ],
     },
-    secret: {},
+    secret: { persistent: [["repo", "R", "value"]] },
     "secret delete": {
       aliases: ["remove"],
       local: [
@@ -1603,7 +1618,7 @@ export const GH_TABLE: CommandTable = {
         ["org", "o", "value"],
       ],
     },
-    variable: {},
+    variable: { persistent: [["repo", "R", "value"]] },
     "variable delete": {
       aliases: ["remove"],
       local: [
@@ -1640,7 +1655,7 @@ export const GH_TABLE: CommandTable = {
         ["visibility", "v", "value"],
       ],
     },
-    workflow: {},
+    workflow: { persistent: [["repo", "R", "value"]] },
     "workflow disable": {},
     "workflow enable": {},
     "workflow list": {

@@ -32,18 +32,22 @@ export function normalizeGh(argv: CliArgv): CliNormalization {
   const flagRepo = ghRepo(gh.flags["repo"]);
   const urls = ghUrlRepos(gh.path, gh.positionals);
   const repo = urls.repo ?? flagRepo;
+  const owner = ghOwnerScope(gh);
   const conflict =
     urls.unreadable ??
     (urls.repo !== undefined && flagRepo !== undefined && urls.repo !== flagRepo
       ? urls.from
       : undefined) ??
-    ghForeignIssueRef(gh, repo);
+    ghForeignIssueRef(gh, repo) ??
+    ghOtherRepo(gh, repo) ??
+    // gh acts on the owner and ignores -R, so a rule on the repo would check the wrong target.
+    (owner !== undefined && repo !== undefined ? owner : undefined);
   return {
     cli: cliFields(argv, gh),
     ...(mapping !== undefined && { action: mapping.action, kind: mapping.kind }),
     ...(repo !== undefined && { repo }),
     ...(GH_PERSISTENCE.has(key) && { persistence: true as const }),
-    ...(ghTakesRepo(gh.path) && { takesRepo: true as const }),
+    ...(ghTakesRepo(gh.path) && owner === undefined && { takesRepo: true as const }),
     ...(pull !== undefined && { pull }),
     ...(gh.argsLenAtDash !== undefined && { dashDash: true as const }),
     help: gh.help,
@@ -225,6 +229,43 @@ function ghForeignIssueRef(gh: ParsedArgs, repo: string | undefined): string | u
     }
   }
   return undefined;
+}
+
+/**
+ * Flags that make a `secret`, `variable` or `ruleset` command act on an
+ * organization or user, not a repo. gh then ignores `-R`.
+ */
+const GH_OWNER_SCOPE_FLAGS: Readonly<Record<string, readonly string[]>> = {
+  secret: ["org", "user", "repos", "no-repos-selected"],
+  variable: ["org", "repos"],
+  ruleset: ["org"],
+};
+
+/** The owner-scope flag a command was given (as `--name`), if any. */
+function ghOwnerScope(gh: ParsedArgs): string | undefined {
+  const flags = GH_OWNER_SCOPE_FLAGS[gh.path[0] ?? ""] ?? [];
+  const given = flags.find((name) => gh.flags[name] !== undefined);
+  return given === undefined ? undefined : `--${given}`;
+}
+
+/**
+ * An argument naming a second repo the command acts on besides `repo`:
+ * `label clone`'s source, `issue transfer`'s destination, `issue develop
+ * --branch-repo`. Rules see one repo, so each must be that repo.
+ */
+function ghOtherRepo(gh: ParsedArgs, repo: string | undefined): string | undefined {
+  const key = gh.path.join(" ");
+  let other: CliFlagValue | undefined;
+  if (key === "label clone") other = gh.positionals[0];
+  else if (key === "issue transfer") other = gh.positionals[1];
+  else if (key === "issue develop") other = gh.flags["branch-repo"];
+  if (other === undefined) return undefined;
+  if (other === true) return "--branch-repo";
+  const values = Array.isArray(other) ? other : [other];
+  return values.find((value) => {
+    const named = normalizeGhRepo(value);
+    return named === undefined || named !== repo;
+  });
 }
 
 /**
