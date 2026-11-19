@@ -17,6 +17,7 @@ export function baseOptions(): BaseLayoutProps {
     githubUrl,
     links: [
       { text: 'docs', url: '/docs', active: 'nested-url' },
+      { text: 'roadmap', url: '/roadmap' },
       { text: 'npm', url: npmUrl, external: true },
     ],
   };

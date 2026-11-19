@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { CopyInstall } from '@/components/copy-install';
-import { githubUrl, npmUrl } from '@/lib/shared';
+import { SiteFooter } from '@/components/site-footer';
 
 /** A dog sitting at heel. */
 const DOG = String.raw`   / \__
@@ -275,22 +275,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <footer className="border-t border-black/5 dark:border-white/10">
-        <div className="mx-auto flex max-w-[1100px] flex-wrap items-center justify-between gap-4 px-5 py-7 text-sm text-neutral-500">
-          <span>heel · apache 2.0</span>
-          <span className="flex gap-5">
-            <Link href="/docs" className="hover:text-neutral-900 dark:hover:text-white">
-              docs
-            </Link>
-            <a href={githubUrl} className="hover:text-neutral-900 dark:hover:text-white">
-              github
-            </a>
-            <a href={npmUrl} className="hover:text-neutral-900 dark:hover:text-white">
-              npm
-            </a>
-          </span>
-        </div>
-      </footer>
+      <SiteFooter />
     </main>
   );
 }
