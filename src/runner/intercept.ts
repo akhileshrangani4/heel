@@ -42,7 +42,7 @@ import {
   createServer as createTlsServer,
   type PeerCertificate,
 } from "node:tls";
-import type { SandboxCa } from "./ca.ts";
+import { hostRoots, type SandboxCa } from "./ca.ts";
 import type { EgressTarget } from "./egress.ts";
 import { createScrubber, credentialForms, scrubAll } from "./scrub.ts";
 
@@ -221,7 +221,7 @@ export interface InterceptOptions {
   readonly placeholder: string;
   /** Read for each request, so a refreshed or revoked credential takes effect at once. */
   readonly credential: () => Promise<string>;
-  /** Trust roots for the upstream's certificate; Node's own when absent. Tests only. */
+  /** Trust roots for the upstream's certificate; the host's own when absent. Tests only. */
   readonly upstreamCa?: readonly string[];
   readonly connectTimeoutMs: number;
   /** One event per request heel read inside a tunnel, for audit. */
@@ -281,6 +281,8 @@ export async function intercept(
     minVersion: "TLSv1.2",
   });
   tls.on("secureConnection", (secure) => {
+    // The http server drops its own listeners on an upgrade or a CONNECT; a reset must not go unhandled.
+    secure.on("error", () => secure.destroy());
     sockets.add(secure);
     secure.on("close", () => sockets.delete(secure));
     http.emit("connection", secure);
@@ -445,7 +447,8 @@ function dialOptions(target: EgressTarget, address: string, options: InterceptOp
     rejectUnauthorized: true,
     checkServerIdentity: (_host: string, cert: PeerCertificate) =>
       checkServerIdentity(target.host, cert),
-    ...(options.upstreamCa === undefined ? {} : { ca: [...options.upstreamCa] }),
+    // The same roots the sandbox trusts for hosts heel tunnels blind.
+    ca: options.upstreamCa === undefined ? hostRoots() : [...options.upstreamCa],
   };
 }
 

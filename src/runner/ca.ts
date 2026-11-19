@@ -122,8 +122,12 @@ export async function createSandboxCa(hosts: readonly string[]): Promise<Sandbox
  * without looking inside still verify) plus this sandbox's CA.
  */
 export function trustBundle(caCertificate: string): string {
-  const roots = new Set([...getCACertificates("system"), ...getCACertificates("bundled")]);
-  return `${[...roots, caCertificate].map((cert) => cert.trim()).join("\n")}\n`;
+  return `${[...hostRoots(), caCertificate].map((cert) => cert.trim()).join("\n")}\n`;
+}
+
+/** The host's system roots and Node's bundled ones, deduplicated. */
+export function hostRoots(): string[] {
+  return [...new Set([...getCACertificates("system"), ...getCACertificates("bundled")])];
 }
 
 type KeyPair = webcrypto.CryptoKeyPair;

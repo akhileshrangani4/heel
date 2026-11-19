@@ -327,7 +327,7 @@ describe("credential injection at the egress proxy", () => {
       async open(alpn?: string[]) {
         const { status, socket } = await tunnel(started.socketPath, target);
         expect(status).toBe("HTTP/1.1 200 Connection Established");
-        return secure(socket, ca.certificate, alpn);
+        return Object.assign(await secure(socket, ca.certificate, alpn), { raw: socket });
       },
       close: () => started.close(),
     };
@@ -585,6 +585,49 @@ describe("credential injection at the egress proxy", () => {
     tls.destroy();
     await p.close();
   });
+
+  it.each(["upgrade", "connect"])(
+    "survives a client that resets mid-%s while heel is still deciding",
+    async (kind) => {
+      let release: () => void = () => {};
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const p = await proxy({
+        credential: async () => {
+          await gate;
+          return TOKEN;
+        },
+      });
+      const tls = await p.open();
+      tls.on("error", () => {});
+      tls.write(
+        kind === "upgrade"
+          ? [
+              `GET /socket HTTP/1.1`,
+              `Host: ${p.target}`,
+              "Connection: Upgrade",
+              "Upgrade: websocket",
+              `Authorization: Bearer ${PLACEHOLDER}`,
+              "",
+              "",
+            ].join("\r\n")
+          : "CONNECT 127.0.0.1:1 HTTP/1.1\r\nHost: 127.0.0.1:1\r\n\r\n",
+      );
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      tls.raw.destroy();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      release();
+      // An unhandled socket error here would fail the run; heel carries on serving.
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const answer = await exchange(
+        await p.open(),
+        request(p.target, ["GET / HTTP/1.1", "Host: {target}"]),
+      );
+      expect(answer.status).toBe(200);
+      await p.close();
+    },
+  );
 
   it("refuses a credential host that isn't allowlisted", async () => {
     const ca = await createSandboxCa(["127.0.0.1"]);

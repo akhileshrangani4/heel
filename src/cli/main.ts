@@ -441,7 +441,7 @@ async function accountCommand(args: string[], io: CliIo): Promise<number> {
           params: { alias, credentialHosts, credentialAuth: values["credential-auth"] ?? null },
         }),
       );
-      io.stdout.write(
+      io.stderr.write(
         "A running server keeps its old environment until its next call, when heel starts it again.\n",
       );
       return EXIT.ok;
