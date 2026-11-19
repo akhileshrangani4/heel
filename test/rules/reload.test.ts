@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -263,8 +263,13 @@ describe("watchRules", () => {
     watcher = null;
   });
 
-  /** Starts watching and returns a function that resolves with the next reload. */
-  function watching(holder: RulesHolder): () => Promise<ReloadOutcome> {
+  /**
+   * Starts watching and returns a function that resolves with the next
+   * reload. macOS can drop changes made in the moments after a watch
+   * starts, so when `rules/` exists this first touches a hidden file there
+   * (which loads nothing) until a reload shows the watcher is live.
+   */
+  async function watching(holder: RulesHolder): Promise<() => Promise<ReloadOutcome>> {
     const pending: ((outcome: ReloadOutcome) => void)[] = [];
     const errors: unknown[] = [];
     watcher = watchRules(holder, {
@@ -272,6 +277,20 @@ describe("watchRules", () => {
       onReload: (outcome) => pending.shift()?.(outcome),
       onError: (error) => errors.push(error),
     });
+    if (existsSync(paths.ownersDir)) {
+      let live = false;
+      pending.push(() => {
+        live = true;
+      });
+      for (let i = 0; !live && i < 50; i++) {
+        writeFileSync(join(paths.ownersDir, ".warm-up"), String(i));
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      rmSync(join(paths.ownersDir, ".warm-up"), { force: true });
+      // Let the removal's reload pass before a test waits for its own.
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      pending.length = 0;
+    }
     return () =>
       new Promise((resolve, reject) => {
         if (errors.length > 0) reject(errors[0]);
@@ -283,7 +302,7 @@ describe("watchRules", () => {
     writeOwner("alice", allowSends);
     const holder = new RulesHolder(paths);
     holder.reload();
-    const next = watching(holder);
+    const next = await watching(holder);
 
     const reloaded = next();
     writeOwner("alice", oneRule("{ action: email.send }", "deny"));
@@ -295,8 +314,8 @@ describe("watchRules", () => {
     writeOwner("alice", allowSends);
     const holder = new RulesHolder(paths);
     holder.reload();
+    const next = await watching(holder);
     const good = holder.set;
-    const next = watching(holder);
 
     const reloaded = next();
     writeOwner("alice", "rules:\n  - match: {}\n    then: maybe\n");
@@ -314,7 +333,7 @@ describe("watchRules", () => {
     writeOwner("alice", allowSends);
     const holder = new RulesHolder(paths);
     holder.reload();
-    const next = watching(holder);
+    const next = await watching(holder);
 
     let reloaded = next();
     const temp = join(paths.ownersDir, ".alice.yaml.tmp");
@@ -335,7 +354,7 @@ describe("watchRules", () => {
   it("picks up a rules/ directory created after heel started", async () => {
     const holder = new RulesHolder(paths);
     holder.reload();
-    const next = watching(holder);
+    const next = await watching(holder);
 
     let reloaded = next();
     mkdirSync(paths.ownersDir);
