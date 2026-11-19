@@ -141,9 +141,9 @@ describe("connecting a Gmail account", () => {
 
 /** One account's row on the Connections page. */
 function rowOf(page: string, alias: string): string {
-  const start = page.indexOf(`<th scope="row" class="mono">${alias}</th>`);
+  const start = page.indexOf(`data-alias="${alias}"`);
   expect(start).toBeGreaterThan(-1);
-  return page.slice(start, page.indexOf("</tr>", start));
+  return page.slice(start, page.indexOf("</li>", start));
 }
 
 describe("Connections without providers.google", () => {
@@ -186,7 +186,8 @@ describe("Connections without providers.google", () => {
     const page = await (await h.fetch("/connections", { as: owner })).text();
 
     expect(page).not.toContain("providers.google");
-    expect(rowOf(page, "gmail-home")).toContain('type="submit" class="btn btn-secondary"');
+    // An account that hasn't signed in yet: Sign in is the card's primary button.
+    expect(rowOf(page, "gmail-home")).toContain('type="submit" class="btn btn-primary"');
   });
 
   it("keys off the config, so a configured client gets no setup hint even while sign-in is off", async () => {

@@ -202,6 +202,14 @@ body:has(.ap){background:var(--page)}
   main{padding:1rem}
   table.data{min-width:34rem}
 }
+.conn-list{list-style:none;margin:.75rem 0 1rem;padding:0;display:grid;gap:.75rem;align-items:start;grid-template-columns:repeat(auto-fill,minmax(17rem,1fr))}
+.conn{margin:0;display:flex;flex-direction:column;gap:.75rem}
+.conn-head{display:flex;justify-content:space-between;align-items:flex-start;gap:.75rem}
+.conn-name{font-size:1rem;margin:0;overflow-wrap:anywhere}
+.conn-kind{margin:.1rem 0 0;font-size:.88rem}
+.conn-step{border-top:1px solid var(--line);padding-top:.75rem;font-size:.9rem}
+.conn-add h2{font-size:1rem;margin:0 0 .25rem}
+.conn-add pre.args{margin-top:.75rem}
 .story{border-top:4px solid var(--border);margin-top:2rem;padding-top:1rem}
 .visually-hidden{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 .signin{max-width:28rem;margin:3rem auto}
