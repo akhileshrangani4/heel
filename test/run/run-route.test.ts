@@ -73,20 +73,59 @@ describe("/run", () => {
     });
   });
 
-  it("injects the token only on GitHub's own hosts, never an extra egress host", async () => {
+  /** The network a gh command gets with `egress` as the account's hosts. */
+  async function ghNetwork(egress: string[]) {
     const h = cliPipeline({
       owner: ALLOW_GH,
       settings: {
         transport: "cli",
         command: "gh",
         bin: "/usr/bin/gh",
-        egress: ["api.github.com", "github.com", "uploads.github.com"],
+        egress,
         credentialEnv: null,
       },
     });
     await h.run({ argv: ["gh", "pr", "list", "-R", "acme/web"], cwd: h.repo });
-    expect(h.started[0]?.network).toMatchObject({
+    return h.started[0]?.network;
+  }
+
+  it("injects the token on GitHub's upload host when the operator allowed it", async () => {
+    const network = await ghNetwork(["api.github.com", "github.com", "uploads.github.com"]);
+    expect(network).toMatchObject({
       allow: ["api.github.com", "github.com", "uploads.github.com"],
+      inject: { hosts: ["api.github.com", "github.com", "uploads.github.com"] },
+    });
+    const inject = network?.kind === "egress" ? network.inject : undefined;
+    expect(await inject?.credential()).toBe(GH_TEST_TOKEN);
+  });
+
+  it("matches an allowed GitHub host however the operator spelled it", async () => {
+    const network = await ghNetwork(["api.github.com", "github.com", "Uploads.GitHub.com:443"]);
+    expect(network).toMatchObject({
+      inject: { hosts: ["api.github.com", "github.com", "Uploads.GitHub.com:443"] },
+    });
+  });
+
+  it("never injects the token on an allowed host outside GitHub's fixed list", async () => {
+    const network = await ghNetwork([
+      "api.github.com",
+      "github.com",
+      "objects.githubusercontent.com",
+      "codeload.github.com",
+      "uploads.github.com.example.com",
+      "uploads.github.com:8443",
+      "example.com",
+    ]);
+    expect(network).toMatchObject({
+      allow: expect.arrayContaining(["example.com", "uploads.github.com:8443"]),
+      inject: { hosts: ["api.github.com", "github.com"] },
+    });
+  });
+
+  it("doesn't inject the token on GitHub's upload host when the operator didn't allow it", async () => {
+    const network = await ghNetwork(["api.github.com", "github.com"]);
+    expect(network).toMatchObject({
+      allow: ["api.github.com", "github.com"],
       inject: { hosts: ["api.github.com", "github.com"] },
     });
   });

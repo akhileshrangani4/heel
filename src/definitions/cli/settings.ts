@@ -8,7 +8,8 @@ import { z } from "zod";
  * proxy, and how its credential reaches it.
  *
  * - `gh`: a placeholder in `GH_TOKEN`, and heel's egress proxy adds the token
- *   to requests to GitHub's API and site, never to an extra egress host.
+ *   to requests to GitHub's API and site, and to `GH_UPLOAD_HOSTS` when the
+ *   operator allowed them; never to any other extra egress host.
  * - `kubectl`: the credential is a kubeconfig, written into the sandbox,
  *   with `KUBECONFIG` pointing at it; egress to its cluster's API server.
  * - any other CLI: the credential in the environment variable the operator
@@ -32,6 +33,20 @@ export function cliSettings(settings: Record<string, unknown>): CliSettings | nu
 
 /** GitHub's hosts `gh` needs (spec: CLI runner, "Network"). */
 export const GH_EGRESS = ["api.github.com", "github.com"] as const;
+
+/**
+ * GitHub's hosts beyond `GH_EGRESS` that `gh` itself sends its token to, so
+ * heel's proxy adds the token there too, but only when the operator put the
+ * host in the account's egress. gh (2.99.0) adds the token to any request its
+ * API client starts to a `*.github.com` host (go-gh's `NormalizeHostname`),
+ * and starts them to `uploads.github.com` for release assets (`gh release
+ * upload`, `gh release create`) and comment attachments. It reaches
+ * `codeload.github.com` and `*.githubusercontent.com` only by a redirect
+ * from the API, where it drops the token, and `tuf-repo.github.com` and its
+ * telemetry host with clients that never carry it, so none of those get it
+ * from heel either.
+ */
+export const GH_UPLOAD_HOSTS = ["uploads.github.com"] as const;
 
 /** The API server hosts a kubeconfig names, as `host:port`; null when it doesn't parse. */
 export function kubeconfigServers(kubeconfig: string): string[] | null {
