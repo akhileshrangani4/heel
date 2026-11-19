@@ -105,7 +105,13 @@ async function signIn(h: ReturnType<typeof setUp>["h"], microsoft: FakeMicrosoft
   });
   const callback = microsoft.consent(started.headers.get("location") ?? "");
   const landed = await h.fetch(callback.pathname + callback.search, { as: owner });
-  return new URL(landed.headers.get("location") ?? "", "https://x.test").searchParams;
+  const location = landed.headers.get("location") ?? "";
+  const params = new URL(location, "https://x.test").searchParams;
+  // A failure's words are on the page; the redirect carries only an id (red-team round 3).
+  const page = params.has("failed") ? await (await h.fetch(location, { as: owner })).text() : "";
+  return {
+    get: (key: string) => (key === "failed" && params.has("failed") ? page : params.get(key)),
+  };
 }
 
 describe("Outlook sign-in", () => {

@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { Hono } from "hono";
 import { GOOGLE_CALLBACK_PATH, MICROSOFT_CALLBACK_PATH } from "../../config/schema.ts";
 import { CALENDAR_PROFILE, GMAIL_PROFILE, googleSignIn } from "../../definitions/google/oauth.ts";
@@ -50,11 +51,41 @@ function isOAuthUpstream(settings: Record<string, unknown>): boolean {
   return upstream?.transport === "http" && upstream.oauth;
 }
 
-function outcomeFrom(query: Record<string, string>): ConnectionsOutcome {
+/**
+ * Why a sign-in failed, kept here for a few minutes: the redirect carries
+ * only a random id, so a link someone else crafts can't put their own words
+ * in heel's error notice. An id heel didn't make shows nothing.
+ */
+class FailureNotes {
+  readonly #notes = new Map<string, { alias: string; message: string; at: number }>();
+  readonly now: () => Date;
+  constructor(now: () => Date) {
+    this.now = now;
+  }
+  add(alias: string, message: string): string {
+    const at = this.now().getTime();
+    for (const [id, note] of this.#notes) {
+      if (at - note.at > 10 * 60_000 || this.#notes.size > 200) this.#notes.delete(id);
+    }
+    const id = randomBytes(12).toString("base64url");
+    this.#notes.set(id, { alias, message, at });
+    return id;
+  }
+  get(id: string): { alias: string; message: string } | null {
+    return this.#notes.get(id) ?? null;
+  }
+}
+
+/** The notice to show: only for an account on this page, and only heel's own words. */
+function outcomeFrom(
+  query: Record<string, string>,
+  failures: FailureNotes,
+  aliases: ReadonlySet<string>,
+): ConnectionsOutcome {
   const alias = query["account"] ?? "";
-  if (query["connected"] !== undefined) return { kind: "connected", alias };
-  if (query["failed"] !== undefined)
-    return { kind: "failed", alias, message: query["failed"] ?? "" };
+  if (query["connected"] !== undefined && aliases.has(alias)) return { kind: "connected", alias };
+  const failure = query["failed"] === undefined ? null : failures.get(query["failed"]);
+  if (failure !== null) return { kind: "failed", alias: failure.alias, message: failure.message };
   return { kind: "none" };
 }
 
@@ -66,6 +97,7 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
   const app = new Hono<SignedInEnv>();
   const signedIn = requireSession(deps);
   const oauth = deps.upstreamOAuth;
+  const failures = new FailureNotes(deps.now);
   // Sign-in for built-in mail accounts, by account provider; only for the
   // providers the operator configured a client for.
   const providers = new Map<string, ProviderSignIn>();
@@ -104,7 +136,7 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       current: "connections",
       body: connectionsPage({
         rows,
-        outcome: outcomeFrom(c.req.query()),
+        outcome: outcomeFrom(c.req.query(), failures, new Set(rows.map((row) => row.alias))),
         signInForm: { action: "/connections/sign-in", csrfToken: session.csrfToken },
       }),
     });
@@ -149,7 +181,10 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
         "upstream sign-in couldn't start",
       );
       return c.redirect(
-        back({ account: alias, failed: "heel couldn't reach the server's sign-in." }),
+        back({
+          account: alias,
+          failed: failures.add(alias, "heel couldn't reach the server's sign-in."),
+        }),
         303,
       );
     }
@@ -163,7 +198,7 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     // Only the person who started this sign-in can finish it.
     if (pending === null || pending.userId !== session.userId) {
       return c.redirect(
-        back({ failed: "That sign-in expired or wasn't yours. Start again." }),
+        back({ failed: failures.add("", "That sign-in expired or wasn't yours. Start again.") }),
         303,
       );
     }
@@ -180,7 +215,10 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     } catch (error) {
       deps.log.warn({ account: alias, error: errorShape(error) }, "upstream sign-in failed");
       return c.redirect(
-        back({ account: alias, failed: "The server didn't accept the sign-in." }),
+        back({
+          account: alias,
+          failed: failures.add(alias, "The server didn't accept the sign-in."),
+        }),
         303,
       );
     }
@@ -212,7 +250,7 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
         provider.callbackPath !== callbackPath
       ) {
         return c.redirect(
-          back({ failed: "That sign-in expired or wasn't yours. Start again." }),
+          back({ failed: failures.add("", "That sign-in expired or wasn't yours. Start again.") }),
           303,
         );
       }
@@ -236,7 +274,10 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
           error instanceof SignInError
             ? error.message
             : `${provider.label} didn't accept the sign-in.`;
-        return c.redirect(back({ account: account.alias, failed: message }), 303);
+        return c.redirect(
+          back({ account: account.alias, failed: failures.add(account.alias, message) }),
+          303,
+        );
       }
       return c.redirect(back({ account: account.alias, connected: "1" }), 303);
     });
