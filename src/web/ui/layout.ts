@@ -148,6 +148,30 @@ function sectionTabs(current: NavId | undefined): Html | "" {
   </ul></nav>`;
 }
 
+/** A dog sitting at heel: the same drawing as useheel.dev's home page. */
+const DOG = String.raw`   / \__
+  (    @\___
+  /         O
+ /   (_____/
+/_____/   U`;
+
+/**
+ * Sign-in, enrollment and consent: heel's brand as on useheel.dev, the dog,
+ * the wordmark and its line, around the page's own card.
+ */
+function authShell(body: Html): Html {
+  return html`<div class="auth">
+    <span class="sticker sticker-allow" aria-hidden="true">allow</span>
+    <span class="sticker sticker-deny" aria-hidden="true">deny</span>
+    <span class="sticker sticker-ask" aria-hidden="true">ask</span>
+    <pre class="auth-dog" aria-label="a dog sitting at heel">${DOG}</pre>
+    <p class="auth-word">heel</p>
+    <p class="auth-tag">access control for your ai agents</p>
+    ${body}
+    <p class="auth-foot">open source · self-hosted</p>
+  </div>`;
+}
+
 /** The document every human-plane page renders into. */
 export function page(props: PageProps): Html {
   const theme = props.theme ?? "auto";
@@ -173,7 +197,7 @@ export function page(props: PageProps): Html {
     <main id="main" tabindex="-1">
       ${props.viewer ? sectionTabs(props.current) : ""}
       <p id="heel-ceremony-status" role="status" aria-live="polite"></p>
-      ${props.body}
+      ${props.viewer ? props.body : authShell(props.body)}
     </main>
     <script>${trusted(CEREMONY_SCRIPT)}</script>
     ${props.script ? html`<script>${trusted(props.script)}</script>` : ""}
