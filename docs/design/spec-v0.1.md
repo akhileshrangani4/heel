@@ -754,7 +754,7 @@ Part 3
 | Denied: defeats a check | `pr merge --admin` and `--auto` under `checks: passing`_[MCP §4]_ | — |
 | Denied: runs repo code | `pr checkout`, `repo clone`, `repo sync`. Each invokes git in the cwd with `GH_TOKEN` set, and hooks would see it _[STK §3.3 item 2]_ | `exec`, `cp`, `debug`, `attach`. Each is mapped to its own action, denied by default |
 | Mapping | `gh api` becomes `github.api` and is denied unless a rule names it. `pr merge` becomes `github.merge`, and heel injects `--match-head-commit H` | The verb becomes the action (`kubectl.delete`), with `-n` as the namespace |
-| Credential delivery | `GH_TOKEN` is a placeholder; heel's egress proxy puts the token in the `Authorization` header of requests to `api.github.com` and `github.com` only, never to an extra `--egress` host | A generated kubeconfig in the sandbox's tmpfs, with `KUBECONFIG` pointing at it and `KUBECTL_KUBERC=false` |
+| Credential delivery | `GH_TOKEN` is a placeholder; heel's egress proxy puts the token in the `Authorization` header of requests to `api.github.com` and `github.com`, and to `uploads.github.com` (release assets, comment attachments) when the operator added it to `--egress`. These are GitHub's hosts gh itself sends its token to; no other `--egress` host ever gets it | A generated kubeconfig in the sandbox's tmpfs, with `KUBECONFIG` pointing at it and `KUBECTL_KUBERC=false` |
 
 ### Exit codes
 

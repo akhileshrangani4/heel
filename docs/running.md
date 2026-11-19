@@ -125,6 +125,7 @@ A sandboxed program reaches the network only through heel's egress proxy. For `g
 - The program gets a random placeholder where it expects the credential (`GH_TOKEN`, or the server's `--credential-env` variable).
 - For the credential hosts, the proxy opens TLS itself, with a certificate authority made for that one sandbox and host, valid only for that exact host (not its subdomains). The sandbox trusts it through `/heel/run/ca.pem` (`SSL_CERT_FILE`, `NODE_EXTRA_CA_CERTS` and the like).
 - The proxy puts the credential in the `Authorization` header (or the one header you named), and only where the program sent the placeholder. A request with any other credential there is refused.
+- For `gh`, the credential hosts are `api.github.com` and `github.com`, plus `uploads.github.com` if you allowed it in the account's egress (`gh release upload` needs it). Those are the GitHub hosts gh sends its token to. Any other host you allow gets the placeholder at most.
 
 So code that runs in the sandbox, a gh extension or an npm script or the MCP server itself, can't read the credential and send it somewhere else. It can still use it against those hosts while the sandbox runs, the same as the program could.
 

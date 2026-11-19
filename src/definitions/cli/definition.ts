@@ -10,6 +10,7 @@ import type {
   Normalized,
   PauseTarget,
 } from "../../gateway/pipeline/ports.ts";
+import { parseHostPort } from "../../runner/egress.ts";
 import { type CredentialAuth, newPlaceholder } from "../../runner/intercept.ts";
 import {
   type CredentialInjection,
@@ -27,7 +28,7 @@ import { isMergeAction, isWorkflowPath } from "../github/definition.ts";
 import type { FetchFn } from "../sign-in.ts";
 import { GH_MERGE_BYPASS_FLAGS } from "./gh-actions.ts";
 import { normalizeCliArgv } from "./index.ts";
-import { type CliSettings, cliSettings, GH_EGRESS } from "./settings.ts";
+import { type CliSettings, cliSettings, GH_EGRESS, GH_UPLOAD_HOSTS } from "./settings.ts";
 import type { CliRefusal } from "./types.ts";
 
 /**
@@ -46,7 +47,8 @@ import type { CliRefusal } from "./types.ts";
  * - Network goes only through heel's egress proxy, to the account's hosts.
  * - `gh` never holds its token: `GH_TOKEN` is an inert placeholder, and
  *   heel's egress proxy puts the real token in the `Authorization` header of
- *   requests to GitHub's own hosts (spec: CLI runner, "Credential delivery").
+ *   requests to GitHub's own hosts that the account's egress allows (spec:
+ *   CLI runner, "Credential delivery").
  * - Only the `/run` surface reaches it; an MCP call naming the account is
  *   refused.
  * - `gh pr merge` (D11) is pinned: heel reads the pull request's head
@@ -337,6 +339,26 @@ function encodings(secret: string): string[] {
 /** `gh` sends `Authorization: token <GH_TOKEN>`; GitHub also takes `bearer`. */
 const GH_AUTH: CredentialAuth = { type: "authorization", schemes: ["token", "bearer"] };
 
+const GH_CREDENTIAL_HOSTS: ReadonlySet<string> = new Set([...GH_EGRESS, ...GH_UPLOAD_HOSTS]);
+
+/**
+ * The account's egress entries heel's proxy adds gh's token on: those naming
+ * one of a fixed list of GitHub's hosts on port 443, and nothing else, so an
+ * operator who allows another host never sends it the token.
+ */
+export function ghCredentialHosts(egress: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const hosts: string[] = [];
+  for (const entry of egress) {
+    const target = parseHostPort(entry, 443);
+    if (target === undefined || target.port !== 443) continue;
+    if (!GH_CREDENTIAL_HOSTS.has(target.host) || seen.has(target.host)) continue;
+    seen.add(target.host);
+    hosts.push(entry);
+  }
+  return hosts;
+}
+
 function cliNetwork(
   egress: readonly string[],
   inject: CredentialInjection | undefined,
@@ -359,8 +381,8 @@ export function credentialSpec(
   inject?: CredentialInjection;
 } {
   if (settings.command === "gh") {
-    // Only GitHub's own hosts get the token; an extra --egress host gets the placeholder at most.
-    const hosts = GH_EGRESS.filter((host) => settings.egress.includes(host));
+    // Only GitHub's own hosts get the token; any other --egress host gets the placeholder at most.
+    const hosts = ghCredentialHosts(settings.egress);
     const placeholder = newPlaceholder();
     return {
       ...(hosts.length === 0
