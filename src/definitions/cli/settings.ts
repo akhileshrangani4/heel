@@ -44,7 +44,9 @@ export const GH_EGRESS = ["api.github.com", "github.com"] as const;
  * `codeload.github.com` and `*.githubusercontent.com` only by a redirect
  * from the API, where it drops the token, and `tuf-repo.github.com` and its
  * telemetry host with clients that never carry it, so none of those get it
- * from heel either.
+ * from heel either. `gh agent-task` also sends the token to a Copilot API
+ * host it looks up at run time (`*.githubcopilot.com`); that isn't a fixed
+ * host, so it isn't on this list and gets the placeholder.
  */
 export const GH_UPLOAD_HOSTS = ["uploads.github.com"] as const;
 
