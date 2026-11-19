@@ -59,6 +59,20 @@ export interface LoadedRules {
   warnings: readonly YamlIssue[];
 }
 
+/** Every rules file, loaded as far as each one allows. */
+export interface RulesLoad extends LoadedRules {
+  /** Every problem in every file, each with its path, line and column. */
+  errors: readonly YamlIssue[];
+  /** Which files the errors are in, so a reload can hold back only those. */
+  failed: {
+    org: boolean;
+    /** `rules/` itself couldn't be read, so no owner file can be trusted. */
+    ownersDir: boolean;
+    /** Owners whose file has an error; they are missing from `set.owners`. */
+    owners: ReadonlySet<string>;
+  };
+}
+
 /**
  * Loads every rules file into one set. Every file is read and checked before
  * anything is returned, so a caller swapping sets never sees half of an
@@ -66,6 +80,17 @@ export interface LoadedRules {
  * problem in every file, each with its path, line and column.
  */
 export function loadRuleSet(paths: RulesPaths): LoadedRules {
+  const { errors, failed: _failed, ...loaded } = loadRuleFiles(paths);
+  if (errors.length > 0) throw new YamlValidationError(errors);
+  return loaded;
+}
+
+/**
+ * Loads each rules file on its own: a file with an error is left out and
+ * named in `failed`, and the rest still load. Hot reload uses this so one
+ * person's broken file holds back only their own edits.
+ */
+export function loadRuleFiles(paths: RulesPaths): RulesLoad {
   const errors: YamlIssue[] = [];
   const warnings: YamlIssue[] = [];
   const files: LoadedFileSummary[] = [];
@@ -93,19 +118,34 @@ export function loadRuleSet(paths: RulesPaths): LoadedRules {
     }
   };
 
+  let mark = errors.length;
   const org = load(paths.orgFile, "org");
+  const orgFailed = errors.length > mark;
+
+  mark = errors.length;
+  const entries = ownerEntries(paths.ownersDir, errors);
+  const dirFailed = errors.length > mark;
+
   const owners = new Map<string, CompiledRulesFile>();
-  for (const entry of ownerEntries(paths.ownersDir, errors)) {
+  const failedOwners = new Set<string>();
+  for (const entry of entries) {
     if (entry.kind === "misnamed") {
       warnings.push(fileIssue(entry.path, `ignored: rules files end in ${OWNER_SUFFIX}`));
       continue;
     }
+    mark = errors.length;
     const compiled = load(entry.path, "owner", entry.user);
     if (compiled !== null) owners.set(entry.user, compiled);
+    else if (errors.length > mark) failedOwners.add(entry.user);
   }
 
-  if (errors.length > 0) throw new YamlValidationError(errors);
-  return { set: { org, owners }, files, warnings };
+  return {
+    set: { org, owners },
+    files,
+    warnings,
+    errors,
+    failed: { org: orgFailed, ownersDir: dirFailed, owners: failedOwners },
+  };
 }
 
 /**

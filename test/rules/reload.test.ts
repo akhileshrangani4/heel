@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { loadRuleSet, type RulesPaths, rulesPaths } from "../../src/config/rules.ts";
+import { loadRuleFiles, loadRuleSet, type RulesPaths, rulesPaths } from "../../src/config/rules.ts";
 import {
   type ReloadOutcome,
   RulesHolder,
@@ -136,25 +136,73 @@ describe("RulesHolder", () => {
 
     writeOwner("alice", "rules:\n  - match: { action: email.send }\n    then: maybe\n");
     const outcome = holder.reload();
-    expect(outcome).toMatchObject({ ok: false, keptLastGood: true });
-    expect(holder.set).toBe(good);
+    expect(outcome).toMatchObject({ ok: false, keptLastGood: true, heldOwners: ["alice"] });
+    expect(holder.set?.owners.get("alice")).toBe(good?.owners.get("alice"));
     expect(holder.lastError?.issues[0]?.file).toBe(join(paths.ownersDir, "alice.yaml"));
     expect(effectiveDecision(run(holder.set, send))).toBe("allow");
   });
 
-  it("swaps nothing in when one file of several is invalid", () => {
+  it("holds back only the invalid owner's file; everyone else's edits apply", () => {
+    writeOwner("alice", allowSends);
+    writeOwner("bob", allowSends);
+    const holder = new RulesHolder(paths);
+    holder.reload();
+
+    // Bob tightens his rules while Alice's file is broken.
+    writeOwner("alice", "rules: [");
+    writeOwner("bob", oneRule("{ action: email.send }", "deny"));
+    const outcome = holder.reload();
+    expect(outcome).toMatchObject({ ok: false, keptLastGood: true, heldOwners: ["alice"] });
+    expect(holder.lastError?.issues[0]?.file).toBe(join(paths.ownersDir, "alice.yaml"));
+    expect(effectiveDecision(run(holder.set, send, { owner: "alice" }))).toBe("allow");
+    expect(effectiveDecision(run(holder.set, send, { owner: "bob" }))).toBe("deny");
+    expect(holder.loaded?.files.map((file) => file.file).sort()).toEqual([
+      "rules/alice.yaml",
+      "rules/bob.yaml",
+    ]);
+
+    // Fixing Alice's file applies it and clears the error.
+    writeOwner("alice", oneRule("{ action: email.send }", "ask"));
+    expect(holder.reload().ok).toBe(true);
+    expect(holder.lastError).toBeNull();
+    expect(effectiveDecision(run(holder.set, send, { owner: "alice" }))).toBe("ask");
+  });
+
+  it("applies a valid org edit alongside a held-back owner file", () => {
+    writeOrg(oneRule("{ action: email.remove }", "deny"));
+    writeOwner("alice", allowSends);
+    const holder = new RulesHolder(paths);
+    holder.reload();
+
+    writeOrg(oneRule("{ action: email.send }", "deny"));
+    writeOwner("alice", "rules: [");
+    expect(holder.reload()).toMatchObject({ ok: false, heldOwners: ["alice"] });
+    expect(effectiveDecision(run(holder.set, send, { owner: "alice" }))).toBe("deny");
+  });
+
+  it("keeps the whole last good set when the org file is invalid", () => {
     writeOrg(oneRule("{ action: email.remove }", "deny"));
     writeOwner("alice", allowSends);
     const holder = new RulesHolder(paths);
     holder.reload();
     const good = holder.set;
 
-    // A valid edit to the org file and a broken owner file in the same reload.
-    writeOrg(oneRule("{ action: email.send }", "deny"));
-    writeOwner("alice", "rules: [");
-    expect(holder.reload().ok).toBe(false);
+    writeOrg("rules: [");
+    writeOwner("alice", oneRule("{ action: email.send }", "deny"));
+    expect(holder.reload()).toMatchObject({ ok: false, keptLastGood: true, heldOwners: [] });
     expect(holder.set).toBe(good);
-    expect(effectiveDecision(run(holder.set, send))).toBe("allow");
+    expect(effectiveDecision(run(holder.set, send, { owner: "alice" }))).toBe("allow");
+  });
+
+  it("leaves a new owner's invalid file out, as before it existed", () => {
+    writeOwner("alice", allowSends);
+    const holder = new RulesHolder(paths);
+    holder.reload();
+
+    writeOwner("bob", "rules: [");
+    expect(holder.reload()).toMatchObject({ ok: false, heldOwners: ["bob"] });
+    expect(holder.set?.owners.has("bob")).toBe(false);
+    expect(effectiveDecision(run(holder.set, send, { owner: "alice" }))).toBe("allow");
   });
 
   it("swaps in a valid edit and clears the last error", () => {
@@ -174,7 +222,7 @@ describe("RulesHolder", () => {
     let fail = false;
     const holder = new RulesHolder(paths, (p) => {
       if (fail) throw new Error("disk on fire");
-      return loadRuleSet(p);
+      return loadRuleFiles(p);
     });
     holder.reload();
     const good = holder.set;
@@ -236,7 +284,7 @@ describe("watchRules", () => {
       file: join(paths.ownersDir, "alice.yaml"),
       line: 3,
     });
-    expect(holder.set).toBe(good);
+    expect(holder.set?.owners.get("alice")).toBe(good?.owners.get("alice"));
   });
 
   it("follows an editor's save-by-rename and an org file edit", async () => {

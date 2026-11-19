@@ -225,7 +225,12 @@ function logRulesOutcome(log: Logger, outcome: ReloadOutcome): void {
     return;
   }
   const issues = outcome.error.issues.map(formatYamlIssue);
-  if (outcome.keptLastGood) {
+  if (outcome.heldOwners.length > 0) {
+    log.error(
+      { issues, heldOwners: outcome.heldOwners },
+      "rules invalid; those owners' last valid rules keep deciding, and every other edit applied",
+    );
+  } else if (outcome.keptLastGood) {
     log.error({ issues }, "rules invalid; the last valid set keeps deciding");
   } else {
     log.error({ issues }, "rules invalid; every call is denied until they are fixed");
