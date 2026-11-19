@@ -638,13 +638,14 @@ Part 3
   - 30 s of `max_feed_duration_secs`;
   - 256 MB `max_memory`, under a 512 MB cgroup ceiling;
   - 1 MB of stdout.
+- **Scripts at once.** Each script is its own sandbox, so heel limits how many run together: 4 per agent and, by default, one per GiB of the host's memory less one (2 to 16) in all, shared with `heel run` (`sandboxes.per_agent`, `sandboxes.total`). Over either limit `run_code` returns status `busy` at once, with nothing run; the agent sends it again later. Every ending gives the slot back. When the HTTP request is aborted, the script is stopped at once; an MCP cancel notification can't reach a stateless request, so then the slot is held until the script ends on its own.
 - **Snapshots** are never persisted _[STK §2.1 item 5]_.
 
 *run_code result*
 
 ```json
 {
-  "status": "pending",                       // completed | pending | paused | error
+  "status": "pending",                       // completed | pending | paused | error | busy
   "approvalId": "apr_7Qx…",                  // when pending
   "stdout": "archived 12 newsletters\n",
   "calls": [
@@ -721,6 +722,7 @@ Part 3
   - a seccomp filter.
 - **Network.** The only route out is heel's egress proxy, with a per-CLI host allowlist. For example, `gh` may reach only `api.github.com` and `github.com`. A client that ignores the proxy fails.
 - **Limits.** 10 minutes of wall time, 1 GB of memory and 256 pids by default. Exceeding one kills the command and returns exit 70.
+- **Commands at once.** Shared with code mode: 4 per agent, and by default one per GiB of memory less one (2 to 16) in all. Over either, `/run` answers 429 `busy` and nothing runs; `heel run` exits 75.
 - **Credential delivery.** For `gh`, and for local MCP servers with credential hosts, the credential never enters the sandbox (I-75):
   - The program gets an inert, random placeholder (`heel-placeholder-…`) where it expects the credential.
   - For each credential host, heel's egress proxy terminates TLS with a CA made for that host in that sandbox: ECDSA P-256, its key only in heel's memory, name-constrained to exactly that host. A DNS name's subdomains are excluded (RFC 5280 alone would let `github.com` cover `uploads.github.com`); one CA per host is what lets `github.com` exclude its subdomains while `api.github.com` is a credential host too. The sandbox trusts it through `/heel/run/ca.pem` (the host's roots plus that CA), named by `SSL_CERT_FILE`, `NODE_EXTRA_CA_CERTS`, `REQUESTS_CA_BUNDLE`, `CURL_CA_BUNDLE` and `GIT_SSL_CAINFO`, which a spec can't set. Every other allowlisted host is still tunnelled blind.
@@ -761,7 +763,7 @@ Part 3
 
 | Outcome | Exit |
 | --- | --- |
-| pending approval | 75 (`EX_TEMPFAIL`) |
+| pending approval, or busy (too many commands and scripts running; `/run` answers 429) | 75 (`EX_TEMPFAIL`) |
 | denied or expired | 77 (`EX_NOPERM`) |
 | paused | 69 (`EX_UNAVAILABLE`) |
 | heel error, sandbox limit or no namespaces | 70 (`EX_SOFTWARE`) |

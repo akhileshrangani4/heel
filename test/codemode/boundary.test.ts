@@ -115,6 +115,20 @@ describe("the sandboxed worker", () => {
     await worker.stop();
   });
 
+  it("fails the step heel is waiting on when it's stopped from outside, as on a hang-up", async () => {
+    const fake = fakeSandbox();
+    const worker = new SandboxedCodeWorker({
+      host,
+      installDir: "/opt/heel",
+      start: async () => fake.process,
+    });
+    // The script never answers: the step stays awaited until the worker is stopped.
+    const started = worker.start("code", [], DEFAULT_LIMITS, () => {});
+    await new Promise((resolve) => setImmediate(resolve));
+    await worker.stop();
+    expect(await started).toEqual({ kind: "failed", error: "the script was stopped" });
+  });
+
   it("removes its work directory when the sandbox doesn't start", async () => {
     const before = readdirSync(tmpdir()).filter((n) => n.startsWith("heel-codemode-")).length;
     const worker = new SandboxedCodeWorker({

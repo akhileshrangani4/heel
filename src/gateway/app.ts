@@ -10,6 +10,7 @@ import type { McpSurface } from "./mcp/server.ts";
 import type { Pipeline } from "./pipeline/pipeline.ts";
 import { type AgentPlaneEnv, requireAgent } from "./require-agent.ts";
 import { handleRun } from "./run-route.ts";
+import type { SandboxSlots } from "./sandbox-slots.ts";
 
 export interface AgentAppDeps {
   db: HeelDb;
@@ -30,7 +31,7 @@ export interface AgentAppDeps {
    */
   hosts?: readonly string[];
   /** The CLI runner's `/run` (D8b); without it, `/run` answers 501. */
-  run?: { pipeline: Pipeline; sandbox: boolean };
+  run?: { pipeline: Pipeline; sandbox: boolean; slots?: SandboxSlots };
 }
 
 /** RFC 9728: where an MCP client learns which authorization server to use. */

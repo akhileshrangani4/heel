@@ -12,6 +12,7 @@ import { addAgent, setWorkRoots, workRootsOf } from "../../src/gateway/agents.ts
 import { createPipeline } from "../../src/gateway/pipeline/pipeline.ts";
 import type { PauseTarget } from "../../src/gateway/pipeline/ports.ts";
 import { handleRun } from "../../src/gateway/run-route.ts";
+import type { SandboxSlots } from "../../src/gateway/sandbox-slots.ts";
 import type { SandboxHost, SandboxSpec } from "../../src/runner/plan.ts";
 import type { SandboxOutcome } from "../../src/runner/run.ts";
 import { SqliteApprovalStore } from "../../src/store/approvals.ts";
@@ -54,6 +55,10 @@ export function cliPipeline(options: {
   fetch?: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
   /** Whether a pause covers a running command, as heel's proxy asks it. */
   paused?: (target: PauseTarget) => boolean;
+  /** When each fake command ends; at once with `outcome` without it. */
+  done?: () => Promise<SandboxOutcome>;
+  /** How many commands may run at once; unlimited without it. */
+  slots?: SandboxSlots;
 }) {
   const t = testStore();
   const command = String(options.settings?.["command"] ?? "gh");
@@ -84,7 +89,7 @@ export function cliPipeline(options: {
       stdin: null,
       stdout,
       stderr,
-      done: Promise.resolve(options.outcome ?? { kind: "exited", code: 0 }),
+      done: options.done?.() ?? Promise.resolve(options.outcome ?? { kind: "exited", code: 0 }),
       kill: () => {},
     };
   };
@@ -135,12 +140,25 @@ export function cliPipeline(options: {
 
   const app = new Hono();
   app.post("/run", (c) =>
-    handleRun(c, agent, { db: t.db, pipeline, sandbox: options.sandbox !== false }),
+    handleRun(c, c.req.header("x-test-agent") === "other" ? other : agent, {
+      db: t.db,
+      pipeline,
+      sandbox: options.sandbox !== false,
+      slots: options.slots,
+    }),
   );
-  const run = async (body: Record<string, unknown>) => {
+  // A second agent of the same owner, with the same work root, for limits per agent.
+  const otherId = addAgent(
+    t.db,
+    { orgId: t.orgId, ownerId: t.ownerId, name: "reviewer" },
+    new Date(),
+  ).agentId;
+  setWorkRoots(t.db, t.orgId, "reviewer", [root]);
+  const other = { ...agent, agentId: otherId, agentName: "reviewer", tokenId: "tok_2" };
+  const run = async (body: Record<string, unknown>, as: "agent" | "other" = "agent") => {
     const response = await app.request("/run", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", "x-test-agent": as },
       body: JSON.stringify(body),
     });
     return { status: response.status, body: (await response.json()) as Record<string, unknown> };

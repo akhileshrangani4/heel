@@ -187,8 +187,10 @@ export class SandboxedCodeWorker implements CodeWorker {
   }
 
   async stop(): Promise<void> {
-    this.#waiting = null;
+    // A step still waiting (stopped from outside, as when the client hangs up) fails now, so its
+    // run ends and gives up its slot instead of waiting forever.
     this.#ended = { kind: "failed", error: "the script was stopped" };
+    this.#deliver(this.#ended);
     this.#process?.kill();
     await this.#process?.done.catch(() => {});
     this.#process = null;

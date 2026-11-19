@@ -61,6 +61,22 @@ describe("heel.yaml loader", () => {
     ]);
   });
 
+  it("limits sandboxes to 4 per agent by default, and takes both limits from heel.yaml", () => {
+    expect(loadConfig(resolveConfigSource({ HEEL_HOME: home })).sandboxes).toEqual({
+      perAgent: 4,
+      total: null,
+    });
+    writeConfig("sandboxes:\n  per_agent: 2\n  total: 8\n");
+    expect(loadConfig(resolveConfigSource({ HEEL_HOME: home })).sandboxes).toEqual({
+      perAgent: 2,
+      total: 8,
+    });
+    writeConfig("sandboxes:\n  per_agent: 0\n");
+    expect(
+      validationIssues(() => loadConfig(resolveConfigSource({ HEEL_HOME: home }))),
+    ).not.toEqual([]);
+  });
+
   it("refuses a config file that was named but does not exist", () => {
     const source = resolveConfigSource({ HEEL_HOME: home }, join(home, "missing.yaml"));
     expect(() => loadConfig(source)).toThrow(/ENOENT/);

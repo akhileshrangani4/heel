@@ -8,6 +8,7 @@ import { isCliProvider } from "../vault/connect.ts";
 import type { AuthenticatedAgent } from "./agent-tokens.ts";
 import type { Pipeline } from "./pipeline/pipeline.ts";
 import type { PipelineResult } from "./pipeline/ports.ts";
+import { type SandboxSlots, UNLIMITED_SLOT } from "./sandbox-slots.ts";
 
 /**
  * The CLI runner's endpoint (D8b; spec: CLI runner): `heel run` posts the
@@ -17,7 +18,9 @@ import type { PipelineResult } from "./pipeline/ports.ts";
  *
  * Answers are JSON with the same statuses as the HTTP proxy: 200 with the
  * program's exit code and output for an allow, 202 for an ask, 403 for a
- * deny, 423 for a pause, 410 for an expired approval.
+ * deny, 423 for a pause, 410 for an expired approval. 429 with `busy` means
+ * the agent, or heel as a whole, already has as many commands and scripts
+ * running as it allows (gateway/sandbox-slots.ts); nothing ran.
  */
 
 export const RunRequestSchema = z.strictObject({
@@ -32,6 +35,8 @@ export interface RunRouteDeps {
   pipeline: Pipeline;
   /** False when bubblewrap isn't usable here: every command is refused as a heel error (exit 70). */
   sandbox: boolean;
+  /** How many commands may run at once, shared with code mode; unlimited when absent. */
+  slots?: SandboxSlots | undefined;
 }
 
 /** A command line and its directory fit well under this; anything larger is refused unread. */
@@ -105,13 +110,28 @@ export async function handleRun(
   if (candidates.length === 0) return deny(c, "unknown_endpoint", 404);
   if (candidates.length > 1) return deny(c, "account_ambiguous", 409);
   const account = candidates[0] as (typeof candidates)[number];
-  const result = await deps.pipeline.run({
-    agent,
-    surface: "cli",
-    account: account.alias,
-    tool: command,
-    args: { argv, cwd },
-    ...(runId === undefined ? {} : { runId }),
-  });
-  return respond(c, result);
+  const slot = deps.slots?.tryAcquire(agent.agentId) ?? UNLIMITED_SLOT;
+  if (!slot.ok) {
+    return c.json(
+      {
+        status: "busy",
+        limit: slot.limit,
+        message: slot.message,
+      },
+      429,
+    );
+  }
+  try {
+    const result = await deps.pipeline.run({
+      agent,
+      surface: "cli",
+      account: account.alias,
+      tool: command,
+      args: { argv, cwd },
+      ...(runId === undefined ? {} : { runId }),
+    });
+    return respond(c, result);
+  } finally {
+    slot.release();
+  }
 }

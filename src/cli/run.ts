@@ -10,7 +10,8 @@ import { parseOrUsage, UsageError } from "./common.ts";
  *
  * When the command ran, its output is written out and its own exit code
  * returned. When it didn't, one line `heel: {"status":...}` goes to stderr
- * and the exit code says why (spec: "Exit codes"): 75 pending, 77 denied or
+ * and the exit code says why (spec: "Exit codes"): 75 pending or busy (too
+ * many commands and scripts running; send it again later), 77 denied or
  * expired, 69 paused, 70 a heel error, a sandbox limit or no sandbox, 64 a
  * usage error, here or in the request heel refused. With
  * `--json` the whole answer goes to stdout instead, and the exit codes stay.
@@ -87,6 +88,7 @@ export async function runCommand(args: string[], io: CliIo, deps: RunDeps): Prom
   }
   switch (status) {
     case "pending":
+    case "busy":
       return RUN_EXIT.pending;
     case "denied":
     case "expired":

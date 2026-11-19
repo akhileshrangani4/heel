@@ -18,5 +18,12 @@ listen:
 # Where `heel connect`, `heel agent` and `heel pause` reach the running server.
 admin_socket: /var/lib/heel/admin.sock
 
+# How many code-mode scripts and `heel run` commands may run at once. Each is a
+# sandbox whose processes may each use up to 1 GiB; over a limit, heel answers
+# "busy" and runs nothing.
+# sandboxes:
+#   per_agent: 4
+#   total: 6   # default: one per GiB of memory, less one, from 2 to 16
+
 log:
   level: info

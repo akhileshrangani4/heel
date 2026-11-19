@@ -8,7 +8,7 @@ import {
   type Tool,
 } from "@modelcontextprotocol/server";
 import { eq } from "drizzle-orm";
-import { runScript } from "../../codemode/run.ts";
+import { type CallRecord, runScript, type ScriptStatus } from "../../codemode/run.ts";
 import { accountModule } from "../../codemode/stubs.ts";
 import type { CodeWorker } from "../../codemode/worker.ts";
 import type { Logger } from "../../log.ts";
@@ -22,6 +22,7 @@ import { isMcpProvider } from "../../vault/connect.ts";
 import type { AuthenticatedAgent } from "../agent-tokens.ts";
 import type { Pipeline } from "../pipeline/pipeline.ts";
 import type { Definition, DefinitionRegistry } from "../pipeline/ports.ts";
+import { type SandboxSlots, UNLIMITED_SLOT } from "../sandbox-slots.ts";
 import { clientNameFrom } from "./client-info.ts";
 import {
   directName,
@@ -67,6 +68,8 @@ export interface McpSurfaceDeps {
   now?: () => Date;
   /** A fresh sandboxed worker per script; absent where the sandbox can't run. */
   codeWorker?: () => CodeWorker;
+  /** How many scripts may run at once, shared with `heel run`; unlimited when absent. */
+  slots?: SandboxSlots;
 }
 
 export interface McpSurface {
@@ -167,6 +170,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     agent: AuthenticatedAgent,
     args: Record<string, unknown>,
     metaRunId: unknown,
+    signal: AbortSignal,
   ): Promise<CallToolResult> {
     const makeWorker = deps.codeWorker;
     if (makeWorker === undefined) {
@@ -182,23 +186,46 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
         : typeof metaRunId === "string"
           ? metaRunId
           : undefined;
-    const result = await runScript({
-      code,
-      agent,
-      runId,
-      modules: await modulesFor(agent),
-      pipeline: deps.pipeline,
-      worker: makeWorker(),
-    });
-    const body = {
-      status: result.status,
-      ...(result.approvalId === undefined ? {} : { approvalId: result.approvalId }),
-      stdout: result.stdout,
-      calls: result.calls,
-      error: result.error,
-    };
+    const slot = deps.slots?.tryAcquire(agent.agentId) ?? UNLIMITED_SLOT;
+    if (!slot.ok)
+      return runCodeResult({ status: "busy", stdout: "", calls: [], error: slot.message });
+    const worker = makeWorker();
+    // An aborted request (the HTTP request closing) stops its script, so its slot frees now.
+    const stop = () => void worker.stop().catch(() => {});
+    signal.addEventListener("abort", stop, { once: true });
+    try {
+      const result = await runScript({
+        code,
+        agent,
+        runId,
+        modules: await modulesFor(agent),
+        pipeline: deps.pipeline,
+        worker,
+      });
+      return runCodeResult({
+        status: result.status,
+        ...(result.approvalId === undefined ? {} : { approvalId: result.approvalId }),
+        stdout: result.stdout,
+        calls: result.calls,
+        error: result.error,
+      });
+    } finally {
+      signal.removeEventListener("abort", stop);
+      // runScript stops the worker when the script ends; this covers a throw on the way.
+      await worker.stop().catch(() => {});
+      slot.release();
+    }
+  }
+
+  function runCodeResult(body: {
+    status: ScriptStatus | "busy";
+    approvalId?: string;
+    stdout: string;
+    calls: CallRecord[];
+    error: string | null;
+  }): CallToolResult {
     return {
-      ...(result.status === "error" && { isError: true }),
+      ...((body.status === "error" || body.status === "busy") && { isError: true }),
       content: [{ type: "text", text: JSON.stringify(body) }],
       structuredContent: body,
     };
@@ -223,11 +250,13 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
       arguments?: Record<string, unknown> | undefined;
       _meta?: Record<string, unknown> | undefined;
     },
+    signal: AbortSignal,
   ): Promise<CallToolResult> {
     const args = params.arguments ?? {};
     if (params.name === HEEL_STATUS) return heelStatus(agent, args);
     if (scope.kind === "code") {
-      if (params.name === RUN_CODE) return runCode(agent, args, params._meta?.[RUN_ID_META_KEY]);
+      if (params.name === RUN_CODE)
+        return runCode(agent, args, params._meta?.[RUN_ID_META_KEY], signal);
       if (params.name === HEEL_STUBS) return heelStubs(agent, args);
       throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Unknown tool: ${params.name}`);
     }
@@ -285,8 +314,8 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
       { capabilities: { tools: {} } },
     );
     server.setRequestHandler("tools/list", async () => ({ tools: await listTools(agent, scope) }));
-    server.setRequestHandler("tools/call", async (request) =>
-      callTool(agent, scope, request.params),
+    server.setRequestHandler("tools/call", async (request, ctx) =>
+      callTool(agent, scope, request.params, ctx.mcpReq.signal),
     );
     return server;
   });

@@ -8,6 +8,7 @@ import { addAgent } from "../../src/gateway/agents.ts";
 import { createAgentApp } from "../../src/gateway/app.ts";
 import { createMcpSurface } from "../../src/gateway/mcp/server.ts";
 import { createPipeline } from "../../src/gateway/pipeline/pipeline.ts";
+import type { SandboxSlots } from "../../src/gateway/sandbox-slots.ts";
 import { SqliteApprovalStore } from "../../src/store/approvals.ts";
 import { SqlitePauseStore } from "../../src/store/pauses.ts";
 import { connectAccount } from "../../src/vault/connect.ts";
@@ -94,6 +95,8 @@ export async function mcpHarness(options: {
   moreAccounts?: readonly string[];
   /** Turns on code mode on bare /mcp with this worker (D6b). */
   codeWorker?: () => CodeWorker;
+  /** How many scripts may run at once; unlimited without it. */
+  slots?: SandboxSlots;
 }): Promise<McpHarness> {
   const t = testStore();
   const { logger } = captureLogger();
@@ -142,6 +145,7 @@ export async function mcpHarness(options: {
     definitions,
     log: logger,
     ...(options.codeWorker === undefined ? {} : { codeWorker: options.codeWorker }),
+    ...(options.slots === undefined ? {} : { slots: options.slots }),
     version: "test",
   });
   const app = createAgentApp({ db: t.db, log: logger, mcp });

@@ -81,6 +81,7 @@ Every call gets one of these answers, right away:
 - **Over HTTP,** these are status codes: 403 denied, 202 needs approval, 423 paused.
 - **For `heel run`,** they're exit codes: 77 denied, 75 needs approval, 69 paused.
 - **In code mode,** a denial is an exception the script can catch, while "needs approval" and "paused" stop the script and return what already ran.
+- **When too much is running at once,** a script or command doesn't start: `run_code` returns status `busy`, and `heel run` exits 75 with `"status":"busy"` on its `heel:` line. Send it again once one of yours has finished.
 
 The agent never sees why a rule matched, and it can't answer an approval. Approving only happens with your passkey on heel's page.
 

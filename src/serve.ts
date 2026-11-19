@@ -35,6 +35,7 @@ import { runApprovalHints } from "./gateway/approval-hints.ts";
 import { createMcpSurface } from "./gateway/mcp/server.ts";
 import { createPipeline } from "./gateway/pipeline/pipeline.ts";
 import type { ApprovalAdapter } from "./gateway/pipeline/ports.ts";
+import { defaultTotalSandboxes, SandboxSlots } from "./gateway/sandbox-slots.ts";
 import type { Logger } from "./log.ts";
 import { defaultLooksLikeJudge, HideCounts } from "./lookslike/judge.ts";
 import { logAdminAlerts } from "./notify/admin-alerts.ts";
@@ -506,6 +507,11 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         looksLike,
         onHidden: (reason) => hideCounts.record(reason),
       });
+      // One count for code mode and `heel run`: both start a sandbox per request.
+      const slots = new SandboxSlots({
+        perAgent: config.sandboxes.perAgent,
+        total: config.sandboxes.total ?? defaultTotalSandboxes(),
+      });
       const mcp = createMcpSurface({
         db: store.db,
         pipeline,
@@ -513,6 +519,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         log,
         version,
         now,
+        slots,
         // Code mode only where the sandbox runs (D6b): heel never loads Monty itself.
         ...(sandbox.ok && {
           codeWorker: () =>
@@ -526,7 +533,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         log,
         now,
         mcp,
-        run: { pipeline, sandbox: sandbox.ok },
+        run: { pipeline, sandbox: sandbox.ok, slots },
         hosts: [config.listen.agent.host],
         oauth:
           config.agentPublicUrl === null
