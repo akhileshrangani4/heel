@@ -135,7 +135,13 @@ export function setSessionCookie(c: Context, deps: HumanPlaneDeps, started: Star
     path: "/",
     httpOnly: true,
     secure: deps.publicUrl.protocol === "https:",
-    sameSite: "Strict",
+    // Lax, not Strict: a link or redirect from another site (a Slack or email
+    // notification, a connector's sign-in, Google or an MCP server sending
+    // you back) is a top-level GET, and it should arrive signed in. Lax still
+    // keeps the cookie off cross-site forms, frames and scripts, and every
+    // change needs a same-origin POST with a CSRF token on top; deciding
+    // needs a passkey. GET routes change nothing a state check doesn't guard.
+    sameSite: "Lax",
     expires: started.expiresAt,
   });
 }

@@ -37,6 +37,8 @@ export interface Browser {
   authenticator: SoftAuthenticator;
   cookie: string;
   csrf: string;
+  /** The whole `set-cookie` heel answered the sign-in with, attributes and all. */
+  setCookie: string;
 }
 
 export interface HumanPlaneHarness extends ApprovalHarness {
@@ -176,11 +178,12 @@ export function humanPlaneHarness(
         response: authenticator.assert(options.options, ORIGIN),
       });
       if (!done.ok) throw new Error(`sign-in refused: ${await done.text()}`);
-      const cookie = (done.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+      const setCookie = done.headers.get("set-cookie") ?? "";
+      const cookie = setCookie.split(";")[0] ?? "";
       const signedIn = await (await fetchAs("/pause", { headers: { cookie } })).text();
       const csrf = /const CSRF = "([^"]+)"/.exec(signedIn)?.[1];
       if (csrf === undefined) throw new Error("no CSRF token on the signed-in page");
-      return { authenticator, cookie, csrf };
+      return { authenticator, cookie, csrf, setCookie };
     },
 
     async ceremony(as: Browser, start: { url: string; body: unknown }, finish: string) {
