@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createAdminHandler } from "../../src/admin/handlers.ts";
 import type { ChannelSender, DeliveryTarget, SendOutcome } from "../../src/notify/channels.ts";
-import type { ApprovalNotice } from "../../src/notify/message.ts";
+import type { Notice } from "../../src/notify/message.ts";
 import { RETRY_DELAYS_MS } from "../../src/notify/message.ts";
 import { Notifier } from "../../src/notify/notifier.ts";
 import { LOCAL_OWNER_NAME } from "../../src/store/install.ts";
@@ -31,8 +31,8 @@ const FIRST_RETRY_MS = RETRY_DELAYS_MS[0] ?? 0;
 function fakeSender(
   channel: NotifyChannel,
   outcome: () => SendOutcome = () => ({ kind: "sent" }),
-): ChannelSender & { sent: { target: DeliveryTarget; notice: ApprovalNotice }[] } {
-  const sent: { target: DeliveryTarget; notice: ApprovalNotice }[] = [];
+): ChannelSender & { sent: { target: DeliveryTarget; notice: Notice }[] } {
+  const sent: { target: DeliveryTarget; notice: Notice }[] = [];
   return {
     channel,
     sent,
@@ -116,6 +116,7 @@ describe("approval notifications", () => {
 
     const notice = email.sent[0]?.notice;
     expect(notice).toEqual({
+      kind: "approval",
       agent: "inbox-bot",
       what: "email.send",
       account: "gmail-work",

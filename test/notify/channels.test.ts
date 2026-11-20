@@ -14,6 +14,7 @@ import {
   approvalUrl,
   nextAttemptAfter,
   noticeText,
+  proposalUrl,
   RETRY_DELAYS_MS,
 } from "../../src/notify/message.ts";
 import { loadOrCreateVapidKeys, notifySetup } from "../../src/notify/setup.ts";
@@ -25,6 +26,7 @@ import { tempDir } from "../helpers/store.ts";
  */
 
 const NOTICE: ApprovalNotice = {
+  kind: "approval",
   agent: "inbox-bot",
   what: "email.send",
   account: "gmail-work",
@@ -38,6 +40,18 @@ describe("the notice", () => {
       body: "On gmail-work. Open heel to see the full call and decide.",
     });
     expect(approvalUrl(new URL("https://heel.example.com/"), "apr_1")).toBe(NOTICE.url);
+  });
+
+  it("tells an owner how many rules an agent proposes, and nothing of the rules themselves", () => {
+    const one = { kind: "proposal", agent: "inbox-bot", rules: 1, url: "u" } as const;
+    expect(noticeText(one)).toEqual({
+      title: "inbox-bot proposes a new rule",
+      body: "Nothing changes until you add them. Open heel to read them and decide.",
+    });
+    expect(noticeText({ ...one, rules: 3 }).title).toBe("inbox-bot proposes 3 new rules");
+    expect(proposalUrl(new URL("https://heel.example.com/"), "rpr_1")).toBe(
+      "https://heel.example.com/proposals/rpr_1",
+    );
   });
 
   it("retries on a fixed schedule, then gives up", () => {

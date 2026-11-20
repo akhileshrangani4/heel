@@ -8,6 +8,7 @@ import {
   type NotifyChannel,
   notificationDeliveries,
   pushSubscriptions,
+  ruleProposals,
   users,
 } from "./schema.ts";
 
@@ -20,36 +21,26 @@ import {
 export type DeliveryRow = typeof notificationDeliveries.$inferSelect;
 export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;
 
-/**
- * Queues one delivery per approver, channel and target for a new request.
- * Approvers are the account's owner, or the admins for an org ask (the same
- * people the approval page lets decide). Web push goes to every device a
- * person turned on; email and Slack go to their address, when they have one.
- * Queuing the same request twice adds nothing. Returns how many were queued.
- */
-export function enqueueApprovalNotifications(
-  db: HeelDb,
-  input: { orgId: string; approvalId: string; channels: ReadonlySet<NotifyChannel>; now: Date },
-): number {
-  const approval = db
-    .select({
-      orgId: approvals.orgId,
-      account: approvals.account,
-      origin: approvals.origin,
-      // The call decides who is asked: per-repo approvers route by its repo.
-      call: approvals.call,
-    })
-    .from(approvals)
-    .where(and(eq(approvals.orgId, input.orgId), eq(approvals.id, input.approvalId)))
-    .get();
-  if (approval === undefined) return 0;
+/** What a delivery tells someone about: a request, or a rule proposal. */
+type Subject = { approvalId: string } | { proposalId: string };
 
+/**
+ * One delivery per channel and target for each person: web push to every
+ * device they turned on, email and Slack to their address when they have
+ * one. Disabled people get nothing. Queuing the same subject twice adds
+ * nothing. Returns how many were queued.
+ */
+function enqueueFor(
+  db: HeelDb,
+  input: { orgId: string; subject: Subject; channels: ReadonlySet<NotifyChannel>; now: Date },
+  userIds: Iterable<string>,
+): number {
   const rows: (typeof notificationDeliveries.$inferInsert)[] = [];
   const queue = (userId: string, channel: NotifyChannel, target: string) =>
     rows.push({
       id: newId("delivery"),
       orgId: input.orgId,
-      approvalId: input.approvalId,
+      ...input.subject,
       userId,
       channel,
       target,
@@ -58,7 +49,7 @@ export function enqueueApprovalNotifications(
       createdAt: input.now,
     });
 
-  for (const userId of approverIds(db, approval)) {
+  for (const userId of userIds) {
     const person = db
       .select({ email: users.email, disabledAt: users.disabledAt })
       .from(users)
@@ -76,6 +67,53 @@ export function enqueueApprovalNotifications(
   }
   if (rows.length === 0) return 0;
   return db.insert(notificationDeliveries).values(rows).onConflictDoNothing().run().changes;
+}
+
+/**
+ * Queues deliveries for a new request to its approvers: the account's
+ * owner, or the admins for an org ask (the same people the approval page
+ * lets decide). Returns how many were queued.
+ */
+export function enqueueApprovalNotifications(
+  db: HeelDb,
+  input: { orgId: string; approvalId: string; channels: ReadonlySet<NotifyChannel>; now: Date },
+): number {
+  const approval = db
+    .select({
+      orgId: approvals.orgId,
+      account: approvals.account,
+      origin: approvals.origin,
+      // The call decides who is asked: per-repo approvers route by its repo.
+      call: approvals.call,
+    })
+    .from(approvals)
+    .where(and(eq(approvals.orgId, input.orgId), eq(approvals.id, input.approvalId)))
+    .get();
+  if (approval === undefined) return 0;
+  return enqueueFor(
+    db,
+    { ...input, subject: { approvalId: input.approvalId } },
+    approverIds(db, approval),
+  );
+}
+
+/**
+ * Queues deliveries for a new rule proposal (roadmap 2.1) to the one person
+ * who can add it: the proposing agent's owner. Returns how many were queued.
+ */
+export function enqueueProposalNotifications(
+  db: HeelDb,
+  input: { orgId: string; proposalId: string; channels: ReadonlySet<NotifyChannel>; now: Date },
+): number {
+  const proposal = db
+    .select({ ownerId: ruleProposals.ownerId })
+    .from(ruleProposals)
+    .where(and(eq(ruleProposals.orgId, input.orgId), eq(ruleProposals.id, input.proposalId)))
+    .get();
+  if (proposal === undefined) return 0;
+  return enqueueFor(db, { ...input, subject: { proposalId: input.proposalId } }, [
+    proposal.ownerId,
+  ]);
 }
 
 /** Pending deliveries whose time has come, oldest first. */

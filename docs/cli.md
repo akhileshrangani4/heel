@@ -33,7 +33,12 @@ heel 0.2.0 is running.
   Waiting:   1 request
     my-agent wants to call DELETE /tickets/42 on tickets
       http://localhost:7301/approvals/apr_…
+  Proposals: 1 waiting for you to add or reject
+    my-agent proposes a new rule for owner's rules
+      http://localhost:7301/proposals/rpr_…
 ```
+
+Rules your agents propose are listed under **Requests** in `heel tui` too. Enter opens a proposal's page, where you add it with your passkey.
 
 ## heel tui
 

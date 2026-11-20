@@ -10,7 +10,7 @@ import type { CompiledRulesFile } from "../core/rules/compile.ts";
 import { Rule } from "../core/rules/schema.ts";
 import type { HeelDb } from "../store/db.ts";
 import { newId } from "../store/ids.ts";
-import { type ProposedRule, ruleProposals } from "../store/schema.ts";
+import { agents, type ProposedRule, ruleProposals, users } from "../store/schema.ts";
 import { hasErrnoCode } from "../util/errno.ts";
 
 /**
@@ -149,6 +149,26 @@ export function pendingProposals(db: HeelDb, ownerId: string, now: Date): Propos
     .select()
     .from(ruleProposals)
     .where(and(eq(ruleProposals.ownerId, ownerId), eq(ruleProposals.status, "pending")))
+    .orderBy(desc(ruleProposals.createdAt))
+    .all();
+}
+
+/** A pending proposal with its agent's and owner's names, for `heel status` and `heel tui`. */
+export interface PendingProposal {
+  row: ProposalRow;
+  agentName: string;
+  ownerName: string;
+}
+
+/** Every pending proposal in the org, newest first. */
+export function orgPendingProposals(db: HeelDb, orgId: string, now: Date): PendingProposal[] {
+  expireProposals(db, now);
+  return db
+    .select({ row: ruleProposals, agentName: agents.name, ownerName: users.name })
+    .from(ruleProposals)
+    .innerJoin(agents, eq(agents.id, ruleProposals.agentId))
+    .innerJoin(users, eq(users.id, ruleProposals.ownerId))
+    .where(and(eq(ruleProposals.orgId, orgId), eq(ruleProposals.status, "pending")))
     .orderBy(desc(ruleProposals.createdAt))
     .all();
 }

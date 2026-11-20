@@ -1123,6 +1123,10 @@ async function statusCommand(args: string[], io: CliIo): Promise<number> {
     scope: string;
     targetName: string;
   }[];
+  const proposals = (await admin(config, { method: "proposals.list" })) as {
+    summary: string;
+    url: string;
+  }[];
   const waiting = approvals.filter((a) => a.status === "pending");
   const lines = [
     `heel ${ping.version ?? ""} is running${ping.vault === "unavailable" ? ", but the vault is closed (no master key)" : ""}.`,
@@ -1136,6 +1140,9 @@ async function statusCommand(args: string[], io: CliIo): Promise<number> {
     `  Waiting:   ${waiting.length === 0 ? "nothing" : `${waiting.length} request${waiting.length === 1 ? "" : "s"}`}`,
     ...waiting.slice(0, 5).map((a) => `    ${a.summary}\n      ${a.url}`),
     ...(waiting.length > 5 ? [`    and ${waiting.length - 5} more: heel tui`] : []),
+    `  Proposals: ${proposals.length === 0 ? "nothing" : `${proposals.length} waiting for you to add or reject`}`,
+    ...proposals.slice(0, 5).map((p) => `    ${p.summary}\n      ${p.url}`),
+    ...(proposals.length > 5 ? [`    and ${proposals.length - 5} more: heel tui`] : []),
   ];
   io.stdout.write(`${lines.join("\n")}\n`);
   return EXIT.ok;
