@@ -22,8 +22,7 @@ heel only controls an agent that has to go through it. An agent that can read he
 
 ```sh
 npm install -g useheel
-export HEEL_HOME=~/.heel     # add this to your shell profile
-heel init
+heel init                    # sets heel up in ~/.heel
 heel serve
 ```
 
