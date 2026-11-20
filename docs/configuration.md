@@ -34,17 +34,20 @@ Rules live in `$HEEL_HOME/rules/<user>.yaml`, one file per user. A single-user i
 - `heel rules check` validates them.
 - `heel rules test` runs cases against them: see [Testing rules](rules-reference.md#testing-rules).
 - [`examples/rules/owner.yaml`](../examples/rules/owner.yaml) holds the examples from [rules.md](rules.md).
-- With no rules files, every call is denied. `heel serve` logs a `no_rules` warning at startup when that's the case.
+- With no rules files, every call is denied. heel logs a `no_rules` warning at startup when that's the case (see `heel logs`).
 
-## What `heel serve` prints
+## What heel prints when it starts
 
-After its JSON log lines, `heel serve` prints where to go:
+`heel start` runs heel in the background and prints where to go once it answers:
 
 ```text
-heel is running.
+heel is running in the background (pid 4821).
   Approve requests:   open http://localhost:7301
   Agents connect to:  http://127.0.0.1:7300/mcp
-  Stop with Ctrl-C.
+  Live logs:          heel logs -f
+  Stop:               heel stop
 ```
+
+`heel serve` runs it in the terminal instead: its JSON log lines, then the same addresses and "Stop with Ctrl-C".
 
 If the approval page or the agent port couldn't start, its line says `off` and why (for example a `public_url` that isn't `https://`, or no master key).

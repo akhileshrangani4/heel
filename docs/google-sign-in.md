@@ -104,7 +104,7 @@ heel reads the client ID from `heel.yaml` and the secret from a file or an envir
   printf 'Client secret: '; read -rs secret; echo
   (umask 077; printf '%s\n' "$secret" > "${HEEL_HOME:?set HEEL_HOME first}/google-client-secret"); unset secret
   ```
-  Run it as the user that runs `heel serve` (not with `sudo`), in a shell where `HEEL_HOME` is set.
+  Run it as the user that runs heel (not with `sudo`), in a shell where `HEEL_HOME` is set.
   To keep it somewhere else, set `client_secret_file` (relative paths are relative to `HEEL_HOME`).
 - **The environment:** `HEEL_GOOGLE_CLIENT_SECRET`. It takes precedence over the file. Use it with a secrets manager or a container platform's secrets. In Docker, a file in the `heel-data` volume is better, since `docker inspect` shows environment variables. If your container is named `heel`, this writes it as the container's own user:
   ```sh
@@ -126,7 +126,7 @@ Do the secret first: once `providers.google` is in `heel.yaml`, heel won't start
 heel: no secret: set HEEL_GOOGLE_CLIENT_SECRET or create /Users/you/.heel/google-client-secret
 ```
 
-**Restart heel** (stop `heel serve` and start it again). heel reads `providers` only when it starts.
+**Restart heel** (`heel restart`). heel reads `providers` only when it starts.
 
 ### 7. Connect and sign in
 

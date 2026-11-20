@@ -25,7 +25,7 @@ export function describeConnectError(path: string, error: unknown): AdminClientE
   if (hasErrnoCode(error, "ENOENT") || hasErrnoCode(error, "ECONNREFUSED")) {
     return new AdminClientError(
       "not_running",
-      `heel serve is not running (no socket at ${path}). If it is running in another terminal, set HEEL_HOME here to the same folder.`,
+      `heel isn't running (no socket at ${path}). Start it with: heel start. If it runs elsewhere (another HEEL_HOME, or as another user), set HEEL_HOME here to its folder.`,
       { cause: error },
     );
   }
