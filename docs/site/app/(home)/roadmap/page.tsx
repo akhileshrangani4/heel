@@ -133,7 +133,7 @@ const PHASES: Phase[] = [
       ['everything in the web app', 'anything the cli can do, the web app can do too.'],
       [
         'it learns from what you approve',
-        'approve the same kind of call again and again, and heel suggests a rule so it stops asking. agents can see the pattern and propose it; you approve with a passkey.',
+        'approve the same kind of call five times (you pick the number) and heel suggests a rule so it stops asking. agents can see the pattern and propose it; you approve with a passkey. only calls through heel count.',
       ],
     ],
     gate: 'on a fresh server, one prompt to an agent puts github and gmail behind heel, and all you do is tap approve.',
@@ -175,7 +175,10 @@ const PHASES: Phase[] = [
       ],
       ['more mcp servers', 'more third-party servers tested, and the odd ones handled.'],
       ['teams', 'organizations, roles and org-wide rules.'],
-      ['mcp events', 'agents wait on events from a server through heel, like a new email or a ci result.'],
+      [
+        'mcp elicitation and events',
+        'a server can ask you for input inside your agent’s app, and agents can wait on events like a new email or a ci result.',
+      ],
       [
         'heel inside other apps',
         'a javascript package, so another app or agent can run its approvals on heel.',
