@@ -205,7 +205,19 @@ jobs:
           # Only for a first publish before trusted publishing is set up;
           # npm uses the OIDC token instead whenever it can.
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish "./$NAME-$VERSION.tgz" --ignore-scripts --provenance --access public --tag "$CHANNEL"
+        # Re-running a release (say, after the site deploy failed) publishes
+        # again, and so can a run started while npm view still lags a fresh
+        # publish. Finding the version already there means it's done.
+        run: |
+          if out=$(npm publish "./$NAME-$VERSION.tgz" --ignore-scripts --provenance --access public --tag "$CHANNEL" 2>&1); then
+            echo "$out"
+          elif grep -q "cannot publish over the previously published versions" <<< "$out"; then
+            echo "$out"
+            echo "$NAME@$VERSION is already on npm, published by an earlier run."
+          else
+            echo "$out" >&2
+            exit 1
+          fi
 
   ghcr:
     name: push to ghcr.io
