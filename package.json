@@ -1,6 +1,6 @@
 {
   "name": "useheel",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "A self-hosted gateway that holds every agent credential and decides each call with default-deny rules.",
   "license": "Apache-2.0",
   "repository": {

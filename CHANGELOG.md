@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/akhileshrangani4/heel/compare/v0.2.1...v0.2.2) (2026-11-20)
+
+
+### Features
+
+* **site:** a roadmap you can read at a glance, and a changelog ([#154](https://github.com/akhileshrangani4/heel/issues/154)) ([4f9fd47](https://github.com/akhileshrangani4/heel/commit/4f9fd477e707700d577855be01f8fd472c144e1c))
+
 ## [0.2.1](https://github.com/akhileshrangani4/heel/compare/v0.2.0...v0.2.1) (2026-11-20)
 
 
