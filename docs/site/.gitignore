@@ -26,4 +26,5 @@ yarn-error.log*
 next-env.d.ts
 # built from the repo by scripts/sync.mjs
 /content/docs/
+/content/changelog.md
 /public/

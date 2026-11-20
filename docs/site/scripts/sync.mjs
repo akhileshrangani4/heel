@@ -7,6 +7,7 @@
  * - Each page's H1 becomes its title, and the first paragraph its description.
  * - Links between docs stay relative; links to other repo files go to GitHub.
  * - The logo, favicons and the video are copied into public/.
+ * - CHANGELOG.md is copied to content/changelog.md for /changelog.
  *
  * Everything this writes is ignored by git (site/.gitignore).
  */
@@ -112,6 +113,10 @@ function page(markdown, from, fallbackTitle) {
 
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
+
+// The changelog page (/changelog) reads release-please's CHANGELOG.md as it
+// was at this release: the site deploys only on release.
+copyFileSync(join(repo, "CHANGELOG.md"), join(site, "content", "changelog.md"));
 
 for (const [slug, file] of PAGES) {
   const text = readFileSync(join(repo, "docs", file), "utf8");
