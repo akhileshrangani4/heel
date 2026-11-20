@@ -416,7 +416,7 @@ describe("heel_request_connection", () => {
     for (const args of [
       { service: "cli", alias: "x" },
       { service: "http", alias: "x" },
-      { service: "github", alias: "x" },
+      { service: "github", alias: "x", url: "https://api.github.com" },
       { service: "mcp", alias: "x" },
       { service: "mcp", alias: "x", url: "http://127.0.0.1:7301/mcp" },
       { service: "mcp", alias: "x", url: "https://good.example@evil.example/mcp" },

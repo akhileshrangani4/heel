@@ -57,7 +57,13 @@ export interface HumanPlaneHarness extends ApprovalHarness {
    * Runs a passkey ceremony: posts `start` for a challenge, signs it, and
    * posts the assertion to `finish`. Returns the finish response.
    */
-  ceremony(as: Browser, start: { url: string; body: unknown }, finish: string): Promise<Response>;
+  ceremony(
+    as: Browser,
+    start: { url: string; body: unknown },
+    finish: string,
+    /** Fields sent beside the signed answer, as a page's options are (a pasted key). */
+    extra?: Record<string, unknown>,
+  ): Promise<Response>;
 }
 
 /** What a challenge endpoint answers: the challenge id and the WebAuthn options to sign. */
@@ -190,13 +196,18 @@ export function humanPlaneHarness(
       return { authenticator, cookie, csrf, setCookie };
     },
 
-    async ceremony(as: Browser, start: { url: string; body: unknown }, finish: string) {
+    async ceremony(
+      as: Browser,
+      start: { url: string; body: unknown },
+      finish: string,
+      extra: Record<string, unknown> = {},
+    ) {
       const response = await postJson(start.url, start.body, as);
       if (!response.ok) return response;
       const { challengeId, options } = await issued(response);
       return postJson(
         finish,
-        { challengeId, response: as.authenticator.assert(options, ORIGIN) },
+        { challengeId, response: as.authenticator.assert(options, ORIGIN), ...extra },
         as,
       );
     },

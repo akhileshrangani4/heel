@@ -84,6 +84,8 @@ export interface RequestPageProps {
   /** After approving: the form that starts the account's sign-in, when it needs one. */
   signIn: FormTarget | null;
   outcome: "approved" | "rejected" | null;
+  /** For a service that uses a key: what key it takes. The owner pastes it here, never the agent. */
+  key: { hint: string } | null;
 }
 
 function coverageView(props: RequestPageProps): Html {
@@ -217,6 +219,27 @@ export function requestPage(props: RequestPageProps): Html {
       pending
         ? html`<div class="decide">
             ${
+              props.problem === null && props.key !== null
+                ? html`<fieldset id="request-key">
+                    <label for="request-key-input"
+                      ><strong>Your ${props.service} key</strong></label
+                    >
+                    <input
+                      id="request-key-input"
+                      name="key"
+                      type="password"
+                      autocomplete="off"
+                      spellcheck="false"
+                      required
+                    />
+                    <p class="muted">
+                      ${props.key.hint} It goes to heel's vault only: ${props.agent} never sees it,
+                      and only gets the account by its name.
+                    </p>
+                  </fieldset>`
+                : ""
+            }
+            ${
               props.problem === null
                 ? ceremonyButton({
                     callback: { handler: "approveConnection" },
@@ -225,6 +248,7 @@ export function requestPage(props: RequestPageProps): Html {
                     tone: "primary",
                     binding: { requestId: props.id, hash: props.hash },
                     describedBy: "request-passkey",
+                    ...(props.key === null ? {} : { optionsFrom: "request-key" }),
                   })
                 : ""
             }

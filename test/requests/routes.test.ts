@@ -203,3 +203,64 @@ describe("what an agent can't do with a connection request", () => {
     expect(page).not.toContain("data-hash");
   });
 });
+
+describe("services that use a pasted key (2.5, part 2)", () => {
+  const KEY = "ghp_pasted-on-heels-page-only";
+
+  it("asks the owner for the key on the page, and stores it in the vault only", async () => {
+    const { h, id } = setUp({ service: "github", alias: "gh-new", why: "to read your PRs" });
+    const owner = await h.signIn(await h.enroll());
+    const page = await (await h.fetch(`/requests/${id}`, { as: owner })).text();
+    expect(page).toContain("asks you to connect GitHub");
+    expect(page).toContain('name="key"');
+    expect(page).toContain("gh auth token");
+    expect(page).toContain('data-heel-options="request-key"');
+
+    const done = await h.ceremony(
+      owner,
+      { url: "/requests/challenge", body: { requestId: id, hash: attribute(page, "data-hash") } },
+      "/requests/confirm",
+      { key: KEY },
+    );
+    expect(done.status).toBe(200);
+    const answer = await done.text();
+    expect(answer).not.toContain(KEY);
+    const account = accountNamed(h, "gh-new");
+    expect(account).toMatchObject({ provider: "github", status: "active" });
+    expect(h.vault.get(account?.id ?? "")).toMatchObject({ type: "static" });
+    expect(JSON.stringify(findRequest(h.t.db, h.t.orgId, id))).not.toContain(KEY);
+    const after = await (await h.fetch(`/requests/${id}?approved`, { as: owner })).text();
+    expect(after).toContain("Connected as");
+    expect(after).not.toContain(KEY);
+  });
+
+  it("won't connect without a key, and the request keeps waiting", async () => {
+    const { h, id } = setUp({ service: "stripe", alias: "stripe-new" });
+    const owner = await h.signIn(await h.enroll());
+    const page = await (await h.fetch(`/requests/${id}`, { as: owner })).text();
+    expect(page).toContain("rk_");
+    const done = await h.ceremony(
+      owner,
+      { url: "/requests/challenge", body: { requestId: id, hash: attribute(page, "data-hash") } },
+      "/requests/confirm",
+    );
+    expect(done.status).toBe(400);
+    expect(accountNamed(h, "stripe-new")).toBeUndefined();
+    expect(findRequest(h.t.db, h.t.orgId, id)?.status).toBe("pending");
+  });
+
+  it("a sign-in service takes no key, even if one is sent", async () => {
+    const { h, id } = setUp();
+    const owner = await h.signIn(await h.enroll());
+    const page = await (await h.fetch(`/requests/${id}`, { as: owner })).text();
+    expect(page).not.toContain('name="key"');
+    await h.ceremony(
+      owner,
+      { url: "/requests/challenge", body: { requestId: id, hash: attribute(page, "data-hash") } },
+      "/requests/confirm",
+      { key: "should-be-ignored" },
+    );
+    const account = accountNamed(h, "inbox-new");
+    expect(account?.status).toBe("reconnect_required");
+  });
+});
