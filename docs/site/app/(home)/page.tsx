@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { Fragment } from 'react';
 import { CopyInstall } from '@/components/copy-install';
 import { Features } from '@/components/features';
 import { FlowDemo } from '@/components/flow-demo';
@@ -103,7 +104,7 @@ function Window({ title, children }: { title: string; children: React.ReactNode 
         <span className="size-3 rounded-full bg-[#ff5f57]" />
         <span className="size-3 rounded-full bg-[#febc2e]" />
         <span className="size-3 rounded-full bg-[#28c840]" />
-        <span className="ml-3 font-mono text-xs text-white/40">{title}</span>
+        <span className="ml-3 truncate font-mono text-xs text-white/40">{title}</span>
       </div>
       {children}
     </div>
@@ -241,11 +242,11 @@ export default function HomePage() {
       {/* the last screen: the closing section, with the footer at its foot */}
       <div data-snap className="flex min-h-[calc(100svh-3.5rem)] flex-col">
         <section className="relative mx-auto flex w-full max-w-[1100px] flex-1 flex-col items-center justify-center px-5 py-10 text-center">
-          <div className="relative flex flex-col items-center">
-            <h2 className="text-[clamp(2.5rem,7vw,4.5rem)] leading-none font-semibold tracking-[-0.05em]">
+          <div className="relative flex w-full flex-col items-center">
+            <h2 className="text-[clamp(2.5rem,7vw,4.5rem)] leading-none font-semibold tracking-[-0.05em] text-balance">
               give your agent a heel
             </h2>
-            <p className="mt-4 text-lg text-neutral-600 sm:text-xl dark:text-neutral-300">
+            <p className="mt-4 text-lg text-balance text-neutral-600 sm:text-xl dark:text-neutral-300">
               ten minutes, one terminal, from install to your first approval.
             </p>
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
@@ -255,12 +256,18 @@ export default function HomePage() {
               </Link>
             </div>
             <div className="mt-10 w-full max-w-2xl text-left">
-              <Window title="the quick start, start to finish">
-                <pre className="overflow-x-auto px-5 py-5 font-mono text-[12.5px] leading-[1.8] sm:px-6">
+              <Window title="the quick start">
+                <pre className="overflow-x-auto px-4 py-4 font-mono text-[12px] leading-[1.7] whitespace-pre-wrap sm:px-6 sm:py-5 sm:text-[12.5px] sm:leading-[1.8] sm:whitespace-pre">
                   {QUICKSTART.map(([kind, line]) => (
-                    <span key={line} className={`block ${kind === '#' ? 'mt-2 text-white/35 first:mt-0' : ''}`}>
+                    <span key={line} className={`block pl-[2ch] -indent-[2ch] sm:pl-0 sm:indent-0 ${kind === '#' ? 'mt-2 text-white/35 first:mt-0' : ''}`}>
                       {kind === '$' ? <span className="text-white/35">$ </span> : null}
-                      {line}
+                      {/* on a phone a long command wraps between words, never inside a flag */}
+                      {line.split(' ').map((word, i) => (
+                        <Fragment key={i}>
+                          {i > 0 ? ' ' : null}
+                          <span className="whitespace-nowrap">{word}</span>
+                        </Fragment>
+                      ))}
                     </span>
                   ))}
                 </pre>
