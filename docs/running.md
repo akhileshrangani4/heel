@@ -16,7 +16,7 @@ heel only controls an agent that has to go through it. An agent that can read he
 | **Its own OS user, or Docker** | Can't read its files, if they can't use `sudo` or `docker` | Daily use on one machine |
 | **Your own user** (`~/.heel`) | Can read and change everything | Trying heel out |
 
-`heel serve` warns at startup when heel's files are in your own home folder, and when a port is open beyond this machine.
+heel warns at startup (in `heel logs`, or in the terminal for `heel serve`) when its files are in your own home folder, and when a port is open beyond this machine.
 
 ## With npm
 
@@ -24,10 +24,14 @@ heel only controls an agent that has to go through it. An agent that can read he
 npm install -g useheel
 export HEEL_HOME=~/.heel     # add this to your shell profile
 heel init
-heel serve
+heel start         # in the background; heel logs -f to watch it
 ```
 
 `heel init` creates the master key, `heel.yaml` and starter rules, and changes nothing that's already there. Back up `master.key` off this machine: without it, the credentials heel stores can't be read. Then follow the [Quickstart](quickstart.md) from step 3.
+
+### In the background or in a terminal
+
+`heel start` runs heel in the background and returns once it answers; its log goes to `$HEEL_HOME/logs/heel.log` (rotated at 10 MB). Read it with `heel logs`, follow it with `heel logs -f`. `heel stop` stops heel however it was started, and `heel restart` starts it again in the background. `heel serve` runs it in the terminal instead, with the log on screen. A background heel doesn't start again after a reboot; run `heel start` again.
 
 ## With Docker
 
@@ -60,7 +64,7 @@ docker exec -i heel heel connect github --as github --credential-stdin < github-
 
 You can run one heel on an always-on machine (a VPS, a Mac mini, a home server) and point the agents on every computer you use at it. Your accounts are connected once, your rules live in one place, and every approval comes to the same phone. It is also the safest setup, since no agent runs where heel's files are (see [Keep agents out of heel's files](#choose-where-heel-runs)).
 
-**1. Start heel on the server.** Install it [with npm](#with-npm) or [with Docker](#with-docker) and run `heel init`, then `heel serve`. Keep both planes on `127.0.0.1`: the next step puts HTTPS in front of them.
+**1. Start heel on the server.** Install it [with npm](#with-npm) or [with Docker](#with-docker) and run `heel init`, then `heel start`. Keep both planes on `127.0.0.1`: the next step puts HTTPS in front of them.
 
 **2. Give both planes an HTTPS address.** With Tailscale, only your own devices can reach them:
 

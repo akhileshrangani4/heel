@@ -409,6 +409,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         db: store.db,
         orgId,
         vault,
+        background: options.env["HEEL_BACKGROUND"] === "1",
         version,
         publicUrl: config.publicUrl,
         home: config.home,

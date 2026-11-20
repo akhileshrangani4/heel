@@ -9,7 +9,10 @@ The `heel` command sets heel up and runs it. Except for `heel run`, it works on 
 | Task | Command |
 | --- | --- |
 | Set up heel's home, key, config and starter rules | `heel init` |
-| Start heel | `heel serve` (`--watch` to let calls through and only log) |
+| Start heel in the background | `heel start` (`--watch` to let calls through and only log) |
+| Watch its log live | `heel logs -f` (`-n 200` for more history, `--json` for raw lines) |
+| Stop or restart it | `heel stop`, `heel restart` |
+| Run it in this terminal instead | `heel serve` (Ctrl-C stops it) |
 | See what's going on | `heel status` |
 | Watch it live | `heel tui` |
 | Create your passkey | `heel user enroll owner` |

@@ -27,17 +27,18 @@ The starter rules let reads run and make everything else ask you.
 ## 2. Start heel
 
 ```sh
-heel serve
+heel start
 ```
 
 ```text
-heel is running.
+heel is running in the background (pid 4821).
   Approve requests:   open http://localhost:7301
   Agents connect to:  http://127.0.0.1:7300/mcp
-  Stop with Ctrl-C.
+  Live logs:          heel logs -f
+  Stop:               heel stop
 ```
 
-Leave it running, and use a second terminal for the next steps.
+heel keeps running in the background, so the next steps happen in this same terminal. `heel logs -f` shows what it's doing as it happens (Ctrl-C stops following, not heel). To run it in the foreground instead, with its log in the terminal, use `heel serve`.
 
 ## 3. Create your passkey
 

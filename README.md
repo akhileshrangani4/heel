@@ -23,7 +23,7 @@ heel sits between an agent and everything it touches (MCP servers, HTTP APIs and
 ```sh
 npm install -g useheel          # Node 26.13 or later
 heel init                       # master key, heel.yaml and starter rules
-heel serve                      # agents on :7300, approvals on :7301
+heel start                      # runs in the background: agents on :7300, approvals on :7301
 ```
 
 Then create your passkey, connect GitHub and point your agent at heel: the **[Quickstart](docs/quickstart.md)** takes about 10 minutes. heel also runs in Docker: `ghcr.io/akhileshrangani4/heel` ([Running heel](docs/running.md)).

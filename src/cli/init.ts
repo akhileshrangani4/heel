@@ -99,8 +99,8 @@ export function initSummary(
     );
   }
   lines.push(
-    `  ${n++}. Start heel:                        heel serve`,
-    `  ${n++}. In another terminal, enroll your passkey: heel user enroll owner`,
+    `  ${n++}. Start heel in the background:      heel start   (heel logs -f to watch it)`,
+    `  ${n++}. Enroll your passkey:               heel user enroll owner`,
     "       and open the link it prints.",
     `  ${n++}. Add an agent and copy its token:   heel agent add my-agent`,
     `  ${n++}. Connect an account, for example:   heel connect github --as github --credential-stdin < token.txt`,

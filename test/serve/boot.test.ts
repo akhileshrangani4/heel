@@ -61,7 +61,10 @@ describe("heel serve", () => {
     // People can still reach heel to fix it.
     expect(heel.planes.human.state).toBe("listening");
     const ping = await adminCall(config.adminSocketPath, { method: "ping" });
-    expect(ping).toEqual({ ok: true, result: { version: "test", vault: "unavailable" } });
+    expect(ping).toEqual({
+      ok: true,
+      result: { version: "test", vault: "unavailable", pid: process.pid, background: false },
+    });
     expect(output()).toContain("agent plane refused");
   });
 
