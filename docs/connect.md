@@ -70,7 +70,7 @@ When your agent needs an account you haven't connected, it can ask for one with 
 { "service": "gmail", "alias": "gmail-work", "why": "so I can triage your work mail" }
 ```
 
-It can ask for **Gmail**, **Google Calendar**, **Outlook**, or a **remote MCP server** by its `https://` URL (`"service": "mcp", "url": "https://…"`). Those are the services you sign in to on heel's page, so the agent never handles a password or token. Anything that runs a program, takes an API key or an OpenAPI file, you still connect yourself.
+It can ask for **Gmail**, **Google Calendar**, **Outlook**, or a **remote MCP server** on a public host by its `https://` URL (`"service": "mcp", "url": "https://…"`). heel reaches a server an agent asked for, every redirect it answers with, and every sign-in address it names, only on public https hosts, so an agent can't use heel to reach your network. Those are the services you sign in to on heel's page, so the agent never handles a password or token. Anything that runs a program, takes an API key or an OpenAPI file, you still connect yourself.
 
 - **Nothing happens until you approve.** heel tells you a request is waiting the same way it tells you about a call, and it shows under **Connection requests** on the Approvals page and in `heel status`. No account exists, and an MCP server's URL isn't contacted, until you connect it.
 - **The page says what your rules would let the agent do.** heel runs your rules on a read and on anything else for the new account. A rule that names no account, like the starter rules' `kind: read`, covers it the moment it's connected. Change your rules first if that's more than you want.

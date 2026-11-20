@@ -295,7 +295,12 @@ function mcpSettings(input: ConnectInput): Record<string, unknown> {
         "--oauth signs in from the Connections page; give no token",
       );
     }
-    return { transport: "http", url: input.url, oauth: input.oauth === true };
+    return {
+      transport: "http",
+      url: input.url,
+      oauth: input.oauth === true,
+      ...(input.publicOnly === true && { publicOnly: true }),
+    };
   }
   if (input.oauth === true) {
     throw new ConnectError("invalid_settings", "--oauth is for remote servers (--url)");
@@ -623,6 +628,8 @@ export interface ConnectInput {
   };
   /** For a remote `mcp` server that wants OAuth sign-in (D5c). */
   oauth?: boolean;
+  /** For a remote `mcp` server an agent asked for: contacted only on public https hosts. */
+  publicOnly?: boolean;
   /** For `mcp`: a local server heel starts in the sandbox, instead of a URL. */
   stdio?: {
     command: string;

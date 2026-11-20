@@ -12,6 +12,7 @@ import type { HeelDb } from "../../store/db.ts";
 import type { AccountRecord } from "../../store/directory.ts";
 import { accounts } from "../../store/schema.ts";
 import { type Vault, VaultError } from "../../vault/vault.ts";
+import { publicOnlyFetch } from "./public-only.ts";
 import { type HttpUpstream, upstreamSettings } from "./settings.ts";
 
 /**
@@ -207,12 +208,29 @@ export class UpstreamOAuthProvider implements OAuthClientProvider {
 }
 
 /**
+ * The fetch a sign-in uses. For a server an agent asked for, every URL the
+ * server's metadata names (its authorization server, its registration and
+ * token endpoints) is held to public https hosts too (roadmap 2.5).
+ */
+function signInFetch(
+  deps: { fetch?: FetchLike; resolveHost?: (host: string) => Promise<readonly string[]> },
+  upstream: { publicOnly: boolean },
+): FetchLike | undefined {
+  if (!upstream.publicOnly) return deps.fetch;
+  return publicOnlyFetch(deps.fetch ?? fetch, deps.resolveHost);
+}
+
+/**
  * Starts a sign-in for an account: discovers the server's authorization
  * server, registers heel if needed, and returns the URL to send the person's
  * browser to.
  */
 export async function startUpstreamSignIn(
-  deps: UpstreamOAuthDeps & { signIns: UpstreamSignIns; fetch?: FetchLike },
+  deps: UpstreamOAuthDeps & {
+    signIns: UpstreamSignIns;
+    fetch?: FetchLike;
+    resolveHost?: (host: string) => Promise<readonly string[]>;
+  },
   account: AccountRecord,
   userId: string,
 ): Promise<URL> {
@@ -221,9 +239,10 @@ export async function startUpstreamSignIn(
   const pending = deps.signIns.get(state, deps.now());
   if (pending === null) throw new Error("the sign-in expired before it started");
   const provider = new UpstreamOAuthProvider(deps, account.id, { state, pending });
+  const fetchFn = signInFetch(deps, upstream);
   const result = await auth(provider, {
     serverUrl: upstream.url,
-    ...(deps.fetch === undefined ? {} : { fetchFn: deps.fetch }),
+    ...(fetchFn === undefined ? {} : { fetchFn }),
   });
   if (result !== "REDIRECT" || provider.authorizationUrl === null) {
     throw new Error("the server didn't ask for sign-in");
@@ -233,7 +252,10 @@ export async function startUpstreamSignIn(
 
 /** Finishes a sign-in with the code the server sent back; the tokens go to the vault. */
 export async function finishUpstreamSignIn(
-  deps: UpstreamOAuthDeps & { fetch?: FetchLike },
+  deps: UpstreamOAuthDeps & {
+    fetch?: FetchLike;
+    resolveHost?: (host: string) => Promise<readonly string[]>;
+  },
   signIn: { state: string; pending: PendingSignIn },
   callback: URLSearchParams,
 ): Promise<void> {
@@ -241,10 +263,11 @@ export async function finishUpstreamSignIn(
   if (code === null) throw new Error(callback.get("error") ?? "the server sent no code");
   const upstream = httpUpstream(deps.db, signIn.pending.accountId);
   const provider = new UpstreamOAuthProvider(deps, signIn.pending.accountId, signIn);
+  const fetchFn = signInFetch(deps, upstream);
   const result = await auth(provider, {
     serverUrl: upstream.url,
     authorizationCode: code,
-    ...(deps.fetch === undefined ? {} : { fetchFn: deps.fetch }),
+    ...(fetchFn === undefined ? {} : { fetchFn }),
   });
   if (result !== "AUTHORIZED") throw new Error("the server didn't accept the sign-in");
 }

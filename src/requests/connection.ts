@@ -1,7 +1,6 @@
-import { isIP } from "node:net";
 import { and, count, desc, eq, gt, lt } from "drizzle-orm";
 import { z } from "zod";
-import { isPublicAddress } from "../runner/egress.ts";
+import { publicHostProblem, publicUrlProblem } from "../definitions/mcp/public-only.ts";
 import type { HeelDb } from "../store/db.ts";
 import { newId } from "../store/ids.ts";
 import { agentRequests, agents, type ConnectionRequestDetails, users } from "../store/schema.ts";
@@ -60,65 +59,14 @@ export const RequestConnectionInput = z
   });
 export type RequestConnectionInput = z.input<typeof RequestConnectionInput>;
 
-/** Names that only mean something on a private network. */
-const PRIVATE_SUFFIXES = [
-  ".local",
-  ".internal",
-  ".localhost",
-  ".home.arpa",
-  ".lan",
-  ".intranet",
-  ".corp",
-];
-
 /**
- * Pure: an MCP server URL an agent may name. Stricter than `heel connect`,
- * so an agent can't use heel's place on the network: https only, a public
- * host name (no IP address, no `localhost`, no single-label or private-only
- * name), and no user name or password (`https://good.com@evil.com`). The
- * owner's approval checks again what the name resolves to (`publicHostProblem`).
+ * Pure: an MCP server URL an agent may name: https on a public host name.
+ * Stricter than `heel connect`, so an agent can't use heel's place on the
+ * network. Approving checks again what the name resolves to.
  */
-export function agentUrlProblem(text: string): string | null {
-  if (!URL.canParse(text)) return "the url doesn't parse";
-  const url = new URL(text);
-  if (url.protocol !== "https:") return "the url must be https://";
-  if (url.username !== "" || url.password !== "")
-    return "the url can't carry a user name or password";
-  const host = url.hostname.toLowerCase().replace(/\.$/, "");
-  if (isIP(host.replace(/^\[|\]$/g, "")) !== 0)
-    return "the url must name a host, not an IP address";
-  if (
-    host === "localhost" ||
-    !host.includes(".") ||
-    PRIVATE_SUFFIXES.some((s) => host.endsWith(s))
-  ) {
-    return "the url must name a public host";
-  }
-  return null;
-}
+export const agentUrlProblem = publicUrlProblem;
 
-/**
- * Whether a host resolves only to public addresses: checked when the owner
- * approves, so a public-looking name that points inside the network is
- * refused before heel ever contacts it. Null when it's fine.
- */
-export async function publicHostProblem(
-  url: string,
-  resolve: (host: string) => Promise<readonly string[]>,
-): Promise<string | null> {
-  const host = new URL(url).hostname;
-  let addresses: readonly string[];
-  try {
-    addresses = await resolve(host);
-  } catch {
-    return `${host} doesn't resolve`;
-  }
-  if (addresses.length === 0) return `${host} doesn't resolve`;
-  if (!addresses.every(isPublicAddress)) {
-    return `${host} points to a private address, so heel won't connect to it for an agent`;
-  }
-  return null;
-}
+export { publicHostProblem };
 
 /** One line of the agent's text, with no line breaks or control characters, capped. */
 function oneLine(text: string | undefined, max: number): string | null {
@@ -287,9 +235,11 @@ export function rejectRequest(db: HeelDb, row: RequestRow, by: string, now: Date
 }
 
 /**
- * Approves a waiting request: claims it first, so a request rejected or
- * replaced a moment ago can't also be approved, then makes the account. If
- * making it fails, the claim is undone and the request waits again.
+ * Approves a waiting request and makes its account, all or nothing: one
+ * transaction claims the request (only if it still waits and hasn't
+ * expired, so one rejected, replaced or expired a moment ago can't be
+ * approved), makes the account and records it. If making it fails, nothing
+ * changed and the request still waits.
  */
 export function approveRequest(
   db: HeelDb,
@@ -298,25 +248,25 @@ export function approveRequest(
   now: Date,
   connect: () => string,
 ): { ok: true; accountId: string } | { ok: false; problem: string } {
-  const claimed =
-    db
-      .update(agentRequests)
-      .set({ status: "approved", decidedBy: by, decidedAt: now })
-      .where(and(eq(agentRequests.id, row.id), eq(agentRequests.status, "pending")))
-      .run().changes === 1;
-  if (!claimed) return { ok: false, problem: "That request isn't waiting for you." };
-  let accountId: string;
-  try {
-    accountId = connect();
-  } catch (error) {
-    db.update(agentRequests)
-      .set({ status: "pending", decidedBy: null, decidedAt: null })
-      .where(eq(agentRequests.id, row.id))
-      .run();
-    throw error;
-  }
-  db.update(agentRequests).set({ accountId }).where(eq(agentRequests.id, row.id)).run();
-  return { ok: true, accountId };
+  return db.transaction((tx) => {
+    const claimed =
+      tx
+        .update(agentRequests)
+        .set({ status: "approved", decidedBy: by, decidedAt: now })
+        .where(
+          and(
+            eq(agentRequests.id, row.id),
+            eq(agentRequests.status, "pending"),
+            gt(agentRequests.expiresAt, now),
+          ),
+        )
+        .run().changes === 1;
+    if (!claimed) return { ok: false as const, problem: "That request isn't waiting for you." };
+    // `connect` writes through heel's db; better-sqlite3 nests its transaction as a savepoint.
+    const accountId = connect();
+    tx.update(agentRequests).set({ accountId }).where(eq(agentRequests.id, row.id)).run();
+    return { ok: true as const, accountId };
+  });
 }
 
 /** Pure: heel's own name for what is asked for. */
