@@ -131,6 +131,10 @@ const PHASES: Phase[] = [
         'tell any agent to put your services behind heel. it proposes the connections and rules, then walks you through swapping out raw keys.',
       ],
       ['everything in the web app', 'anything the cli can do, the web app can do too.'],
+      [
+        'it learns from what you approve',
+        'approve the same kind of call again and again, and heel suggests a rule so it stops asking. agents can see the pattern and propose it; you approve with a passkey.',
+      ],
     ],
     gate: 'on a fresh server, one prompt to an agent puts github and gmail behind heel, and all you do is tap approve.',
   },
@@ -171,6 +175,11 @@ const PHASES: Phase[] = [
       ],
       ['more mcp servers', 'more third-party servers tested, and the odd ones handled.'],
       ['teams', 'organizations, roles and org-wide rules.'],
+      ['mcp events', 'agents wait on events from a server through heel, like a new email or a ci result.'],
+      [
+        'heel inside other apps',
+        'a javascript package, so another app or agent can run its approvals on heel.',
+      ],
     ],
     gate: 'install to your first phone approval in under 10 minutes, without the docs.',
   },
@@ -181,6 +190,7 @@ const EXPLORING: [string, string][] = [
   ['approval from more than one person', 'one task that needs sign-off from two people, each owning different data.'],
   ['results without the raw data', 'an agent that can share a query’s answer, but not the data behind it.'],
   ['plain-text guidance for hints', 'describe in words what usually looks fine. rules still decide.'],
+  ['your own mcp catalog', 'pick mcp servers from a list and sign in; heel keeps the tokens on your machine.'],
 ];
 
 const STATUS: Record<Status, { label: string; sticker: string }> = {
