@@ -33,9 +33,31 @@ import type { CodeWorker, ScriptLimits, Step } from "./worker.ts";
 /** Suspensions each imported module costs: its stubs and the import itself. */
 const SUSPENSIONS_PER_IMPORT = 2;
 
+/** Which Monty build runs the script: the native addon, or WebAssembly in a worker thread. */
+export type MontyBackend = "native" | "wasm";
+
+async function createPool(backend: MontyBackend): Promise<Pick<Monty, "checkout">> {
+  const options = { minProcesses: 0, maxProcesses: 1, maxCheckoutsPerWorker: 1 };
+  if (backend === "native") return Monty.create(options);
+  const wasm = await import("@pydantic/monty/wasm");
+  return wasm.Monty.create(options);
+}
+
 export class MontyWorker implements CodeWorker {
-  #pool: Monty | null = null;
+  readonly #backend: MontyBackend;
+  #pool: Pick<Monty, "checkout"> | null = null;
   #session: MontySession | null = null;
+
+  /** Set when the pool is shared: the worker then closes only its session, never the pool. */
+  readonly #shared: Pick<Monty, "checkout"> | null;
+
+  constructor(
+    backend: MontyBackend = "native",
+    shared: Pick<Monty, "checkout"> | null = null,
+  ) {
+    this.#backend = backend;
+    this.#shared = shared;
+  }
 
   async start(
     code: string,
@@ -43,7 +65,7 @@ export class MontyWorker implements CodeWorker {
     limits: ScriptLimits,
     stdout: (text: string) => void,
   ): Promise<Step> {
-    this.#pool = await Monty.create({ minProcesses: 0, maxProcesses: 1, maxCheckoutsPerWorker: 1 });
+    this.#pool = this.#shared ?? (await createPool(this.#backend));
     this.#session = await this.#pool.checkout({
       typeCheck: true,
       limits: {
@@ -125,9 +147,15 @@ export class MontyWorker implements CodeWorker {
 
   async stop(): Promise<void> {
     const pool = this.#pool;
+    const session = this.#session;
     this.#pool = null;
     this.#session = null;
+    if (this.#shared !== null) {
+      // A shared pool retires this session's worker (one checkout per worker), suspended script and all.
+      await session?.close();
+      return;
+    }
     // Closing the pool kills its one worker, suspended script and all.
-    await pool?.[Symbol.asyncDispose]?.();
+    await (pool as Partial<AsyncDisposable> | null)?.[Symbol.asyncDispose]?.();
   }
 }
