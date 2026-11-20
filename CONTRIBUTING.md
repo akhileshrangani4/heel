@@ -45,9 +45,9 @@ A release happens when you merge a release PR. Nothing is published before that.
 
    | Title | Next version |
    | --- | --- |
-   | `fix: …` | patch: 0.1.0 to 0.1.1 |
-   | `feat: …` | minor: 0.1.0 to 0.2.0 |
-   | `feat!: …`, or a `BREAKING CHANGE:` footer | major from 1.0.0 on; minor before that |
+   | `fix: …` | patch: 0.2.0 to 0.2.1 |
+   | `feat: …` | patch before 1.0.0 (0.2.0 to 0.2.1); minor from 1.0.0 on |
+   | `feat!: …`, or a `BREAKING CHANGE:` footer | minor before 1.0.0 (0.2.0 to 0.3.0); major from 1.0.0 on |
    | `docs:`, `ci:`, `chore:`, `test:`, `refactor:` | no release on their own |
 
 2. **The release PR updates itself.** After CI passes on `main`, release-please opens or updates a PR titled `chore(main): release <version>`. It bumps `version` in `package.json` and adds the release to `CHANGELOG.md`. The PR is opened from the repository owner's account, so CI runs on it.
