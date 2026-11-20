@@ -11,6 +11,9 @@ export const metadata: Metadata = {
   alternates: { canonical: '/roadmap' },
 };
 
+// Written by hand, unlike /changelog: update an item's state (and this date)
+// in the same PR as the roadmap work it describes. The site deploys on
+// release, so it shows what that release ships.
 const UPDATED = 'november 20, 2026';
 
 type Status = 'done' | 'now' | 'next' | 'later';
@@ -94,7 +97,7 @@ const PHASES: Phase[] = [
     items: [
       [
         'proposals, not edits',
-        'agents propose rules, and you’re notified to add them with a passkey. connections and new agents come next.',
+        'agents propose rules and hide entries, and ask for connections; you’re notified and approve each with a passkey. new agents come next.',
         'started',
       ],
       [
