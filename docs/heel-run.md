@@ -14,7 +14,7 @@ That last part is what trips people up: **the command runs on heel's machine, in
 
 ## Set it up
 
-Run these as heel's operator, with the same `HEEL_HOME` as `heel serve`. For heel in Docker, see [heel in Docker, agent on the host](#heel-in-docker-agent-on-the-host), which has each step in its Docker form.
+Run these as heel's operator, with the same `HEEL_HOME` as the running heel (`~/.heel` unless you set another). For heel in Docker, see [heel in Docker, agent on the host](#heel-in-docker-agent-on-the-host), which has each step in its Docker form.
 
 ### 1. Connect the CLI
 

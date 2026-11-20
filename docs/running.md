@@ -131,5 +131,5 @@ A heel you started with `heel start` is restarted on the new version for you. On
 
 ## More
 
-- **[Configuration](configuration.md):** every `heel.yaml` key, where rules live, and what `heel serve` prints.
+- **[Configuration](configuration.md):** every `heel.yaml` key, where rules live, and what heel prints when it starts.
 - **[Sandbox and credentials](sandbox.md):** how `heel run`, code mode and local MCP servers run, and how they get credentials without holding them.

@@ -131,7 +131,7 @@ function watchTable(entries: readonly WatchEntry[]): Html {
   if (entries.length === 0) {
     return html`<p>
       No watch records yet. Add <code>watch: true</code> to a rule, or run
-      <code>heel serve --watch</code>, to see what it would decide without enforcing it.
+      <code>heel restart --watch</code>, to see what it would decide without enforcing it.
     </p>`;
   }
   return scrollRegion(

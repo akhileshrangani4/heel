@@ -92,11 +92,11 @@ export async function startInBackground(
 
   for (let waited = 0; waited < 20_000; waited += 250) {
     await sleep(250);
-    if (exited !== null) return { kind: "failed", reason: `heel serve exited (${exited})` };
+    if (exited !== null) return { kind: "failed", reason: `heel exited (${exited})` };
     const ping = await pingHeel(config);
     if (ping !== null) return { kind: "started", pid: child.pid ?? ping.pid ?? 0, ping };
   }
-  return { kind: "failed", reason: "heel serve didn't answer within 20 s" };
+  return { kind: "failed", reason: "heel didn't answer within 20 s" };
 }
 
 export type StopOutcome =

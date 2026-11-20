@@ -33,7 +33,7 @@ Code turns the answers into hints:
      ```
      The file must be readable only by you (mode `600`). heel refuses to start if anyone else can read it. To keep it somewhere else, set `api_key_file` (relative paths are under `$HEEL_HOME`).
    - **The environment variable `HEEL_TYPESAFE_API_KEY`.** It takes precedence over the file. With Docker, pass `-e HEEL_TYPESAFE_API_KEY`, or mount the key file read-only and point `api_key_file` at it.
-3. **Turn the adapter on** in `$HEEL_HOME/heel.yaml`, then restart `heel serve`:
+3. **Turn the adapter on** in `$HEEL_HOME/heel.yaml`, then restart heel (`heel restart`):
    ```yaml
    adapters:
      approval:

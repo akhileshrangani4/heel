@@ -76,7 +76,7 @@ rules:
 
 **Watch mode** lets calls through that your rules would deny or send for approval, and marks each one in **Activity** as "would deny" or "would ask". Use it to try rules on real traffic, then switch back.
 
-- **Everyone:** `heel serve --watch`.
+- **Everyone:** `heel start --watch` (or `heel restart --watch` if heel is running).
 - **One person, or the org default:** the **Modes** page (admins). Switching to Watch needs a passkey; switching back to Enforce doesn't.
 - **One rule:** add `watch: true` to it.
 

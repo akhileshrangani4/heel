@@ -151,7 +151,7 @@ describe("heel CLI", () => {
   it("exits 69 when heel serve isn't running", async () => {
     const result = await run(["agent", "list"], { HEEL_HOME: heelHome() });
     expect(result.code).toBe(EXIT.unavailable);
-    expect(result.stderr).toContain("not running");
+    expect(result.stderr).toContain("isn't running");
   });
 
   it("vault init creates a 0600 master key once and never replaces it", async () => {
