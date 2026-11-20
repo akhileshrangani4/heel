@@ -32,11 +32,11 @@ describe("pages at phone width", () => {
     }
   });
 
-  it("wraps the navigation, scrolls preformatted text, and lets an open decision bar scroll away", () => {
+  it("wraps the navigation, scrolls preformatted text, and keeps the decision bar in the page, never over it", () => {
     expect(STYLESHEET).toContain(".site nav ul{display:flex;flex-wrap:wrap;");
     expect(STYLESHEET).not.toMatch(/\.site nav\{[^}]*overflow-x/);
     expect(STYLESHEET).toContain("pre{overflow-x:auto;max-width:100%}");
-    expect(STYLESHEET).toContain(".ap-decide:has(.ap-more[open]){position:static}");
+    expect(STYLESHEET).not.toMatch(/\.ap-decide\{[^}]*position:(sticky|fixed)/);
   });
 });
 

@@ -169,10 +169,16 @@ async function setUp() {
  * One screen as a person sees it: a phone shows the first screenful, with
  * the decision bar where it sits; a laptop shows the whole page.
  */
-async function shoot(page: Page, name: string): Promise<void> {
+async function shoot(page: Page, name: string, { dark = false } = {}): Promise<void> {
   await page.waitForLoadState("networkidle");
   const phone = (page.viewportSize()?.width ?? 0) < 600;
   await page.screenshot({ path: join(OUT, `${name}.png`), fullPage: !phone });
+  // The README's phones follow the reader's theme, so these screens come in dark too.
+  if (dark) {
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.screenshot({ path: join(OUT, `${name}-dark.png`), fullPage: !phone });
+    await page.emulateMedia({ colorScheme: "light" });
+  }
 }
 
 it("captures the docs screenshots", async () => {
@@ -243,9 +249,9 @@ it("captures the docs screenshots", async () => {
     await page.goto(`${origin}/approvals`);
     await shoot(page, "approvals");
     await page.goto(`${origin}/approvals/${send.approvalId}`);
-    await shoot(page, "approval-email");
+    await shoot(page, "approval-email", { dark: true });
     await page.goto(`${origin}/approvals/${merge.approvalId}`);
-    await shoot(page, "approval-merge");
+    await shoot(page, "approval-merge", { dark: true });
     await page.getByRole("button", { name: "Approve once" }).click();
     await page.waitForLoadState("networkidle");
     await page.reload();

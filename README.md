@@ -17,7 +17,12 @@
 
 heel sits between an agent and everything it touches (MCP servers, HTTP APIs and CLIs). It holds the credentials and checks every call against rules on the call's actual arguments: who an email goes to, which account it comes from, which repo, how many messages this run has deleted. It also hides what an agent shouldn't read. Calls that need a person go to the owner's phone, outside the agent's session. One switch pauses any agent.
 
-[![heel checking three calls against what you asked: reading runs, a reply asks you, deleting 500 emails is blocked](assets/heel.gif)](assets/heel.mp4)
+<a href="assets/heel.mp4">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/heel-dark.gif">
+    <img src="assets/heel.gif" alt="heel checking three calls against what you asked: reading runs, a reply asks you, deleting 500 emails is blocked" width="100%">
+  </picture>
+</a>
 
 ## Get started
 
@@ -33,7 +38,12 @@ Then create your passkey, connect GitHub and point your agent at heel: the **[Qu
 
 When a rule says `ask`, you see exactly what the call will do, in plain words, and decide with your passkey, on your phone if you like:
 
-<p align="center"><img src="docs/images/approval-email.png" alt="An email waiting for approval on a phone" width="320"></p>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/approvals-dark.png">
+    <img src="assets/readme/approvals-light.png" alt="Two approval pages on a phone: an email to someone outside the company, and a merge into main, each waiting for you" width="100%">
+  </picture>
+</p>
 
 ## What a rule looks like
 

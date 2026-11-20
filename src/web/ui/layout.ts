@@ -2,6 +2,7 @@ import type { PauseScope } from "../../core/call.ts";
 import { CEREMONY_SCRIPT } from "./ceremony.ts";
 import { formatPauseScope, formatUtc } from "./format.ts";
 import { type Child, type Html, html, trusted } from "./html.ts";
+import { LOGO_SVG } from "./logo.ts";
 import { STYLESHEET } from "./theme.ts";
 
 /** The signed-in person, shown in the header. Sign-in screens have none. */
@@ -130,7 +131,7 @@ function header(viewer: Viewer, current: NavId | undefined): Html {
     </li>`;
   });
   return html`<header class="site">
-    <a class="brand" href="/approvals">heel</a>
+    <a class="brand" href="/approvals">${trusted(LOGO_SVG)}heel</a>
     <nav aria-label="Main"><ul>${links}</ul></nav>
     <div class="account">
       <span class="who">${viewer.name} · ${viewer.role}</span>
@@ -157,12 +158,41 @@ function sectionTabs(current: NavId | undefined): Html | "" {
   </ul></nav>`;
 }
 
-/** A dog sitting at heel: the same drawing as useheel.dev's home page. */
-const DOG = String.raw`   / \__
-  (    @\___
-  /         O
- /   (_____/
-/_____/   U`;
+/** heel's logo dog written in the word heel: the same drawing as behind useheel.dev's wordmark. */
+const DOG = `                          :+heelheelh*-
+                       .+eelheelheelheel+
+                      +heelheelheelheelhee=.
+                     lheelheelheelheelheelheelheelh-
+                    eelheelheelheelheelheelheelheelh
+                   =eelheelhe*elheelheelheelheelheel
+                   heelheelhe**elheelheelheelheelhe=
+                   elheelheelh:eelheelheelheelheel=
+                  .heelheelhee:*lheelheelheelhe+-
+                   elheelheelh.=eelheelhe+:
+                   -elheelheel heelheelh
+                    :*eelhee= +lheelhee.
+                     *==--::=lheelheelh
+                    +eelheelheelheelhee
+                  :lheel**heelheelheelh.
+                .*eelheelheelhe*******e:
+              -lheelheelheelheelheelheel
+           .+heelheelheelheelheelheelhee
+         -lheelheelheelheelheelheelheelh:
+       =eelheelheelheelheelheelheelheelh-
+     -eelheelheelheelheelheelheelheelhee=
+    lheelheelheelheelheelheelheelheelhee-
+  :lheelheelheelheelheelheelheelheelheel:
+ .heelheelheelheelheelheelheelheelheelhe
+ elheelheelheelheelheelheelheelheelheelh
++eelheelheelheelheelheelheelheelheelhee*
+lheelheelheelheelheelheelheelheelheelhe-
+elheelheelheelheelheelheelheelheelheelh.
+eelheelheelheelheelheelheelheelheelheel
+heelheelheelheelheelheelheelheelheelhee*
+:lheelheelheelheelheelheelheelheelheelhee*.
+ =lheelheelheelheelheelheelheelheelheelheel-
+  .*heelheelheelheelheelheelheelheelheelhee*
+     -*lheelheelheelheelheelheelheelheelhe*`;
 
 /**
  * Sign-in, enrollment and consent: heel's brand as on useheel.dev, the dog,
@@ -173,7 +203,7 @@ function authShell(body: Html): Html {
     <span class="sticker sticker-allow" aria-hidden="true">allow</span>
     <span class="sticker sticker-deny" aria-hidden="true">deny</span>
     <span class="sticker sticker-ask" aria-hidden="true">ask</span>
-    <pre class="auth-dog" aria-label="a dog sitting at heel">${DOG}</pre>
+    <pre class="auth-dog" aria-hidden="true">${DOG}</pre>
     <p class="auth-word">heel</p>
     <p class="auth-tag">access control for your ai agents</p>
     ${body}
