@@ -78,7 +78,7 @@ export function pendingList(props: PendingListProps): Html {
     if (changes > 0) {
       return html`${heading}
         <p class="muted req-count">
-          No calls are waiting for you. ${changes === 1 ? "A rule change is" : `${changes} rule changes are`},
+          No calls are waiting for you. ${changes === 1 ? "One thing your agents asked for is" : `${changes} things your agents asked for are`}
           below.
         </p>`;
     }

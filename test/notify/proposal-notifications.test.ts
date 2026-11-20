@@ -7,9 +7,10 @@ import type { ChannelSender, DeliveryTarget } from "../../src/notify/channels.ts
 import type { Notice } from "../../src/notify/message.ts";
 import { Notifier } from "../../src/notify/notifier.ts";
 import { findProposal, proposeRules, rejectProposal } from "../../src/proposals/rules.ts";
+import { findRequest, rejectRequest, requestConnection } from "../../src/requests/connection.ts";
 import { LOCAL_OWNER_NAME } from "../../src/store/install.ts";
 import { savePushSubscription, setUserEmail } from "../../src/store/notifications.ts";
-import { type NotifyChannel, notificationDeliveries } from "../../src/store/schema.ts";
+import { agents, type NotifyChannel, notificationDeliveries } from "../../src/store/schema.ts";
 import { captureLogger } from "../helpers/log.ts";
 import { testStore } from "../helpers/store.ts";
 
@@ -202,5 +203,48 @@ describe("pending proposals in heel status and heel tui", () => {
       ["rpr_1", "pending", "avi's rules"],
       ["apr_1", "pending", "gmail-work"],
     ]);
+  });
+});
+
+describe("connection request notifications", () => {
+  it("reach the agent's owner, and stop once the request is decided", async () => {
+    const { t, notifierWith } = setUp();
+    const agent = t.db.select().from(agents).get();
+    if (agent === undefined) throw new Error("the agent exists");
+    const asked = requestConnection(
+      t.db,
+      { orgId: t.orgId, ownerId: t.ownerId, agentId: agent.id },
+      { service: "gmail", alias: "inbox-new", why: "secret-looking why text" },
+      NOW,
+    );
+    if (!asked.ok) throw new Error(asked.problem);
+    const email = fakeSender("email");
+    const notifier = notifierWith([email.sender]);
+    notifier.agentRequested(asked.requestId);
+    await notifier.drain();
+    expect(email.sent.map((s) => s.notice)).toEqual([
+      {
+        kind: "connection",
+        agent: "repo-bot",
+        service: "Gmail",
+        url: `https://heel.example.com/requests/${asked.requestId}`,
+      },
+    ]);
+    expect(JSON.stringify(email.sent)).not.toMatch(/secret-looking|inbox-new/);
+
+    // A second request, rejected before its notice goes out, sends nothing.
+    const second = requestConnection(
+      t.db,
+      { orgId: t.orgId, ownerId: t.ownerId, agentId: agent.id },
+      { service: "outlook", alias: "outlook-new" },
+      NOW,
+    );
+    if (!second.ok) throw new Error(second.problem);
+    const row = findRequest(t.db, t.orgId, second.requestId);
+    if (row === null) throw new Error("stored");
+    rejectRequest(t.db, row, t.ownerId, NOW);
+    notifier.agentRequested(second.requestId);
+    await notifier.drain();
+    expect(email.sent).toHaveLength(1);
   });
 });

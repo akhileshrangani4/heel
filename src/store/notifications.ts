@@ -4,6 +4,7 @@ import { approverIds } from "./approvals.ts";
 import type { HeelDb } from "./db.ts";
 import { newId } from "./ids.ts";
 import {
+  agentRequests,
   approvals,
   type NotifyChannel,
   notificationDeliveries,
@@ -22,7 +23,7 @@ export type DeliveryRow = typeof notificationDeliveries.$inferSelect;
 export type PushSubscriptionRow = typeof pushSubscriptions.$inferSelect;
 
 /** What a delivery tells someone about: a request, or a rule proposal. */
-type Subject = { approvalId: string } | { proposalId: string };
+type Subject = { approvalId: string } | { proposalId: string } | { requestId: string };
 
 /**
  * One delivery per channel and target for each person: web push to every
@@ -114,6 +115,23 @@ export function enqueueProposalNotifications(
   return enqueueFor(db, { ...input, subject: { proposalId: input.proposalId } }, [
     proposal.ownerId,
   ]);
+}
+
+/**
+ * Queues deliveries for a new agent request (a connection, roadmap 2.5) to
+ * the one person who can approve it: the requesting agent's owner.
+ */
+export function enqueueRequestNotifications(
+  db: HeelDb,
+  input: { orgId: string; requestId: string; channels: ReadonlySet<NotifyChannel>; now: Date },
+): number {
+  const request = db
+    .select({ ownerId: agentRequests.ownerId })
+    .from(agentRequests)
+    .where(and(eq(agentRequests.orgId, input.orgId), eq(agentRequests.id, input.requestId)))
+    .get();
+  if (request === undefined) return 0;
+  return enqueueFor(db, { ...input, subject: { requestId: input.requestId } }, [request.ownerId]);
 }
 
 /** Pending deliveries whose time has come, oldest first. */

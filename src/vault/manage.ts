@@ -5,6 +5,7 @@ import {
   accountApprovers,
   accountShares,
   accounts,
+  agentRequests,
   approvals,
   credentials,
   grants,
@@ -119,6 +120,11 @@ export function removeAccount(db: HeelDb, orgId: string, alias: string, now: Dat
     tx.delete(credentials).where(eq(credentials.accountId, row.id)).run();
     tx.delete(accountShares).where(eq(accountShares.accountId, row.id)).run();
     tx.delete(accountApprovers).where(eq(accountApprovers.accountId, row.id)).run();
+    // A request that made this account keeps its history; it just no longer points at it.
+    tx.update(agentRequests)
+      .set({ accountId: null })
+      .where(eq(agentRequests.accountId, row.id))
+      .run();
     tx.delete(accounts).where(eq(accounts.id, row.id)).run();
     return {
       alias,

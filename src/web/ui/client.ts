@@ -221,6 +221,13 @@ export function clientScript(csrfToken: string | null): string {
         sign: getAssertion,
         finish: "/proposals/confirm",
       }),
+    approveConnection: ({ binding, status }) =>
+      run({
+        status,
+        start: { url: "/requests/challenge", body: { requestId: binding.requestId, hash: binding.hash } },
+        sign: getAssertion,
+        finish: "/requests/confirm",
+      }),
     mode: ({ binding, status }) =>
       run({
         status,

@@ -99,6 +99,48 @@ export const HEEL_PROPOSE_RULES_TOOL: Tool = {
   },
 };
 
+export const HEEL_REQUEST_CONNECTION = "heel_request_connection";
+
+/**
+ * Asking the agent's owner to connect an account (roadmap 2.5). heel's own:
+ * an account tool by this name is never listed.
+ */
+export const HEEL_REQUEST_CONNECTION_TOOL: Tool = {
+  name: HEEL_REQUEST_CONNECTION,
+  description:
+    "Ask your owner to connect an account you need: Gmail, Google Calendar, Outlook, or a remote MCP server by its https URL. " +
+    "Your owner reads the request on heel's approval page, approves it with a passkey and signs in there; you never see a password or token. " +
+    "Nothing is connected, and the URL isn't contacted, until they do. Once it's connected, your owner's rules decide what you can do with it. " +
+    "Give it a short alias (how rules and tools will name it, like gmail-work) and a why. " +
+    "Asking again for the same alias replaces your earlier request; at most 5 can wait at once.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      service: {
+        type: "string",
+        enum: ["gmail", "google-calendar", "outlook", "mcp"],
+        description: "What to connect. mcp is a remote MCP server; give its url.",
+      },
+      alias: {
+        type: "string",
+        description:
+          "What to call the account: a letter, then lower-case letters, digits or '-'. For example gmail-work.",
+      },
+      url: { type: "string", description: "For mcp only: the server's https URL." },
+      oauth: {
+        type: "boolean",
+        description: "For mcp only: whether the server wants OAuth sign-in. Defaults to true.",
+      },
+      why: {
+        type: "string",
+        description: "One plain sentence your owner reads: why you need this account.",
+      },
+    },
+    required: ["service", "alias"],
+    additionalProperties: false,
+  },
+};
+
 export const RUN_CODE = "run_code";
 export const HEEL_STUBS = "heel_stubs";
 

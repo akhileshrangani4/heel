@@ -37,12 +37,14 @@ heel 0.2.0 is running.
   Waiting:   1 request
     my-agent wants to call DELETE /tickets/42 on tickets
       http://localhost:7301/approvals/apr_…
-  Proposals: 1 waiting for you to add or reject
+  From agents: 2 waiting for you to decide
     my-agent proposes a new rule for owner's rules
       http://localhost:7301/proposals/rpr_…
+    my-agent asks owner to connect Gmail as gmail-work
+      http://localhost:7301/requests/req_…
 ```
 
-Rules your agents propose are listed under **Requests** in `heel tui` too. Enter opens a proposal's page, where you add it with your passkey.
+Rules your agents propose and connections they ask for are listed under **Requests** in `heel tui` too. Enter opens the page, where you decide with your passkey.
 
 ## heel tui
 

@@ -62,6 +62,22 @@ Your agent calls it at `http://127.0.0.1:7300/http/tickets/<path>` with its heel
 
 `gh`, `kubectl` and other CLIs run through `heel run`, in heel's sandbox, without the agent holding the credential. See [Run CLIs with heel run](heel-run.md).
 
+## Your agent can ask for a connection
+
+When your agent needs an account you haven't connected, it can ask for one with heel's `heel_request_connection` tool instead of asking you to run `heel connect`:
+
+```json
+{ "service": "gmail", "alias": "gmail-work", "why": "so I can triage your work mail" }
+```
+
+It can ask for **Gmail**, **Google Calendar**, **Outlook**, or a **remote MCP server** by its `https://` URL (`"service": "mcp", "url": "https://…"`). Those are the services you sign in to on heel's page, so the agent never handles a password or token. Anything that runs a program, takes an API key or an OpenAPI file, you still connect yourself.
+
+- **Nothing happens until you approve.** heel tells you a request is waiting the same way it tells you about a call, and it shows under **Connection requests** on the Approvals page and in `heel status`. No account exists, and an MCP server's URL isn't contacted, until you connect it.
+- **The page says what your rules would let the agent do.** heel runs your rules on a read and on anything else for the new account. A rule that names no account, like the starter rules' `kind: read`, covers it the moment it's connected. Change your rules first if that's more than you want.
+- **Connect it** asks for your passkey, then offers **Sign in to Gmail** (or the server's own sign-in). An MCP server that doesn't sign in is connected at once.
+- **The agent learns nothing about your accounts.** It gets the same answer whether or not you already have an account by that name. If the name is taken, the page says so to you, and you reject the request.
+- **Asking again for the same name replaces the earlier request.** At most 5 wait per agent, each expires after 7 days, and a paused agent can't ask.
+
 ## Change or remove an account
 
 - **New key:** after you rotate a key with the provider, give heel the new one. Every setting stays.

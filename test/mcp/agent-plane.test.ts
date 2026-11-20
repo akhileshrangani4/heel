@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { decideApproval, SqliteApprovalStore } from "../../src/store/approvals.ts";
 import { pause, SqlitePauseStore } from "../../src/store/pauses.ts";
-import { approvals, auditLog, ruleProposals } from "../../src/store/schema.ts";
+import {
+  accounts,
+  agentRequests,
+  approvals,
+  auditLog,
+  ruleProposals,
+} from "../../src/store/schema.ts";
 import { mcpHarness } from "../helpers/mcp.ts";
 
 /** A rule object as an agent sends it; `then` is the rules file's own key. */
@@ -41,6 +47,7 @@ describe("listing tools", () => {
       "echo_auth",
       "heel_status",
       "heel_propose_rules",
+      "heel_request_connection",
     ]);
     expect(tools.find((tool) => tool.name === "search_notes")).not.toHaveProperty("outputSchema");
     // The upstream's own heel_status is dropped; the one listed is heel's.
@@ -61,6 +68,7 @@ describe("listing tools", () => {
       "notes__echo_auth",
       "heel_status",
       "heel_propose_rules",
+      "heel_request_connection",
     ]);
   });
 
@@ -365,5 +373,116 @@ describe("heel_propose_rules", () => {
     const result = await client.callTool({ name: "heel_propose_rules", arguments: proposal });
     expect(result.structuredContent).toMatchObject({ status: "paused" });
     expect(h.t.db.select().from(ruleProposals).all()).toEqual([]);
+  });
+});
+
+describe("heel_request_connection", () => {
+  const ask = { service: "gmail", alias: "gmail-work", why: "so I can triage your work mail" };
+  const accountCount = (h: Awaited<ReturnType<typeof mcpHarness>>) =>
+    h.t.db.select().from(accounts).all().length;
+
+  it("stores a request for the agent's owner, and connects and contacts nothing", async () => {
+    const h = await mcpHarness({ owner: READS_ALLOWED });
+    const before = accountCount(h);
+    const client = await h.connect("/mcp/notes");
+    const result = await client.callTool({ name: "heel_request_connection", arguments: ask });
+    expect(result.isError).toBeFalsy();
+    expect(result.structuredContent).toMatchObject({ status: "requested" });
+    const [row] = h.t.db.select().from(agentRequests).all();
+    expect(row).toMatchObject({
+      ownerId: h.t.ownerId,
+      kind: "connection",
+      status: "pending",
+      details: { provider: "gmail", alias: "gmail-work" },
+      why: "so I can triage your work mail",
+      accountId: null,
+    });
+    expect(accountCount(h)).toBe(before);
+  });
+
+  it("answers the same when the name is already taken, so it learns nothing about accounts", async () => {
+    const h = await mcpHarness({ owner: READS_ALLOWED });
+    const client = await h.connect("/mcp/notes");
+    const taken = await client.callTool({
+      name: "heel_request_connection",
+      arguments: { ...ask, alias: "notes" },
+    });
+    expect(taken.structuredContent).toMatchObject({ status: "requested" });
+  });
+
+  it("asks only for sign-in services and https MCP servers", async () => {
+    const h = await mcpHarness({ owner: READS_ALLOWED });
+    const client = await h.connect("/mcp/notes");
+    for (const args of [
+      { service: "cli", alias: "x" },
+      { service: "http", alias: "x" },
+      { service: "github", alias: "x" },
+      { service: "mcp", alias: "x" },
+      { service: "mcp", alias: "x", url: "http://127.0.0.1:7301/mcp" },
+      { service: "mcp", alias: "x", url: "https://good.example@evil.example/mcp" },
+      { service: "mcp", alias: "x", url: "https://127.0.0.1/mcp" },
+      { service: "mcp", alias: "x", url: "https://[::1]/mcp" },
+      { service: "mcp", alias: "x", url: "https://localhost/mcp" },
+      { service: "mcp", alias: "x", url: "https://intranet/mcp" },
+      { service: "mcp", alias: "x", url: "https://wiki.corp.internal/mcp" },
+      { service: "gmail", alias: "x", url: "https://mcp.example.com" },
+      { service: "gmail", alias: "Bad Name" },
+      { service: "mcp", alias: "x", url: "https://mcp.example.com", command: "/bin/sh" },
+    ]) {
+      const result = await client.callTool({ name: "heel_request_connection", arguments: args });
+      expect(result.isError, JSON.stringify(args)).toBe(true);
+    }
+    expect(h.t.db.select().from(agentRequests).all()).toEqual([]);
+  });
+
+  it("replaces a waiting request for the same name, and caps how many wait", async () => {
+    const h = await mcpHarness({ owner: READS_ALLOWED });
+    const client = await h.connect("/mcp/notes");
+    await client.callTool({ name: "heel_request_connection", arguments: ask });
+    await client.callTool({ name: "heel_request_connection", arguments: ask });
+    const rows = h.t.db.select().from(agentRequests).all();
+    expect(rows.map((r) => r.status).sort()).toEqual(["pending", "superseded"]);
+    for (const n of [2, 3, 4, 5]) {
+      await client.callTool({
+        name: "heel_request_connection",
+        arguments: { ...ask, alias: `gmail-${n}` },
+      });
+    }
+    const sixth = await client.callTool({
+      name: "heel_request_connection",
+      arguments: { ...ask, alias: "gmail-6" },
+    });
+    expect(sixth.structuredContent).toMatchObject({ status: "refused" });
+  });
+
+  it("can't flood its owner by asking again and again", async () => {
+    const h = await mcpHarness({ owner: READS_ALLOWED });
+    const client = await h.connect("/mcp/notes");
+    for (let i = 0; i < 10; i++) {
+      const result = await client.callTool({ name: "heel_request_connection", arguments: ask });
+      expect(result.structuredContent).toMatchObject({ status: "requested" });
+    }
+    const eleventh = await client.callTool({ name: "heel_request_connection", arguments: ask });
+    expect(eleventh.structuredContent).toMatchObject({ status: "refused" });
+  });
+
+  it("keeps its why to plain text: no line breaks or direction controls", async () => {
+    const h = await mcpHarness({ owner: READS_ALLOWED });
+    const client = await h.connect("/mcp/notes");
+    await client.callTool({
+      name: "heel_request_connection",
+      arguments: { ...ask, why: "read mail\u202Eliame ruoy lla eteled\u202C\nnow" },
+    });
+    const [row] = h.t.db.select().from(agentRequests).all();
+    expect(row?.why).toBe("read mail liame ruoy lla eteled now");
+  });
+
+  it("refuses while the agent is paused", async () => {
+    const h = await mcpHarness({ owner: READS_ALLOWED });
+    pause(h.t.db, h.t.orgId, { scope: "global", target: "" }, h.t.ownerId, new Date());
+    const client = await h.connect("/mcp/notes");
+    const result = await client.callTool({ name: "heel_request_connection", arguments: ask });
+    expect(result.structuredContent).toMatchObject({ status: "paused" });
+    expect(h.t.db.select().from(agentRequests).all()).toEqual([]);
   });
 });
