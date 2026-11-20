@@ -625,6 +625,7 @@ export function approvalRequest(props: ApprovalRequestProps): Html {
     ${statusNotice(request, props.now)}
     ${view}
     ${hintsView(request)}
+    ${decisionControls(request, props.pause, props.onDecide)}
     <section class="card ap-card ap-details" aria-label="Details">
       ${fold(
         folds,
@@ -670,6 +671,5 @@ export function approvalRequest(props: ApprovalRequestProps): Html {
         "",
       )}
     </section>
-    ${decisionControls(request, props.pause, props.onDecide)}
   </article>`;
 }

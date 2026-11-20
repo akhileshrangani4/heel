@@ -33,7 +33,12 @@ Then create your passkey, connect GitHub and point your agent at heel: the **[Qu
 
 When a rule says `ask`, you see exactly what the call will do, in plain words, and decide with your passkey, on your phone if you like:
 
-<p align="center"><img src="docs/images/approval-email.png" alt="An email waiting for approval on a phone" width="320"></p>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/approvals-dark.png">
+    <img src="assets/readme/approvals-light.png" alt="Two approval pages on a phone: an email to someone outside the company, and a merge into main, each waiting for you" width="100%">
+  </picture>
+</p>
 
 ## What a rule looks like
 
