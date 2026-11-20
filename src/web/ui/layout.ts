@@ -8,6 +8,8 @@ import { STYLESHEET } from "./theme.ts";
 export interface Viewer {
   name: string;
   role: "admin" | "member";
+  /** The session's CSRF token, for the header's sign-out form. */
+  csrfToken: string;
 }
 
 /** A pause that covers what the page shows (spec: Pause). */
@@ -130,7 +132,14 @@ function header(viewer: Viewer, current: NavId | undefined): Html {
   return html`<header class="site">
     <a class="brand" href="/approvals">heel</a>
     <nav aria-label="Main"><ul>${links}</ul></nav>
-    <span class="who">${viewer.name} · ${viewer.role}</span>
+    <div class="account">
+      <span class="who">${viewer.name} · ${viewer.role}</span>
+      ${postForm(
+        { action: "/sign-out", csrfToken: viewer.csrfToken },
+        {},
+        html`<button type="submit" class="sign-out">Sign out</button>`,
+      )}
+    </div>
   </header>`;
 }
 

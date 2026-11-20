@@ -33,7 +33,13 @@ describe("enrollment and sign-in", () => {
     const h = humanPlaneHarness();
     const owner = await h.signIn(await h.enroll());
 
-    expect((await h.fetch("/approvals", { as: owner })).status).toBe(200);
+    const page = await h.fetch("/approvals", { as: owner });
+    expect(page.status).toBe(200);
+    // Every page's header carries the sign-out button, with this session's CSRF token.
+    const header = (await page.text()).match(/<header class="site">[\s\S]*?<\/header>/)?.[0] ?? "";
+    expect(header).toContain('action="/sign-out"');
+    expect(header).toContain(`name="csrf" value="${owner.csrf}"`);
+    expect(header).toContain(">Sign out</button>");
 
     const out = await h.fetch("/sign-out", { as: owner, ...form({ csrf: owner.csrf }) });
     expect(out.headers.get("location")).toBe("/sign-in?signed-out");
