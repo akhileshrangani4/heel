@@ -56,7 +56,7 @@ One MCP server with every connected account's tools, named by alias: `github__me
 
 - **On Linux,** `/mcp` without `?tools=direct` is code mode: one `run_code` tool where the agent writes a short Python script against your accounts (`github.list_pull_requests(...)`).
 - **HTTP APIs** are at `/http/<alias>/<path>`, and **CLIs** run with `heel run`. Neither is an MCP tool.
-- **`heel_status`** tells the agent where an approval stands. **`heel_propose_rules`** lets it [propose rules](rules.md#your-agent-can-propose-rules) for you to add.
+- **`heel_status`** tells the agent where an approval stands. **`heel_propose_rules`** lets it [propose rules and hide entries](rules.md#your-agent-can-propose-rules) for you to add.
 
 ## What happens to each call
 

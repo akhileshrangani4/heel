@@ -90,7 +90,7 @@ Edit the file and heel reloads it on its own. Before you rely on a change, run `
 
 ## Your agent can propose rules
 
-When a call your agent needs keeps asking, or is denied, it can propose rules instead of asking you to edit the file. Every MCP endpoint lists heel's own `heel_propose_rules` tool:
+When a call your agent needs keeps asking, or is denied, it can propose rules instead of asking you to edit the file. It can also propose [hide entries](#hiding-what-the-agent-reads), for mail you want kept from agents. Every MCP endpoint lists heel's own `heel_propose_rules` tool:
 
 ```json
 {
@@ -100,15 +100,24 @@ When a call your agent needs keeps asking, or is denied, it can propose rules in
       "rule": { "name": "read-github", "match": { "provider": "github", "kind": "read" }, "then": "allow" },
       "why": "so I can read PRs without asking you each time"
     }
+  ],
+  "hide": [
+    {
+      "entry": { "email": { "looks_like": ["password_reset", "login_code"] } },
+      "why": "so no agent reads your login codes"
+    }
   ]
 }
 ```
 
+Either list can be left out, but a proposal needs at least one rule or hide entry.
+
 ![A proposed rule: vendor-mail, with the agent's why and where it goes](images/proposal.png)
 
-- **Nothing changes until you add them.** heel tells you a proposal is waiting the same way it tells you about a request (push, email or Slack, whichever you set up), and it shows in `heel status` and `heel tui`. The notification says only which agent and how many rules; read them on the page. The proposal shows up under **Rule changes** on the Approvals page. Its page shows each rule with the agent's why, which of your rules they come before, and the whole file after the change. **Add these rules** asks for your passkey; **Reject** doesn't.
-- **They go first in your file,** above your own rules, each with a `# Proposed by <agent>: <why>` comment. The first rule that matches decides, so a proposed `allow` decides a call that one of your rules would have asked about. The page says so.
-- **heel writes the file, never the agent.** The agent sends rule objects, not YAML, and only ever for its own owner's file. It never sees your file: a proposal is checked on its own, and only its own problems go back to the agent. heel can't add a `watch: true` rule, `hide` entries or org rules this way.
+- **Nothing changes until you add them.** heel tells you a proposal is waiting the same way it tells you about a request (push, email or Slack, whichever you set up), and it shows in `heel status` and `heel tui`. The notification says only which agent and how many rules or hide entries; read them on the page. The proposal shows up under **Rule changes** on the Approvals page. Its page shows each rule with the agent's why, which of your rules they come before, and the whole file after the change. **Add these rules** asks for your passkey; **Reject** doesn't.
+- **Rules go first in your file,** above your own rules, each with a `# Proposed by <agent>: <why>` comment. The first rule that matches decides, so a proposed `allow` decides a call that one of your rules would have asked about. The page says so.
+- **Hide entries go at the end of your `hide:` list,** with the same comment. A hide entry only takes email away from agents, never gives them anything, and the page says that too.
+- **heel writes the file, never the agent.** The agent sends rule objects, not YAML, and only ever for its own owner's file. It never sees your file: a proposal is checked on its own, and only its own problems go back to the agent. heel can't add a `watch: true` rule or org rules this way.
 - **The passkey signs the exact file.** If the file changes between opening the page and touching your passkey, heel writes nothing and asks you to reload. It won't add to a file that has an error; fix that first.
 - **One proposal per agent waits at a time.** A newer one replaces the older, and a proposal expires after 7 days. A paused agent can't propose.
 - **Proposals are the history.** Each one keeps which agent proposed it, who added or rejected it, and when.

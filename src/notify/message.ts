@@ -10,6 +10,8 @@
  * replying to it changes nothing.
  */
 
+import { describeProposal } from "../proposals/describe.ts";
+
 export interface ApprovalNotice {
   kind: "approval";
   agent: string;
@@ -29,6 +31,8 @@ export interface ProposalNotice {
   kind: "proposal";
   agent: string;
   rules: number;
+  /** Hide entries proposed beside the rules. */
+  hide: number;
   /** The proposal's page. */
   url: string;
 }
@@ -43,7 +47,7 @@ export interface NoticeText {
 export function noticeText(notice: Notice): NoticeText {
   if (notice.kind === "proposal") {
     return {
-      title: `${notice.agent} proposes ${notice.rules === 1 ? "a new rule" : `${notice.rules} new rules`}`,
+      title: `${notice.agent} proposes ${describeProposal(notice.rules, notice.hide)}`,
       body: "Nothing changes until you add them. Open heel to read them and decide.",
     };
   }

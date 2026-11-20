@@ -16,7 +16,7 @@ import {
   setWorkRoots,
   workRootsByName,
 } from "../gateway/agents.ts";
-import { orgPendingProposals } from "../proposals/rules.ts";
+import { describeProposal, orgPendingProposals } from "../proposals/rules.ts";
 import { readActivity } from "../store/activity.ts";
 import { listOrgApprovals, listStanding, revokeStanding } from "../store/approvals.ts";
 import type { HeelDb } from "../store/db.ts";
@@ -327,7 +327,8 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
           agent: agentName,
           owner: ownerName,
           rules: row.rules.length,
-          summary: `${agentName} proposes ${row.rules.length === 1 ? "a new rule" : `${row.rules.length} new rules`} for ${ownerName}'s rules`,
+          hide: row.hide.length,
+          summary: `${agentName} proposes ${describeProposal(row.rules.length, row.hide.length)} for ${ownerName}'s rules`,
           reason: row.reason,
           createdAt: row.createdAt.toISOString(),
           expiresAt: row.expiresAt.toISOString(),

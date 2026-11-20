@@ -917,6 +917,8 @@ export const ruleProposals = sqliteTable(
       .references(() => agents.id),
     /** The proposed rules, as validated objects; heel writes the YAML, never the agent. */
     rules: text("rules", { mode: "json" }).$type<ProposedRule[]>().notNull(),
+    /** Hide entries to add to the file's `hide:` list; each only hides more from agents. */
+    hide: text("hide", { mode: "json" }).$type<ProposedHide[]>().notNull().default([]),
     /** The agent's own words on why, shown as its claim. */
     reason: text("reason"),
     status: text("status", { enum: RULE_PROPOSAL_STATUSES }).notNull(),
@@ -934,5 +936,11 @@ export const ruleProposals = sqliteTable(
 /** One rule an agent proposed, with its one-line why (roadmap 2.2). */
 export interface ProposedRule {
   rule: Record<string, unknown>;
+  why: string | null;
+}
+
+/** One hide entry an agent proposed, with its one-line why. */
+export interface ProposedHide {
+  entry: Record<string, unknown>;
   why: string | null;
 }

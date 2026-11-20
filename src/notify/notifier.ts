@@ -204,6 +204,7 @@ export class Notifier {
         kind: "proposal",
         agent: agent?.name ?? "An agent",
         rules: proposal.rules.length,
+        hide: proposal.hide.length,
         url: proposalUrl(publicUrl, proposal.id),
       };
     }

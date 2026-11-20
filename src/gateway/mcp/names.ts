@@ -36,16 +36,16 @@ export const HEEL_PROPOSE_RULES = "heel_propose_rules";
 export const HEEL_PROPOSE_RULES_TOOL: Tool = {
   name: HEEL_PROPOSE_RULES,
   description:
-    "Propose rules for your owner's heel rules file, for when a call you need is denied or asks every time. " +
+    "Propose rules for your owner's heel rules file, for when a call you need is denied or asks every time, " +
+    "and hide entries, for email your owner wants kept from agents (yourself included). " +
     "Nothing changes until your owner reads them on heel's approval page and adds them with a passkey. " +
-    "They go first in the file, so they decide the calls they match. Give each rule a short why. " +
+    "Rules go first in the file, so they decide the calls they match. Give each rule and entry a short why. " +
     "A newer proposal replaces your earlier one that is still waiting. Rules reference: https://useheel.dev/docs/rules-reference",
   inputSchema: {
     type: "object",
     properties: {
       rules: {
         type: "array",
-        minItems: 1,
         maxItems: 20,
         items: {
           type: "object",
@@ -65,12 +65,36 @@ export const HEEL_PROPOSE_RULES_TOOL: Tool = {
           additionalProperties: false,
         },
       },
+      hide: {
+        type: "array",
+        maxItems: 20,
+        description:
+          "Optional. Email to hide from agents. Hidden messages drop out of searches and lists, " +
+          "and fetching, replying to or deleting one is denied. A hide entry only hides more.",
+        items: {
+          type: "object",
+          properties: {
+            entry: {
+              type: "object",
+              description:
+                "One hide entry as a heel rules file writes it, for email: from, to, subject, labels or looks_like. " +
+                'For example {"email": {"looks_like": ["password_reset", "login_code"]}}.',
+            },
+            why: {
+              type: "string",
+              description: "One plain sentence your owner reads: why this should be hidden.",
+            },
+          },
+          required: ["entry"],
+          additionalProperties: false,
+        },
+      },
       reason: {
         type: "string",
-        description: "Optional. What you're working on that needs these rules.",
+        description: "Optional. What you're working on that needs these changes.",
       },
     },
-    required: ["rules"],
+    required: [],
     additionalProperties: false,
   },
 };

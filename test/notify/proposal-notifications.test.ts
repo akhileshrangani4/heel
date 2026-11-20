@@ -101,6 +101,7 @@ describe("rule proposal notifications", () => {
         kind: "proposal",
         agent: "repo-bot",
         rules: 2,
+        hide: 0,
         url: `https://heel.example.com/proposals/${id}`,
       },
     ]);
@@ -162,6 +163,7 @@ describe("pending proposals in heel status and heel tui", () => {
           agent: "repo-bot",
           owner: LOCAL_OWNER_NAME,
           rules: 1,
+          hide: 0,
           summary: "repo-bot proposes a new rule for owner's rules",
           reason: "so I can review your repos",
           createdAt: NOW.toISOString(),
