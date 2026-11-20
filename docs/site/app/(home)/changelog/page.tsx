@@ -16,6 +16,7 @@ const SHOWN = 8;
 const KIND: Record<Exclude<ChangeKind, 'other'>, { label: string; dot: string }> = {
   new: { label: 'new', dot: 'bg-emerald-500' },
   fixed: { label: 'fixed', dot: 'bg-amber-500' },
+  docs: { label: 'docs', dot: 'bg-sky-500' },
 };
 
 const underline =
