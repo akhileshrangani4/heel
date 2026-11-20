@@ -8,12 +8,15 @@ export function SiteFooter() {
     <footer className="border-t border-black/5 dark:border-white/10">
       <div className="mx-auto flex max-w-[1100px] flex-wrap items-center justify-between gap-4 px-5 py-7 text-sm text-neutral-500">
         <span>heel · apache 2.0</span>
-        <span className="flex gap-5">
+        <span className="flex flex-wrap gap-x-5 gap-y-2">
           <Link href="/docs" className={link}>
             docs
           </Link>
           <Link href="/roadmap" className={link}>
             roadmap
+          </Link>
+          <Link href="/changelog" className={link}>
+            changelog
           </Link>
           <a href={githubUrl} className={link}>
             github

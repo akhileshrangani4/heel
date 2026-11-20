@@ -18,6 +18,7 @@ export function baseOptions(): BaseLayoutProps {
     links: [
       { text: 'docs', url: '/docs', active: 'nested-url' },
       { text: 'roadmap', url: '/roadmap' },
+      { text: 'changelog', url: '/changelog' },
       { text: 'npm', url: npmUrl, external: true },
     ],
   };
