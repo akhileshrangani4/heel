@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
+import { defaultHeelHome } from "../config/load.ts";
 import { createMasterKeyFile } from "../vault/key.ts";
 
 /**
@@ -77,6 +78,7 @@ export function initHome(home: string): InitStep[] {
 export function initSummary(
   home: string,
   steps: readonly InitStep[],
+  /** Every command finds this home without an export: it's HEEL_HOME already, or the default. */
   homeFromEnv: boolean,
 ): string {
   const lines = [
@@ -94,7 +96,7 @@ export function initSummary(
   let n = 1;
   if (!homeFromEnv) {
     lines.push(
-      `  ${n++}. Tell heel where its home is (add this to your shell profile too):`,
+      `  ${n++}. Tell heel where its home is, in your shell profile so every terminal has it:`,
       `       export HEEL_HOME=${home}`,
     );
   }
@@ -111,12 +113,15 @@ export function initSummary(
   return lines.join("\n");
 }
 
-/** Where heel's home goes: --home, then HEEL_HOME, then ~/.heel. */
+/**
+ * Where heel's home goes: --home, then HEEL_HOME, then the same default
+ * every other command uses (`~/.heel` unless /var/lib/heel exists).
+ */
 export function chooseHome(
   flag: string | undefined,
   env: Record<string, string | undefined>,
 ): string {
-  const raw = flag ?? env["HEEL_HOME"] ?? join(homedir(), ".heel");
+  const raw = flag ?? env["HEEL_HOME"] ?? defaultHeelHome();
   const expanded = raw.startsWith("~/") ? join(homedir(), raw.slice(2)) : raw;
   return isAbsolute(expanded) ? expanded : resolve(expanded);
 }

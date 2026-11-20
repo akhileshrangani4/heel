@@ -22,8 +22,7 @@ heel warns at startup (in `heel logs`, or in the terminal for `heel serve`) when
 
 ```sh
 npm install -g useheel
-export HEEL_HOME=~/.heel     # add this to your shell profile
-heel init
+heel init          # sets heel up in ~/.heel
 heel start         # in the background; heel logs -f to watch it
 ```
 
@@ -118,11 +117,17 @@ A second option is planned: `heel login` on each machine, with your connections 
 ## Upgrading
 
 ```sh
-npm install -g useheel@latest                 # npm
-docker pull ghcr.io/akhileshrangani4/heel     # Docker: recreate the container with the same volume
+heel update            # move to the newest heel, the way you installed it
+heel update --check    # only say whether there is a newer one
 ```
 
-Back up `HEEL_HOME` (or the volume) and the master key first. heel migrates its database when it starts; read the startup warnings after an upgrade.
+Back up `HEEL_HOME` and the master key first. Then:
+
+- **Installed with npm:** `heel update` runs `npm install --global useheel@<newest>` with the npm next to the Node heel runs on.
+- **Docker:** a container can't replace itself, so `heel update` prints the steps: `docker pull ghcr.io/akhileshrangani4/heel:<newest>`, then start the container again from the new image with the same volume.
+- **A git checkout:** it tells you to `git pull && pnpm install`.
+
+A heel you started with `heel start` is restarted on the new version for you. One running in a terminal (`heel serve`) keeps the old version until you stop it and start it again. heel migrates its database when it starts; read the startup warnings. heel never updates itself in the background.
 
 ## More
 

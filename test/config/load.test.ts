@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { loadConfig, resolveConfigSource } from "../../src/config/load.ts";
+import { defaultHeelHome, loadConfig, resolveConfigSource } from "../../src/config/load.ts";
 import { humanPlaneUrlProblem, parseListenAddress } from "../../src/config/schema.ts";
 import { YamlValidationError } from "../../src/config/yaml.ts";
 import { publicUrlPortProblem } from "../../src/serve.ts";
@@ -48,7 +48,22 @@ describe("heel.yaml loader", () => {
   it("keeps a server install's admin socket in /run/heel", () => {
     const config = loadConfig(resolveConfigSource({ HEEL_HOME: "/var/lib/heel" }));
     expect(config.adminSocketPath).toBe("/run/heel/admin.sock");
-    expect(loadConfig(resolveConfigSource({})).adminSocketPath).toBe("/run/heel/admin.sock");
+    expect(
+      loadConfig(resolveConfigSource({}, undefined, () => "/var/lib/heel")).adminSocketPath,
+    ).toBe("/run/heel/admin.sock");
+  });
+
+  it("without HEEL_HOME, uses /var/lib/heel when it exists and ~/.heel otherwise", () => {
+    expect(defaultHeelHome((path) => path === "/var/lib/heel", "/home/heel-test-nobody")).toBe(
+      "/var/lib/heel",
+    );
+    expect(defaultHeelHome(() => false, "/home/heel-test-nobody")).toBe(
+      "/home/heel-test-nobody/.heel",
+    );
+    // heel serve and a heel connect in another terminal resolve the same socket.
+    const personal = resolveConfigSource({}, undefined, () => "/home/heel-test-nobody/.heel");
+    expect(personal.home).toBe("/home/heel-test-nobody/.heel");
+    expect(loadConfig(personal).adminSocketPath).toBe("/home/heel-test-nobody/.heel/admin.sock");
   });
 
   it("has no approval adapters unless heel.yaml names one", () => {
