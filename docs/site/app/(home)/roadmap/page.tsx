@@ -142,7 +142,11 @@ const PHASES: Phase[] = [
       ['a walkthrough video', 'from install to an agent that sets heel up, with you approving each step.'],
       ['the email demo', 'an agent that reads and drafts your mail, but asks before anything is sent.'],
       ['how heel was built', 'a write-up of the research, the decisions and what we learned.'],
-      ['a new home page', 'the real app up front, with an example rules file.'],
+      [
+        'a new home page',
+        'heel at work up front: your intent, three calls and what heel does with each, with the rules behind them.',
+        'shipped',
+      ],
     ],
     gate: 'people set heel up on their own, without help.',
   },
