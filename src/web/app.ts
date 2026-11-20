@@ -29,7 +29,8 @@ export type { HumanPlaneDeps } from "./http.ts";
 export function createHumanApp(deps: HumanPlaneDeps): Hono {
   const app = new Hono();
   // On every response (red-team round 3): no page can be framed by another
-  // site (clickjacking a passkey button), no <base> or plugin injection, no
+  // site (clickjacking a passkey button) or keep a handle on a popup of it,
+  // no <base> or plugin injection, no
   // content sniffing, and approval ids in URLs don't leak through Referer.
   app.use("*", async (c, next) => {
     await next();
@@ -42,6 +43,9 @@ export function createHumanApp(deps: HumanPlaneDeps): Hono {
     // same-origin, not no-referrer: with no-referrer browsers send `Origin: null` on form posts,
     // which requireSameOrigin refuses. Nothing goes to other sites either way.
     c.header("Referrer-Policy", "same-origin");
+    // A page another site opens in a popup gets no handle on heel's window,
+    // so it can't time a second click onto one of heel's buttons.
+    c.header("Cross-Origin-Opener-Policy", "same-origin");
   });
   app.get("/healthz", (c) => c.json({ status: "ok" }));
   // Before any route: a state-changing request from another origin never reaches one.

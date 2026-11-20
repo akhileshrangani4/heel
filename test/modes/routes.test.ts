@@ -112,6 +112,16 @@ describe("what the Modes page says", () => {
     expect(page).toContain("Switch to Enforce");
   });
 
+  it("doesn't claim a switch the stored mode doesn't show", async () => {
+    const h = humanPlaneHarness();
+    const admin = await h.signIn(await h.enroll());
+    // Nothing is stored for this person: a crafted link can't announce a switch.
+    const page = text(
+      await (await h.fetch(`/modes?switched=enforce&owner=${h.t.ownerId}`, { as: admin })).text(),
+    );
+    expect(page).not.toContain("is now in");
+  });
+
   it("doesn't say a person is in Watch when the org default keeps them in Enforce", async () => {
     const h = humanPlaneHarness();
     const admin = await h.signIn(await h.enroll());

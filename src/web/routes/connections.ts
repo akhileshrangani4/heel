@@ -156,7 +156,12 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       current: "connections",
       body: connectionsPage({
         rows,
-        outcome: outcomeFrom(c.req.query(), failures, new Set(rows.map((row) => row.alias))),
+        // "Connected" only for an account that is: a crafted link can't claim it.
+        outcome: outcomeFrom(
+          c.req.query(),
+          failures,
+          new Set(rows.filter((row) => row.status === "active").map((row) => row.alias)),
+        ),
         signInForm: { action: "/connections/sign-in", csrfToken: session.csrfToken },
       }),
     });
