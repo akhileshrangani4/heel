@@ -1,7 +1,7 @@
-import { lookup } from "node:dns/promises";
 import { and, eq } from "drizzle-orm";
 import { type Context, Hono } from "hono";
 import { canonicalHash } from "../../core/canonical.ts";
+import { resolveAll } from "../../definitions/mcp/public-only.ts";
 import { missingSignInSetup } from "../../definitions/sign-in-setup.ts";
 import { compileGrant } from "../../grants/compile.ts";
 import {
@@ -62,11 +62,6 @@ function nameOf(deps: HumanPlaneDeps, table: "user" | "agent", id: string): stri
 function ownRequest(deps: HumanPlaneDeps, session: SessionView, id: string): RequestRow | null {
   const row = findRequest(deps.db, deps.orgId, id);
   return row !== null && row.ownerId === session.userId ? row : null;
-}
-
-/** Every address a host name resolves to. */
-async function resolveAll(host: string): Promise<string[]> {
-  return (await lookup(host, { all: true })).map((a) => a.address);
 }
 
 /** What the passkey signs: the request and exactly what it asks for. */
@@ -288,6 +283,8 @@ export function requestRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
               alias: details.alias,
               ...(details.url === undefined ? {} : { url: details.url }),
               ...(details.oauth === undefined ? {} : { oauth: details.oauth }),
+              // heel contacts this server, its redirects and its sign-in only on public hosts.
+              ...(details.url === undefined ? {} : { publicOnly: true }),
             },
             now,
           ).accountId,

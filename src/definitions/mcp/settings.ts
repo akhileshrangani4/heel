@@ -36,6 +36,11 @@ const HttpSettings = z.object({
    * in from the Connections page before any call works.
    */
   oauth: z.boolean().default(false),
+  /**
+   * Set for a server an agent asked for (roadmap 2.5): heel contacts it, its
+   * redirects and its sign-in endpoints only on public https hosts.
+   */
+  publicOnly: z.boolean().default(false),
   /** What the server registered heel as (dynamic client registration); public, never a secret. */
   oauthClient: z.looseObject({ client_id: z.string() }).optional(),
 });

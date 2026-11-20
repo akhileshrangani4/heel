@@ -154,3 +154,37 @@ describe("remote MCP servers that want OAuth sign-in", () => {
     ).toThrow(/remote/);
   });
 });
+
+describe("a server an agent asked for (roadmap 2.5)", () => {
+  it("can't send heel's sign-in to an authorization server inside the network", async () => {
+    const upstream = oauthUpstream();
+    const h = humanPlaneHarness({
+      upstreamOAuth: { fetch: upstream.fetch },
+      // The server's metadata names an authorization server that resolves privately.
+      resolveHost: async (host) => [host === "auth.upstream.test" ? "10.0.0.5" : "93.184.216.34"],
+    });
+    connectAccount(
+      h.t.db,
+      h.vault,
+      {
+        orgId: h.t.orgId,
+        ownerId: h.t.ownerId,
+        provider: "mcp",
+        alias: "linear",
+        url: UPSTREAM_MCP_URL,
+        oauth: true,
+        publicOnly: true,
+      },
+      new Date(),
+    );
+    const owner = await h.signIn(await h.enroll());
+    const started = await h.fetch("/connections/sign-in", {
+      as: owner,
+      ...form({ csrf: owner.csrf, alias: "linear" }),
+    });
+    expect(started.status).toBe(303);
+    const location = started.headers.get("location") ?? "";
+    expect(location).not.toContain("auth.upstream.test");
+    expect(location).toContain("failed=");
+  });
+});

@@ -33,7 +33,8 @@ export interface Coverage {
   mode: "enforce" | "watch";
 }
 
-const SCOPE_KEYS: ReadonlySet<string> = new Set(["account", "provider"]);
+/** Conditions that decide whether a rule can apply to this agent on this account at all. */
+const SCOPE_KEYS: ReadonlySet<string> = new Set(["account", "provider", "agent"]);
 
 function covers(rule: CompiledRule, facts: { agent: string; account: string; provider: string }) {
   const scoped = rule.conditions.filter(
@@ -60,7 +61,8 @@ export function coverage(
   };
   const rules: CoveringRule[] = [];
   for (const rule of set === null ? [] : rulesFor(set, owner)) {
-    if (rule.decision === "deny") continue;
+    // Deny rules can't let anything through; watch rules never decide.
+    if (rule.decision === "deny" || rule.watch) continue;
     const { holds, namesIt } = covers(rule, facts);
     if (holds) rules.push({ rule: describeRule(rule), decision: rule.decision, namesIt });
   }

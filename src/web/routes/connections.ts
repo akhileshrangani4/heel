@@ -216,6 +216,7 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
           ...oauthDeps,
           signIns: oauth.signIns,
           ...(oauth.fetch === undefined ? {} : { fetch: oauth.fetch }),
+          ...(deps.resolveHost === undefined ? {} : { resolveHost: deps.resolveHost }),
         },
         account,
         session.userId,
@@ -254,7 +255,11 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     const alias = account?.alias ?? "";
     try {
       await finishUpstreamSignIn(
-        { ...oauthDeps, ...(oauth.fetch === undefined ? {} : { fetch: oauth.fetch }) },
+        {
+          ...oauthDeps,
+          ...(oauth.fetch === undefined ? {} : { fetch: oauth.fetch }),
+          ...(deps.resolveHost === undefined ? {} : { resolveHost: deps.resolveHost }),
+        },
         { state, pending },
         params,
       );

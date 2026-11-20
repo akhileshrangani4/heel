@@ -11,6 +11,7 @@ import type { AccountRecord } from "../../store/directory.ts";
 import type { Secret } from "../../vault/secret.ts";
 import { type Vault, VaultError } from "../../vault/vault.ts";
 import { type CappedFetch, cappedFetch } from "./capped-fetch.ts";
+import { publicOnlyFetch } from "./public-only.ts";
 import {
   MessageTooLargeError,
   SandboxStdioTransport,
@@ -40,6 +41,8 @@ export interface UpstreamDeps {
   log: Logger;
   /** Overrides `fetch` for every upstream request; tests reach in-process servers with it. */
   fetch?: FetchLike;
+  /** What host names resolve to, for servers held to public hosts; DNS when absent. */
+  resolveHost?: (host: string) => Promise<readonly string[]>;
   /**
    * Starts a local (stdio) MCP server in the sandbox. Absent when the host
    * can't run the sandbox: those accounts' calls are then denied.
@@ -215,7 +218,8 @@ export class UpstreamPool {
       release();
       onClose();
     };
-    const capped = upstream.transport === "http" ? cappedFetch(this.#deps.fetch) : undefined;
+    const capped =
+      upstream.transport === "http" ? cappedFetch(this.#httpFetch(upstream)) : undefined;
     if (capped !== undefined) {
       capped.onExceeded = () => {
         void client.close().catch(() => {});
@@ -236,6 +240,12 @@ export class UpstreamPool {
     return { client, transport, ...(capped === undefined ? {} : { capped }) };
   }
 
+  /** The fetch for a remote server: public hosts only, hop by hop, for one an agent asked for (roadmap 2.5). */
+  #httpFetch(upstream: UpstreamSettings): FetchLike | undefined {
+    if (upstream.transport !== "http" || !upstream.publicOnly) return this.#deps.fetch;
+    return publicOnlyFetch(this.#deps.fetch ?? fetch, this.#deps.resolveHost);
+  }
+
   async #transport(
     account: AccountRecord,
     upstream: UpstreamSettings,
@@ -245,7 +255,7 @@ export class UpstreamPool {
     if (upstream.transport === "http") {
       // Every reply goes through the capped fetch: a remote server can't make heel read more
       // than MAX_MESSAGE_BYTES of one message, as a local one can't.
-      const fetch = { fetch: (capped ?? cappedFetch(this.#deps.fetch)).fetch };
+      const fetch = { fetch: (capped ?? cappedFetch(this.#httpFetch(upstream))).fetch };
       if (upstream.oauth) {
         // The SDK signs requests with the stored token and refreshes it when the server asks.
         const oauth = this.#deps.oauth;

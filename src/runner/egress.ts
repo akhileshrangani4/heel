@@ -153,6 +153,9 @@ for (const [prefix, bits] of [
   ["::1", 128],
   ["::ffff:0:0", 96],
   ["64:ff9b::", 96],
+  // 6to4 and Teredo carry an IPv4 address inside, which could be a private one.
+  ["2002::", 16],
+  ["2001::", 32],
   ["fc00::", 7],
   ["fe80::", 10],
   ["ff00::", 8],

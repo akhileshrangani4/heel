@@ -96,7 +96,11 @@ describe("connection requests on the approval page", () => {
       { url: "/requests/challenge", body: { requestId: id, hash: attribute(page, "data-hash") } },
       "/requests/confirm",
     );
-    expect(accountNamed(h, "tracker-new")).toMatchObject({ provider: "mcp:tracker-new" });
+    expect(accountNamed(h, "tracker-new")).toMatchObject({
+      provider: "mcp:tracker-new",
+      // heel contacts it, its redirects and its sign-in only on public hosts.
+      settings: { publicOnly: true },
+    });
     expect(fetched()).toBe(0);
   });
 
