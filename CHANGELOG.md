@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.2.3](https://github.com/akhileshrangani4/heel/compare/v0.2.2...v0.2.3) (2026-11-20)
+
+
+### Features
+
+* agents can ask for GitHub, Slack, Linear, Notion or Stripe; you paste the key on heel's page ([#164](https://github.com/akhileshrangani4/heel/issues/164)) ([4bfd6dc](https://github.com/akhileshrangani4/heel/commit/4bfd6dc874381787232d0a045df83d0894f41981))
+* agents can ask you to connect an account; you approve with a passkey and sign in ([#159](https://github.com/akhileshrangani4/heel/issues/159)) ([05811d4](https://github.com/akhileshrangani4/heel/commit/05811d43c0ef5086728c38672646630694125ef9))
+* agents can propose hide entries, not only rules ([#156](https://github.com/akhileshrangani4/heel/issues/156)) ([2863240](https://github.com/akhileshrangani4/heel/commit/2863240ac8fd1dae8a6868da6120ce18cd5d88e9))
+
+
+### Bug Fixes
+
+* a server an agent asked for is reached only on public hosts, every hop ([#161](https://github.com/akhileshrangani4/heel/issues/161)) ([4bc2d6d](https://github.com/akhileshrangani4/heel/commit/4bc2d6d926435b40e16ac8bc601455ce42363c33))
+* **release:** the site deploy gets CHANGELOG.md, and a re-run finds npm done ([#158](https://github.com/akhileshrangani4/heel/issues/158)) ([affeae9](https://github.com/akhileshrangani4/heel/commit/affeae99d90f586b19c855d5e919962aa5d57280))
+
+
+### Documentation
+
+* **site:** the roadmap says what proposals and requests cover now ([#162](https://github.com/akhileshrangani4/heel/issues/162)) ([648db9f](https://github.com/akhileshrangani4/heel/commit/648db9f4e2e20fc9ad3dafb046ab337de367c04f))
+
 ## [0.2.2](https://github.com/akhileshrangani4/heel/compare/v0.2.1...v0.2.2) (2026-11-20)
 
 
