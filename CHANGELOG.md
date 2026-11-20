@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.6](https://github.com/akhileshrangani4/heel/compare/v0.2.5...v0.2.6) (2026-11-20)
+
+
+### Bug Fixes
+
+* **site:** the closing section fits a phone ([#172](https://github.com/akhileshrangani4/heel/issues/172)) ([6c7b3f8](https://github.com/akhileshrangani4/heel/commit/6c7b3f8a86eaa7f0d0f9d241829830fac1226fbb))
+
 ## [0.2.5](https://github.com/akhileshrangani4/heel/compare/v0.2.4...v0.2.5) (2026-11-20)
 
 
