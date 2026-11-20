@@ -1,8 +1,9 @@
 <p align="center">
-  <img src="assets/logo/heel-icon.svg" alt="heel logo: a dog sitting at heel" width="128">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/readme/banner-dark.png">
+    <img src="assets/readme/banner-light.png" alt="heel: access control for your ai agents" width="100%">
+  </picture>
 </p>
-
-<h1 align="center">heel</h1>
 
 <p align="center">
   <strong>Your agent has the tools. heel decides what it does with them.</strong><br>
