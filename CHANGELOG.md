@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.2.1](https://github.com/akhileshrangani4/heel/compare/v0.2.0...v0.2.1) (2026-11-20)
+
+
+### Features
+
+* heel start runs heel in the background, heel logs follows it ([#151](https://github.com/akhileshrangani4/heel/issues/151)) ([8e04720](https://github.com/akhileshrangani4/heel/commit/8e047206c1a616d04a3d4f473e6737e4e7ed2bbe))
+* heel tells you when an agent proposes rules, and lists them in heel status and heel tui ([#146](https://github.com/akhileshrangani4/heel/issues/146)) ([42d589e](https://github.com/akhileshrangani4/heel/commit/42d589e1e3f79cbe116eb5a081dbfdaa9cb539fd))
+* heel update moves heel to the newest version ([#149](https://github.com/akhileshrangani4/heel/issues/149)) ([68db8c6](https://github.com/akhileshrangani4/heel/commit/68db8c6d7b68da163451637ca9b0ef84b3252cf2))
+* **web:** add a Sign out button and always show Google's account list ([#143](https://github.com/akhileshrangani4/heel/issues/143)) ([b97a287](https://github.com/akhileshrangani4/heel/commit/b97a28760283b9be2e0028f4c893b38513bd34bf))
+
+
+### Bug Fixes
+
+* arriving at heel from another site keeps you signed in ([#148](https://github.com/akhileshrangani4/heel/issues/148)) ([36a72d9](https://github.com/akhileshrangani4/heel/commit/36a72d93b41237c2f73967f463c72cc1822a7471))
+* **docs:** keep the social card fonts in the repo ([#144](https://github.com/akhileshrangani4/heel/issues/144)) ([6002c03](https://github.com/akhileshrangani4/heel/commit/6002c03843ae434be0194f1703bbcc4874b9f263))
+* heel commands find ~/.heel without HEEL_HOME ([#147](https://github.com/akhileshrangani4/heel/issues/147)) ([5e16b6c](https://github.com/akhileshrangani4/heel/commit/5e16b6c1ce7521a275a78ea0fe618d2b0ea0a8c7))
+* heel's pages only claim what happened, and keep popups at arm's length ([#150](https://github.com/akhileshrangani4/heel/issues/150)) ([708f9eb](https://github.com/akhileshrangani4/heel/commit/708f9eb95317623413a516df601932daded8f688))
+
 ## [0.2.0](https://github.com/akhileshrangani4/heel/compare/v0.1.1...v0.2.0) (2026-11-19)
 
 
