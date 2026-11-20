@@ -30,8 +30,27 @@ export const MAX_PENDING_PER_AGENT = 5;
 export const MAX_PER_HOUR = 10;
 const MAX_WHY_CHARS = 200;
 
-/** Built-in services an agent may ask for: each signs in on heel's page, so no secret passes the agent. */
-export const REQUESTABLE_SERVICES = ["gmail", "google-calendar", "outlook"] as const;
+/** Built-in services people sign in to on heel's page. */
+export const SIGN_IN_SERVICES = ["gmail", "google-calendar", "outlook"] as const;
+/** Built-in services that use a key the owner pastes on heel's page (2.5, part 2). */
+export const KEY_SERVICES = ["github", "slack", "linear", "notion", "stripe"] as const;
+/** What an agent may ask for: no secret ever passes through the agent. */
+export const REQUESTABLE_SERVICES = [...SIGN_IN_SERVICES, ...KEY_SERVICES] as const;
+
+/** Pure: whether a request's account is made with a key the owner pastes. */
+export function needsKey(provider: string): boolean {
+  return (KEY_SERVICES as readonly string[]).includes(provider);
+}
+
+/** What key each service takes, as the owner reads it beside the field (same as docs/connect.md). */
+export const KEY_HINTS: Readonly<Record<(typeof KEY_SERVICES)[number], string>> = {
+  github:
+    "A fine-grained token with only the repositories and permissions the agent needs. (gh auth token works too, but gives everything your gh login can do.)",
+  slack: "A bot token (xoxb-…) from your Slack app.",
+  linear: "A personal API key (lin_api_…).",
+  notion: "An internal integration secret, shared with the pages the agent needs.",
+  stripe: "A restricted key (rk_…) with only what the agent needs.",
+};
 
 /** Same rule as `heel connect`: a letter first, then lower-case letters, digits or '-'. */
 const ALIAS = /^[a-z][a-z0-9-]{0,63}$/;
@@ -49,6 +68,18 @@ export const RequestConnectionInput = z
     why: z.string().max(2_000).optional(),
   })
   .superRefine((input, ctx) => {
+    // An alias naming another service (github "stripe-live") could get the owner to paste
+    // the wrong key, which heel would then send to this service.
+    const other = needsKey(input.service)
+      ? REQUESTABLE_SERVICES.find((name) => name !== input.service && input.alias.startsWith(name))
+      : undefined;
+    if (other !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["alias"],
+        message: `an alias for ${input.service} can't start with ${other}`,
+      });
+    }
     if (input.service === "mcp") {
       const problem =
         input.url === undefined ? "mcp needs the server's url" : agentUrlProblem(input.url);
@@ -278,6 +309,16 @@ export function serviceLabel(details: ConnectionRequestDetails): string {
       return "Google Calendar";
     case "outlook":
       return "Outlook";
+    case "github":
+      return "GitHub";
+    case "slack":
+      return "Slack";
+    case "linear":
+      return "Linear";
+    case "notion":
+      return "Notion";
+    case "stripe":
+      return "Stripe";
     case "mcp":
       return details.url === undefined || !URL.canParse(details.url)
         ? "an MCP server"

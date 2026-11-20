@@ -416,7 +416,7 @@ describe("heel_request_connection", () => {
     for (const args of [
       { service: "cli", alias: "x" },
       { service: "http", alias: "x" },
-      { service: "github", alias: "x" },
+      { service: "github", alias: "x", url: "https://api.github.com" },
       { service: "mcp", alias: "x" },
       { service: "mcp", alias: "x", url: "http://127.0.0.1:7301/mcp" },
       { service: "mcp", alias: "x", url: "https://good.example@evil.example/mcp" },
@@ -427,12 +427,24 @@ describe("heel_request_connection", () => {
       { service: "mcp", alias: "x", url: "https://wiki.corp.internal/mcp" },
       { service: "gmail", alias: "x", url: "https://mcp.example.com" },
       { service: "gmail", alias: "Bad Name" },
+      // A key request whose name points at another service: the owner might paste the wrong key.
+      { service: "github", alias: "stripe-live" },
       { service: "mcp", alias: "x", url: "https://mcp.example.com", command: "/bin/sh" },
     ]) {
       const result = await client.callTool({ name: "heel_request_connection", arguments: args });
       expect(result.isError, JSON.stringify(args)).toBe(true);
     }
     expect(h.t.db.select().from(agentRequests).all()).toEqual([]);
+  });
+
+  it("lets an MCP server or a sign-in service carry another service's name", async () => {
+    const h = await mcpHarness({ owner: READS_ALLOWED });
+    const client = await h.connect("/mcp/notes");
+    const mcp = await client.callTool({
+      name: "heel_request_connection",
+      arguments: { service: "mcp", alias: "github-mcp", url: "https://api.githubcopilot.com/mcp" },
+    });
+    expect(mcp.structuredContent).toMatchObject({ status: "requested" });
   });
 
   it("replaces a waiting request for the same name, and caps how many wait", async () => {

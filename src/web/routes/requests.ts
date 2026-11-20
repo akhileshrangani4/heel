@@ -7,6 +7,8 @@ import { compileGrant } from "../../grants/compile.ts";
 import {
   approveRequest,
   findRequest,
+  KEY_HINTS,
+  needsKey,
   pendingRequests,
   publicHostProblem,
   type RequestRow,
@@ -63,6 +65,9 @@ function ownRequest(deps: HumanPlaneDeps, session: SessionView, id: string): Req
   const row = findRequest(deps.db, deps.orgId, id);
   return row !== null && row.ownerId === session.userId ? row : null;
 }
+
+/** Longer than any real API key; a paste past it is a mistake. */
+const MAX_KEY_CHARS = 8_192;
 
 /** What the passkey signs: the request and exactly what it asks for. */
 function requestHash(row: RequestRow): string {
@@ -194,6 +199,9 @@ export function requestRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
             : "rejected" in query && row.status === "rejected"
               ? "rejected"
               : null,
+        key: needsKey(details.provider)
+          ? { hint: KEY_HINTS[details.provider as keyof typeof KEY_HINTS] }
+          : null,
       }),
       script: clientScript(session.csrfToken),
     });
@@ -260,6 +268,15 @@ export function requestRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     const { details } = row;
     const problem = problemOf(deps, row);
     if (problem !== null) return c.json({ ok: false, message: problem }, 409);
+    // A key the owner pasted: the one thing read from this body. It goes to the vault and nowhere
+    // else: not the request row, not a log line, not the redirect.
+    const pasted = stringField(body, "key")?.trim() ?? "";
+    if (needsKey(details.provider) && (pasted === "" || pasted.length > MAX_KEY_CHARS)) {
+      return c.json(
+        { ok: false, message: `Paste the ${serviceLabel(details)} key, then connect again.` },
+        400,
+      );
+    }
     // A name the agent gave may resolve inside the network; check before heel ever contacts it.
     if (details.url !== undefined) {
       const unsafe = await publicHostProblem(details.url, deps.resolveHost ?? resolveAll);
@@ -285,6 +302,9 @@ export function requestRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
               ...(details.oauth === undefined ? {} : { oauth: details.oauth }),
               // heel contacts this server, its redirects and its sign-in only on public hosts.
               ...(details.url === undefined ? {} : { publicOnly: true }),
+              ...(needsKey(details.provider)
+                ? { credential: { type: "static" as const, value: pasted } }
+                : {}),
             },
             now,
           ).accountId,

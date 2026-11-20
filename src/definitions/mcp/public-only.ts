@@ -95,21 +95,33 @@ export function publicOnlyFetch(
 ): FetchLike {
   return async (input, init) => {
     let url = new URL(input instanceof Request ? input.url : String(input));
+    if (input instanceof Request && input.body !== null) {
+      // A stream body can't be checked hop by hop or sent again after a redirect.
+      throw new NotPublicError("heel sends a request with a body to this server only as text");
+    }
     let request: RequestInit =
       input instanceof Request ? { ...requestInit(input), ...init } : { ...init };
+    if (request.body instanceof ReadableStream) {
+      throw new NotPublicError("heel sends a request with a body to this server only as text");
+    }
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
       const problem = publicUrlProblem(url.href) ?? (await publicHostProblem(url.href, resolve));
       if (problem !== null) throw new NotPublicError(`heel won't contact ${url.href}: ${problem}`);
       const response = await inner(url, { ...request, redirect: "manual" });
       const location = response.headers.get("location");
       if (!REDIRECTS.has(response.status) || location === null) return response;
+      // Free the connection: the redirect's own body is never read.
+      await response.body?.cancel().catch(() => {});
       const next = new URL(location, url);
       const method = (request.method ?? "GET").toUpperCase();
       if (
         response.status === 303 ||
         ((response.status === 301 || response.status === 302) && method === "POST")
       ) {
-        request = { ...request, method: "GET", body: null };
+        const headers = new Headers(request.headers);
+        for (const name of ["content-type", "content-length", "content-encoding"])
+          headers.delete(name);
+        request = { ...request, method: "GET", body: null, headers };
       }
       if (next.origin !== url.origin) {
         const headers = new Headers(request.headers);
@@ -123,10 +135,5 @@ export function publicOnlyFetch(
 }
 
 function requestInit(request: Request): RequestInit {
-  return {
-    method: request.method,
-    headers: request.headers,
-    body: request.body,
-    signal: request.signal,
-  };
+  return { method: request.method, headers: request.headers, signal: request.signal };
 }

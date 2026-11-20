@@ -81,7 +81,7 @@ export function clientScript(csrfToken: string | null): string {
   };
 
   // The three steps every ceremony shares.
-  const run = async ({ status, start, sign, finish }) => {
+  const run = async ({ status, start, sign, finish, extra }) => {
     const say = (text) => { if (status) status.textContent = text; };
     try {
       say("Getting a passkey challenge…");
@@ -89,7 +89,7 @@ export function clientScript(csrfToken: string | null): string {
       say("Waiting for your passkey…");
       const signed = await sign(issued.options);
       say("Checking…");
-      const result = await post(finish, { challengeId: issued.challengeId, response: signed });
+      const result = await post(finish, { challengeId: issued.challengeId, response: signed, ...(extra || {}) });
       say(result.message || "Done.");
       if (result.next) window.location.assign(result.next);
     } catch (error) {
@@ -221,13 +221,26 @@ export function clientScript(csrfToken: string | null): string {
         sign: getAssertion,
         finish: "/proposals/confirm",
       }),
-    approveConnection: ({ binding, status }) =>
-      run({
+    approveConnection: ({ binding, options, status }) => {
+      const field = document.getElementById("request-key-input");
+      // Ask for the key before the passkey, so an empty field doesn't use up a passkey tap.
+      if (field && !(options && options.key && options.key.trim())) {
+        if (status) status.textContent = "Paste the key first. Nothing changed.";
+        field.focus();
+        return;
+      }
+      return run({
         status,
         start: { url: "/requests/challenge", body: { requestId: binding.requestId, hash: binding.hash } },
         sign: getAssertion,
         finish: "/requests/confirm",
-      }),
+        // A pasted key goes only to heel, only with the signed answer.
+        extra: options && options.key ? { key: options.key } : {},
+      }).finally(() => {
+        // Whatever happened, the key doesn't stay on the page.
+        if (field) field.value = "";
+      });
+    },
     mode: ({ binding, status }) =>
       run({
         status,

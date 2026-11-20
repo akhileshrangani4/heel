@@ -123,8 +123,8 @@ const PHASES: Phase[] = [
       ],
       [
         'agents ask for connections',
-        'an agent can ask for gmail, calendar, outlook or an mcp server. you approve with a passkey and sign in; the agent never sees the secret.',
-        'started',
+        'an agent asks for gmail, calendar, outlook, github, slack, linear, notion, stripe or an mcp server. you approve with a passkey and sign in or paste the key; the agent never sees the secret.',
+        'shipped',
       ],
       [
         'one setup prompt',

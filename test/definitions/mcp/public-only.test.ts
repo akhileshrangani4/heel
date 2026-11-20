@@ -122,3 +122,31 @@ describe("publicOnlyFetch", () => {
     ).rejects.toThrow("redirects");
   });
 });
+
+describe("publicOnlyFetch, edge cases", () => {
+  it("drops body headers when a redirect turns a POST into a GET", async () => {
+    const seen: (string | null)[] = [];
+    const inner = async (input: string | URL | Request, init?: RequestInit) => {
+      seen.push(new Headers(init?.headers).get("content-type"));
+      return String(input).endsWith("/a")
+        ? new Response("moved", { status: 303, headers: { location: "/b" } })
+        : new Response("{}");
+    };
+    await publicOnlyFetch(inner, async () => [PUBLIC])("https://mcp.example.com/a", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    expect(seen).toEqual(["application/json", null]);
+  });
+
+  it("won't send a streaming body it couldn't send again", async () => {
+    const body = new ReadableStream();
+    await expect(
+      publicOnlyFetch(
+        async () => new Response("{}"),
+        async () => [PUBLIC],
+      )("https://mcp.example.com/a", { method: "POST", body, duplex: "half" } as RequestInit),
+    ).rejects.toBeInstanceOf(NotPublicError);
+  });
+});

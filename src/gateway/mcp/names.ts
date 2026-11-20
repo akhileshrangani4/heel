@@ -108,8 +108,8 @@ export const HEEL_REQUEST_CONNECTION = "heel_request_connection";
 export const HEEL_REQUEST_CONNECTION_TOOL: Tool = {
   name: HEEL_REQUEST_CONNECTION,
   description:
-    "Ask your owner to connect an account you need: Gmail, Google Calendar, Outlook, or a remote MCP server by its https URL. " +
-    "Your owner reads the request on heel's approval page, approves it with a passkey and signs in there; you never see a password or token. " +
+    "Ask your owner to connect an account you need: Gmail, Google Calendar, Outlook, GitHub, Slack, Linear, Notion, Stripe, or a remote MCP server by its https URL. " +
+    "Your owner reads the request on heel's approval page and approves it with a passkey, then signs in there or pastes the service's key there; you never see a password, token or key. " +
     "Nothing is connected, and the URL isn't contacted, until they do. Once it's connected, your owner's rules decide what you can do with it. " +
     "Give it a short alias (how rules and tools will name it, like gmail-work) and a why. " +
     "Asking again for the same alias replaces your earlier request; at most 5 can wait at once.",
@@ -118,8 +118,19 @@ export const HEEL_REQUEST_CONNECTION_TOOL: Tool = {
     properties: {
       service: {
         type: "string",
-        enum: ["gmail", "google-calendar", "outlook", "mcp"],
-        description: "What to connect. mcp is a remote MCP server; give its url.",
+        enum: [
+          "gmail",
+          "google-calendar",
+          "outlook",
+          "github",
+          "slack",
+          "linear",
+          "notion",
+          "stripe",
+          "mcp",
+        ],
+        description:
+          "What to connect. Gmail, Google Calendar and Outlook: your owner signs in. GitHub, Slack, Linear, Notion and Stripe: your owner pastes a key on heel's page. mcp is a remote MCP server; give its url.",
       },
       alias: {
         type: "string",
