@@ -15,8 +15,10 @@ import { compileRulesText, loadRuleSet, rulesPaths } from "../../src/config/rule
 import { addAgent } from "../../src/gateway/agents.ts";
 import {
   applyProposal,
+  describeProposal,
   findProposal,
   ownerRulesFile,
+  ProposeRulesInput,
   pendingProposals,
   previewProposal,
   proposeRules,
@@ -244,5 +246,82 @@ describe("the file heel writes", () => {
     expect(ownerRulesFile(paths, "sam.lee@example.com")).toBe(
       "/heel/rules/sam.lee@example.com.yaml",
     );
+  });
+});
+
+describe("proposing hide entries", () => {
+  const RESETS = {
+    entry: { email: { looks_like: ["password_reset", "login_code"] } },
+    why: "so no agent reads your login codes",
+  };
+  const WITH_HIDE = `${ASKS}
+hide:
+  # family mail stays private
+  - email: { from: { any_of: [sarah@example.com] } }
+`;
+
+  it("names what a proposal holds", () => {
+    expect(describeProposal(2, 0)).toBe("2 new rules");
+    expect(describeProposal(0, 1)).toBe("a hide entry");
+    expect(describeProposal(1, 2)).toBe("a new rule and 2 hide entries");
+  });
+
+  it("needs at least one rule or hide entry", () => {
+    expect(ProposeRulesInput.safeParse({}).success).toBe(false);
+    expect(ProposeRulesInput.safeParse({ rules: [], hide: [] }).success).toBe(false);
+    expect(ProposeRulesInput.safeParse({ hide: [RESETS] }).success).toBe(true);
+  });
+
+  it("refuses an invalid entry, naming only the proposal", () => {
+    const { t, who } = setUp(WITH_HIDE);
+    const outcome = proposeRules(
+      t.db,
+      who,
+      { hide: [{ entry: { email: { form: "x@example.com" } } }] },
+      NOW,
+    );
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.problems.join("\n")).toMatch(/hide\.0/);
+    expect(outcome.problems.join("\n")).not.toContain("sarah@example.com");
+  });
+
+  it("adds them after the file's own hide entries, keeping its rules and comments", () => {
+    const { t, who, file } = setUp(WITH_HIDE);
+    const outcome = proposeRules(t.db, who, { rules: [readRepos], hide: [RESETS] }, NOW);
+    if (!outcome.ok) throw new Error(outcome.problems.join("; "));
+    const proposal = findProposal(t.db, t.orgId, outcome.proposalId);
+    if (proposal === null) throw new Error("missing");
+    expect(proposal.hide).toEqual([
+      { entry: RESETS.entry, why: "so no agent reads your login codes" },
+    ]);
+
+    const preview = previewProposal(proposal, file, "rules/owner.yaml", "my-agent");
+    if (!preview.ok) throw new Error(preview.problem);
+    expect(applyProposal(t.db, proposal, file, preview, preview.sha, t.ownerId, NOW)).toEqual({
+      ok: true,
+    });
+    const written = readFileSync(file, "utf8");
+    expect(written).toContain("# family mail stays private");
+    expect(written).toContain("# Proposed by my-agent: so no agent reads your login codes");
+    const compiled = compileRulesText(written, file, "rules/owner.yaml", "owner");
+    expect(compiled.file.rules.map((r) => r.ref.name)).toEqual(["read-repos", "everything-else"]);
+    expect(compiled.file.hide).toHaveLength(2);
+    // The file's own entry stays first; the proposed one follows it.
+    expect(written.indexOf("sarah@example.com")).toBeLessThan(written.indexOf("password_reset"));
+  });
+
+  it("starts a hide list in a file that has none", () => {
+    const { t, who, file } = setUp(ASKS);
+    const outcome = proposeRules(t.db, who, { hide: [RESETS] }, NOW);
+    if (!outcome.ok) throw new Error(outcome.problems.join("; "));
+    const proposal = findProposal(t.db, t.orgId, outcome.proposalId);
+    if (proposal === null) throw new Error("missing");
+    const preview = previewProposal(proposal, file, "rules/owner.yaml", "my-agent");
+    if (!preview.ok) throw new Error(preview.problem);
+    expect(preview.existing).toBe(1);
+    const compiled = compileRulesText(preview.after, file, "rules/owner.yaml", "owner");
+    expect(compiled.file.rules.map((r) => r.ref.name)).toEqual(["everything-else"]);
+    expect(compiled.file.hide).toHaveLength(1);
   });
 });

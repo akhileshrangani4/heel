@@ -1,0 +1,1 @@
+ALTER TABLE `rule_proposals` ADD `hide` text DEFAULT '[]' NOT NULL;

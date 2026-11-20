@@ -1,3 +1,4 @@
+import { describeProposal } from "../../proposals/describe.ts";
 import type { RuleProposalStatus } from "../../store/schema.ts";
 import { ceremonyButton } from "./ceremony.ts";
 import { formatRelative } from "./format.ts";
@@ -9,6 +10,7 @@ export interface ProposalCard {
   id: string;
   agent: string;
   rules: number;
+  hide: number;
   reason: string | null;
   createdAt: Date;
   expiresAt: Date;
@@ -40,7 +42,7 @@ export function proposalCards(cards: readonly ProposalCard[], now: Date): Html |
           </div>
           <h2 class="req-title">
             <a href="/proposals/${encodeURIComponent(card.id)}"
-              >${card.agent} proposes <mark>${count(card.rules)}</mark> for your rules file</a
+              >${card.agent} proposes <mark>${describeProposal(card.rules, card.hide)}</mark> for your rules file</a
             >
           </h2>
           ${
@@ -65,6 +67,8 @@ export interface ProposalPageProps {
   /** The file the rules go into, relative to heel's home: `rules/alice.yaml`. */
   file: string;
   rules: readonly { yaml: string; why: string | null }[];
+  /** Hide entries, added to the end of the file's `hide:` list. */
+  hide: readonly { yaml: string; why: string | null }[];
   createdAt: Date;
   expiresAt: Date;
   decision: { by: string; at: Date } | null;
@@ -106,16 +110,27 @@ function effectView(props: ProposalPageProps): Html {
       <p>${effect.problem}</p>`,
     );
   }
-  const before =
-    effect.existing === 0
-      ? html`<p>${props.file} has no rules yet, so these become its first.</p>`
+  const hiding =
+    props.hide.length === 0
+      ? ""
       : html`<p>
+          The hide ${props.hide.length === 1 ? "entry goes" : "entries go"} at the end of
+          ${props.file}'s hide list. Hiding only takes email away from your agents: matching
+          messages drop out of what they read, and fetching, replying to or deleting one is
+          denied.
+        </p>`;
+  const before =
+    props.rules.length === 0
+      ? ""
+      : effect.existing === 0
+        ? html`<p>${props.file} has no rules yet, so these become its first.</p>`
+        : html`<p>
           They go <strong>first</strong> in ${props.file}, before your ${count(effect.existing)}${
             effect.existingNames.length > 0 ? html` (${effect.existingNames.join(", ")})` : ""
           }. The first rule that matches decides, so a call these match is decided by them, even
           one your own rules would have asked about or denied.
         </p>`;
-  return html`${before}
+  return html`${before}${hiding}
     <details>
       <summary>The file after the change</summary>
       ${diffLines(effect.diff)}
@@ -129,7 +144,7 @@ export function proposalPage(props: ProposalPageProps): Html {
     props.outcome === "applied"
       ? notice("ok", html`<p>Added to ${props.file}. heel is using them now.</p>`)
       : props.outcome === "rejected"
-        ? notice("info", html`<p>Rejected. ${props.agent}'s rules weren't added.</p>`)
+        ? notice("info", html`<p>Rejected. Nothing ${props.agent} proposed was added.</p>`)
         : "";
   const pending = props.status === "pending" && props.expiresAt > props.now;
   return html`${outcome}
@@ -139,7 +154,10 @@ export function proposalPage(props: ProposalPageProps): Html {
         <span class="muted">${formatRelative(props.createdAt, props.now)}</span>
         ${badge(status.label, status.tone)}
       </div>
-      <h1 class="ap-title">${props.agent} proposes ${count(props.rules.length)} for ${props.file}</h1>
+      <h1 class="ap-title">
+        ${props.agent} proposes ${describeProposal(props.rules.length, props.hide.length)} for
+        ${props.file}
+      </h1>
       ${
         props.reason === null
           ? ""
@@ -149,7 +167,10 @@ export function proposalPage(props: ProposalPageProps): Html {
             </figure>`
       }
     </header>
-    <ul class="req-list" aria-label="Proposed rules">
+    ${
+      props.rules.length === 0
+        ? ""
+        : html`<ul class="req-list" aria-label="Proposed rules">
       ${props.rules.map(
         (rule) => html`<li class="card">
           ${
@@ -160,7 +181,25 @@ export function proposalPage(props: ProposalPageProps): Html {
           <pre class="mono">${rule.yaml}</pre>
         </li>`,
       )}
-    </ul>
+    </ul>`
+    }
+    ${
+      props.hide.length === 0
+        ? ""
+        : html`<h2 class="section-title">Hide from agents</h2>
+          <ul class="req-list" aria-label="Proposed hide entries">
+            ${props.hide.map(
+              (entry) => html`<li class="card">
+                ${
+                  entry.why === null
+                    ? ""
+                    : html`<p><span class="muted">${props.agent}: </span>${entry.why}</p>`
+                }
+                <pre class="mono">${entry.yaml}</pre>
+              </li>`,
+            )}
+          </ul>`
+    }
     ${pending ? effectView(props) : ""}
     ${
       props.decision === null
@@ -177,7 +216,7 @@ export function proposalPage(props: ProposalPageProps): Html {
                 ? ceremonyButton({
                     callback: { handler: "applyRules" },
                     intent: "apply-rules",
-                    label: "Add these rules",
+                    label: props.rules.length === 0 ? "Add to the hide list" : "Add these rules",
                     tone: "primary",
                     binding: { proposalId: props.id, sha: props.effect.sha },
                     describedBy: "proposal-passkey",
@@ -186,7 +225,7 @@ export function proposalPage(props: ProposalPageProps): Html {
             }
             ${postForm(props.reject, {}, html`<button type="submit" class="btn btn-secondary">Reject</button>`)}
             <p id="proposal-passkey" class="muted">
-              Adding rules asks for your passkey. Nothing changes until you add them; rejecting
+              Adding them asks for your passkey. Nothing changes until you add them; rejecting
               changes nothing. Proposals expire ${formatRelative(props.expiresAt, props.now)}.
             </p>
           </div>`

@@ -2,15 +2,25 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { and, desc, eq, lt } from "drizzle-orm";
-import { Document, isMap, isNode, isSeq, parseDocument, YAMLSeq } from "yaml";
+import { Document, isMap, isNode, isSeq, parse, parseDocument, YAMLSeq } from "yaml";
 import { z } from "zod";
 import { compileRulesText, type RulesPaths } from "../config/rules.ts";
 import { formatYamlIssue, YamlValidationError } from "../config/yaml.ts";
+import { canonicalHash } from "../core/canonical.ts";
 import type { CompiledRulesFile } from "../core/rules/compile.ts";
+
+export { describeProposal } from "./describe.ts";
+
 import { Rule } from "../core/rules/schema.ts";
 import type { HeelDb } from "../store/db.ts";
 import { newId } from "../store/ids.ts";
-import { agents, type ProposedRule, ruleProposals, users } from "../store/schema.ts";
+import {
+  agents,
+  type ProposedHide,
+  type ProposedRule,
+  ruleProposals,
+  users,
+} from "../store/schema.ts";
 import { hasErrnoCode } from "../util/errno.ts";
 
 /**
@@ -25,6 +35,8 @@ import { hasErrnoCode } from "../util/errno.ts";
  * - The target file comes from the agent's owner, never from an argument.
  * - Proposed rules go first in the file, so a call they match is decided by
  *   them. The approval page says which existing rules they come before.
+ * - Proposed hide entries go at the end of the file's `hide:` list. A hide
+ *   entry only takes more away from agents, never gives them anything.
  *
  * Rows are never changed once decided, so they are the change history too.
  */
@@ -32,24 +44,39 @@ import { hasErrnoCode } from "../util/errno.ts";
 /** How long a proposal waits for its owner. */
 export const PROPOSAL_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const MAX_PROPOSED_RULES = 20;
+export const MAX_PROPOSED_HIDE = 20;
 const MAX_PROPOSAL_BYTES = 32 * 1024;
 const MAX_WHY_CHARS = 200;
 const MAX_REASON_CHARS = 500;
 
-/** What `heel_propose_rules` takes. */
-export const ProposeRulesInput = z.strictObject({
-  rules: z
-    .array(
-      z.strictObject({
-        rule: z.record(z.string(), z.unknown()),
-        why: z.string().max(2_000).optional(),
-      }),
-    )
-    .min(1)
-    .max(MAX_PROPOSED_RULES),
-  reason: z.string().max(4_000).optional(),
-});
-export type ProposeRulesInput = z.output<typeof ProposeRulesInput>;
+/** What `heel_propose_rules` takes: rules, hide entries, or both. */
+export const ProposeRulesInput = z
+  .strictObject({
+    rules: z
+      .array(
+        z.strictObject({
+          rule: z.record(z.string(), z.unknown()),
+          why: z.string().max(2_000).optional(),
+        }),
+      )
+      .max(MAX_PROPOSED_RULES)
+      .default([]),
+    hide: z
+      .array(
+        z.strictObject({
+          entry: z.record(z.string(), z.unknown()),
+          why: z.string().max(2_000).optional(),
+        }),
+      )
+      .max(MAX_PROPOSED_HIDE)
+      .default([]),
+    reason: z.string().max(4_000).optional(),
+  })
+  .refine((input) => input.rules.length + input.hide.length > 0, {
+    message: "propose at least one rule or hide entry",
+  });
+/** What callers pass; `rules` and `hide` may be left out. */
+export type ProposeRulesInput = z.input<typeof ProposeRulesInput>;
 
 export type ProposeOutcome =
   | { ok: true; proposalId: string; expiresAt: Date }
@@ -63,13 +90,18 @@ function oneLine(text: string | undefined, max: number): string | null {
   return flat === "" ? null : flat.slice(0, max);
 }
 
-/** The proposed rules as a rules file of their own, which is how heel checks them. */
-function proposalText(rules: readonly ProposedRule[]): string {
+/** The proposal as a rules file of its own, which is how heel checks it. */
+function proposalText(rules: readonly ProposedRule[], hide: readonly ProposedHide[]): string {
   const doc = parseDocument("rules: []\n");
   doc.set(
     "rules",
     rules.map((r) => r.rule),
   );
+  if (hide.length > 0)
+    doc.set(
+      "hide",
+      hide.map((h) => h.entry),
+    );
   return doc.toString();
 }
 
@@ -84,11 +116,15 @@ export function proposeRules(
   input: ProposeRulesInput,
   now: Date,
 ): ProposeOutcome {
-  const rules: ProposedRule[] = input.rules.map((r) => ({
+  const rules: ProposedRule[] = (input.rules ?? []).map((r) => ({
     rule: JSON.parse(JSON.stringify(r.rule)) as Record<string, unknown>,
     why: oneLine(r.why, MAX_WHY_CHARS),
   }));
-  if (Buffer.byteLength(JSON.stringify(rules)) > MAX_PROPOSAL_BYTES) {
+  const hide: ProposedHide[] = (input.hide ?? []).map((h) => ({
+    entry: JSON.parse(JSON.stringify(h.entry)) as Record<string, unknown>,
+    why: oneLine(h.why, MAX_WHY_CHARS),
+  }));
+  if (Buffer.byteLength(JSON.stringify([rules, hide])) > MAX_PROPOSAL_BYTES) {
     return { ok: false, problems: [`the proposal is larger than ${MAX_PROPOSAL_BYTES} bytes`] };
   }
   const problems: string[] = [];
@@ -97,7 +133,7 @@ export function proposeRules(
     if (r.rule["watch"] === true) problems.push(`rules.${i}: a proposed rule can't be watch: true`);
   });
   try {
-    compileRulesText(proposalText(rules), "proposal", "proposal", "owner");
+    compileRulesText(proposalText(rules, hide), "proposal", "proposal", "owner");
   } catch (error) {
     if (!(error instanceof YamlValidationError)) throw error;
     problems.push(
@@ -122,6 +158,7 @@ export function proposeRules(
         ownerId: who.ownerId,
         agentId: who.agentId,
         rules,
+        hide,
         reason: oneLine(input.reason, MAX_REASON_CHARS),
         status: "pending",
         createdAt: now,
@@ -224,7 +261,7 @@ export type ProposalPreview =
  * Comments and layout already in the file stay as they are.
  */
 export function previewProposal(
-  proposal: Pick<ProposalRow, "rules">,
+  proposal: Pick<ProposalRow, "rules" | "hide">,
   file: string,
   display: string,
   agentName: string,
@@ -273,6 +310,18 @@ export function previewProposal(
       node.commentBefore = ` Proposed by ${agentName}${r.why === null ? "" : `: ${r.why}`}`;
       list.items.unshift(node);
     });
+  if (proposal.hide.length > 0) {
+    let hideSeq = doc.get("hide", true);
+    if (!isSeq(hideSeq)) {
+      hideSeq = new YAMLSeq();
+      doc.set("hide", hideSeq);
+    }
+    for (const h of proposal.hide) {
+      const node = doc.createNode(h.entry);
+      node.commentBefore = ` Proposed by ${agentName}${h.why === null ? "" : `: ${h.why}`}`;
+      (hideSeq as YAMLSeq).items.push(node);
+    }
+  }
   const after = doc.toString();
   let merged: CompiledRulesFile;
   try {
@@ -285,15 +334,24 @@ export function previewProposal(
     };
   }
   // heel rewrites the whole file, so check every rule already there still
-  // says exactly what it said, in the same order, and the hide list too.
+  // says exactly what it said, in the same order, and that the hide list is
+  // the one that was there with exactly the proposed entries after it.
   const kept = merged.rules.slice(proposal.rules.length).map((rule) => rule.hash);
   const had = current?.rules.map((rule) => rule.hash) ?? [];
+  const hideOf = (text: string | null): string[] => {
+    const parsed = text === null ? null : (parse(text) as { hide?: unknown } | null);
+    const list = Array.isArray(parsed?.hide) ? parsed.hide : [];
+    return list.map((entry) => canonicalHash(entry));
+  };
+  const hideBefore = hideOf(before);
+  const hideAfter = hideOf(after);
+  const wantHide = [...hideBefore, ...proposal.hide.map((h) => canonicalHash(h.entry))];
   const sameHide =
-    current === null ? merged.hide.length === 0 : merged.hideHash === current.hideHash;
+    hideAfter.length === wantHide.length && hideAfter.every((hash, i) => hash === wantHide[i]);
   if (kept.length !== had.length || kept.some((hash, i) => hash !== had[i]) || !sameHide) {
     return {
       ok: false,
-      problem: `heel couldn't add these rules without changing ${display}'s own rules. Add them by hand.`,
+      problem: `heel couldn't add these without changing what ${display} already says. Add them by hand.`,
     };
   }
   return {
@@ -353,7 +411,7 @@ export function rejectProposal(db: HeelDb, proposal: ProposalRow, by: string, no
   return true;
 }
 
-/** A proposed rule as YAML, for the approval page. */
+/** A proposed rule or hide entry as YAML, for the approval page. */
 export function ruleYaml(rule: Record<string, unknown>): string {
   return new Document(rule).toString();
 }

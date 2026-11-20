@@ -63,6 +63,7 @@ export function proposalCardsFor(deps: HumanPlaneDeps, session: SessionView, now
     id: row.id,
     agent: nameOf(deps, "agent", row.agentId),
     rules: row.rules.length,
+    hide: row.hide.length,
     reason: row.reason,
     createdAt: row.createdAt,
     expiresAt: row.expiresAt,
@@ -144,6 +145,7 @@ export function proposalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
         reason: row.reason,
         file: where?.display ?? "your rules file",
         rules: row.rules.map((r) => ({ yaml: ruleYaml(r.rule), why: r.why })),
+        hide: row.hide.map((h) => ({ yaml: ruleYaml(h.entry), why: h.why })),
         createdAt: row.createdAt,
         expiresAt: row.expiresAt,
         decision:

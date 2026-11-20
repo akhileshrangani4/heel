@@ -178,3 +178,43 @@ describe("proposed rules on the approval page", () => {
     expect(readFileSync(file, "utf8")).not.toContain("read-mail");
   });
 });
+
+describe("proposed hide entries on the approval page", () => {
+  it("shows them in their own section, says hiding only takes email away, and adds them", async () => {
+    const { h, file } = setUp();
+    const proposed = proposeRules(
+      h.t.db,
+      { orgId: h.t.orgId, ownerId: h.t.ownerId, agentId: h.agent.agentId },
+      {
+        hide: [
+          {
+            entry: { email: { looks_like: ["login_code"] } },
+            why: "so no agent reads your login codes",
+          },
+        ],
+      },
+      h.clock.now,
+    );
+    if (!proposed.ok) throw new Error(proposed.problems.join("; "));
+    const owner = await h.signIn(await h.enroll());
+    const listed = await (await h.fetch("/approvals", { as: owner })).text();
+    expect(listed).toContain("a hide entry");
+    const page = await (await h.fetch(`/proposals/${proposed.proposalId}`, { as: owner })).text();
+    expect(page).toContain("Hide from agents");
+    expect(page).toContain("login_code");
+    expect(page).toContain("Hiding only takes email away from your agents");
+    expect(page).toContain("Add to the hide list");
+
+    const added = await h.ceremony(
+      owner,
+      {
+        url: "/proposals/challenge",
+        body: { proposalId: proposed.proposalId, sha: attribute(page, "data-sha") },
+      },
+      "/proposals/confirm",
+    );
+    expect(added.status).toBe(200);
+    expect(readFileSync(file, "utf8")).toContain("login_code");
+    expect(findProposal(h.t.db, h.t.orgId, proposed.proposalId)?.status).toBe("applied");
+  });
+});
