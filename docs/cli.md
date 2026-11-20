@@ -20,6 +20,7 @@ The `heel` command sets heel up and runs it. Except for `heel run`, it works on 
 | Check your rules | `heel rules check` |
 | Test your rules | `heel rules test cases.yaml` ([how](rules-reference.md#testing-rules)) |
 | Run a CLI through heel (agent side) | `heel run -- gh pr list -R acme/web` ([how](heel-run.md)) |
+| Update heel | `heel update` (`--check` to only look) ([how](running.md#upgrading)) |
 
 Resuming after a pause needs your passkey, so it happens on the **Pause** page, not in the CLI.
 
