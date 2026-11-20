@@ -81,10 +81,14 @@ export function grantRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
   app.get("/grants", signedIn, (c) => {
     const session = c.get("session");
     const query = c.req.query();
+    // Only a notice that names a grant of yours in that state: a crafted link
+    // can't make the page claim something happened.
+    const state = (id: string | undefined) =>
+      id === undefined ? undefined : visible(session).find((g) => g.id === id)?.state;
     const outcome: GrantsOutcome =
-      query["granted"] !== undefined
+      state(query["granted"]) === "live"
         ? { kind: "granted" }
-        : query["revoked"] !== undefined
+        : state(query["revoked"]) === "revoked"
           ? { kind: "revoked" }
           : { kind: "none" };
     const mine = deps.db
@@ -166,7 +170,7 @@ export function grantRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       return c.json({ ok: false, message: "That grant isn't yours to make." }, 409);
     }
     const now = deps.now();
-    createGrant(deps.db, {
+    const id = createGrant(deps.db, {
       orgId: deps.orgId,
       agentId: agent,
       task,
@@ -176,7 +180,7 @@ export function grantRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       expiresAt: new Date(now.getTime() + STANDING_DURATIONS[duration]),
     });
     deps.log.warn({ agent, by: session.userId }, "intent grant signed");
-    return c.json({ ok: true, next: "/grants?granted=1" });
+    return c.json({ ok: true, next: `/grants?${new URLSearchParams({ granted: id })}` });
   });
 
   app.post("/grants/revoke", signedIn, requireCsrfField(), async (c) => {
@@ -186,7 +190,7 @@ export function grantRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       return c.text("Refused: no such grant of yours.", 404);
     }
     revokeGrant(deps.db, deps.orgId, id, session.userId, deps.now());
-    return c.redirect("/grants?revoked=1", 303);
+    return c.redirect(`/grants?${new URLSearchParams({ revoked: id })}`, 303);
   });
 
   return app;

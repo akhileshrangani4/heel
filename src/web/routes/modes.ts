@@ -80,12 +80,17 @@ export function modeRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     if (!isAdmin(session)) return c.text("Only an admin can see and switch modes.", 403);
     const all = rows();
     const query = c.req.query();
+    // Only when that row's stored mode is what the link says, so a crafted
+    // link can't make the page claim a switch that didn't happen.
+    const owner = query["owner"];
     const outcome: ModesOutcome =
-      isMode(query["switched"]) && query["owner"] !== undefined
+      isMode(query["switched"]) &&
+      owner !== undefined &&
+      all.some((row) => row.ownerId === owner && row.mode === query["switched"])
         ? {
             kind: "switched",
-            ownerId: query["owner"],
-            label: label(all, query["owner"]),
+            ownerId: owner,
+            label: label(all, owner),
             mode: query["switched"],
           }
         : { kind: "none" };

@@ -16,6 +16,8 @@ describe("security headers on the human plane", () => {
       expect(response.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
       expect(response.headers.get("x-content-type-options")).toBe("nosniff");
       expect(response.headers.get("referrer-policy")).toBe("same-origin");
+      // A popup another site opens gets no handle on heel's window.
+      expect(response.headers.get("cross-origin-opener-policy")).toBe("same-origin");
     }
   });
 });

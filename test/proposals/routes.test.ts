@@ -46,6 +46,12 @@ describe("proposed rules on the approval page", () => {
     expect(await (await h.fetch("/approvals", { as: owner })).text()).toContain("proposes");
     const page = await (await h.fetch(`/proposals/${id}`, { as: owner })).text();
     expect(page).toContain("so I can summarise your inbox");
+    // A crafted link can't make a pending proposal look added or rejected.
+    for (const crafted of ["applied", "rejected"]) {
+      const shown = await (await h.fetch(`/proposals/${id}?${crafted}`, { as: owner })).text();
+      expect(shown).not.toContain("heel is using them now");
+      expect(shown).not.toContain("rules weren't added");
+    }
     const added = await h.ceremony(
       owner,
       {
@@ -63,6 +69,9 @@ describe("proposed rules on the approval page", () => {
     expect(added.status).toBe(200);
     expect(readFileSync(file, "utf8")).toContain("read-mail");
     expect(findProposal(h.t.db, h.t.orgId, id)?.status).toBe("applied");
+    expect(await (await h.fetch(`/proposals/${id}?applied`, { as: owner })).text()).toContain(
+      "heel is using them now",
+    );
   });
 
   it("writes nothing when the file changed after the passkey challenge", async () => {

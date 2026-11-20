@@ -164,7 +164,13 @@ export function proposalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
           action: `/proposals/${encodeURIComponent(row.id)}/reject`,
           csrfToken: session.csrfToken,
         },
-        outcome: "applied" in query ? "applied" : "rejected" in query ? "rejected" : null,
+        // Only the outcome the proposal actually had, whatever the link says.
+        outcome:
+          "applied" in query && row.status === "applied"
+            ? "applied"
+            : "rejected" in query && row.status === "rejected"
+              ? "rejected"
+              : null,
       }),
       script: clientScript(session.csrfToken),
     });
