@@ -13,6 +13,7 @@ import { accountModule } from "../../codemode/stubs.ts";
 import type { CodeWorker } from "../../codemode/worker.ts";
 import type { Logger } from "../../log.ts";
 import { ProposeRulesInput, proposeRules } from "../../proposals/rules.ts";
+import { RequestConnectionInput, requestConnection } from "../../requests/connection.ts";
 import { approvalStatusForAgent } from "../../store/approvals.ts";
 import type { HeelDb } from "../../store/db.ts";
 import { type AccountRecord, findAccount } from "../../store/directory.ts";
@@ -31,6 +32,8 @@ import {
   directName,
   HEEL_PROPOSE_RULES,
   HEEL_PROPOSE_RULES_TOOL,
+  HEEL_REQUEST_CONNECTION,
+  HEEL_REQUEST_CONNECTION_TOOL,
   HEEL_STATUS,
   HEEL_STATUS_TOOL,
   HEEL_STUBS,
@@ -79,10 +82,13 @@ export interface McpSurfaceDeps {
   pauses?: PauseStore;
   /** Called after an agent proposes rules, to tell its owner. */
   onRuleProposal?: (proposalId: string) => void;
+  /** Called after an agent asks for a connection, to tell its owner. */
+  onAgentRequest?: (requestId: string) => void;
 }
 
 /** heel's own tools, listed on every MCP scope. */
-const HEEL_TOOLS = [HEEL_STATUS_TOOL, HEEL_PROPOSE_RULES_TOOL];
+const HEEL_TOOLS = [HEEL_STATUS_TOOL, HEEL_PROPOSE_RULES_TOOL, HEEL_REQUEST_CONNECTION_TOOL];
+const HEEL_TOOL_NAMES: ReadonlySet<string> = new Set(HEEL_TOOLS.map((tool) => tool.name));
 
 export interface McpSurface {
   /** Whether bare `/mcp` serves code mode: only with a sandboxed worker. */
@@ -116,7 +122,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
   ): Promise<Tool[]> {
     const listed = await tools(AbortSignal.timeout(10_000));
     return listed
-      .filter((tool) => tool.name !== HEEL_STATUS && tool.name !== HEEL_PROPOSE_RULES)
+      .filter((tool) => !HEEL_TOOL_NAMES.has(tool.name))
       .map((tool) => listedTool(tool, rename(tool.name)));
   }
 
@@ -291,6 +297,51 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     return { content: [{ type: "text", text: JSON.stringify(answer) }], structuredContent: answer };
   }
 
+  /** Stores a connection request for the agent's owner; nothing is connected or contacted. */
+  function requestConnectionTool(
+    agent: AuthenticatedAgent,
+    args: Record<string, unknown>,
+  ): CallToolResult {
+    const refuse = (body: Record<string, unknown>): CallToolResult => ({
+      isError: true,
+      content: [{ type: "text", text: JSON.stringify(body) }],
+      structuredContent: body,
+    });
+    const paused = pauses.find(deps.db, {
+      orgId: agent.orgId,
+      agentId: agent.agentId,
+      ownerId: agent.ownerId,
+      account: "",
+      provider: "",
+    });
+    if (paused !== null) return refuse({ status: "paused", scope: paused });
+    const input = RequestConnectionInput.safeParse(args);
+    if (!input.success) {
+      return refuse({
+        status: "invalid",
+        problems: input.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`),
+      });
+    }
+    const outcome = requestConnection(
+      deps.db,
+      { orgId: agent.orgId, ownerId: agent.ownerId, agentId: agent.agentId },
+      input.data,
+      now(),
+    );
+    if (!outcome.ok) return refuse({ status: "refused", problem: outcome.problem });
+    deps.log.info({ agent: agent.agentName, request: outcome.requestId }, "connection requested");
+    deps.onAgentRequest?.(outcome.requestId);
+    const answer = {
+      status: "requested",
+      requestId: outcome.requestId,
+      expiresAt: outcome.expiresAt.toISOString(),
+      message:
+        "Your owner will see this on heel's approval page and can connect it with a passkey. " +
+        "Nothing is connected until then. Once it is, the account's tools appear and your owner's rules decide what you can do.",
+    };
+    return { content: [{ type: "text", text: JSON.stringify(answer) }], structuredContent: answer };
+  }
+
   function heelStatus(agent: AuthenticatedAgent, args: Record<string, unknown>): CallToolResult {
     const approvalId = typeof args["approval_id"] === "string" ? args["approval_id"] : "";
     const status = approvalStatusForAgent(deps.db, agent, approvalId, now());
@@ -315,6 +366,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     const args = params.arguments ?? {};
     if (params.name === HEEL_STATUS) return heelStatus(agent, args);
     if (params.name === HEEL_PROPOSE_RULES) return proposeRulesTool(agent, args);
+    if (params.name === HEEL_REQUEST_CONNECTION) return requestConnectionTool(agent, args);
     if (scope.kind === "code") {
       if (params.name === RUN_CODE)
         return runCode(agent, args, params._meta?.[RUN_ID_META_KEY], signal);

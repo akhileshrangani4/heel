@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import type { Logger } from "../log.ts";
 import { findProposal } from "../proposals/rules.ts";
+import { findRequest, serviceLabel } from "../requests/connection.ts";
 import { getApproval } from "../store/approvals.ts";
 import type { HeelDb } from "../store/db.ts";
 import {
@@ -8,6 +9,7 @@ import {
   dueDeliveries,
   enqueueApprovalNotifications,
   enqueueProposalNotifications,
+  enqueueRequestNotifications,
   findPushSubscription,
   removePushSubscription,
   updateDelivery,
@@ -15,7 +17,7 @@ import {
 import { agents, type NotifyChannel } from "../store/schema.ts";
 import { errorShape } from "../util/error-shape.ts";
 import type { ChannelSender, DeliveryTarget } from "./channels.ts";
-import { approvalUrl, type Notice, nextAttemptAfter, proposalUrl } from "./message.ts";
+import { approvalUrl, type Notice, nextAttemptAfter, proposalUrl, requestUrl } from "./message.ts";
 
 /**
  * Sends notifications (spec: Notifications) from the outbox.
@@ -111,6 +113,27 @@ export class Notifier {
     void this.drain();
   }
 
+  /**
+   * The MCP server's `onAgentRequest`: queues the request's deliveries to
+   * its owner and starts sending without waiting.
+   */
+  agentRequested(requestId: string): void {
+    const queued = enqueueRequestNotifications(this.#deps.db, {
+      orgId: this.#deps.orgId,
+      requestId,
+      channels: this.channels,
+      now: this.#now(),
+    });
+    if (queued === 0) {
+      this.#deps.log.warn(
+        { requestId },
+        "no notification channel reaches this request's owner; it waits on the approval page",
+      );
+      return;
+    }
+    void this.drain();
+  }
+
   /** Sends every due delivery. Concurrent calls share one pass. */
   drain(): Promise<void> {
     this.#draining ??= this.#drainOnce().finally(() => {
@@ -191,6 +214,21 @@ export class Notifier {
   #noticeFor(delivery: DeliveryRow): Notice | null {
     const { db, publicUrl } = this.#deps;
     const now = this.#now();
+    if (delivery.requestId !== null) {
+      const request = findRequest(db, delivery.orgId, delivery.requestId);
+      if (request === null || request.status !== "pending" || request.expiresAt < now) return null;
+      const agent = db
+        .select({ name: agents.name })
+        .from(agents)
+        .where(eq(agents.id, request.agentId))
+        .get();
+      return {
+        kind: "connection",
+        agent: agent?.name ?? "An agent",
+        service: serviceLabel(request.details),
+        url: requestUrl(publicUrl, request.id),
+      };
+    }
     if (delivery.proposalId !== null) {
       const proposal = findProposal(db, delivery.orgId, delivery.proposalId);
       if (proposal === null || proposal.status !== "pending" || proposal.expiresAt < now)

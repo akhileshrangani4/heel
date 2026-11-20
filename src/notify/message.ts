@@ -37,7 +37,19 @@ export interface ProposalNotice {
   url: string;
 }
 
-export type Notice = ApprovalNotice | ProposalNotice;
+/**
+ * An agent asking for a connection (roadmap 2.5). Names the agent and heel's
+ * own name for the service; the alias and the agent's why stay on the page.
+ */
+export interface ConnectionNotice {
+  kind: "connection";
+  agent: string;
+  /** heel's words for the service: "Gmail", "the MCP server at mcp.example.com". */
+  service: string;
+  url: string;
+}
+
+export type Notice = ApprovalNotice | ProposalNotice | ConnectionNotice;
 
 export interface NoticeText {
   title: string;
@@ -45,6 +57,12 @@ export interface NoticeText {
 }
 
 export function noticeText(notice: Notice): NoticeText {
+  if (notice.kind === "connection") {
+    return {
+      title: `${notice.agent} asks you to connect ${notice.service}`,
+      body: "Nothing is connected until you approve it. Open heel to see the request and decide.",
+    };
+  }
   if (notice.kind === "proposal") {
     return {
       title: `${notice.agent} proposes ${describeProposal(notice.rules, notice.hide)}`,
@@ -60,6 +78,11 @@ export function noticeText(notice: Notice): NoticeText {
 /** The approval page link for a request, under the human plane's public URL. */
 export function approvalUrl(publicUrl: URL, approvalId: string): string {
   return new URL(`/approvals/${encodeURIComponent(approvalId)}`, publicUrl).toString();
+}
+
+/** An agent request's page, under the human plane's public URL. */
+export function requestUrl(publicUrl: URL, requestId: string): string {
+  return new URL(`/requests/${encodeURIComponent(requestId)}`, publicUrl).toString();
 }
 
 /** A rule proposal's page, under the human plane's public URL. */

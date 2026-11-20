@@ -183,6 +183,13 @@
       "when": 1795143735145,
       "tag": "0025_proposal_hide",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1795144536901,
+      "tag": "0026_agent_requests",
+      "breakpoints": true
     }
   ]
 }

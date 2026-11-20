@@ -466,6 +466,7 @@ export const CHALLENGE_PURPOSES = [
   "grant",
   "add_device",
   "rules",
+  "connection",
 ] as const;
 export type ChallengePurpose = (typeof CHALLENGE_PURPOSES)[number];
 
@@ -707,6 +708,8 @@ export const notificationDeliveries = sqliteTable(
     approvalId: text("approval_id").references(() => approvals.id),
     /** The rule proposal this tells its owner about (roadmap 2.1). */
     proposalId: text("proposal_id").references(() => ruleProposals.id),
+    /** The agent's request (a connection) this tells its owner about (roadmap 2.5). */
+    requestId: text("request_id").references(() => agentRequests.id),
     userId: text("user_id")
       .notNull()
       .references(() => users.id),
@@ -729,9 +732,15 @@ export const notificationDeliveries = sqliteTable(
       t.channel,
       t.target,
     ),
+    uniqueIndex("notification_deliveries_request_once").on(
+      t.requestId,
+      t.userId,
+      t.channel,
+      t.target,
+    ),
     check(
       "notification_deliveries_subject",
-      sql`("approval_id" IS NULL) <> ("proposal_id" IS NULL)`,
+      sql`("approval_id" IS NOT NULL) + ("proposal_id" IS NOT NULL) + ("request_id" IS NOT NULL) = 1`,
     ),
     index("notification_deliveries_due").on(t.status, t.nextAttemptAt),
     check("notification_deliveries_channel", sql`"channel" IN (${sqlList(NOTIFY_CHANNELS)})`),
@@ -944,3 +953,65 @@ export interface ProposedHide {
   entry: Record<string, unknown>;
   why: string | null;
 }
+
+export const AGENT_REQUEST_KINDS = ["connection"] as const;
+export type AgentRequestKind = (typeof AGENT_REQUEST_KINDS)[number];
+
+export const AGENT_REQUEST_STATUSES = [
+  "pending",
+  "approved",
+  "rejected",
+  "superseded",
+  "expired",
+] as const;
+export type AgentRequestStatus = (typeof AGENT_REQUEST_STATUSES)[number];
+
+/** What a connection request asks for (roadmap 2.5); never a credential. */
+export interface ConnectionRequestDetails {
+  /** A built-in sign-in service, or `mcp` for a remote MCP server. */
+  provider: string;
+  alias: string;
+  /** For `mcp`: the server's URL, and whether it wants OAuth sign-in. */
+  url?: string;
+  oauth?: boolean;
+}
+
+/**
+ * Something an agent asks its owner to set up: a connection now, a new agent
+ * later. It waits for the owner, who approves with a passkey. Nothing is
+ * created and nothing the agent named is contacted before that. Rows are
+ * never changed once decided, so they are the history too.
+ */
+export const agentRequests = sqliteTable(
+  "agent_requests",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    /** Who decides: always the requesting agent's owner. */
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => users.id),
+    agentId: text("agent_id")
+      .notNull()
+      .references(() => agents.id),
+    kind: text("kind", { enum: AGENT_REQUEST_KINDS }).notNull(),
+    details: text("details", { mode: "json" }).$type<ConnectionRequestDetails>().notNull(),
+    /** The agent's own words on why, shown as its claim. */
+    why: text("why"),
+    status: text("status", { enum: AGENT_REQUEST_STATUSES }).notNull(),
+    createdAt: createdAt(),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+    decidedBy: text("decided_by").references(() => users.id),
+    decidedAt: integer("decided_at", { mode: "timestamp_ms" }),
+    /** What approving made: the account's id. */
+    accountId: text("account_id").references(() => accounts.id),
+  },
+  (t) => [
+    index("agent_requests_owner_status").on(t.ownerId, t.status),
+    index("agent_requests_agent_status").on(t.agentId, t.status),
+    check("agent_requests_kind", sql`"kind" IN (${sqlList(AGENT_REQUEST_KINDS)})`),
+    check("agent_requests_status", sql`"status" IN (${sqlList(AGENT_REQUEST_STATUSES)})`),
+  ],
+);

@@ -16,6 +16,7 @@ import {
   noticeText,
   proposalUrl,
   RETRY_DELAYS_MS,
+  requestUrl,
 } from "../../src/notify/message.ts";
 import { loadOrCreateVapidKeys, notifySetup } from "../../src/notify/setup.ts";
 import { tempDir } from "../helpers/store.ts";
@@ -40,6 +41,20 @@ describe("the notice", () => {
       body: "On gmail-work. Open heel to see the full call and decide.",
     });
     expect(approvalUrl(new URL("https://heel.example.com/"), "apr_1")).toBe(NOTICE.url);
+  });
+
+  it("names the agent and heel's word for the service in a connection request, not its alias or why", () => {
+    const notice = {
+      kind: "connection",
+      agent: "inbox-bot",
+      service: "Gmail",
+      url: "https://heel.example.com/requests/req_1",
+    } as const;
+    expect(noticeText(notice)).toEqual({
+      title: "inbox-bot asks you to connect Gmail",
+      body: "Nothing is connected until you approve it. Open heel to see the request and decide.",
+    });
+    expect(requestUrl(new URL("https://heel.example.com/"), "req_1")).toBe(notice.url);
   });
 
   it("tells an owner how many rules an agent proposes, and nothing of the rules themselves", () => {

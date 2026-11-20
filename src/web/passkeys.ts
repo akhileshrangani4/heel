@@ -293,7 +293,15 @@ export type OptionsResult<T> =
 export type AssertionSubject =
   | { purpose: "sign_in"; userId: null }
   | {
-      purpose: "decide" | "resume" | "connect" | "mode" | "grant" | "add_device" | "rules";
+      purpose:
+        | "decide"
+        | "resume"
+        | "connect"
+        | "mode"
+        | "grant"
+        | "add_device"
+        | "rules"
+        | "connection";
       userId: string;
     };
 

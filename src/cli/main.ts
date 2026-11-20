@@ -1334,7 +1334,7 @@ async function statusCommand(args: string[], io: CliIo): Promise<number> {
     `  Waiting:   ${waiting.length === 0 ? "nothing" : `${waiting.length} request${waiting.length === 1 ? "" : "s"}`}`,
     ...waiting.slice(0, 5).map((a) => `    ${a.summary}\n      ${a.url}`),
     ...(waiting.length > 5 ? [`    and ${waiting.length - 5} more: heel tui`] : []),
-    `  Proposals: ${proposals.length === 0 ? "nothing" : `${proposals.length} waiting for you to add or reject`}`,
+    `  From agents: ${proposals.length === 0 ? "nothing" : `${proposals.length} waiting for you to decide`}`,
     ...proposals.slice(0, 5).map((p) => `    ${p.summary}\n      ${p.url}`),
     ...(proposals.length > 5 ? [`    and ${proposals.length - 5} more: heel tui`] : []),
   ];

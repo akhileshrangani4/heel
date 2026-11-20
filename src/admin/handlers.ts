@@ -17,6 +17,7 @@ import {
   workRootsByName,
 } from "../gateway/agents.ts";
 import { describeProposal, orgPendingProposals } from "../proposals/rules.ts";
+import { orgPendingRequests, serviceLabel } from "../requests/connection.ts";
 import { readActivity } from "../store/activity.ts";
 import { listOrgApprovals, listStanding, revokeStanding } from "../store/approvals.ts";
 import type { HeelDb } from "../store/db.ts";
@@ -321,8 +322,9 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
       );
     }
     case "proposals.list": {
-      return adminOk(
-        orgPendingProposals(db, orgId, now).map(({ row, agentName, ownerName }) => ({
+      // Rule proposals and connection requests: everything agents asked their owners for.
+      const proposals = orgPendingProposals(db, orgId, now).map(
+        ({ row, agentName, ownerName }) => ({
           id: row.id,
           agent: agentName,
           owner: ownerName,
@@ -333,7 +335,22 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
           createdAt: row.createdAt.toISOString(),
           expiresAt: row.expiresAt.toISOString(),
           url: new URL(`/proposals/${encodeURIComponent(row.id)}`, deps.publicUrl).href,
-        })),
+        }),
+      );
+      const requests = orgPendingRequests(db, orgId, now).map(({ row, agentName, ownerName }) => ({
+        id: row.id,
+        agent: agentName,
+        owner: ownerName,
+        rules: 0,
+        hide: 0,
+        summary: `${agentName} asks ${ownerName} to connect ${serviceLabel(row.details)} as ${row.details.alias}`,
+        reason: row.why,
+        createdAt: row.createdAt.toISOString(),
+        expiresAt: row.expiresAt.toISOString(),
+        url: new URL(`/requests/${encodeURIComponent(row.id)}`, deps.publicUrl).href,
+      }));
+      return adminOk(
+        [...proposals, ...requests].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
       );
     }
     case "activity.list": {

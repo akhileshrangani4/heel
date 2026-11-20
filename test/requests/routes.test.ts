@@ -1,0 +1,134 @@
+import { eq } from "drizzle-orm";
+import { describe, expect, it } from "vitest";
+import { findRequest, requestConnection } from "../../src/requests/connection.ts";
+import { accounts } from "../../src/store/schema.ts";
+import { attribute, humanPlaneHarness } from "../helpers/human-plane.ts";
+import { oneRule } from "../helpers/pipeline.ts";
+
+/** Connection requests on the human plane (roadmap 2.5): only the agent's owner sees and decides them. */
+
+const READS = oneRule("{ kind: read }", "allow");
+
+function setUp(
+  details: Parameters<typeof requestConnection>[2] = {
+    service: "gmail",
+    alias: "inbox-new",
+    why: "so I can triage your work mail",
+  },
+) {
+  let fetched = 0;
+  const h = humanPlaneHarness({
+    owner: READS,
+    upstreamOAuth: {
+      fetch: async () => {
+        fetched++;
+        return new Response("{}", { status: 500 });
+      },
+    },
+  });
+  const asked = requestConnection(
+    h.t.db,
+    { orgId: h.t.orgId, ownerId: h.t.ownerId, agentId: h.agent.agentId },
+    details,
+    h.clock.now,
+  );
+  if (!asked.ok) throw new Error(asked.problem);
+  return { h, id: asked.requestId, fetched: () => fetched };
+}
+
+const accountNamed = (h: ReturnType<typeof humanPlaneHarness>, alias: string) =>
+  h.t.db.select().from(accounts).where(eq(accounts.alias, alias)).get();
+
+describe("connection requests on the approval page", () => {
+  it("shows the request in heel's words and what the owner's rules would let the agent do", async () => {
+    const { h, id } = setUp();
+    const owner = await h.signIn(await h.enroll());
+    const list = await (await h.fetch("/approvals", { as: owner })).text();
+    expect(list).toContain("asks you to connect <mark>Gmail</mark>");
+    const page = await (await h.fetch(`/requests/${id}`, { as: owner })).text();
+    expect(page).toContain("asks you to connect Gmail");
+    expect(page).toContain("inbox-new");
+    expect(page).toMatch(/its own words; heel didn(&#39;|')t check them/);
+    // The owner's read rule names no account, so it covers the new one: say so.
+    expect(page).toMatch(/a read on inbox-new<\/dt>\s*<dd>\s*<strong>runs<\/strong>/);
+    expect(page).toMatch(/anything else on inbox-new<\/dt>\s*<dd>\s*<strong>is denied<\/strong>/);
+  });
+
+  it("connects it with a passkey, from the stored request, and only then", async () => {
+    const { h, id, fetched } = setUp();
+    const owner = await h.signIn(await h.enroll());
+    const page = await (await h.fetch(`/requests/${id}`, { as: owner })).text();
+    expect(accountNamed(h, "inbox-new")).toBeUndefined();
+
+    const added = await h.ceremony(
+      owner,
+      { url: "/requests/challenge", body: { requestId: id, hash: attribute(page, "data-hash") } },
+      "/requests/confirm",
+    );
+    expect(added.status).toBe(200);
+    expect(accountNamed(h, "inbox-new")).toMatchObject({
+      provider: "gmail",
+      ownerId: h.t.ownerId,
+      status: "reconnect_required",
+    });
+    expect(findRequest(h.t.db, h.t.orgId, id)).toMatchObject({ status: "approved" });
+    // Gmail signs in next, on heel's own page: the request page offers it.
+    const after = await (await h.fetch(`/requests/${id}?approved`, { as: owner })).text();
+    expect(after).toContain("Sign in to Gmail");
+    expect(fetched()).toBe(0);
+  });
+
+  it("contacts an MCP server the agent named only after approval", async () => {
+    const { h, id, fetched } = setUp({
+      service: "mcp",
+      alias: "tracker-new",
+      url: "https://mcp.example.com/mcp",
+      why: "to read your tickets",
+    });
+    const owner = await h.signIn(await h.enroll());
+    const page = await (await h.fetch(`/requests/${id}`, { as: owner })).text();
+    expect(page).toContain("the MCP server at mcp.example.com");
+    expect(page).toContain("https://mcp.example.com/mcp");
+    await h.ceremony(
+      owner,
+      { url: "/requests/challenge", body: { requestId: id, hash: attribute(page, "data-hash") } },
+      "/requests/confirm",
+    );
+    expect(accountNamed(h, "tracker-new")).toMatchObject({ provider: "mcp:tracker-new" });
+    expect(fetched()).toBe(0);
+  });
+
+  it("won't connect over a name that's taken, and says so to the owner only", async () => {
+    // The harness already has a gmail-work account.
+    const { h, id } = setUp({ service: "gmail", alias: "gmail-work" });
+    const owner = await h.signIn(await h.enroll());
+    const page = await (await h.fetch(`/requests/${id}`, { as: owner })).text();
+    expect(page).toContain("already has an account named gmail-work");
+    expect(page).not.toContain("data-hash");
+  });
+
+  it("someone else can't see, connect or reject it; rejecting connects nothing", async () => {
+    const { h, id } = setUp();
+    const owner = await h.signIn(await h.enroll());
+    h.addUser("sam", "admin");
+    const sam = await h.signIn(await h.enroll("sam"));
+    expect((await h.fetch(`/requests/${id}`, { as: sam })).status).toBe(404);
+    const challenge = await h.fetch("/requests/challenge", {
+      as: sam,
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ requestId: id, hash: "x" }),
+    });
+    expect(challenge.status).toBe(404);
+
+    const rejected = await h.fetch(`/requests/${id}/reject`, {
+      as: owner,
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ csrf: owner.csrf }).toString(),
+    });
+    expect(rejected.status).toBe(303);
+    expect(findRequest(h.t.db, h.t.orgId, id)?.status).toBe("rejected");
+    expect(accountNamed(h, "inbox-new")).toBeUndefined();
+  });
+});
