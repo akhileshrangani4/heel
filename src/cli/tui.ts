@@ -26,6 +26,44 @@ export interface ApprovalItem {
   url: string;
 }
 
+/** A rule proposal waiting for its owner (roadmap 2.1), as `proposals.list` returns it. */
+export interface ProposalItem {
+  id: string;
+  agent: string;
+  owner: string;
+  rules: number;
+  summary: string;
+  reason: string | null;
+  createdAt: string;
+  expiresAt: string;
+  url: string;
+}
+
+/**
+ * Pure: proposals join the Requests list as waiting items, newest first
+ * with the rest. Enter opens the proposal's page, where the owner adds it
+ * with a passkey, just as for a request.
+ */
+export function withProposals(
+  approvals: readonly ApprovalItem[],
+  proposals: readonly ProposalItem[],
+): ApprovalItem[] {
+  const asItems = proposals.map(
+    (p): ApprovalItem => ({
+      id: p.id,
+      agent: p.agent,
+      account: `${p.owner}'s rules`,
+      status: "pending",
+      summary: p.summary,
+      reason: p.reason,
+      createdAt: p.createdAt,
+      expiresAt: p.expiresAt,
+      url: p.url,
+    }),
+  );
+  return [...approvals, ...asItems].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
 export interface ActivityItem {
   id: number;
   at: string;
@@ -450,9 +488,10 @@ async function call(config: HeelConfig, request: AdminRequest): Promise<unknown>
 /** One refresh: everything the screen shows, newest activity first. */
 async function load(config: HeelConfig, previous: TuiData): Promise<TuiData> {
   try {
-    const [ping, approvals, activity, agents, accounts, pauses] = await Promise.all([
+    const [ping, approvals, proposals, activity, agents, accounts, pauses] = await Promise.all([
       call(config, { method: "ping" }),
       call(config, { method: "approvals.list" }),
+      call(config, { method: "proposals.list" }),
       call(config, { method: "activity.list", params: { limit: 200 } }),
       call(config, { method: "agent.list" }),
       call(config, { method: "account.list" }),
@@ -460,7 +499,7 @@ async function load(config: HeelConfig, previous: TuiData): Promise<TuiData> {
     ]);
     return {
       version: (ping as { version?: string }).version ?? null,
-      approvals: approvals as ApprovalItem[],
+      approvals: withProposals(approvals as ApprovalItem[], proposals as ProposalItem[]),
       activity: activity as ActivityItem[],
       agents: agents as AgentItem[],
       accounts: accounts as AccountItem[],

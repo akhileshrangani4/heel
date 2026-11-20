@@ -703,9 +703,10 @@ export const notificationDeliveries = sqliteTable(
     orgId: text("org_id")
       .notNull()
       .references(() => orgs.id),
-    approvalId: text("approval_id")
-      .notNull()
-      .references(() => approvals.id),
+    /** The request this tells someone about; exactly one of this and `proposalId` is set. */
+    approvalId: text("approval_id").references(() => approvals.id),
+    /** The rule proposal this tells its owner about (roadmap 2.1). */
+    proposalId: text("proposal_id").references(() => ruleProposals.id),
     userId: text("user_id")
       .notNull()
       .references(() => users.id),
@@ -722,6 +723,16 @@ export const notificationDeliveries = sqliteTable(
   },
   (t) => [
     uniqueIndex("notification_deliveries_once").on(t.approvalId, t.userId, t.channel, t.target),
+    uniqueIndex("notification_deliveries_proposal_once").on(
+      t.proposalId,
+      t.userId,
+      t.channel,
+      t.target,
+    ),
+    check(
+      "notification_deliveries_subject",
+      sql`("approval_id" IS NULL) <> ("proposal_id" IS NULL)`,
+    ),
     index("notification_deliveries_due").on(t.status, t.nextAttemptAt),
     check("notification_deliveries_channel", sql`"channel" IN (${sqlList(NOTIFY_CHANNELS)})`),
     check("notification_deliveries_status", sql`"status" IN (${sqlList(DELIVERY_STATUSES)})`),

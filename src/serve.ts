@@ -584,6 +584,8 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         version,
         now,
         slots,
+        // Tell the owner a proposal is waiting, the same way as a request (roadmap 2.1).
+        onRuleProposal: (proposalId) => notifier.ruleProposed(proposalId),
         // Code mode only where the sandbox runs (D6b): heel never loads Monty itself.
         ...(sandbox.ok && {
           codeWorker: () =>

@@ -2,11 +2,11 @@ import type { WebClient } from "@slack/web-api";
 import type { Transporter } from "nodemailer";
 import type { PushSubscription, SendOptions, sendNotification, VapidKeys } from "web-push";
 import type { NotifyChannel } from "../store/schema.ts";
-import { type ApprovalNotice, noticeText } from "./message.ts";
+import { type Notice, noticeText } from "./message.ts";
 
 /**
  * The three ways a notification leaves heel (spec: Notifications). Each
- * sender turns an `ApprovalNotice` into one message on its channel and
+ * sender turns a `Notice` into one message on its channel and
  * reports what happened, so the notifier can mark the delivery sent, retry
  * it, or stop trying.
  */
@@ -25,7 +25,7 @@ export type DeliveryTarget =
 
 export interface ChannelSender {
   readonly channel: NotifyChannel;
-  send(target: DeliveryTarget, notice: ApprovalNotice): Promise<SendOutcome>;
+  send(target: DeliveryTarget, notice: Notice): Promise<SendOutcome>;
 }
 
 /** A short, content-free description of an error for the outbox's `last_error`. */

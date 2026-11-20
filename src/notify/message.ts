@@ -1,5 +1,5 @@
 /**
- * What an approval notification says, and how often heel retries one.
+ * What a notification says, and how often heel retries one.
  * Pure.
  *
  * A notification only tells someone that a request is waiting and where to
@@ -11,6 +11,7 @@
  */
 
 export interface ApprovalNotice {
+  kind: "approval";
   agent: string;
   /** The normalized action, e.g. `email.send`, or the raw tool name when there is none. */
   what: string;
@@ -19,12 +20,33 @@ export interface ApprovalNotice {
   url: string;
 }
 
+/**
+ * A rule proposal waiting for its owner (roadmap 2.1). Like a request, it
+ * names only the agent and how many rules, never the rules themselves: they
+ * are the agent's words, and the page is where the owner reads them.
+ */
+export interface ProposalNotice {
+  kind: "proposal";
+  agent: string;
+  rules: number;
+  /** The proposal's page. */
+  url: string;
+}
+
+export type Notice = ApprovalNotice | ProposalNotice;
+
 export interface NoticeText {
   title: string;
   body: string;
 }
 
-export function noticeText(notice: ApprovalNotice): NoticeText {
+export function noticeText(notice: Notice): NoticeText {
+  if (notice.kind === "proposal") {
+    return {
+      title: `${notice.agent} proposes ${notice.rules === 1 ? "a new rule" : `${notice.rules} new rules`}`,
+      body: "Nothing changes until you add them. Open heel to read them and decide.",
+    };
+  }
   return {
     title: `${notice.agent} is asking to ${notice.what}`,
     body: `On ${notice.account}. Open heel to see the full call and decide.`,
@@ -34,6 +56,11 @@ export function noticeText(notice: ApprovalNotice): NoticeText {
 /** The approval page link for a request, under the human plane's public URL. */
 export function approvalUrl(publicUrl: URL, approvalId: string): string {
   return new URL(`/approvals/${encodeURIComponent(approvalId)}`, publicUrl).toString();
+}
+
+/** A rule proposal's page, under the human plane's public URL. */
+export function proposalUrl(publicUrl: URL, proposalId: string): string {
+  return new URL(`/proposals/${encodeURIComponent(proposalId)}`, publicUrl).toString();
 }
 
 /**

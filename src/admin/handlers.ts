@@ -16,6 +16,7 @@ import {
   setWorkRoots,
   workRootsByName,
 } from "../gateway/agents.ts";
+import { orgPendingProposals } from "../proposals/rules.ts";
 import { readActivity } from "../store/activity.ts";
 import { listOrgApprovals, listStanding, revokeStanding } from "../store/approvals.ts";
 import type { HeelDb } from "../store/db.ts";
@@ -308,6 +309,21 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
             url: new URL(`/approvals/${encodeURIComponent(row.id)}`, deps.publicUrl).href,
           };
         }),
+      );
+    }
+    case "proposals.list": {
+      return adminOk(
+        orgPendingProposals(db, orgId, now).map(({ row, agentName, ownerName }) => ({
+          id: row.id,
+          agent: agentName,
+          owner: ownerName,
+          rules: row.rules.length,
+          summary: `${agentName} proposes ${row.rules.length === 1 ? "a new rule" : `${row.rules.length} new rules`} for ${ownerName}'s rules`,
+          reason: row.reason,
+          createdAt: row.createdAt.toISOString(),
+          expiresAt: row.expiresAt.toISOString(),
+          url: new URL(`/proposals/${encodeURIComponent(row.id)}`, deps.publicUrl).href,
+        })),
       );
     }
     case "activity.list": {
