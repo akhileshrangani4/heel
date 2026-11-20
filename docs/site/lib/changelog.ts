@@ -7,7 +7,7 @@ import { join } from 'node:path';
  * roadmap's "latest release" read the same thing.
  */
 
-export type ChangeKind = 'new' | 'fixed' | 'other';
+export type ChangeKind = 'new' | 'fixed' | 'docs' | 'other';
 
 export interface Change {
   /** The conventional-commit scope, e.g. `web`, when there is one. */
@@ -25,7 +25,11 @@ export interface Release {
   groups: { kind: ChangeKind; changes: Change[] }[];
 }
 
-const KIND: Record<string, ChangeKind> = { Features: 'new', 'Bug Fixes': 'fixed' };
+const KIND: Record<string, ChangeKind> = {
+  Features: 'new',
+  'Bug Fixes': 'fixed',
+  Documentation: 'docs',
+};
 
 /** "D5a MCP agent plane…" reads as "MCP agent plane…": the D/A codes are internal plan ids. */
 function plain(text: string): string {
