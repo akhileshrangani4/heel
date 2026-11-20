@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { ImageResponse } from 'next/og';
 
 /** The OG card: the home page's look at 1200×630, for the site and every docs page. */
@@ -10,13 +12,13 @@ const DOG = String.raw`   / \__
  /   (_____/
 /_____/   U`;
 
-/** A Google font as TTF, subset to `text` (next/og can't use woff2). */
-async function googleFont(family: string, weight: number, text: string): Promise<ArrayBuffer> {
-  const url = `https://fonts.googleapis.com/css2?family=${family.replaceAll(' ', '+')}:wght@${weight}&text=${encodeURIComponent(text)}`;
-  const css = await (await fetch(url)).text();
-  const src = /src: url\((.+?)\) format\('(opentype|truetype)'\)/.exec(css)?.[1];
-  if (!src) throw new Error(`no TTF for ${family} ${weight}`);
-  return (await fetch(src)).arrayBuffer();
+/**
+ * The card's fonts, as TTF files kept in `lib/fonts` (next/og can't use woff2).
+ * Kept in the repo rather than fetched from Google Fonts at build time, so a
+ * network hiccup can't fail the build.
+ */
+function font(file: string): Promise<Buffer> {
+  return readFile(join(process.cwd(), 'lib', 'fonts', file));
 }
 
 export async function ogCard({
@@ -28,11 +30,10 @@ export async function ogCard({
   description: string;
   label: string;
 }): Promise<ImageResponse> {
-  const sans = `heel${title}${description}${label}useheel.dev`;
   const [regular, semibold, mono] = await Promise.all([
-    googleFont('Inter', 400, sans),
-    googleFont('Inter', 600, sans),
-    googleFont('Geist Mono', 400, `${DOG}${label}$ npm install -g useheel`),
+    font('inter-400.ttf'),
+    font('inter-600.ttf'),
+    font('geist-mono-400.ttf'),
   ]);
   return new ImageResponse(
     <div
