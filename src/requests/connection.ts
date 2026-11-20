@@ -45,7 +45,7 @@ export function needsKey(provider: string): boolean {
 /** What key each service takes, as the owner reads it beside the field (same as docs/connect.md). */
 export const KEY_HINTS: Readonly<Record<(typeof KEY_SERVICES)[number], string>> = {
   github:
-    "A token: run gh auth token, or make a fine-grained token with only what the agent needs.",
+    "A fine-grained token with only the repositories and permissions the agent needs. (gh auth token works too, but gives everything your gh login can do.)",
   slack: "A bot token (xoxb-…) from your Slack app.",
   linear: "A personal API key (lin_api_…).",
   notion: "An internal integration secret, shared with the pages the agent needs.",
@@ -68,6 +68,18 @@ export const RequestConnectionInput = z
     why: z.string().max(2_000).optional(),
   })
   .superRefine((input, ctx) => {
+    // An alias naming another service (github "stripe-live") could get the owner to paste
+    // the wrong key, which heel would then send to this service.
+    const other = needsKey(input.service)
+      ? REQUESTABLE_SERVICES.find((name) => name !== input.service && input.alias.startsWith(name))
+      : undefined;
+    if (other !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["alias"],
+        message: `an alias for ${input.service} can't start with ${other}`,
+      });
+    }
     if (input.service === "mcp") {
       const problem =
         input.url === undefined ? "mcp needs the server's url" : agentUrlProblem(input.url);

@@ -228,7 +228,10 @@ export function requestPage(props: RequestPageProps): Html {
                       id="request-key-input"
                       name="key"
                       type="password"
-                      autocomplete="off"
+                      autocomplete="new-password"
+                      data-1p-ignore
+                      data-lpignore="true"
+                      data-bwignore
                       spellcheck="false"
                       required
                     />
