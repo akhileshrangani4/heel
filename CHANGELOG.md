@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.5](https://github.com/akhileshrangani4/heel/compare/v0.2.4...v0.2.5) (2026-11-20)
+
+
+### Documentation
+
+* **site:** the roadmap shows the new home page as shipped ([#170](https://github.com/akhileshrangani4/heel/issues/170)) ([dff785e](https://github.com/akhileshrangani4/heel/commit/dff785e846ab123f32c956b3c6c8e8c657b6b4dc))
+
 ## [0.2.4](https://github.com/akhileshrangani4/heel/compare/v0.2.3...v0.2.4) (2026-11-20)
 
 
