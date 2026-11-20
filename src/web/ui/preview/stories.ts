@@ -108,8 +108,8 @@ export const PREVIEW_CEREMONY_SCRIPT = `
 })();
 `;
 
-const ALICE: Viewer = { name: "alice", role: "member" };
-const ADMIN: Viewer = { name: "dana", role: "admin" };
+const ALICE: Viewer = { name: "alice", role: "member", csrfToken: "preview" };
+const ADMIN: Viewer = { name: "dana", role: "admin", csrfToken: "preview" };
 
 const form = (action: string): FormTarget => ({ action, csrfToken: "preview-csrf-token" });
 const PAUSE_FORM = form("/pause");

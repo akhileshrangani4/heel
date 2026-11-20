@@ -93,7 +93,7 @@ export interface SignedInEnv {
 export const CSRF_HEADER = "x-heel-csrf";
 
 export function viewerOf(session: SessionView): Viewer {
-  return { name: session.userName, role: session.role };
+  return { name: session.userName, role: session.role, csrfToken: session.csrfToken };
 }
 
 /** Renders a full page. Every human-plane page goes through `page()`, so all share one layout. */

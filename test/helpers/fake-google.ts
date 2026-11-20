@@ -49,7 +49,10 @@ export class FakeGoogle {
     if (url.origin + url.pathname !== GOOGLE_AUTHORIZE_URL) throw new Error("not Google's page");
     const params = url.searchParams;
     if (params.get("client_id") !== TEST_GOOGLE_CLIENT.clientId) throw new Error("wrong client");
-    if (params.get("access_type") !== "offline" || params.get("prompt") !== "consent") {
+    if (
+      params.get("access_type") !== "offline" ||
+      params.get("prompt") !== "select_account consent"
+    ) {
       throw new Error("heel must ask for offline access with consent");
     }
     if (params.get("code_challenge_method") !== "S256") throw new Error("no PKCE");

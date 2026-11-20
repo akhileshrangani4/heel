@@ -11,6 +11,8 @@ import { type FetchFn, grantedScopes, type ProviderSignIn, SignInError } from ".
  * Facts from Google's "Using OAuth 2.0 for Web Server Applications":
  * - `access_type=offline` returns a refresh token; `prompt=consent` makes
  *   Google issue one again when the person has consented before.
+ *   `prompt=select_account` shows Google's account list every time, so
+ *   someone signed in to several accounts can pick (or switch) the right one.
  * - The token response's `scope` is the space-separated list actually
  *   granted. People can untick scopes, so heel checks it.
  * - A revoked or expired grant answers `invalid_grant`.
@@ -50,7 +52,7 @@ export function googleAuthorizeUrl(
     response_type: "code",
     scope: scopes.join(" "),
     access_type: "offline",
-    prompt: "consent",
+    prompt: "select_account consent",
     state: input.state,
     code_challenge: input.challenge,
     code_challenge_method: "S256",

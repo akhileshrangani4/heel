@@ -89,7 +89,10 @@ a{color:var(--link);text-underline-offset:.2em}
 .site nav a{text-decoration:none;padding:.3rem .55rem;border-radius:8px;white-space:nowrap;display:inline-block;color:var(--muted);font-size:.93rem}
 .site nav a:hover{color:var(--text);background:var(--surface)}
 .site nav a[aria-current="page"]{color:var(--text);font-weight:600;background:var(--bg);box-shadow:inset 0 0 0 1px var(--line)}
-.site .who{margin-left:auto;color:var(--muted);font-size:.88rem}
+.site .account{margin-left:auto;display:flex;align-items:center;gap:.75rem}
+.site .who{color:var(--muted);font-size:.88rem}
+.site .sign-out{font:inherit;font-size:.88rem;color:var(--muted);background:none;border:0;padding:.3rem .55rem;border-radius:8px;cursor:pointer}
+.site .sign-out:hover{color:var(--text);background:var(--surface)}
 .subnav{margin:0 0 1rem}
 .subnav ul{display:flex;flex-wrap:wrap;gap:.25rem;list-style:none;margin:0;padding:.25rem;background:var(--surface);border-radius:10px;width:fit-content;max-width:100%}
 .subnav a{display:inline-block;padding:.3rem .7rem;border-radius:7px;color:var(--muted);text-decoration:none;font-size:.9rem;white-space:nowrap}
@@ -209,6 +212,8 @@ body:has(.ap){background:var(--page)}
   .ap-more{margin-top:.25rem}
   .site{padding:.6rem 1rem 0;gap:.4rem 1rem}
   .site .who{display:none}
+  .site .account{order:1}
+  .site nav{order:2}
   .site nav{flex-basis:100%}
   .site nav ul{flex-wrap:nowrap;justify-content:space-between;gap:0;margin:0 -.4rem}
   .site nav a{padding:.35rem .4rem;font-size:.85rem}
