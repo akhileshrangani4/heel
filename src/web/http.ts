@@ -79,6 +79,8 @@ export interface HumanPlaneDeps {
   ruleFiles?: { paths: RulesPaths; reload: () => void };
   /** `heel serve --watch`: rows with no stored mode behave as shadow (A3). */
   watchFallback: boolean;
+  /** Resolves a host name to its addresses; tests pass a fake. Defaults to DNS. */
+  resolveHost?: (host: string) => Promise<readonly string[]>;
   /** Messages hidden from agents since heel started, by reason (A5, I-44); absent in tests. */
   hiddenCounts?: () => Readonly<Record<string, number>>;
   now: () => Date;

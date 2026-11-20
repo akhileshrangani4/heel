@@ -1,7 +1,9 @@
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
+import { revokeAgent } from "../../src/gateway/agents.ts";
 import { findRequest, requestConnection } from "../../src/requests/connection.ts";
 import { accounts } from "../../src/store/schema.ts";
+import { removeAccount } from "../../src/vault/manage.ts";
 import { attribute, humanPlaneHarness } from "../helpers/human-plane.ts";
 import { oneRule } from "../helpers/pipeline.ts";
 
@@ -50,8 +52,8 @@ describe("connection requests on the approval page", () => {
     expect(page).toContain("inbox-new");
     expect(page).toMatch(/its own words; heel didn(&#39;|')t check them/);
     // The owner's read rule names no account, so it covers the new one: say so.
-    expect(page).toMatch(/a read on inbox-new<\/dt>\s*<dd>\s*<strong>runs<\/strong>/);
-    expect(page).toMatch(/anything else on inbox-new<\/dt>\s*<dd>\s*<strong>is denied<\/strong>/);
+    expect(page).toContain("names no account, so it covers every one");
+    expect(page).toMatch(/<strong>runs<\/strong>/);
   });
 
   it("connects it with a passkey, from the stored request, and only then", async () => {
@@ -130,5 +132,70 @@ describe("connection requests on the approval page", () => {
     expect(rejected.status).toBe(303);
     expect(findRequest(h.t.db, h.t.orgId, id)?.status).toBe("rejected");
     expect(accountNamed(h, "inbox-new")).toBeUndefined();
+  });
+});
+
+describe("what an agent can't do with a connection request", () => {
+  it("can't name a host that resolves inside the network; heel checks before approving", async () => {
+    let fetched = 0;
+    const h = humanPlaneHarness({
+      owner: READS,
+      upstreamOAuth: {
+        fetch: async () => {
+          fetched++;
+          return new Response("{}");
+        },
+      },
+      resolveHost: async () => ["10.0.0.5"],
+    });
+    const asked = requestConnection(
+      h.t.db,
+      { orgId: h.t.orgId, ownerId: h.t.ownerId, agentId: h.agent.agentId },
+      { service: "mcp", alias: "looks-public", url: "https://mcp.looks-public.example/mcp" },
+      h.clock.now,
+    );
+    if (!asked.ok) throw new Error(asked.problem);
+    const owner = await h.signIn(await h.enroll());
+    const page = await (await h.fetch(`/requests/${asked.requestId}`, { as: owner })).text();
+    const done = await h.ceremony(
+      owner,
+      {
+        url: "/requests/challenge",
+        body: { requestId: asked.requestId, hash: attribute(page, "data-hash") },
+      },
+      "/requests/confirm",
+    );
+    expect(done.status).toBe(409);
+    expect(await done.text()).toContain("private address");
+    expect(accountNamed(h, "looks-public")).toBeUndefined();
+    expect(findRequest(h.t.db, h.t.orgId, asked.requestId)?.status).toBe("pending");
+    expect(fetched).toBe(0);
+  });
+
+  it("an account made from a request can be removed, and the request keeps its history", async () => {
+    const { h, id } = setUp();
+    const owner = await h.signIn(await h.enroll());
+    const page = await (await h.fetch(`/requests/${id}`, { as: owner })).text();
+    await h.ceremony(
+      owner,
+      { url: "/requests/challenge", body: { requestId: id, hash: attribute(page, "data-hash") } },
+      "/requests/confirm",
+    );
+    expect(accountNamed(h, "inbox-new")).toBeDefined();
+    removeAccount(h.t.db, h.t.orgId, "inbox-new", h.clock.now);
+    expect(accountNamed(h, "inbox-new")).toBeUndefined();
+    expect(findRequest(h.t.db, h.t.orgId, id)).toMatchObject({
+      status: "approved",
+      accountId: null,
+    });
+  });
+
+  it("a revoked agent's request can't be connected", async () => {
+    const { h, id } = setUp();
+    revokeAgent(h.t.db, h.t.orgId, h.agent.agentName, h.clock.now);
+    const owner = await h.signIn(await h.enroll());
+    const page = await (await h.fetch(`/requests/${id}`, { as: owner })).text();
+    expect(page).toContain("has been revoked");
+    expect(page).not.toContain("data-hash");
   });
 });

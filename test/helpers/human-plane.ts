@@ -92,6 +92,8 @@ export function humanPlaneHarness(
     rulesHome?: string;
     /** heel's built-in Google client (roadmap 1.14), used when `providerClients.google` is unset. */
     builtInGoogle?: BuiltInGoogleClient;
+    /** What host names resolve to (connection requests check this before approval). */
+    resolveHost?: (host: string) => Promise<readonly string[]>;
   } = {},
 ): HumanPlaneHarness {
   const h = approvalHarness(options);
@@ -121,6 +123,8 @@ export function humanPlaneHarness(
     watchFallback: false,
     ...(options.oidc === undefined ? {} : { oidc: options.oidc }),
     ...(options.builtInGoogle === undefined ? {} : { builtInGoogle: options.builtInGoogle }),
+    // No real DNS in tests: every name resolves to a public documentation address unless a test says otherwise.
+    resolveHost: options.resolveHost ?? (async () => ["93.184.216.34"]),
     ...(options.rulesHome === undefined
       ? {}
       : { ruleFiles: { paths: rulesPaths(options.rulesHome), reload: () => {} } }),

@@ -1,16 +1,21 @@
+import { lookup } from "node:dns/promises";
 import { and, eq } from "drizzle-orm";
 import { type Context, Hono } from "hono";
 import { canonicalHash } from "../../core/canonical.ts";
 import { missingSignInSetup } from "../../definitions/sign-in-setup.ts";
+import { compileGrant } from "../../grants/compile.ts";
 import {
+  approveRequest,
   findRequest,
-  markApproved,
   pendingRequests,
+  publicHostProblem,
   type RequestRow,
   rejectRequest,
   serviceLabel,
 } from "../../requests/connection.ts";
 import { coverage } from "../../requests/coverage.ts";
+import { liveGrants } from "../../store/grants.ts";
+import { modeFor } from "../../store/modes.ts";
 import { accounts, agents, users } from "../../store/schema.ts";
 import { ConnectError, connectAccount } from "../../vault/connect.ts";
 import {
@@ -59,6 +64,11 @@ function ownRequest(deps: HumanPlaneDeps, session: SessionView, id: string): Req
   return row !== null && row.ownerId === session.userId ? row : null;
 }
 
+/** Every address a host name resolves to. */
+async function resolveAll(host: string): Promise<string[]> {
+  return (await lookup(host, { all: true })).map((a) => a.address);
+}
+
 /** What the passkey signs: the request and exactly what it asks for. */
 function requestHash(row: RequestRow): string {
   return canonicalHash({ id: row.id, kind: row.kind, details: row.details });
@@ -66,6 +76,14 @@ function requestHash(row: RequestRow): string {
 
 /** Why it can't be connected as asked; checked when the page loads and again on confirm. */
 function problemOf(deps: HumanPlaneDeps, row: RequestRow): string | null {
+  const agent = deps.db
+    .select({ revokedAt: agents.revokedAt })
+    .from(agents)
+    .where(eq(agents.id, row.agentId))
+    .get();
+  if (agent === undefined || agent.revokedAt !== null) {
+    return "The agent that asked has been revoked. Reject this request.";
+  }
   const taken = deps.db
     .select({ id: accounts.id })
     .from(accounts)
@@ -148,7 +166,21 @@ export function requestRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
             ? null
             : { by: nameOf(deps, "user", row.decidedBy), at: row.decidedAt },
         now,
-        coverage: coverage(deps.rules.set, nameOf(deps, "user", row.ownerId), agent, details),
+        coverage: coverage(deps.rules.set, nameOf(deps, "user", row.ownerId), agent, details, {
+          grants: liveGrants(deps.db, deps.orgId, row.agentId, now).flatMap((g) => {
+            try {
+              return [{ id: g.id, rule: compileGrant(g.match, { id: g.id }).rule }];
+            } catch {
+              return [];
+            }
+          }),
+          mode: modeFor(
+            deps.db,
+            deps.orgId,
+            row.ownerId,
+            deps.watchFallback ? "shadow" : "enforce",
+          ),
+        }),
         problem: problemOf(deps, row),
         setup: missingSignInSetup(details.provider, signIns),
         hash: requestHash(row),
@@ -157,7 +189,7 @@ export function requestRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
           csrfToken: session.csrfToken,
         },
         signIn:
-          account !== undefined && account.status !== "active"
+          account !== undefined && account.status !== "active" && deps.upstreamOAuth !== null
             ? { action: "/connections/sign-in", csrfToken: session.csrfToken }
             : null,
         // Only the outcome the request actually had, whatever the link says.
@@ -231,26 +263,40 @@ export function requestRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       return c.json({ ok: false, message: "That request isn't waiting for you." }, 409);
     }
     const { details } = row;
-    let accountId: string;
+    const problem = problemOf(deps, row);
+    if (problem !== null) return c.json({ ok: false, message: problem }, 409);
+    // A name the agent gave may resolve inside the network; check before heel ever contacts it.
+    if (details.url !== undefined) {
+      const unsafe = await publicHostProblem(details.url, deps.resolveHost ?? resolveAll);
+      if (unsafe !== null) return c.json({ ok: false, message: unsafe }, 409);
+    }
+    let approved: ReturnType<typeof approveRequest>;
     try {
-      accountId = connectAccount(
+      approved = approveRequest(
         deps.db,
-        deps.upstreamOAuth?.vault ?? null,
-        {
-          orgId: deps.orgId,
-          ownerId: row.ownerId,
-          provider: details.provider,
-          alias: details.alias,
-          ...(details.url === undefined ? {} : { url: details.url }),
-          ...(details.oauth === undefined ? {} : { oauth: details.oauth }),
-        },
+        row,
+        session.userId,
         now,
-      ).accountId;
+        () =>
+          connectAccount(
+            deps.db,
+            deps.upstreamOAuth?.vault ?? null,
+            {
+              orgId: deps.orgId,
+              ownerId: row.ownerId,
+              provider: details.provider,
+              alias: details.alias,
+              ...(details.url === undefined ? {} : { url: details.url }),
+              ...(details.oauth === undefined ? {} : { oauth: details.oauth }),
+            },
+            now,
+          ).accountId,
+      );
     } catch (error) {
       if (!(error instanceof ConnectError)) throw error;
       return c.json({ ok: false, message: error.message }, 409);
     }
-    markApproved(deps.db, row, accountId, session.userId, now);
+    if (!approved.ok) return c.json({ ok: false, message: approved.problem }, 409);
     deps.log.warn(
       {
         request: row.id,

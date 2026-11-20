@@ -1,24 +1,48 @@
 import { describeRule } from "../core/rules/cases.ts";
-import { evaluate, NO_STANDING_APPROVALS, type RuleSet } from "../core/rules/evaluate.ts";
+import type { CompiledRule } from "../core/rules/compile.ts";
+import { type RuleSet, rulesFor } from "../core/rules/evaluate.ts";
+import { resolveField } from "../core/rules/facts.ts";
+import { evalCondition } from "../core/rules/match.ts";
 import type { ConnectionRequestDetails } from "../store/schema.ts";
 import { mcpProvider } from "../vault/connect.ts";
 
 /**
- * What the owner's rules would let the requesting agent do with a new
- * account, worked out by heel's real evaluation on two sample calls: a read
- * and anything else. Approving a connection loosens things (a rule that
- * names no account covers the new one at once), so the request page shows
- * this before the passkey. Pure.
+ * Which of the owner's rules, and the requesting agent's grants, would cover
+ * a new account. Approving a connection loosens things: a rule that names no
+ * account covers the new one at once. The request page lists these before
+ * the passkey. Pure.
+ *
+ * A rule covers the account when its account and provider conditions, if it
+ * has any, hold for it. Its other conditions (the action, the tool, the
+ * arguments) only narrow which calls it lets through, so the page says "for
+ * calls it matches" rather than guessing a verdict from a made-up call.
+ * Rules that only deny are left out: they can't let anything through.
  */
 
-export type CoverageVerdict = "allow" | "ask" | "deny" | "depends";
+export interface CoveringRule {
+  /** As `heel rules test` names a rule, or "grant <id>". */
+  rule: string;
+  decision: "allow" | "ask";
+  /** True when it names this account or provider; false when it names no account at all. */
+  namesIt: boolean;
+}
 
-export interface CoverageLine {
-  /** "a read", "anything else", "a call" (an MCP server's tools have no kind). */
-  call: string;
-  verdict: CoverageVerdict;
-  /** The rule that decides it, as `heel rules test` names one; null for the default deny. */
-  rule: string | null;
+export interface Coverage {
+  rules: CoveringRule[];
+  /** The owner's rollout mode. Watch lets calls through that rules would deny or ask about. */
+  mode: "enforce" | "watch";
+}
+
+const SCOPE_KEYS: ReadonlySet<string> = new Set(["account", "provider"]);
+
+function covers(rule: CompiledRule, facts: { agent: string; account: string; provider: string }) {
+  const scoped = rule.conditions.filter(
+    (c) => c.field.kind === "text" && SCOPE_KEYS.has(c.field.name),
+  );
+  const holds = scoped.every(
+    (c) => evalCondition(c, resolveField({ ...facts, items: 1 }, c.field)) === true,
+  );
+  return { holds, namesIt: scoped.length > 0 };
 }
 
 export function coverage(
@@ -26,45 +50,23 @@ export function coverage(
   owner: string,
   agent: string,
   details: ConnectionRequestDetails,
-): CoverageLine[] {
-  // An MCP passthrough account is stored under provider `mcp`, and its tools
-  // are never read-only to heel, so one sample covers it.
-  const samples: [string, "read" | "write" | undefined][] =
-    details.provider === "mcp"
-      ? [["a call", undefined]]
-      : [
-          ["a read", "read"],
-          ["anything else", "write"],
-        ];
-  return samples.map(([call, kind]) => {
-    const evaluation = evaluate(set, {
-      owner,
-      facts: {
-        agent,
-        account: details.alias,
-        // An MCP account is stored, and matched by rules, as `mcp:<alias>`.
-        provider: details.provider === "mcp" ? mcpProvider(details.alias) : details.provider,
-        ...(kind === undefined ? {} : { kind }),
-        items: 1,
-      },
-      mode: "enforce",
-      // A rule that checks the account's state can't be judged ahead of time.
-      state: () => "unavailable",
-      counted: () => 0,
-      standing: NO_STANDING_APPROVALS,
-    });
-    const { verdict } = evaluation;
-    if (verdict.decision === "deny" && verdict.reason === "state_check_unavailable") {
-      return {
-        call,
-        verdict: "depends",
-        rule: verdict.rule === null ? null : describeRule(verdict.rule),
-      };
-    }
-    return {
-      call,
-      verdict: verdict.decision,
-      rule: verdict.rule === null ? null : describeRule(verdict.rule),
-    };
-  });
+  extra: { grants: readonly { id: string; rule: CompiledRule }[]; mode: string },
+): Coverage {
+  const facts = {
+    agent,
+    account: details.alias,
+    // An MCP account is stored, and matched by rules, as `mcp:<alias>`.
+    provider: details.provider === "mcp" ? mcpProvider(details.alias) : details.provider,
+  };
+  const rules: CoveringRule[] = [];
+  for (const rule of set === null ? [] : rulesFor(set, owner)) {
+    if (rule.decision === "deny") continue;
+    const { holds, namesIt } = covers(rule, facts);
+    if (holds) rules.push({ rule: describeRule(rule), decision: rule.decision, namesIt });
+  }
+  for (const grant of extra.grants) {
+    const { holds, namesIt } = covers(grant.rule, facts);
+    if (holds) rules.push({ rule: `grant ${grant.id}`, decision: "allow", namesIt });
+  }
+  return { rules, mode: extra.mode === "enforce" ? "enforce" : "watch" };
 }

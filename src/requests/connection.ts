@@ -1,5 +1,7 @@
-import { and, count, desc, eq, lt } from "drizzle-orm";
+import { isIP } from "node:net";
+import { and, count, desc, eq, gt, lt } from "drizzle-orm";
 import { z } from "zod";
+import { isPublicAddress } from "../runner/egress.ts";
 import type { HeelDb } from "../store/db.ts";
 import { newId } from "../store/ids.ts";
 import { agentRequests, agents, type ConnectionRequestDetails, users } from "../store/schema.ts";
@@ -25,6 +27,8 @@ import { agentRequests, agents, type ConnectionRequestDetails, users } from "../
 export const REQUEST_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 /** Requests one agent can have waiting at once; each one notifies its owner. */
 export const MAX_PENDING_PER_AGENT = 5;
+/** Requests one agent can make in an hour, replaced ones included, so it can't flood its owner. */
+export const MAX_PER_HOUR = 10;
 const MAX_WHY_CHARS = 200;
 
 /** Built-in services an agent may ask for: each signs in on heel's page, so no secret passes the agent. */
@@ -56,10 +60,23 @@ export const RequestConnectionInput = z
   });
 export type RequestConnectionInput = z.input<typeof RequestConnectionInput>;
 
+/** Names that only mean something on a private network. */
+const PRIVATE_SUFFIXES = [
+  ".local",
+  ".internal",
+  ".localhost",
+  ".home.arpa",
+  ".lan",
+  ".intranet",
+  ".corp",
+];
+
 /**
- * Pure: an MCP server URL an agent may name. Stricter than `heel connect`:
- * https only (no http://localhost, so an agent can't point heel at its own
- * host's services), and no user name or password (`https://good.com@evil.com`).
+ * Pure: an MCP server URL an agent may name. Stricter than `heel connect`,
+ * so an agent can't use heel's place on the network: https only, a public
+ * host name (no IP address, no `localhost`, no single-label or private-only
+ * name), and no user name or password (`https://good.com@evil.com`). The
+ * owner's approval checks again what the name resolves to (`publicHostProblem`).
  */
 export function agentUrlProblem(text: string): string | null {
   if (!URL.canParse(text)) return "the url doesn't parse";
@@ -67,14 +84,51 @@ export function agentUrlProblem(text: string): string | null {
   if (url.protocol !== "https:") return "the url must be https://";
   if (url.username !== "" || url.password !== "")
     return "the url can't carry a user name or password";
+  const host = url.hostname.toLowerCase().replace(/\.$/, "");
+  if (isIP(host.replace(/^\[|\]$/g, "")) !== 0)
+    return "the url must name a host, not an IP address";
+  if (
+    host === "localhost" ||
+    !host.includes(".") ||
+    PRIVATE_SUFFIXES.some((s) => host.endsWith(s))
+  ) {
+    return "the url must name a public host";
+  }
+  return null;
+}
+
+/**
+ * Whether a host resolves only to public addresses: checked when the owner
+ * approves, so a public-looking name that points inside the network is
+ * refused before heel ever contacts it. Null when it's fine.
+ */
+export async function publicHostProblem(
+  url: string,
+  resolve: (host: string) => Promise<readonly string[]>,
+): Promise<string | null> {
+  const host = new URL(url).hostname;
+  let addresses: readonly string[];
+  try {
+    addresses = await resolve(host);
+  } catch {
+    return `${host} doesn't resolve`;
+  }
+  if (addresses.length === 0) return `${host} doesn't resolve`;
+  if (!addresses.every(isPublicAddress)) {
+    return `${host} points to a private address, so heel won't connect to it for an agent`;
+  }
   return null;
 }
 
 /** One line of the agent's text, with no line breaks or control characters, capped. */
 function oneLine(text: string | undefined, max: number): string | null {
   if (text === undefined) return null;
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what this removes.
-  const flat = text.replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, " ").trim();
+  // Control characters, line breaks, and the bidi controls that could make the
+  // agent's words read as something else on the page.
+  const flat = text
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what this removes.
+    .replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]+/g, " ")
+    .trim();
   return flat === "" ? null : flat.slice(0, max);
 }
 
@@ -96,7 +150,13 @@ export function requestConnection(
   expireRequests(db, now);
   const details: ConnectionRequestDetails =
     input.service === "mcp"
-      ? { provider: "mcp", alias: input.alias, url: input.url ?? "", oauth: input.oauth ?? true }
+      ? {
+          provider: "mcp",
+          alias: input.alias,
+          // Stored as heel reads it, so the page shows exactly what heel will contact.
+          url: new URL(input.url ?? "").href,
+          oauth: input.oauth ?? true,
+        }
       : { provider: input.service, alias: input.alias };
   const id = newId("agentRequest");
   const expiresAt = new Date(now.getTime() + REQUEST_TTL_MS);
@@ -106,6 +166,23 @@ export function requestConnection(
       .from(agentRequests)
       .where(and(eq(agentRequests.agentId, who.agentId), eq(agentRequests.status, "pending")))
       .all();
+    const lastHour =
+      tx
+        .select({ n: count() })
+        .from(agentRequests)
+        .where(
+          and(
+            eq(agentRequests.agentId, who.agentId),
+            gt(agentRequests.createdAt, new Date(now.getTime() - 60 * 60 * 1000)),
+          ),
+        )
+        .get()?.n ?? 0;
+    if (lastHour >= MAX_PER_HOUR) {
+      return {
+        ok: false as const,
+        problem: `you've asked ${MAX_PER_HOUR} times in the last hour; wait for your owner`,
+      };
+    }
     const replaced = waiting.filter((r) => r.details.alias === details.alias).map((r) => r.id);
     if (waiting.length - replaced.length >= MAX_PENDING_PER_AGENT) {
       return {
@@ -209,21 +286,37 @@ export function rejectRequest(db: HeelDb, row: RequestRow, by: string, now: Date
   );
 }
 
-/** Marks a request approved, naming the account it made. False when it no longer waits. */
-export function markApproved(
+/**
+ * Approves a waiting request: claims it first, so a request rejected or
+ * replaced a moment ago can't also be approved, then makes the account. If
+ * making it fails, the claim is undone and the request waits again.
+ */
+export function approveRequest(
   db: HeelDb,
   row: RequestRow,
-  accountId: string,
   by: string,
   now: Date,
-): boolean {
-  return (
+  connect: () => string,
+): { ok: true; accountId: string } | { ok: false; problem: string } {
+  const claimed =
     db
       .update(agentRequests)
-      .set({ status: "approved", decidedBy: by, decidedAt: now, accountId })
+      .set({ status: "approved", decidedBy: by, decidedAt: now })
       .where(and(eq(agentRequests.id, row.id), eq(agentRequests.status, "pending")))
-      .run().changes === 1
-  );
+      .run().changes === 1;
+  if (!claimed) return { ok: false, problem: "That request isn't waiting for you." };
+  let accountId: string;
+  try {
+    accountId = connect();
+  } catch (error) {
+    db.update(agentRequests)
+      .set({ status: "pending", decidedBy: null, decidedAt: null })
+      .where(eq(agentRequests.id, row.id))
+      .run();
+    throw error;
+  }
+  db.update(agentRequests).set({ accountId }).where(eq(agentRequests.id, row.id)).run();
+  return { ok: true, accountId };
 }
 
 /** Pure: heel's own name for what is asked for. */

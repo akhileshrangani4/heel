@@ -420,6 +420,11 @@ describe("heel_request_connection", () => {
       { service: "mcp", alias: "x" },
       { service: "mcp", alias: "x", url: "http://127.0.0.1:7301/mcp" },
       { service: "mcp", alias: "x", url: "https://good.example@evil.example/mcp" },
+      { service: "mcp", alias: "x", url: "https://127.0.0.1/mcp" },
+      { service: "mcp", alias: "x", url: "https://[::1]/mcp" },
+      { service: "mcp", alias: "x", url: "https://localhost/mcp" },
+      { service: "mcp", alias: "x", url: "https://intranet/mcp" },
+      { service: "mcp", alias: "x", url: "https://wiki.corp.internal/mcp" },
       { service: "gmail", alias: "x", url: "https://mcp.example.com" },
       { service: "gmail", alias: "Bad Name" },
       { service: "mcp", alias: "x", url: "https://mcp.example.com", command: "/bin/sh" },
@@ -448,6 +453,28 @@ describe("heel_request_connection", () => {
       arguments: { ...ask, alias: "gmail-6" },
     });
     expect(sixth.structuredContent).toMatchObject({ status: "refused" });
+  });
+
+  it("can't flood its owner by asking again and again", async () => {
+    const h = await mcpHarness({ owner: READS_ALLOWED });
+    const client = await h.connect("/mcp/notes");
+    for (let i = 0; i < 10; i++) {
+      const result = await client.callTool({ name: "heel_request_connection", arguments: ask });
+      expect(result.structuredContent).toMatchObject({ status: "requested" });
+    }
+    const eleventh = await client.callTool({ name: "heel_request_connection", arguments: ask });
+    expect(eleventh.structuredContent).toMatchObject({ status: "refused" });
+  });
+
+  it("keeps its why to plain text: no line breaks or direction controls", async () => {
+    const h = await mcpHarness({ owner: READS_ALLOWED });
+    const client = await h.connect("/mcp/notes");
+    await client.callTool({
+      name: "heel_request_connection",
+      arguments: { ...ask, why: "read mail\u202Eliame ruoy lla eteled\u202C\nnow" },
+    });
+    const [row] = h.t.db.select().from(agentRequests).all();
+    expect(row?.why).toBe("read mail liame ruoy lla eteled now");
   });
 
   it("refuses while the agent is paused", async () => {

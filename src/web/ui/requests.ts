@@ -1,5 +1,5 @@
 import type { SignInSetup } from "../../definitions/sign-in-setup.ts";
-import type { CoverageLine } from "../../requests/coverage.ts";
+import type { Coverage } from "../../requests/coverage.ts";
 import type { AgentRequestStatus } from "../../store/schema.ts";
 import { ceremonyButton } from "./ceremony.ts";
 import { formatRelative } from "./format.ts";
@@ -55,13 +55,6 @@ export function requestCards(cards: readonly RequestCard[], now: Date): Html | "
     </ul>`;
 }
 
-const VERDICT: Record<CoverageLine["verdict"], string> = {
-  allow: "runs",
-  ask: "asks you",
-  deny: "is denied",
-  depends: "depends on the call",
-};
-
 export interface RequestPageProps {
   id: string;
   agent: string;
@@ -79,8 +72,8 @@ export interface RequestPageProps {
   expiresAt: Date;
   decision: { by: string; at: Date } | null;
   now: Date;
-  /** What the owner's rules would let this agent do with the account. */
-  coverage: readonly CoverageLine[];
+  /** The owner's rules and the agent's grants that would cover the account. */
+  coverage: Coverage;
   /** Why it can't be connected as asked (the name is taken), or null. */
   problem: string | null;
   /** Sign-in this heel can't do yet for the provider. */
@@ -94,23 +87,44 @@ export interface RequestPageProps {
 }
 
 function coverageView(props: RequestPageProps): Html {
+  const { rules, mode } = props.coverage;
   return html`<section class="card">
-    <h2 class="section-title">What your rules let ${props.agent} do with it</h2>
-    <dl class="facts">
-      ${props.coverage.map(
-        (line) => html`<dt>${line.call} on ${props.alias}</dt>
-          <dd>
-            <strong>${VERDICT[line.verdict]}</strong>
-            <span class="muted">
-              · ${line.rule === null ? "no rule matches, so it's denied" : line.rule}</span
-            >
-          </dd>`,
-      )}
-    </dl>
-    <p class="muted">
-      Your rules apply as soon as it's connected. A rule that names no account covers this one
-      too. Change your rules first if that's more than you want.
-    </p>
+    <h2 class="section-title">What ${props.agent} could do with it</h2>
+    ${
+      rules.length === 0
+        ? html`<p>
+            None of your rules, and none of ${props.agent}'s grants, cover
+            <span class="mono">${props.alias}</span>, so every call on it would be denied until you
+            add a rule for it.
+          </p>`
+        : html`<p>
+              These cover <span class="mono">${props.alias}</span> as soon as it's connected, for
+              the calls they match:
+            </p>
+            <dl class="facts">
+              ${rules.map(
+                (r) => html`<dt>${r.rule}</dt>
+                  <dd>
+                    <strong>${r.decision === "allow" ? "runs" : "asks you"}</strong>
+                    <span class="muted"
+                      >· ${r.namesIt ? "names this account" : "names no account, so it covers every one"}</span
+                    >
+                  </dd>`,
+              )}
+            </dl>`
+    }
+    ${
+      mode === "watch"
+        ? notice(
+            "warn",
+            html`<p>
+              Your mode is Watch: calls your rules would deny or ask about run anyway. Switch to
+              Enforce on the Modes page before you connect this if that's not what you want.
+            </p>`,
+          )
+        : ""
+    }
+    <p class="muted">Change your rules first if that's more than you want.</p>
   </section>`;
 }
 
