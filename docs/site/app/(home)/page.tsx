@@ -1,88 +1,84 @@
 import Link from 'next/link';
 import { CopyInstall } from '@/components/copy-install';
+import { Features } from '@/components/features';
+import { FlowDemo } from '@/components/flow-demo';
+import { RulesDemo } from '@/components/rules-demo';
+import { SectionSnap } from '@/components/section-snap';
 import { SiteFooter } from '@/components/site-footer';
 
 /** A dog sitting at heel. */
-const DOG = String.raw`   / \__
-  (    @\___
-  /         O
- /   (_____/
-/_____/   U`;
+/**
+ * heel's logo dog, written out in the word heel; it sits faint behind the wordmark. Its lower
+ * body fades out, and what stays visible leans right, so it's shifted a little left to sit centred.
+ */
+const DOG = String.raw`                          :+heelheelh*-
+                       .+eelheelheelheel+
+                      +heelheelheelheelhee=.
+                     lheelheelheelheelheelheelheelh-
+                    eelheelheelheelheelheelheelheelh
+                   =eelheelhe*elheelheelheelheelheel
+                   heelheelhe**elheelheelheelheelhe=
+                   elheelheelh:eelheelheelheelheel=
+                  .heelheelhee:*lheelheelheelhe+-
+                   elheelheelh.=eelheelhe+:
+                   -elheelheel heelheelh
+                    :*eelhee= +lheelhee.
+                     *==--::=lheelheelh
+                    +eelheelheelheelhee
+                  :lheel**heelheelheelh.
+                .*eelheelheelhe*******e:
+              -lheelheelheelheelheelheel
+           .+heelheelheelheelheelheelhee
+         -lheelheelheelheelheelheelheelh:
+       =eelheelheelheelheelheelheelheelh-
+     -eelheelheelheelheelheelheelheelhee=
+    lheelheelheelheelheelheelheelheelhee-
+  :lheelheelheelheelheelheelheelheelheel:
+ .heelheelheelheelheelheelheelheelheelhe
+ elheelheelheelheelheelheelheelheelheelh
++eelheelheelheelheelheelheelheelheelhee*
+lheelheelheelheelheelheelheelheelheelhe-
+elheelheelheelheelheelheelheelheelheelh.
+eelheelheelheelheelheelheelheelheelheel
+heelheelheelheelheelheelheelheelheelhee*
+:lheelheelheelheelheelheelheelheelheelhee*.
+ =lheelheelheelheelheelheelheelheelheelheel-
+  .*heelheelheelheelheelheelheelheelheelhee*
+     -*lheelheelheelheelheelheelheelheelhe*`;
 
 type Tone = 'allow' | 'deny' | 'ask' | 'paused' | 'ok';
 
-/** One agent's afternoon in heel's activity: [agent, call, [verdict, tone], note]. */
-const ACTIVITY: [string, string, [string, Tone], string][] = [
-  ['inbox-bot', 'gmail-work  search "in:inbox"', ['allow', 'allow'], '2 hidden from the result'],
-  [
-    'inbox-bot',
-    'gmail-personal  send → dana@clientco.com',
-    ['deny', 'deny'],
-    'personal never emails clients',
-  ],
-  ['inbox-bot', 'gmail-work  reply_all → sam@customer.com', ['ask', 'ask'], 'sent to your phone'],
-  ['', 'approved with a passkey by avi', ['sent', 'ok'], 'ran once'],
-  ['inbox-bot', 'gmail-work  trash 340 messages', ['ask', 'ask'], 'over 20 this run'],
-  ['', 'paused from the phone by avi', ['paused', 'paused'], 'nothing ran'],
-];
 
-const RULES = `rules:
+const RULES = `# what this agent is for:
+# catching up on your inbox and replying to people
+rules:
+  # reading email is allowed
   - match: { kind: read }
     then: allow
 
-  # the personal account never emails clients
-  - match:
-      action: email.send
-      account: gmail-personal
-      recipients: { any_domain_in: [clientco.com] }
-    then: deny
-
-  # coworkers already in the thread
-  - match:
-      action: email.send
-      recipients:
-        all_in_thread: true
-        all_domain_in: [company.com]
-    then: allow
-
-  - match: { action: email.send }
-    then: ask
-
-  # count messages, not calls
+  # deleting over 20 emails is blocked
   - match:
       action: email.remove
       items: { over: 20, per: run }
-    then: ask
-  - match:
-      action: email.remove
-      items: { over: 100, per: hour }
-    then: ask`;
+    then: deny
 
-const POINTS: [string, string][] = [
-  [
-    'rules on the arguments',
-    'who an email goes to, which account it comes from, which repo, whether ci passed, how many messages this run deleted. one yaml file for mcp, http and cli. nothing matched means deny.',
-  ],
-  [
-    'approvals it can’t answer',
-    'an ask waits for its owner, who sees the full call and approves with a passkey, outside the agent’s session.',
-  ],
-  [
-    'hiding what it reads',
-    'mail from people you name, password resets and login codes drop out before the agent sees them.',
-  ],
-  [
-    'one switch to stop it',
-    'pause an agent, an account or everything from your phone. even an approved call stops.',
-  ],
-  [
-    'no model decides a call',
-    'whoever shapes a call could shape a model judging it. rules, grants and people decide.',
-  ],
-  [
-    'yours to run',
-    'open source, self-hosted, one process. heel holds the credentials; agents only get a heel token.',
-  ],
+  # sending email asks you
+  - match: { action: email.send }
+    then: ask
+
+  # anything else is blocked: no rule matched`;
+
+/** The quick start's commands, in order (docs/quickstart.md). */
+const QUICKSTART: ['#' | '$', string][] = [
+  ['#', '# 1 · install and set up'],
+  ['$', 'npm install -g useheel'],
+  ['$', 'heel init'],
+  ['#', '# 2 · start it, and make your passkey'],
+  ['$', 'heel start'],
+  ['$', 'heel user enroll owner'],
+  ['#', '# 3 · connect an account, then your agent'],
+  ['$', 'gh auth token | heel connect github --as github --credential-stdin'],
+  ['$', 'heel agent add my-agent'],
 ];
 
 const tone: Record<Tone, string> = {
@@ -95,6 +91,10 @@ const tone: Record<Tone, string> = {
 
 const pill =
   'rounded-full border border-black/10 bg-white px-5 py-2.5 text-sm font-medium shadow-[0_1px_2px_rgba(0,0,0,0.06)] transition-colors hover:bg-neutral-50 dark:border-white/15 dark:bg-white/5 dark:hover:bg-white/10';
+
+/** Each section below the hero fills one screen, its content centred in it. */
+const screen =
+  'relative mx-auto flex min-h-[calc(100svh-3.5rem)] max-w-[1100px] flex-col justify-center px-5 py-16';
 
 function Window({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -114,7 +114,7 @@ function Sticker({ label, className }: { label: string; className: string }) {
   return (
     <span
       aria-hidden
-      className={`pointer-events-none absolute hidden rounded-md border px-2.5 py-1 font-mono text-xs font-medium shadow-sm lg:block ${className}`}
+      className={`pointer-events-none absolute hidden rounded-md border px-2.5 py-1 font-mono text-xs font-medium shadow-sm lg:block short:hidden ${className}`}
     >
       {label}
     </span>
@@ -123,103 +123,73 @@ function Sticker({ label, className }: { label: string; className: string }) {
 
 export default function HomePage() {
   return (
-    <main className="relative flex-1 overflow-x-clip bg-[radial-gradient(circle,rgba(0,0,0,0.07)_1px,transparent_1px)] bg-[length:22px_22px] dark:bg-[radial-gradient(circle,rgba(255,255,255,0.06)_1px,transparent_1px)]">
-      <section className="relative mx-auto flex max-w-[1100px] flex-col items-center px-5 pt-16 text-center sm:pt-24">
+    <main className="relative flex-1 overflow-x-clip">
+      <section data-snap className="relative isolate mx-auto flex min-h-[calc(100svh-3.5rem)] max-w-[1100px] flex-col items-center justify-center px-5 py-10 text-center short:py-3">
+        {/* pinned to the background's dot grid (rows every 22px, the first 11px down): the dog's
+            top touches the second row, the stickers sit on rows below it */}
         <Sticker
           label="allow"
-          className="top-28 left-[9%] -rotate-6 border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+          className="top-[165px] left-[9%] -rotate-6 border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
         />
         <Sticker
           label="deny"
-          className="top-44 right-[8%] rotate-[8deg] border-red-300 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
+          className="top-[231px] right-[8%] rotate-[8deg] border-red-300 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
         />
         <Sticker
           label="ask"
-          className="top-[22rem] left-[14%] rotate-[4deg] border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300"
+          className="top-[297px] left-[15%] rotate-[4deg] border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300"
         />
 
+        {/* the dog, big and faint behind the wordmark */}
         <pre
-          aria-label="a dog sitting at heel"
-          className="rise text-left font-mono text-[11px] leading-[1.25] text-neutral-500 sm:text-xs"
+          aria-hidden
+          className="pointer-events-none absolute top-[calc(33px-0.1em)] left-1/2 -z-10 -translate-x-[calc(50%+2.6ch-2px)] select-none [mask-image:linear-gradient(to_bottom,black_55%,transparent_88%)] text-left font-mono text-[9px] leading-none text-neutral-900/[0.07] sm:text-[13px] short:text-[11px] dark:text-white/[0.07]"
         >
           {DOG}
         </pre>
-        <h1
-          className="rise mt-5 text-[clamp(4rem,13vw,7.5rem)] leading-none font-semibold tracking-[-0.06em]"
-          style={{ animationDelay: '60ms' }}
-        >
-          heel
-        </h1>
-        <p
-          className="rise mt-3 text-lg text-neutral-600 sm:text-xl dark:text-neutral-300"
-          style={{ animationDelay: '120ms' }}
-        >
-          access control for your ai agents
-        </p>
-        <div
-          className="rise mt-8 flex flex-wrap items-center justify-center gap-3"
-          style={{ animationDelay: '180ms' }}
-        >
-          <CopyInstall command="npm install -g useheel" />
-          <Link href="/docs" className={pill}>
-            read the docs
-          </Link>
-        </div>
-        <p className="rise mt-3 text-xs text-neutral-400" style={{ animationDelay: '220ms' }}>
-          open source · self-hosted · node 26.13 or later
-        </p>
+        <div className="relative flex w-full flex-col items-center">
+          <h1
+            className="rise text-[clamp(4rem,13vw,6.5rem)] leading-none short:text-[5rem] font-semibold tracking-[-0.06em]"
+            style={{ animationDelay: '60ms' }}
+          >
+            heel
+          </h1>
+          <p
+            className="rise mt-3 text-lg text-neutral-600 sm:text-xl dark:text-neutral-300"
+            style={{ animationDelay: '120ms' }}
+          >
+            access control for your ai agents
+          </p>
+          <div
+            className="rise mt-6 flex flex-wrap items-center justify-center gap-3"
+            style={{ animationDelay: '180ms' }}
+          >
+            <CopyInstall command="npm install -g useheel" />
+            <Link href="/docs" className={pill}>
+              read the docs
+            </Link>
+          </div>
+          <p className="rise mt-3 text-xs text-neutral-400 short:hidden" style={{ animationDelay: '220ms' }}>
+            open source · self-hosted · node 26.13 or later
+          </p>
 
-        <figure className="rise mt-14 w-full max-w-[880px]" style={{ animationDelay: '280ms' }}>
-          <Window title="heel · activity">
-            <div className="overflow-x-auto px-5 py-5 text-left sm:px-6">
-              <table className="w-full min-w-[640px] whitespace-nowrap font-mono text-[12.5px] leading-[1.9]">
-                <tbody>
-                  {ACTIVITY.map(([agent, call, [verdict, t], note], i) => (
-                    <tr
-                      // biome-ignore lint/suspicious/noArrayIndexKey: static rows
-                      key={i}
-                      className="rise"
-                      style={{ animationDelay: `${520 + i * 260}ms` }}
-                    >
-                      <td className="pr-4 text-white/35">{agent}</td>
-                      <td className={`pr-4 ${agent ? '' : 'text-white/55'}`}>
-                        {agent ? '' : '↳ '}
-                        {call}
-                      </td>
-                      <td className={`pr-4 font-medium ${tone[t]}`}>{verdict}</td>
-                      <td className="text-white/40">{note}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Window>
-          <figcaption className="mt-3 font-mono text-xs text-neutral-400">activity.log</figcaption>
-        </figure>
+          <div className="rise mt-8 w-full max-w-[960px] short:mt-6" style={{ animationDelay: '280ms' }}>
+            <FlowDemo />
+          </div>
+        </div>
       </section>
 
-      <section className="mx-auto mt-28 grid max-w-[1100px] grid-cols-[minmax(0,1fr)] items-start gap-10 px-5 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] md:gap-14">
-        <div className="md:sticky md:top-24">
+      <section data-snap className={screen}>
+        <div className="grid grid-cols-[minmax(0,1fr)] items-center gap-10 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] md:gap-14">
+        <div className="relative">
           <h2 className="text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">
             say what the agent is for
           </h2>
           <p className="mt-4 max-w-md leading-relaxed text-neutral-600 dark:text-neutral-300">
             rules are a file you can read, review and test. the first match decides, and a call no
-            rule matches is denied. these are the rules behind the activity above.
+            rule matches is denied. these are the rules behind the flow above.
           </p>
           <div className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm font-medium">
-            <Link
-              href="/docs/rules"
-              className="underline decoration-neutral-300 underline-offset-4 hover:decoration-current dark:decoration-neutral-600"
-            >
-              how rules work →
-            </Link>
-            <Link
-              href="/docs/rules-reference"
-              className="underline decoration-neutral-300 underline-offset-4 hover:decoration-current dark:decoration-neutral-600"
-            >
-              rules reference and recipes →
-            </Link>
             <Link
               href="/docs/quickstart"
               className="underline decoration-neutral-300 underline-offset-4 hover:decoration-current dark:decoration-neutral-600"
@@ -228,60 +198,79 @@ export default function HomePage() {
             </Link>
           </div>
         </div>
-        <figure className="min-w-0">
-          <Window title="rules/owner.yaml">
-            <pre className="overflow-x-auto px-5 py-5 font-mono text-[12.5px] leading-[1.7] sm:px-6">
-              {RULES.split('\n').map((line, i) => {
-                const comment = line.trim().startsWith('#');
-                const verdict = /then: (allow|deny|ask)/.exec(line);
-                return (
-                  <span
-                    // biome-ignore lint/suspicious/noArrayIndexKey: static lines
-                    key={i}
-                    className={`block ${comment ? 'text-white/35' : ''}`}
-                  >
-                    {verdict ? (
-                      <>
-                        {line.slice(0, verdict.index + 6)}
-                        <span className={tone[verdict[1] as Tone]}>{verdict[1]}</span>
-                      </>
-                    ) : (
-                      line || ' '
-                    )}
-                  </span>
-                );
-              })}
-            </pre>
-          </Window>
-        </figure>
-      </section>
-
-      <section className="mx-auto mt-28 max-w-[1100px] px-5">
-        <dl className="grid gap-x-12 gap-y-9 sm:grid-cols-2 lg:grid-cols-3">
-          {POINTS.map(([term, detail]) => (
-            <div key={term}>
-              <dt className="font-medium">{term}</dt>
-              <dd className="mt-1.5 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
-                {detail}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </section>
-
-      <section className="mx-auto mt-28 flex max-w-[1100px] flex-col items-center px-5 pb-24 text-center">
-        <p className="text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">
-          give your agent a heel
-        </p>
-        <div className="mt-7 flex flex-wrap items-center justify-center gap-3">
-          <CopyInstall command="npm install -g useheel" />
-          <Link href="/docs" className={pill}>
-            quick start
-          </Link>
+        <div className="relative min-w-0 md:min-h-[504px]">
+          <RulesDemo
+            yaml={
+              <Window title="rules/owner.yaml">
+              <pre className="overflow-x-auto px-5 py-5 font-mono text-[12.5px] leading-[1.7] sm:px-6">
+                {RULES.split('\n').map((line, i) => {
+                  const comment = line.trim().startsWith('#');
+                  const verdict = /then: (allow|deny|ask)/.exec(line);
+                  return (
+                    <span
+                      // biome-ignore lint/suspicious/noArrayIndexKey: static lines
+                      key={i}
+                      className={`block ${comment ? 'text-white/35' : ''}`}
+                    >
+                      {verdict ? (
+                        <>
+                          {line.slice(0, verdict.index + 6)}
+                          <span className={tone[verdict[1] as Tone]}>{verdict[1]}</span>
+                        </>
+                      ) : (
+                        line || ' '
+                      )}
+                    </span>
+                  );
+                })}
+              </pre>
+            </Window>
+            }
+          />
+        </div>
         </div>
       </section>
 
-      <SiteFooter />
+      <section data-snap className={screen}>
+        <div className="relative">
+          <h2 className="mb-8 text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">what else it does</h2>
+          <Features />
+        </div>
+      </section>
+
+      {/* the last screen: the closing section, with the footer at its foot */}
+      <div data-snap className="flex min-h-[calc(100svh-3.5rem)] flex-col">
+        <section className="relative mx-auto flex w-full max-w-[1100px] flex-1 flex-col items-center justify-center px-5 py-10 text-center">
+          <div className="relative flex flex-col items-center">
+            <h2 className="text-[clamp(2.5rem,7vw,4.5rem)] leading-none font-semibold tracking-[-0.05em]">
+              give your agent a heel
+            </h2>
+            <p className="mt-4 text-lg text-neutral-600 sm:text-xl dark:text-neutral-300">
+              ten minutes, one terminal, from install to your first approval.
+            </p>
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+              <CopyInstall command="npm install -g useheel" />
+              <Link href="/docs/quickstart" className={pill}>
+                quick start
+              </Link>
+            </div>
+            <div className="mt-10 w-full max-w-2xl text-left">
+              <Window title="the quick start, start to finish">
+                <pre className="overflow-x-auto px-5 py-5 font-mono text-[12.5px] leading-[1.8] sm:px-6">
+                  {QUICKSTART.map(([kind, line]) => (
+                    <span key={line} className={`block ${kind === '#' ? 'mt-2 text-white/35 first:mt-0' : ''}`}>
+                      {kind === '$' ? <span className="text-white/35">$ </span> : null}
+                      {line}
+                    </span>
+                  ))}
+                </pre>
+              </Window>
+            </div>
+          </div>
+        </section>
+        <SiteFooter />
+      </div>
+      <SectionSnap />
     </main>
   );
 }
