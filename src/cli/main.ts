@@ -5,6 +5,7 @@ import { z } from "zod";
 import { AdminClientError, adminCall } from "../admin/client.ts";
 import { type AdminRequest, AUDIT_EXPORT_MAX_PAGE } from "../admin/protocol.ts";
 import { AdminSocketError } from "../admin/server.ts";
+import { defaultHeelHome } from "../config/load.ts";
 import type { HeelConfig, ListenAddress } from "../config/schema.ts";
 import { signInSetupFor } from "../definitions/sign-in-setup.ts";
 import { createLogger } from "../log.ts";
@@ -1086,7 +1087,9 @@ async function initCommand(args: string[], io: CliIo): Promise<number> {
     }
   }
   const steps = initHome(home);
-  io.stdout.write(initSummary(home, steps, fromEnv || home === io.env["HEEL_HOME"]));
+  // Every command finds the default home on its own; only another folder needs HEEL_HOME.
+  const found = fromEnv || home === io.env["HEEL_HOME"] || home === defaultHeelHome();
+  io.stdout.write(initSummary(home, steps, found));
   return EXIT.ok;
 }
 

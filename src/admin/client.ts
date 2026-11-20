@@ -23,9 +23,11 @@ export class AdminClientError extends Error {
 /** Pure: a message a person can act on for a connect error. */
 export function describeConnectError(path: string, error: unknown): AdminClientError {
   if (hasErrnoCode(error, "ENOENT") || hasErrnoCode(error, "ECONNREFUSED")) {
-    return new AdminClientError("not_running", `heel serve is not running (no socket at ${path})`, {
-      cause: error,
-    });
+    return new AdminClientError(
+      "not_running",
+      `heel serve is not running (no socket at ${path}). If it is running in another terminal, set HEEL_HOME here to the same folder.`,
+      { cause: error },
+    );
   }
   if (hasErrnoCode(error, "EACCES") || hasErrnoCode(error, "EPERM")) {
     return new AdminClientError(

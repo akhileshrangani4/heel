@@ -2,9 +2,9 @@
 
 [README](../README.md) · [Quickstart](quickstart.md) · [Connect accounts](connect.md) · [Connect your agent](agents.md) · [Rules](rules.md) · [Approvals](approvals.md) · [Running](running.md)
 
-heel keeps everything in one folder, `HEEL_HOME` (`~/.heel` after `heel init`): its config, master key, database, rules and admin socket. Set `HEEL_HOME` in every shell, so every `heel` command finds the running server.
+heel keeps everything in one folder, `HEEL_HOME`: its config, master key, database, rules and admin socket.
 
-Without `HEEL_HOME`, heel uses `/var/lib/heel` with the admin socket at `/run/heel/admin.sock`: the layout for a server install running as its own user.
+Without `HEEL_HOME`, every `heel` command uses `/var/lib/heel` if it exists (a server install running as its own user, with the admin socket at `/run/heel/admin.sock`), and `~/.heel` otherwise, which is where `heel init` puts it. So on your own machine `heel serve` and a `heel connect` in another terminal find each other with nothing to set. Use another folder and you need `HEEL_HOME` in every shell.
 
 ## heel.yaml
 
