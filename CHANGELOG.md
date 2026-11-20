@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.2.4](https://github.com/akhileshrangani4/heel/compare/v0.2.3...v0.2.4) (2026-11-20)
+
+
+### Features
+
+* agents can ask for GitHub, Slack, Linear, Notion or Stripe; you paste the key on heel's page ([#164](https://github.com/akhileshrangani4/heel/issues/164)) ([4bfd6dc](https://github.com/akhileshrangani4/heel/commit/4bfd6dc874381787232d0a045df83d0894f41981))
+* agents can ask you to connect an account; you approve with a passkey and sign in ([#159](https://github.com/akhileshrangani4/heel/issues/159)) ([05811d4](https://github.com/akhileshrangani4/heel/commit/05811d43c0ef5086728c38672646630694125ef9))
+* heel's pages look like useheel.dev, and approve and deny never cover the page ([#169](https://github.com/akhileshrangani4/heel/issues/169)) ([f6a0f10](https://github.com/akhileshrangani4/heel/commit/f6a0f104a2212a26e2988a07426e3a92c4f839c6))
+
+
+### Bug Fixes
+
+* a server an agent asked for is reached only on public hosts, every hop ([#161](https://github.com/akhileshrangani4/heel/issues/161)) ([4bc2d6d](https://github.com/akhileshrangani4/heel/commit/4bc2d6d926435b40e16ac8bc601455ce42363c33))
+
+
+### Documentation
+
+* **site:** the home page shows heel at work instead of code ([#165](https://github.com/akhileshrangani4/heel/issues/165)) ([ccea462](https://github.com/akhileshrangani4/heel/commit/ccea462ebe7efb438f515976401fd14f2e3b53d2))
+* **site:** the roadmap says what proposals and requests cover now ([#162](https://github.com/akhileshrangani4/heel/issues/162)) ([648db9f](https://github.com/akhileshrangani4/heel/commit/648db9f4e2e20fc9ad3dafb046ab337de367c04f))
+* the README opens with heel's banner, like useheel.dev ([#166](https://github.com/akhileshrangani4/heel/issues/166)) ([6fc3003](https://github.com/akhileshrangani4/heel/commit/6fc3003abba62fa06bfbc57d150ad4d8fae07e1d))
+* the README's video is the home page's flow ([#168](https://github.com/akhileshrangani4/heel/issues/168)) ([9127351](https://github.com/akhileshrangani4/heel/commit/91273511a46d7ed2fa828ba8f1a0f3397b55417b))
+
 ## [0.2.3](https://github.com/akhileshrangani4/heel/compare/v0.2.2...v0.2.3) (2026-11-20)
 
 
