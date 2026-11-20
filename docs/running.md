@@ -114,11 +114,17 @@ A second option is planned: `heel login` on each machine, with your connections 
 ## Upgrading
 
 ```sh
-npm install -g useheel@latest                 # npm
-docker pull ghcr.io/akhileshrangani4/heel     # Docker: recreate the container with the same volume
+heel update            # move to the newest heel, the way you installed it
+heel update --check    # only say whether there is a newer one
 ```
 
-Back up `HEEL_HOME` (or the volume) and the master key first. heel migrates its database when it starts; read the startup warnings after an upgrade.
+Back up `HEEL_HOME` and the master key first. Then:
+
+- **Installed with npm:** `heel update` runs `npm install --global useheel@<newest>` with the npm next to the Node heel runs on.
+- **Docker:** a container can't replace itself, so `heel update` prints the steps: `docker pull ghcr.io/akhileshrangani4/heel:<newest>`, then start the container again from the new image with the same volume.
+- **A git checkout:** it tells you to `git pull && pnpm install`.
+
+Restart `heel serve` afterwards: it keeps running the old version until you do. heel migrates its database when it starts; read the startup warnings. heel never updates itself in the background.
 
 ## More
 

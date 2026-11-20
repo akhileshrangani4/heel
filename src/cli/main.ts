@@ -74,6 +74,9 @@ export const USAGE = `usage:
   heel tui                                a live full-screen view of requests,
                                           activity, agents and accounts; Enter
                                           opens a request in the browser
+  heel update [--check]                   move heel to the newest version on npm, the
+                                          way it was installed; --check only says
+                                          whether there is one
   heel vault init                         create the master key file
   heel agent add <name> [--owner <user>] [--expires <days>d|never]
                                           add an agent; prints its token once. The
@@ -1090,6 +1093,50 @@ async function initCommand(args: string[], io: CliIo): Promise<number> {
   return EXIT.ok;
 }
 
+/** `heel update`: the newest heel from npm, installed the way this one was (src/cli/update.ts). */
+async function updateCommand(args: string[], io: CliIo): Promise<number> {
+  const { values, positionals } = parseOrUsage(() =>
+    parseArgs({
+      args,
+      options: { check: { type: "boolean" } },
+      allowPositionals: true,
+      strict: true,
+    }),
+  );
+  if (positionals.length > 0) throw new UsageError(`unexpected argument "${positionals[0]}"`);
+  const { checkMessage, latestVersion, runCommand, thisInstall, updatePlan } = await import(
+    "./update.ts"
+  );
+  let latest: string;
+  try {
+    latest = await latestVersion();
+  } catch (error) {
+    io.stderr.write(
+      `heel: couldn't ask npm for the newest version: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
+    return EXIT.unavailable;
+  }
+  if (values.check === true) {
+    io.stdout.write(checkMessage(HEEL_VERSION, latest));
+    return EXIT.ok;
+  }
+  const plan = updatePlan(thisInstall(), HEEL_VERSION, latest);
+  if (plan.kind !== "run") {
+    io.stdout.write(plan.message);
+    return EXIT.ok;
+  }
+  io.stdout.write(plan.before);
+  const code = await runCommand(plan.command, plan.args);
+  if (code !== 0) {
+    io.stderr.write(
+      `heel: the update didn't finish (${plan.command} ${plan.args.join(" ")} exited ${code}). heel ${HEEL_VERSION} is unchanged.\n`,
+    );
+    return EXIT.failed;
+  }
+  io.stdout.write(plan.after);
+  return EXIT.ok;
+}
+
 /** `heel tui`: the full-screen view (src/cli/tui.ts). Needs a terminal. */
 async function tuiCommand(args: string[], io: CliIo): Promise<number> {
   const { values, positionals } = parseOrUsage(() =>
@@ -1194,6 +1241,8 @@ async function dispatch(argv: string[], io: CliIo): Promise<number> {
       return initCommand(rest, io);
     case "tui":
       return tuiCommand(rest, io);
+    case "update":
+      return updateCommand(rest, io);
     case "status":
       return statusCommand(rest, io);
     case "help": {
