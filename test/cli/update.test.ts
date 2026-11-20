@@ -51,7 +51,7 @@ describe("heel update", () => {
       command: "/opt/homebrew/bin/npm",
       args: ["install", "--global", "useheel@0.3.0"],
     });
-    if (plan.kind === "run") expect(plan.after).toContain("Restart heel serve");
+    if (plan.kind === "run") expect(plan.after).toBe("heel is now 0.3.0.\n");
   });
 
   it("does nothing when heel is already the newest", () => {

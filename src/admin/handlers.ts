@@ -74,6 +74,8 @@ export interface AdminDeps {
    * in yet. Left out, connect says nothing about it.
    */
   signIns?: ConfiguredSignIns;
+  /** Started by `heel start` (it sets HEEL_BACKGROUND=1), so `heel update` may restart it. */
+  background?: boolean;
   now?: () => Date;
 }
 
@@ -154,7 +156,14 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
   const { db, orgId } = deps;
   switch (request.method) {
     case "ping":
-      return adminOk({ version: deps.version, vault: deps.vault ? "open" : "unavailable" });
+      return adminOk({
+        version: deps.version,
+        vault: deps.vault ? "open" : "unavailable",
+        // For `heel stop` and `heel update`: which process to signal, and
+        // whether it runs in the background where heel may restart it.
+        pid: process.pid,
+        background: deps.background ?? false,
+      });
     case "agent.add": {
       const ownerId = resolveOwner(db, orgId, request.params.owner);
       const { name, expiresInDays } = request.params;

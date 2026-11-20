@@ -1,5 +1,5 @@
-import { mkdirSync, readFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { z } from "zod";
 import { AdminClientError, adminCall } from "../admin/client.ts";
@@ -69,7 +69,14 @@ export const USAGE = `usage:
   heel init [--home <dir>] [--yes]        set heel up: its home, master key, heel.yaml
                                           and starter rules; changes nothing that's
                                           already there
-  heel serve [--watch]                    start the agent, human and admin planes
+  heel serve [--watch]                    start the agent, human and admin planes,
+                                          in this terminal (Ctrl-C stops it)
+  heel start [--watch]                    the same, in the background: returns once
+                                          heel is up, and writes its log to
+                                          $HEEL_HOME/logs/heel.log
+  heel stop                               stop the running heel, in the background or not
+  heel restart [--watch]                  stop heel, then start it in the background
+  heel logs [-f] [-n <lines>] [--json]    heel's log from heel start; -f follows it live
   heel status                             what heel is doing: agents, accounts,
                                           pauses and requests waiting for you
   heel tui                                a live full-screen view of requests,
@@ -303,6 +310,129 @@ async function serveCommand(args: string[], io: CliIo): Promise<number> {
   return EXIT.ok;
 }
 
+/** `heel start`: `heel serve` in the background (src/cli/background.ts). */
+async function startCommand(args: string[], io: CliIo): Promise<number> {
+  const { values, positionals } = parseOrUsage(() =>
+    parseArgs({
+      args,
+      options: { ...CONFIG_OPTION, watch: { type: "boolean" } },
+      allowPositionals: true,
+      strict: true,
+    }),
+  );
+  if (positionals.length > 0) throw new UsageError(`unexpected argument "${positionals[0]}"`);
+  const config = configFrom(io, values.config);
+  const { logFileOf, startInBackground } = await import("./background.ts");
+  const serveArgs = [
+    ...(values.watch === true ? ["--watch"] : []),
+    ...(values.config === undefined ? [] : ["--config", resolve(values.config)]),
+  ];
+  const outcome = await startInBackground(config, io.env, serveArgs);
+  const logs = logFileOf(config);
+  switch (outcome.kind) {
+    case "already":
+      io.stdout.write(
+        `heel ${outcome.ping.version ?? ""} is already running${outcome.ping.background === true ? " in the background" : " (heel serve, in another terminal)"}.\n`,
+      );
+      return EXIT.ok;
+    case "failed":
+      io.stderr.write(`heel: heel didn't start: ${outcome.reason}. See: heel logs\n  (${logs})\n`);
+      return EXIT.unavailable;
+    case "started":
+      io.stdout.write(
+        [
+          `heel is running in the background (pid ${outcome.pid}).`,
+          `  Approve requests:   open ${config.publicUrl.origin}`,
+          `  Agents connect to:  http://${config.listen.agent.host}:${config.listen.agent.port}/mcp`,
+          "  Live logs:          heel logs -f",
+          "  Stop:               heel stop",
+          "",
+        ].join("\n"),
+      );
+      return EXIT.ok;
+  }
+}
+
+/** `heel stop`: the running heel, wherever it was started. */
+async function stopCommand(args: string[], io: CliIo): Promise<number> {
+  const { values, positionals } = parseOrUsage(() =>
+    parseArgs({ args, options: CONFIG_OPTION, allowPositionals: true, strict: true }),
+  );
+  if (positionals.length > 0) throw new UsageError(`unexpected argument "${positionals[0]}"`);
+  const config = configFrom(io, values.config);
+  const { stopHeel } = await import("./background.ts");
+  const outcome = await stopHeel(config);
+  switch (outcome.kind) {
+    case "not_running":
+      io.stdout.write("heel isn't running.\n");
+      return EXIT.ok;
+    case "stopped":
+      io.stdout.write(`heel stopped (pid ${outcome.pid}).\n`);
+      return EXIT.ok;
+    case "failed":
+      io.stderr.write(`heel: couldn't stop heel: ${outcome.reason}\n`);
+      return EXIT.failed;
+  }
+}
+
+/** `heel restart`: stop, then start in the background. */
+async function restartCommand(args: string[], io: CliIo): Promise<number> {
+  const { values } = parseOrUsage(() =>
+    parseArgs({
+      args,
+      options: { ...CONFIG_OPTION, watch: { type: "boolean" } },
+      allowPositionals: true,
+      strict: true,
+    }),
+  );
+  const stopped = await stopCommand(
+    values.config === undefined ? [] : ["--config", values.config],
+    io,
+  );
+  if (stopped !== EXIT.ok) return stopped;
+  return startCommand(args, io);
+}
+
+/** `heel logs`: the background heel's log, readable; `-f` follows it. */
+async function logsCommand(args: string[], io: CliIo): Promise<number> {
+  const { values, positionals } = parseOrUsage(() =>
+    parseArgs({
+      args,
+      options: {
+        ...CONFIG_OPTION,
+        follow: { type: "boolean", short: "f" },
+        lines: { type: "string", short: "n" },
+        json: { type: "boolean" },
+      },
+      allowPositionals: true,
+      strict: true,
+    }),
+  );
+  if (positionals.length > 0) throw new UsageError(`unexpected argument "${positionals[0]}"`);
+  const count = values.lines === undefined ? 50 : Number.parseInt(values.lines, 10);
+  if (!Number.isInteger(count) || count < 0) throw new UsageError("-n takes a number of lines");
+  const config = configFrom(io, values.config);
+  const { followFile, formatLogLine, lastLines, logFileOf, pingHeel } = await import(
+    "./background.ts"
+  );
+  const file = logFileOf(config);
+  const show = (line: string) =>
+    io.stdout.write(`${values.json === true ? line : formatLogLine(line)}\n`);
+  if (!existsSync(file)) {
+    const ping = await pingHeel(config);
+    io.stderr.write(
+      ping === null
+        ? "heel has no log yet. Start it in the background with: heel start\n"
+        : "This heel runs in a terminal (heel serve), so its log is there. For a log here, run it with: heel start\n",
+    );
+    return values.follow === true && ping === null ? EXIT.unavailable : EXIT.ok;
+  }
+  for (const line of lastLines(file, count)) show(line);
+  if (values.follow !== true) return EXIT.ok;
+  await followFile(file, statSync(file).size, show);
+  return EXIT.ok;
+}
+
 /**
  * Pure: the plain lines `heel serve` prints once it is up, after the JSON
  * logs, so a person sees where to go without reading them.
@@ -322,7 +452,7 @@ export function startupBanner(
   } else {
     lines.push(`  Agent port:         off (${planes.agent.reason})`);
   }
-  lines.push("  Stop with Ctrl-C.", "");
+  lines.push("  Stop with Ctrl-C. To run it in the background instead: heel start", "");
   return `${lines.join("\n")}\n`;
 }
 
@@ -1101,7 +1231,7 @@ async function updateCommand(args: string[], io: CliIo): Promise<number> {
   const { values, positionals } = parseOrUsage(() =>
     parseArgs({
       args,
-      options: { check: { type: "boolean" } },
+      options: { ...CONFIG_OPTION, check: { type: "boolean" } },
       allowPositionals: true,
       strict: true,
     }),
@@ -1137,7 +1267,21 @@ async function updateCommand(args: string[], io: CliIo): Promise<number> {
     return EXIT.failed;
   }
   io.stdout.write(plan.after);
-  return EXIT.ok;
+  // A heel that's running still runs the old code. One `heel start` put in
+  // the background is restarted here, on the new version; one in a terminal
+  // is the person's to restart.
+  const config = configFrom(io, values.config);
+  const { pingHeel } = await import("./background.ts");
+  const running = await pingHeel(config);
+  if (running === null) return EXIT.ok;
+  if (running.background !== true) {
+    io.stdout.write(
+      "heel serve is still running the old version: stop it (Ctrl-C) and start it again.\n",
+    );
+    return EXIT.ok;
+  }
+  io.stdout.write("Restarting heel in the background on the new version…\n");
+  return restartCommand(values.config === undefined ? [] : ["--config", values.config], io);
 }
 
 /** `heel tui`: the full-screen view (src/cli/tui.ts). Needs a terminal. */
@@ -1244,6 +1388,14 @@ async function dispatch(argv: string[], io: CliIo): Promise<number> {
       return initCommand(rest, io);
     case "tui":
       return tuiCommand(rest, io);
+    case "start":
+      return startCommand(rest, io);
+    case "stop":
+      return stopCommand(rest, io);
+    case "restart":
+      return restartCommand(rest, io);
+    case "logs":
+      return logsCommand(rest, io);
     case "update":
       return updateCommand(rest, io);
     case "status":

@@ -75,7 +75,7 @@ export function updatePlan(install: Install, current: string, latest: string): U
   if (!newer(latest, current)) {
     return { kind: "current", message: `heel ${current} is the latest version.\n` };
   }
-  const restart = "Restart heel serve to run it: it keeps running the old version until you do.";
+  const restart = "Restart heel to run it: a running heel keeps the old version until you do.";
   switch (install.kind) {
     case "npm":
       return {
@@ -83,7 +83,7 @@ export function updatePlan(install: Install, current: string, latest: string): U
         command: install.npm,
         args: ["install", "--global", `${PACKAGE}@${latest}`],
         before: `Updating heel ${current} to ${latest}…\n`,
-        after: `heel is now ${latest}. ${restart}\n`,
+        after: `heel is now ${latest}.\n`,
       };
     case "docker":
       return {
