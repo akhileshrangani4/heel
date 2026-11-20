@@ -1,8 +1,9 @@
-# useheel.dev builds from docs/site/, which reads README.md, docs/ and assets/.
+# useheel.dev builds from docs/site/, which reads README.md, CHANGELOG.md, docs/ and assets/.
 /*
 !/docs
 !/assets
 !/README.md
+!/CHANGELOG.md
 /docs/site/node_modules
 /docs/site/.next
 /docs/design
