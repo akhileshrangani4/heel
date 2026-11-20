@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.3](https://github.com/akhileshrangani4/heel/compare/v0.2.2...v0.2.3) (2026-11-20)
+
+
+### Features
+
+* agents can propose hide entries, not only rules ([#156](https://github.com/akhileshrangani4/heel/issues/156)) ([2863240](https://github.com/akhileshrangani4/heel/commit/2863240ac8fd1dae8a6868da6120ce18cd5d88e9))
+
+
+### Bug Fixes
+
+* **release:** the site deploy gets CHANGELOG.md, and a re-run finds npm done ([#158](https://github.com/akhileshrangani4/heel/issues/158)) ([affeae9](https://github.com/akhileshrangani4/heel/commit/affeae99d90f586b19c855d5e919962aa5d57280))
+
 ## [0.2.2](https://github.com/akhileshrangani4/heel/compare/v0.2.1...v0.2.2) (2026-11-20)
 
 
