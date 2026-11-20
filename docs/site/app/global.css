@@ -2,6 +2,9 @@
 @import 'fumadocs-ui/css/neutral.css';
 @import 'fumadocs-ui/css/preset.css';
 
+/* Short screens (a laptop with browser chrome): the hero tightens so the whole flow fits without scrolling. */
+@custom-variant short (@media (max-height: 820px));
+
 /* Neutral, with heel's amber (#F2A33A, assets/logo) as the one accent. */
 @theme {
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
@@ -75,6 +78,39 @@ html > body[data-scroll-locked] {
   }
 }
 
+/* The home page's flow demo: a call travelling along a wire between two cards. The track is
+   the wire's length, so translating it by 100% moves the pill end to end, on the compositor. */
+@keyframes heel-travel-x {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(100%, 0, 0);
+  }
+}
+@keyframes heel-travel-y {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(0, 100%, 0);
+  }
+}
+.heel-travel-x {
+  animation: heel-travel-x 0.85s cubic-bezier(0.65, 0, 0.35, 1) both;
+  will-change: transform;
+}
+.heel-travel-y {
+  animation: heel-travel-y 0.85s cubic-bezier(0.65, 0, 0.35, 1) both;
+  will-change: transform;
+}
+@media (prefers-reduced-motion: reduce) {
+  .heel-travel-x,
+  .heel-travel-y {
+    animation: none;
+  }
+}
+
 /* Screenshots from heel's own app (docs/images). Phone screens stay phone-sized and
    centered; wide-*.png are laptop screens and use the column. */
 .prose img[src*="/_next/"] {
@@ -90,3 +126,28 @@ html > body[data-scroll-locked] {
   max-width: 100%;
   border-radius: 8px;
 }
+
+/* The dot grid behind the home, roadmap and changelog pages, top bar included. Offset 12px so
+   the rows fall 11px + 22px * n below the bar (56px), where the hero's dog and stickers sit. */
+.heel-dots {
+  background-image: radial-gradient(circle, rgba(0, 0, 0, 0.07) 1px, transparent 1px);
+  background-size: 22px 22px;
+  background-position: 0 12px;
+}
+.dark .heel-dots {
+  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+}
+
+/* The top bar never blurs what's under it: a backdrop blur is redrawn on every frame of a
+   scroll, and on a Mac that drops frames. Scrolled, it gets a solid background instead.
+   At the top of the page it's clear, with no line under it, so it shows the grid as it is. */
+.heel-dots #nd-nav > * {
+  backdrop-filter: none;
+}
+.heel-dots #nd-nav > .bg-fd-background\/80 {
+  background-color: var(--color-fd-background);
+}
+.heel-dots #nd-nav > :not(.bg-fd-background\/80) {
+  border-bottom-color: transparent;
+}
+

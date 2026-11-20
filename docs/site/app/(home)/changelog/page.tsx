@@ -125,7 +125,7 @@ function ReleaseEntry({ release, latest }: { release: Release; latest: boolean }
 export default function ChangelogPage() {
   const all = releases();
   return (
-    <main className="relative flex-1 overflow-x-clip bg-[radial-gradient(circle,rgba(0,0,0,0.07)_1px,transparent_1px)] bg-[length:22px_22px] dark:bg-[radial-gradient(circle,rgba(255,255,255,0.06)_1px,transparent_1px)]">
+    <main className="relative flex-1 overflow-x-clip">
       <section className="mx-auto max-w-[1100px] px-5 pt-16 sm:pt-24">
         <h1 className="rise text-[clamp(3rem,10vw,5.5rem)] leading-none font-semibold tracking-[-0.06em]">
           changelog
