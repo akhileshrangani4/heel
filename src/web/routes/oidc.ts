@@ -144,18 +144,8 @@ export function oidcRoutes(deps: HumanPlaneDeps): Hono {
       now,
     });
     setSessionCookie(c, deps, started);
-    // Not a redirect: the session cookie is SameSite=Strict, and a browser doesn't send it on a
-    // redirect chain the IdP started from another site. A page that moves on by itself is same-site.
-    return c.html(continuePage(taken.next));
+    return c.redirect(taken.next, 303);
   });
 
   return app;
-}
-
-const escapeHtml = (text: string) => text.replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
-
-/** A page that goes on to `next` (a path on this site) by itself, with a link if it doesn't. */
-function continuePage(next: string): string {
-  const href = escapeHtml(next);
-  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=${href}"><title>Signed in</title></head><body><p>Signed in. <a href="${href}">Continue</a></p></body></html>`;
 }

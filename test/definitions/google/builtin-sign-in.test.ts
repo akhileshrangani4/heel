@@ -81,14 +81,8 @@ describe("Gmail with heel's built-in Google client", () => {
     expect(location.searchParams.has("code")).toBe(true);
     expect(location.searchParams.has("extra")).toBe(false);
 
-    // The redirect from Google's side carries no session cookie (SameSite=Strict):
-    // heel's bounce page needs none, and sends the browser on from heel's own origin.
-    const bounce = await h.fetch(location.pathname + location.search);
-    expect(bounce.status).toBe(200);
-    expect(bounce.headers.get("cache-control")).toBe("no-store");
-    const finish = /url=([^"]+)"/.exec(await bounce.text())?.[1]?.replaceAll("&amp;", "&") ?? "";
-    expect(finish.startsWith("/connections/google/finish?")).toBe(true);
-    const landed = await h.fetch(finish, { as: owner });
+    // A top-level redirect from Google's side: the Lax session cookie comes with it.
+    const landed = await h.fetch(location.pathname + location.search, { as: owner });
     expect(landed.headers.get("location")).toContain("connected=1");
     expect(account(h)?.status).toBe("active");
     // The tokens remember which client issued them, so they refresh with it.
@@ -111,7 +105,7 @@ describe("Gmail with heel's built-in Google client", () => {
     });
     expect(pasted.status).toBe(303);
     const next = pasted.headers.get("location") ?? "";
-    expect(next.startsWith("/connections/google/finish?")).toBe(true);
+    expect(next.startsWith("/connections/google/return?")).toBe(true);
     const landed = await h.fetch(next, { as: owner });
     expect(landed.headers.get("location")).toContain("connected=1");
     expect(account(h)?.status).toBe("active");

@@ -21,6 +21,16 @@ function form(fields: Record<string, string>): RequestInit {
 }
 
 describe("enrollment and sign-in", () => {
+  it("arrives signed in from a link or redirect on another site", async () => {
+    const h = humanPlaneHarness();
+    const owner = await h.signIn(await h.enroll());
+    // Lax: a notification link in Slack or email, a connector's sign-in, or
+    // Google or an MCP server sending you back all arrive signed in. Cross-site
+    // forms, frames and scripts still get no cookie.
+    expect(owner.setCookie).toMatch(/;\s*SameSite=Lax/i);
+    expect(owner.setCookie).toMatch(/;\s*HttpOnly/i);
+  });
+
   it("Q-N2: an enrollment link works once", async () => {
     const h = humanPlaneHarness();
     await h.enroll();

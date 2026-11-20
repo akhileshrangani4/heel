@@ -69,7 +69,7 @@ describe("OIDC sign-in", () => {
   /** Where a successful callback's page sends the browser, or null when it signed nobody in. */
   const signedInTo = async (response: Response) => {
     if (!(response.headers.get("set-cookie") ?? "").includes("heel_session=")) return null;
-    return /url=([^"]+)"/.exec(await response.text())?.[1] ?? null;
+    return response.headers.get("location");
   };
 
   const dana = (h: ReturnType<typeof setUp>) =>
@@ -84,9 +84,10 @@ describe("OIDC sign-in", () => {
     const h = setUp();
     const { cookie, callback } = await start(h, "/activity");
     const response = await back(h, callback, cookie);
-    // A page, not a redirect: the Strict session cookie isn't sent on the IdP's redirect chain.
-    expect(response.status).toBe(200);
+    // A plain redirect: the Lax session cookie goes with the IdP's top-level redirect chain.
+    expect(response.status).toBe(303);
     expect(response.headers.get("set-cookie")).toContain("__Host-heel_session=");
+    expect(response.headers.get("set-cookie")).toContain("SameSite=Lax");
     expect(await signedInTo(response)).toBe("/activity");
     expect(dana(h)).toMatchObject({
       role: "member",

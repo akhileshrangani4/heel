@@ -33,14 +33,6 @@ import { loopbackSignInPage } from "../ui/loopback-sign-in.ts";
 
 /** Where heel's built-in Google client finishes a sign-in, and where a pasted address goes. */
 export const GOOGLE_LOOPBACK_PATH = "/connections/google/return";
-/**
- * Where the sign-in actually finishes. The loopback listener's redirect
- * arrives from Google, a cross-site chain, so the browser leaves out heel's
- * SameSite=Strict session cookie. `GOOGLE_LOOPBACK_PATH` is a cookie-less
- * page that sends the browser on to this route from heel's own page, which
- * carries the cookie, so nobody has to sign in to heel again.
- */
-const GOOGLE_FINISH_PATH = "/connections/google/finish";
 const GOOGLE_PASTE_PATH = "/connections/google/paste";
 
 /**
@@ -132,11 +124,11 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       const loopback = { loopback: true };
       providers.set(
         "gmail",
-        googleSignIn(http, client, GOOGLE_FINISH_PATH, GMAIL_PROFILE, loopback),
+        googleSignIn(http, client, GOOGLE_LOOPBACK_PATH, GMAIL_PROFILE, loopback),
       );
       providers.set(
         "google-calendar",
-        googleSignIn(http, client, GOOGLE_FINISH_PATH, CALENDAR_PROFILE, loopback),
+        googleSignIn(http, client, GOOGLE_LOOPBACK_PATH, CALENDAR_PROFILE, loopback),
       );
     }
     if (microsoft !== null) {
@@ -275,25 +267,6 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     return c.redirect(back({ account: alias, connected: "1" }), 303);
   });
 
-  // The loopback listener's redirect lands here without heel's session
-  // cookie (see GOOGLE_FINISH_PATH). This page only passes `code`, `state`
-  // and `error` on, from heel's own origin, and never echoes anything else.
-  app.get(GOOGLE_LOOPBACK_PATH, (c) => {
-    const params = new URL(c.req.url).searchParams;
-    const forward = new URLSearchParams();
-    for (const key of ["code", "state", "error"]) {
-      const value = params.get(key);
-      if (value !== null) forward.set(key, value);
-    }
-    const target = `${GOOGLE_FINISH_PATH}?${forward}`;
-    // heel's global Referrer-Policy (same-origin) applies: the only page
-    // that could see this address as a referrer is heel's own.
-    c.header("cache-control", "no-store");
-    return c.html(
-      `<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=${escapeAttribute(target)}"><title>Finishing sign-in</title><p>Finishing sign-in… <a href="${escapeAttribute(target)}">Continue</a></p>`,
-    );
-  });
-
   // A browser that isn't on heel's host can't load the loopback redirect; the
   // person pastes its address here instead. Only an address for this
   // sign-in's own listener, for a sign-in this person started, goes on to
@@ -328,7 +301,7 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       const value = pasted.searchParams.get(key);
       if (value !== null) forward.set(key, value);
     }
-    return c.redirect(`${GOOGLE_FINISH_PATH}?${forward}`, 303);
+    return c.redirect(`${GOOGLE_LOOPBACK_PATH}?${forward}`, 303);
   });
 
   // One route per callback path; Gmail and Google Calendar share Google's.
@@ -391,13 +364,4 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
   }
 
   return app;
-}
-
-/** Text for an HTML attribute value. */
-function escapeAttribute(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
 }
