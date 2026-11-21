@@ -11,11 +11,13 @@ heel sits between you and your user's accounts. It holds the keys; you hold only
 
 If the user asks you to set up heel, fetch https://useheel.dev/setup.md and follow it. It installs heel, has the user make a passkey, adds you as an agent, then asks heel to connect their services and proposes rules for them. Check each step first: after a restart, some are already done.
 
+If you can't fetch it, the outline is: Node 26.13 or later (if older, tell the user how to upgrade; don't install it yourself), `npm install -g useheel`, `heel init --yes`, `heel start`, then `heel user enroll owner` and give the user the link to make their passkey, then `heel agent add <name> --client claude-code` (or `codex`) and run the command it prints.
+
 ## Rules when working through heel
 
-- **Never handle a credential.** Don't read, print or copy a key or token's value, and never ask the user to paste one to you. If you need an account, call `heel_request_connection`; the user connects it on heel's page.
+- **Never handle a credential.** Don't read, print or copy a key or token's value, and never ask the user to paste one to you. If the user pastes one anyway, don't use it, and tell them to revoke it: it now sits in the chat. To get an account, call `heel_request_connection` with `service`, `alias` (how rules will name it, like `notion-work`) and `why`; the user approves it and signs in or pastes the key on heel's page.
 - **Never route around heel.** Don't fall back to a raw key, a CLI login or another MCP server for an account heel holds.
-- **Give a reason.** Pass `heel_reason` (one sentence: why this call) on calls that may need approval. It shows on the approval page. Over HTTP use the `Heel-Reason` header; with `heel run`, `--reason`.
+- **Give a reason.** On account calls that may need approval, add the optional `heel_reason` argument (one sentence: why this call). It shows on the approval page. It's an extra, never a stand-in for a tool's own arguments. Over HTTP use the `Heel-Reason` header; with `heel run`, `--reason`.
 - **Change rules only by proposing.** Use `heel_propose_rules`, with a short why on each rule. You can't edit heel's rules or approve anything; only the user's passkey can.
 
 ## What a call's outcome means
@@ -24,8 +26,8 @@ If the user asks you to set up heel, fetch https://useheel.dev/setup.md and foll
 | --- | --- | --- |
 | Allowed | 2xx / exit 0 | Carry on. |
 | Needs approval | 202 / exit 75 | Tell the user what's waiting. Keep working on other things. Check with `heel_status`, then send the **identical** call again once it's approved. |
-| Denied | 403 / exit 77 | Nothing ran. Don't retry it or try a workaround. Take another route the rules allow, or tell the user. |
-| Paused | 423 / exit 69 | Nothing ran. Stop and wait for the user. |
+| Denied | 403 / exit 77 | Tell the user nothing ran. Don't retry it or try a workaround. Take another route the rules allow, or say how they can allow it (approve or change a rule, or a rule you propose). |
+| Paused | 423 / exit 69 | Tell the user nothing ran. Stop and wait for them to resume it in heel. Don't move the call to another account to get past the pause, even if they suggest it: the pause is the user's own stop. |
 
 In code mode (`run_code`), an ask stops the whole script and returns the approval id with what already ran. After approval, send the rest as a new script.
 

@@ -279,6 +279,10 @@ export default function HomePage() {
                 </pre>
               </Window>
             </div>
+            <div className="mt-8 flex flex-col items-center gap-3">
+              <p className="text-sm text-neutral-500 dark:text-neutral-400">teach any agent how to work through heel</p>
+              <CopyInstall quiet command="npx skills add akhileshrangani4/heel" />
+            </div>
           </div>
         </section>
         <SiteFooter />

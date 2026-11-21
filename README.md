@@ -34,7 +34,11 @@ Set up heel for me by following https://useheel.dev/setup.md
 
 It installs heel, connects itself and puts your services behind heel. You make a passkey and approve each connection and rule ([Set up heel with one prompt](docs/setup.md)).
 
-To teach your agent how to work through heel (approvals, denials, asking for a connection), add the skill: `npx skills add akhileshrangani4/heel`.
+To teach your agent how to work through heel (approvals, denials, asking for a connection), add the skill:
+
+```sh
+npx skills add akhileshrangani4/heel
+```
 
 Or by hand:
 
