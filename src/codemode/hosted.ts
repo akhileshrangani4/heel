@@ -1,7 +1,14 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { join, resolve } from "node:path";
-import { lineReader, parseFromHost, type ToHost, type WireStep } from "./protocol.ts";
+import {
+  fromWire,
+  lineReader,
+  parseFromHost,
+  type ToHost,
+  toWireModules,
+  type WireStep,
+} from "./protocol.ts";
 import { hoistedDependencies } from "./sandboxed.ts";
 import type { StubModule } from "./stubs.ts";
 import type { CodeWorker, ScriptLimits, Step } from "./worker.ts";
@@ -239,11 +246,7 @@ export class HostedCodeWorker implements CodeWorker {
         id,
         type: "start",
         code,
-        modules: modules.map((m) => ({
-          module: m.module,
-          stubs: m.stubs,
-          functions: [...m.functions],
-        })),
+        modules: toWireModules(modules),
         limits,
       }),
     );
@@ -253,12 +256,9 @@ export class HostedCodeWorker implements CodeWorker {
     const id = this.#id;
     if (step.kind !== "call") return step;
     if (id === null) return { kind: "failed", error: "the script was stopped" };
-    return {
-      ...step,
-      resume: async (value) => this.#step(await this.#host.next(id, { id, type: "resume", value })),
-      raise: async (errorType, message) =>
-        this.#step(await this.#host.next(id, { id, type: "raise", errorType, message })),
-    };
+    return fromWire(step, async (answer) =>
+      this.#step(await this.#host.next(id, { ...answer, id })),
+    );
   }
 
   async stop(): Promise<void> {

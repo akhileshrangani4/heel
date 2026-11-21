@@ -1,14 +1,26 @@
 import { StringDecoder } from "node:string_decoder";
+import type { StubModule } from "./stubs.ts";
 import type { ScriptLimits, Step } from "./worker.ts";
 
 /**
- * The line protocol between heel and `heel codemode-worker` (D6b): one JSON
- * object per line, each way, over the worker's stdin and stdout.
+ * The line protocols between heel and the process that runs Monty: one JSON
+ * object per line, each way, over that process's stdin and stdout. There are
+ * two, because there are two such processes:
  *
- * heel → worker: `start` once, then `resume` or `raise` after each `call`.
- * worker → heel: `stdout` chunks as the script prints, and a `step` after
- * every turn. heel ends a script by killing the worker; there is no message
- * for it.
+ * - `heel codemode-worker` (under bubblewrap) runs one script, so its
+ *   messages are bare: `ToWorker` and `FromWorker`.
+ * - `heel codemode-host` (the helper, where bubblewrap isn't available) runs
+ *   many scripts at once, so the same messages carry the script's `id`, and
+ *   two more exist to end one script without ending the process: `ToHost`
+ *   and `FromHost`.
+ *
+ * heel → process: `start` once, then `resume` or `raise` after each `call`.
+ * process → heel: `stdout` chunks as the script prints, and a `step` after
+ * every turn. heel ends a worker's script by killing the worker, and a
+ * helper's script with `stop`.
+ *
+ * Both sides of both protocols share the conversions below, so a module, a
+ * step and the stdout limit mean the same thing on either path.
  */
 
 /** A module as it crosses the boundary: functions as pairs, since a Map isn't JSON. */
@@ -18,10 +30,29 @@ export interface WireModule {
   functions: [string, string][];
 }
 
-export type ToWorker =
-  | { type: "start"; code: string; modules: WireModule[]; limits: ScriptLimits }
+export function toWireModules(modules: readonly StubModule[]): WireModule[] {
+  return modules.map((m) => ({ module: m.module, stubs: m.stubs, functions: [...m.functions] }));
+}
+
+/** The renames stay behind on heel's side, where `run.ts` applies them. */
+export function fromWireModules(modules: readonly WireModule[]): StubModule[] {
+  return modules.map((m) => ({
+    module: m.module,
+    stubs: m.stubs,
+    functions: new Map(m.functions),
+    renamed: new Map(),
+    skipped: [],
+  }));
+}
+
+/** heel's answer to a `call`: the result, or an error raised at the call site. */
+export type Answer =
   | { type: "resume"; value: unknown }
   | { type: "raise"; errorType: "PermissionError" | "RuntimeError"; message: string };
+
+export type ToWorker =
+  | { type: "start"; code: string; modules: WireModule[]; limits: ScriptLimits }
+  | Answer;
 
 /** A step without its continuations, which stay on the worker's side. */
 export type WireStep =
@@ -45,6 +76,45 @@ export function toWire(step: Step): WireStep {
     fn: step.fn,
     kwargs: step.kwargs,
     positional: step.positional,
+  };
+}
+
+/**
+ * heel's side: a step off the wire gets its continuations back, each one
+ * sending heel's answer and waiting for the step after it.
+ */
+export function fromWire(step: WireStep, answer: (answer: Answer) => Promise<Step>): Step {
+  if (step.kind !== "call") return step;
+  return {
+    ...step,
+    resume: (value) => answer({ type: "resume", value }),
+    raise: (errorType, message) => answer({ type: "raise", errorType, message }),
+  };
+}
+
+/** The script's side: applies heel's answer to the call the script is waiting at. */
+export function applyAnswer(waiting: Step | null, answer: Answer): Promise<Step> {
+  if (waiting?.kind !== "call") {
+    return Promise.resolve({ kind: "failed", error: "heel answered a call that wasn't waiting" });
+  }
+  return answer.type === "resume"
+    ? waiting.resume(answer.value)
+    : waiting.raise(answer.errorType, answer.message);
+}
+
+/**
+ * The script's side: passes on what a script prints until `max` is reached
+ * and drops the rest there, so a script can't flood the pipe to heel. heel
+ * applies the same limit again to what it keeps (`run.ts`), since it doesn't
+ * trust this side to.
+ */
+export function stdoutUpTo(max: number, send: (text: string) => void): (text: string) => void {
+  let sent = 0;
+  return (text) => {
+    if (sent >= max) return;
+    const part = text.slice(0, max - sent);
+    sent += part.length;
+    send(part);
   };
 }
 

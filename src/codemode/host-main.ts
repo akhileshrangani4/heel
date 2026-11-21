@@ -1,7 +1,14 @@
 import type { Monty } from "@pydantic/monty";
 import { MontyWorker } from "./monty.ts";
-import { type FromHost, lineReader, type ToHost, toWire } from "./protocol.ts";
-import type { StubModule } from "./stubs.ts";
+import {
+  applyAnswer,
+  type FromHost,
+  fromWireModules,
+  lineReader,
+  stdoutUpTo,
+  type ToHost,
+  toWire,
+} from "./protocol.ts";
 import type { Step } from "./worker.ts";
 
 /**
@@ -83,34 +90,15 @@ export async function codemodeHostMain(): Promise<void> {
       refill();
       const script: Script = { worker: new MontyWorker("wasm", pool), pool, current: null };
       scripts.set(id, script);
-      const modules: StubModule[] = message.modules.map((m) => ({
-        module: m.module,
-        stubs: m.stubs,
-        functions: new Map(m.functions),
-        renamed: new Map(),
-        skipped: [],
-      }));
-      let sent = 0;
-      const max = message.limits.maxStdout;
+      const stdout = stdoutUpTo(message.limits.maxStdout, (text) => {
+        if (scripts.has(id)) send({ id, type: "stdout", text });
+      });
       const step = await script.worker
-        .start(message.code, modules, message.limits, (text) => {
-          if (sent >= max || !scripts.has(id)) return;
-          const part = text.slice(0, max - sent);
-          sent += part.length;
-          send({ id, type: "stdout", text: part });
-        })
+        .start(message.code, fromWireModules(message.modules), message.limits, stdout)
         .catch((error: unknown): Step => ({ kind: "failed", error: String(error) }));
       return report(id, step);
     }
-    const step = scripts.get(id)?.current;
-    if (step?.kind !== "call")
-      return report(id, { kind: "failed", error: "heel answered a call that wasn't waiting" });
-    report(
-      id,
-      message.type === "resume"
-        ? await step.resume(message.value)
-        : await step.raise(message.errorType, message.message),
-    );
+    report(id, await applyAnswer(scripts.get(id)?.current ?? null, message));
   };
 
   // Messages for one script are handled in order; different scripts run side by side.

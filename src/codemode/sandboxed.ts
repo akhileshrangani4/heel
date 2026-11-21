@@ -4,7 +4,14 @@ import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { SandboxHost, SandboxProcess } from "../runner/index.ts";
 import { startSandboxed } from "../runner/index.ts";
-import { lineReader, parseFromWorker, type ToWorker, type WireStep } from "./protocol.ts";
+import {
+  fromWire,
+  lineReader,
+  parseFromWorker,
+  type ToWorker,
+  toWireModules,
+  type WireStep,
+} from "./protocol.ts";
 import type { StubModule } from "./stubs.ts";
 import type { CodeWorker, ScriptLimits, Step } from "./worker.ts";
 
@@ -151,16 +158,7 @@ export class SandboxedCodeWorker implements CodeWorker {
       };
       this.#deliver(this.#ended);
     });
-    return this.#next({
-      type: "start",
-      code,
-      modules: modules.map((m) => ({
-        module: m.module,
-        stubs: m.stubs,
-        functions: [...m.functions],
-      })),
-      limits,
-    });
+    return this.#next({ type: "start", code, modules: toWireModules(modules), limits });
   }
 
   #deliver(step: WireStep): void {
@@ -174,16 +172,7 @@ export class SandboxedCodeWorker implements CodeWorker {
       if (this.#ended !== null) return resolve(this.#ended);
       this.#waiting = resolve;
       this.#process?.stdin?.write(`${JSON.stringify(message)}\n`);
-    }).then((step) => this.#step(step));
-  }
-
-  #step(step: WireStep): Step {
-    if (step.kind !== "call") return step;
-    return {
-      ...step,
-      resume: (value) => this.#next({ type: "resume", value }),
-      raise: (errorType, message) => this.#next({ type: "raise", errorType, message }),
-    };
+    }).then((step) => fromWire(step, (answer) => this.#next(answer)));
   }
 
   async stop(): Promise<void> {
