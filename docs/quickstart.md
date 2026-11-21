@@ -73,7 +73,7 @@ Then add heel to your agent as an MCP server:
 **Claude Code**
 
 ```sh
-claude mcp add --transport http heel "http://127.0.0.1:7300/mcp" \
+claude mcp add --scope user --transport http heel "http://127.0.0.1:7300/mcp" \
   --header "Authorization: Bearer heel_…"
 ```
 

@@ -26,7 +26,19 @@ export interface CliIo {
   fetch?: (input: string | URL, init?: RequestInit) => Promise<Response>;
   /** The current directory; `process.cwd()` when absent. */
   cwd?: () => string;
+  /**
+   * Runs another program, without a shell (`heel agent add --client` adding heel to
+   * Claude Code). Only the `heel` binary passes one; when absent, heel prints the
+   * command instead, so no test can ever change a real app's config.
+   */
+  exec?: ExecFn;
 }
+
+/** A program's exit code and its stdout and stderr together. Code 127: not installed. */
+export type ExecFn = (
+  command: string,
+  args: readonly string[],
+) => Promise<{ code: number; output: string }>;
 
 export class UsageError extends Error {
   override readonly name = "UsageError";

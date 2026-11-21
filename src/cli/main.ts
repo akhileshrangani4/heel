@@ -14,6 +14,7 @@ import { hasErrnoCode } from "../util/errno.ts";
 import { createMasterKeyFile } from "../vault/key.ts";
 import { SecretFileError } from "../vault/secret-file.ts";
 import { HEEL_VERSION } from "../version.ts";
+import { AGENT_CLIENTS, type ClientResult, connectClient, isAgentClient } from "./clients.ts";
 import {
   type CliIo,
   CONFIG_OPTION,
@@ -86,19 +87,21 @@ export const USAGE = `usage:
                                           way it was installed; --check only says
                                           whether there is one
   heel vault init                         create the master key file
-  heel agent add <name> [--owner <user>] [--expires <days>d|never]
+  heel agent add <name> [--owner <user>] [--expires <days>d|never] [--client claude-code|codex]
                                           add an agent; prints its token once. The
                                           token expires in 90 days unless --expires
-                                          says otherwise. --client claude-code|codex
-                                          also prints the command that adds heel to
-                                          that app
+                                          says otherwise. --client claude-code adds
+                                          heel to Claude Code for every project (the
+                                          token goes there, not to the screen);
+                                          --client codex prints the commands to run
   heel agent workdir <name>               list the directories heel run may work in
   heel agent workdir <name> <dir>...      set them (replaces the list); each <dir> is
                                           an absolute path that exists on heel's host
   heel agent workdir <name> --clear       remove them all: heel run is then refused
-  heel agent rotate <name> [--expires <days>d|never]
+  heel agent rotate <name> [--expires <days>d|never] [--client claude-code|codex]
                                           replace an agent's token (renews it; no
-                                          passkey needed)
+                                          passkey needed); --client puts the new one
+                                          in that app, as for heel agent add
   heel agent revoke <name>                revoke an agent's token
   heel agent list
   heel connect <provider> --as <alias> [--owner <user>] [--credential-stdin]
@@ -245,34 +248,7 @@ export function parseExportTime(text: string, now: Date): string | null {
   return null;
 }
 
-/** The agent apps `heel agent add --client` prints a ready command for. */
-export const AGENT_CLIENTS = ["claude-code", "codex"] as const;
-export type AgentClient = (typeof AGENT_CLIENTS)[number];
-
-function isAgentClient(value: string): value is AgentClient {
-  return (AGENT_CLIENTS as readonly string[]).includes(value);
-}
-
-/**
- * Pure: how to add heel to an agent app, as commands to run. An agent
- * setting heel up for its owner runs these itself, so it never has to put
- * the token anywhere else.
- */
-export function addToClient(client: AgentClient, url: string, token: string): string {
-  switch (client) {
-    case "claude-code":
-      return (
-        "Add heel to Claude Code (then run /mcp, or restart, to load it):\n" +
-        `  claude mcp add --transport http heel "${url}" --header "Authorization: Bearer ${token}"`
-      );
-    case "codex":
-      return (
-        "Add heel to Codex (keep HEEL_TOKEN set where Codex runs, for example in your shell profile):\n" +
-        `  export HEEL_TOKEN=${token}\n` +
-        `  codex mcp add heel --url "${url}" --bearer-token-env-var HEEL_TOKEN`
-      );
-  }
-}
+export { addToClient, runProgram } from "./clients.ts";
 
 /** Pure: the MCP URL an agent should be given, from the agent plane's listen address. */
 export function agentMcpUrl(listen: ListenAddress, publicUrl: URL | null = null): string {
@@ -534,6 +510,31 @@ export function expiresLine(name: string, expiresAt: string | null): string {
   return `Expires: ${expiresAt.slice(0, 10)}. Before then, get a new one with: heel agent rotate ${name}`;
 }
 
+/** `--client` for add and rotate: adds heel to that app, or null without the flag. */
+async function clientStep(
+  io: CliIo,
+  client: string | undefined,
+  url: string,
+  issued: { name: string; token: string },
+  replace: boolean,
+): Promise<ClientResult | null> {
+  if (client === undefined || !isAgentClient(client)) return null;
+  return connectClient(client, url, issued.token, issued.name, {
+    exec: io.exec,
+    replace,
+  });
+}
+
+/** Pure: the token line; when the token went straight into an app, it says so instead. */
+export function tokenLine(
+  token: string,
+  client: { tokenShown: boolean } | null,
+  label: string,
+): string {
+  if (client === null || client.tokenShown) return `${label}: ${token}\n`;
+  return "Token: in Claude Code's config only, not shown here (heel keeps only its hash)\n";
+}
+
 async function agentCommand(args: string[], io: CliIo): Promise<number> {
   const { values, positionals } = parseOrUsage(() =>
     parseArgs({
@@ -551,8 +552,8 @@ async function agentCommand(args: string[], io: CliIo): Promise<number> {
     }),
   );
   const [subcommand, ...rest] = positionals;
-  if (values.client !== undefined && subcommand !== "add") {
-    throw new UsageError("--client is for heel agent add");
+  if (values.client !== undefined && subcommand !== "add" && subcommand !== "rotate") {
+    throw new UsageError("--client is for heel agent add and heel agent rotate");
   }
   if (values.client !== undefined && !isAgentClient(values.client)) {
     throw new UsageError(`--client is one of ${AGENT_CLIENTS.join(", ")}`);
@@ -575,14 +576,13 @@ async function agentCommand(args: string[], io: CliIo): Promise<number> {
       };
       const issued = IssuedAgentResult.parse(await admin(config, { method: "agent.add", params }));
       const url = agentMcpUrl(config.listen.agent, config.agentPublicUrl);
+      const client = await clientStep(io, values.client, url, issued, false);
       io.stdout.write(
         `Added agent "${issued.name}".\n` +
-          `Token (shown once; heel keeps only its hash): ${issued.token}\n` +
+          tokenLine(issued.token, client, "Token (shown once; heel keeps only its hash)") +
           `${expiresLine(issued.name, issued.expiresAt)}\n` +
           `MCP URL: ${url}\n` +
-          (values.client === undefined || !isAgentClient(values.client)
-            ? ""
-            : `\n${addToClient(values.client, url, issued.token)}\n`),
+          (client === null ? "" : `\n${client.text}\n`),
       );
       return EXIT.ok;
     }
@@ -611,10 +611,13 @@ async function agentCommand(args: string[], io: CliIo): Promise<number> {
       const issued = IssuedAgentResult.parse(
         await admin(config, { method: "agent.rotate", params: { name, ...expiry } }),
       );
+      const url = agentMcpUrl(config.listen.agent, config.agentPublicUrl);
+      const client = await clientStep(io, values.client, url, issued, true);
       io.stdout.write(
         `Rotated the token for "${issued.name}". The old token no longer works.\n` +
-          `Token (shown once): ${issued.token}\n` +
-          `${expiresLine(issued.name, issued.expiresAt)}\n`,
+          tokenLine(issued.token, client, "Token (shown once)") +
+          `${expiresLine(issued.name, issued.expiresAt)}\n` +
+          (client === null ? "" : `\n${client.text}\n`),
       );
       return EXIT.ok;
     }
