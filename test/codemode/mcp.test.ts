@@ -24,6 +24,7 @@ describe("code mode over MCP", () => {
       "run_code",
       "heel_stubs",
       "heel_status",
+      "heel_accounts",
       "heel_propose_rules",
       "heel_request_connection",
     ]);

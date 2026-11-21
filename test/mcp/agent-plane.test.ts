@@ -46,6 +46,7 @@ describe("listing tools", () => {
       "delete_note",
       "echo_auth",
       "heel_status",
+      "heel_accounts",
       "heel_propose_rules",
       "heel_request_connection",
     ]);
@@ -67,6 +68,7 @@ describe("listing tools", () => {
       "notes__delete_note",
       "notes__echo_auth",
       "heel_status",
+      "heel_accounts",
       "heel_propose_rules",
       "heel_request_connection",
     ]);

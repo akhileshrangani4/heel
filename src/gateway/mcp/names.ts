@@ -264,3 +264,18 @@ export function cleanReason(raw: unknown): string | undefined {
   const text = typeof raw === "string" ? raw.trim() : "";
   return text === "" ? undefined : text.slice(0, REASON_MAX_CHARS);
 }
+
+export const HEEL_ACCOUNTS = "heel_accounts";
+
+/**
+ * What's behind heel for the agent (roadmap 2.6): the accounts it can use,
+ * and what it asked for that still waits for its owner. heel's own: an
+ * account tool by this name is never listed.
+ */
+export const HEEL_ACCOUNTS_TOOL: Tool = {
+  name: HEEL_ACCOUNTS,
+  description:
+    "What's behind heel for you: the accounts you can use (by alias and service), and your connection requests and rule proposals still waiting for your owner. " +
+    "Names and services only; heel never shows a key. Read-only.",
+  inputSchema: { type: "object", properties: {}, additionalProperties: false },
+};

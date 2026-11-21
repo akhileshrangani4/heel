@@ -119,6 +119,7 @@ The agent checks back and sends the call again, and this time it runs. Every dec
 
 ## Next steps
 
+- **[Set up the rest with one prompt](setup.md):** your agent finds the services you use and asks heel to connect them; you approve each.
 - **[Write rules](rules.md):** let the calls you always approve run on their own.
 - **[Approve from your phone](approvals.md):** give heel an HTTPS address and get notifications.
 - **[Connect more accounts](connect.md):** Gmail, Slack, Linear, any MCP server, API or CLI.

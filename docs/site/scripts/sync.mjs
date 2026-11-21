@@ -22,7 +22,14 @@ const GITHUB = "https://github.com/akhileshrangani4/heel/blob/main/";
 
 /** The sidebar, in groups and in order: [page, file in docs/]. `index` is the docs home. */
 const GROUPS = [
-  ["Get started", [["index", "introduction.md"], ["quickstart", "quickstart.md"]]],
+  [
+    "Get started",
+    [
+      ["index", "introduction.md"],
+      ["quickstart", "quickstart.md"],
+      ["setup", "setup.md"],
+    ],
+  ],
   [
     "Guides",
     [

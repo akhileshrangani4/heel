@@ -129,6 +129,7 @@ const PHASES: Phase[] = [
       [
         'one setup prompt',
         'tell any agent to put your services behind heel. it proposes the connections and rules, then walks you through swapping out raw keys.',
+        'shipped',
       ],
       ['everything in the web app', 'anything the cli can do, the web app can do too.'],
       [
