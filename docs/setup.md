@@ -1,0 +1,83 @@
+# Set up heel with one prompt
+
+[README](../README.md) · [Quickstart](quickstart.md) · [Connect accounts](connect.md) · [Connect your agent](agents.md) · [Rules](rules.md) · [Approvals](approvals.md) · [Running](running.md)
+
+heel is set up by your agent. Tell Claude Code, Codex or any coding agent:
+
+```text
+Set up heel for me by following https://useheel.dev/setup.md
+```
+
+It installs heel, starts it, connects itself, then finds the services you use and asks heel to connect each one. You do two things by hand and approve the rest with your passkey.
+
+## What you'll do
+
+1. **Make your passkey.** The agent gives you a link. Open it and choose **Create a passkey** (Touch ID, Windows Hello or a security key).
+2. **Load heel in your agent.** In Claude Code, run `/mcp` or restart. If you restart, tell it the same line again; it picks up where it left off.
+3. **Approve what it asks for** on heel's approval page:
+   - each connection: sign in (Gmail, Calendar, Outlook) or paste the service's key on heel's page (GitHub, Slack, Linear, Notion, Stripe);
+   - the rules it proposes, each with what it's for. Change them first if you like.
+4. **Remove the old keys** with it, one change at a time.
+
+The agent never reads a key's value, never connects an account or writes a rule itself, and asks before it changes anything outside heel.
+
+## Already connected?
+
+If your agent already reaches heel, skip the install: in Claude Code, run `/mcp__heel__setup` (other agents: pick heel's `setup` prompt). It starts at finding your services.
+
+## The prompt
+
+This is what the agent reads at useheel.dev/setup.md.
+
+```text
+Set up heel for me. heel is a permission gateway: you'll reach my accounts through it, it holds their keys, and I approve anything risky with a passkey. Go step by step and tell me what you're doing.
+
+Some steps may be done already, for example if I restarted you partway: check each one first and skip it if it's done. If heel's tools (such as heel_accounts) are already available to you, skip straight to the part after step 6.
+
+Rules for the whole task:
+- Never read, print, copy or send the value of a key, token, password or secret. The one exception is heel's own token for you in step 5: pass it straight to the command that adds heel to your app, and don't repeat it in our chat.
+- Use heel's command line only for the steps below. Don't run heel connect, edit heel's rules files or approve anything yourself: connections and rules go through requests I approve.
+- Don't install system software, edit shell profiles or change files outside heel without asking me first.
+
+1. Check Node: node -v must be 26.13 or later. If it isn't, stop and tell me how to install it (from nodejs.org, or with mise or nvm). Don't install it yourself.
+
+2. If heel --version fails, install heel: npm install -g useheel
+
+3. Set heel up and start it: heel init --yes, then heel start. Run heel status to check it's running.
+
+4. My passkey: run heel user enroll owner and give me the link it prints. Ask me to open it and choose Create a passkey. Wait until I say I'm done, then run heel status and check that Passkeys is 1 or more.
+
+5. Add yourself as an agent: heel agent add <a short name for you, like claude-code> --client claude-code (or --client codex). Run the command it prints to add heel to your app. For any other app, leave out --client and tell me the MCP URL to add, with the token as a bearer token.
+
+6. Ask me to load heel in your app (in Claude Code, run /mcp or restart), and to tell you when it's done. Then check that heel's tools are there, such as heel_accounts.
+
+heel now runs on this machine as me, so you could still read its files. When we're done, tell me that heel is safest under its own user or on a server, and point me to https://useheel.dev/docs/running.
+
+Once heel's tools are loaded, carry on:
+
+Help me put the services I use behind heel, so you reach them through heel and never hold their keys.
+
+Rules for the whole task:
+- Never read, print, copy or send the value of a key, token, password or secret. You may look at names only: environment variable names, which config files exist, which servers an MCP config lists.
+- Don't edit, move or delete any file or setting without asking me first.
+- Everything you ask heel for waits for me. I approve each request on heel's approval page with my passkey.
+
+1. Call heel_accounts to see what's already behind heel and what's still waiting.
+
+2. Find the services I use, by name only:
+   - environment variables such as GH_TOKEN, GITHUB_TOKEN, SLACK_BOT_TOKEN, LINEAR_API_KEY, NOTION_TOKEN, STRIPE_API_KEY (names only, never values);
+   - the gh CLI's login (whether ~/.config/gh/hosts.yml exists);
+   - the MCP servers in your own client's config, and which of them carry a token;
+   - .env files in the project I'm working in (variable names only).
+   Tell me what you found as a short list: service, where its key lives now. Leave out anything already behind heel.
+
+3. For each one heel can hold, call heel_request_connection with a short alias and a one-line why. heel takes Gmail, Google Calendar, Outlook, GitHub, Slack, Linear, Notion, Stripe, and remote MCP servers on public https hosts. For anything else, tell me it stays as it is.
+
+4. Propose rules with heel_propose_rules, one short why per rule. A good start for each new account: reads run, anything that sends, merges, pays or deletes asks me, and nothing else is allowed. Keep it to what you need for the work I do with you.
+
+5. Tell me what's waiting for me and where to approve it. Then wait for me; call heel_accounts again when I say I've approved.
+
+6. Once an account is connected, walk me through removing the raw key heel replaced: which variable, file or MCP config entry to change, and whether to revoke the old key with the service. Show me each change first; make it only if I say yes.
+
+Finish with a short summary: what's behind heel now, what's still waiting, and what still holds its own key.
+```

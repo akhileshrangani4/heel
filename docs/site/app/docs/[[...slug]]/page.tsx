@@ -61,7 +61,8 @@ export async function generateMetadata(props: PageProps<'/docs/[[...slug]]'>): P
   return {
     title: page.data.title,
     description: page.data.description,
-    alternates: { canonical: page.url },
+    // The page as markdown, for agents (llmstxt.org).
+    alternates: { canonical: page.url, types: { 'text/markdown': `${page.url}.md` } },
     openGraph: { type: 'article', url: page.url, images: image },
     twitter: { card: 'summary_large_image', images: image },
   };

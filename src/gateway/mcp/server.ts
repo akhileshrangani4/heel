@@ -12,8 +12,12 @@ import { type CallRecord, runScript, type ScriptStatus } from "../../codemode/ru
 import { accountModule } from "../../codemode/stubs.ts";
 import type { CodeWorker } from "../../codemode/worker.ts";
 import type { Logger } from "../../log.ts";
-import { ProposeRulesInput, proposeRules } from "../../proposals/rules.ts";
-import { RequestConnectionInput, requestConnection } from "../../requests/connection.ts";
+import { ProposeRulesInput, pendingProposals, proposeRules } from "../../proposals/rules.ts";
+import {
+  pendingRequests,
+  RequestConnectionInput,
+  requestConnection,
+} from "../../requests/connection.ts";
 import { approvalStatusForAgent } from "../../store/approvals.ts";
 import type { HeelDb } from "../../store/db.ts";
 import { type AccountRecord, findAccount } from "../../store/directory.ts";
@@ -30,6 +34,8 @@ import { type SandboxSlots, UNLIMITED_SLOT } from "../sandbox-slots.ts";
 import { clientNameFrom } from "./client-info.ts";
 import {
   directName,
+  HEEL_ACCOUNTS,
+  HEEL_ACCOUNTS_TOOL,
   HEEL_PROPOSE_RULES,
   HEEL_PROPOSE_RULES_TOOL,
   HEEL_REQUEST_CONNECTION,
@@ -45,6 +51,7 @@ import {
   takeReason,
 } from "./names.ts";
 import { toolResult } from "./results.ts";
+import { SETUP_PROMPT_NAME, setupPrompt } from "./setup-prompt.ts";
 
 /**
  * heel's MCP endpoints on the agent plane (spec: MCP and code mode).
@@ -85,10 +92,17 @@ export interface McpSurfaceDeps {
   onRuleProposal?: (proposalId: string) => void;
   /** Called after an agent asks for a connection, to tell its owner. */
   onAgentRequest?: (requestId: string) => void;
+  /** heel's approval page, named in the setup prompt; the prompt says "heel's approval page" without it. */
+  approvalsUrl?: string;
 }
 
 /** heel's own tools, listed on every MCP scope. */
-const HEEL_TOOLS = [HEEL_STATUS_TOOL, HEEL_PROPOSE_RULES_TOOL, HEEL_REQUEST_CONNECTION_TOOL];
+const HEEL_TOOLS = [
+  HEEL_STATUS_TOOL,
+  HEEL_ACCOUNTS_TOOL,
+  HEEL_PROPOSE_RULES_TOOL,
+  HEEL_REQUEST_CONNECTION_TOOL,
+];
 const HEEL_TOOL_NAMES: ReadonlySet<string> = new Set(HEEL_TOOLS.map((tool) => tool.name));
 
 export interface McpSurface {
@@ -346,6 +360,33 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     return { content: [{ type: "text", text: JSON.stringify(answer) }], structuredContent: answer };
   }
 
+  /** The agent's accounts and what it asked for that still waits (roadmap 2.6). Names only. */
+  function heelAccounts(agent: AuthenticatedAgent): CallToolResult {
+    const at = now();
+    const answer = {
+      accounts: accountsUsableBy(deps.db, agent.orgId, agent.ownerId).map((a) => ({
+        alias: a.alias,
+        // A remote MCP server's provider id carries heel's own key; the agent sees "mcp".
+        service: isMcpProvider(a.provider) ? "mcp" : a.provider,
+        status: a.status,
+      })),
+      waiting: {
+        connections: pendingRequests(deps.db, agent.ownerId, at)
+          .filter((r) => r.agentId === agent.agentId)
+          .map((r) => ({
+            alias: r.details.alias,
+            service: r.details.provider,
+            expiresAt: r.expiresAt.toISOString(),
+          })),
+        ruleProposals: pendingProposals(deps.db, agent.ownerId, at)
+          .filter((p) => p.agentId === agent.agentId)
+          .map((p) => ({ proposalId: p.id, expiresAt: p.expiresAt.toISOString() })),
+      },
+      ...(deps.approvalsUrl === undefined ? {} : { approveAt: deps.approvalsUrl }),
+    };
+    return { content: [{ type: "text", text: JSON.stringify(answer) }], structuredContent: answer };
+  }
+
   function heelStatus(agent: AuthenticatedAgent, args: Record<string, unknown>): CallToolResult {
     const approvalId = typeof args["approval_id"] === "string" ? args["approval_id"] : "";
     const status = approvalStatusForAgent(deps.db, agent, approvalId, now());
@@ -369,6 +410,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
   ): Promise<CallToolResult> {
     const args = params.arguments ?? {};
     if (params.name === HEEL_STATUS) return heelStatus(agent, args);
+    if (params.name === HEEL_ACCOUNTS) return heelAccounts(agent);
     if (params.name === HEEL_PROPOSE_RULES) return proposeRulesTool(agent, args);
     if (params.name === HEEL_REQUEST_CONNECTION) return requestConnectionTool(agent, args);
     if (scope.kind === "code") {
@@ -428,9 +470,37 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     const { agent, scope } = context;
     const server = new Server(
       { name: "heel", version: deps.version },
-      { capabilities: { tools: {} } },
+      { capabilities: { tools: {}, prompts: {} } },
     );
     server.setRequestHandler("tools/list", async () => ({ tools: await listTools(agent, scope) }));
+    // The setup prompt (roadmap 2.6): in Claude Code, /mcp__heel__setup.
+    server.setRequestHandler("prompts/list", async () => ({
+      prompts: [
+        {
+          name: SETUP_PROMPT_NAME,
+          title: "Put my services behind heel",
+          description:
+            "Find the services you use, ask heel to connect each and propose rules, then help replace the raw keys. Everything waits for your passkey.",
+        },
+      ],
+    }));
+    server.setRequestHandler("prompts/get", async (request) => {
+      if (request.params.name !== SETUP_PROMPT_NAME) {
+        throw new ProtocolError(
+          ProtocolErrorCode.InvalidParams,
+          `Unknown prompt: ${request.params.name}`,
+        );
+      }
+      return {
+        description: "Put my services behind heel",
+        messages: [
+          {
+            role: "user" as const,
+            content: { type: "text" as const, text: setupPrompt(deps.approvalsUrl ?? null) },
+          },
+        ],
+      };
+    });
     server.setRequestHandler("tools/call", async (request, ctx) =>
       withExpiryNote(
         await callTool(agent, scope, request.params, ctx.mcpReq.signal),

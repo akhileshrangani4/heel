@@ -128,7 +128,8 @@ const PHASES: Phase[] = [
       ],
       [
         'one setup prompt',
-        'tell any agent to put your services behind heel. it proposes the connections and rules, then walks you through swapping out raw keys.',
+        'tell any agent one line. it installs heel, connects itself, asks for your connections and proposes rules, then walks you through swapping out raw keys. you make a passkey and approve each step.',
+        'shipped',
       ],
       ['everything in the web app', 'anything the cli can do, the web app can do too.'],
       [
@@ -151,6 +152,11 @@ const PHASES: Phase[] = [
       ['a walkthrough video', 'from install to an agent that sets heel up, with you approving each step.'],
       ['the email demo', 'an agent that reads and drafts your mail, but asks before anything is sent.'],
       ['how heel was built', 'a write-up of the research, the decisions and what we learned.'],
+      [
+        'readable by agents',
+        'useheel.dev serves llms.txt, every docs page as markdown, and the setup prompt at /setup.md, so an agent can find heel and set it up.',
+        'shipped',
+      ],
       [
         'a new home page',
         'heel at work up front: your intent, three calls and what heel does with each, with the rules behind them.',

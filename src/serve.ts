@@ -602,6 +602,8 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
       }
       const mcp = createMcpSurface({
         db: store.db,
+        // The setup prompt tells the owner where to approve.
+        approvalsUrl: new URL("/approvals", config.publicUrl).href,
         pipeline,
         definitions,
         log,
