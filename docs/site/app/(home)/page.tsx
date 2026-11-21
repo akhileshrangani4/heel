@@ -250,7 +250,10 @@ export default function HomePage() {
               tell your agent one line. it sets heel up; you approve with a passkey.
             </p>
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-              <CopyInstall prompt command="Set up heel for me by following https://useheel.dev/setup.md" />
+              <CopyInstall
+                label="copy prompt"
+                command="Set up heel for me by following https://useheel.dev/setup.md"
+              />
               <Link href="/docs/setup" className={pill}>
                 how it works
               </Link>

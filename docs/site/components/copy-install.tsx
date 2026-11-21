@@ -4,10 +4,10 @@ import { Check, Copy } from 'lucide-react';
 import { useState } from 'react';
 
 /**
- * A pill that copies a line. A shell command shows a `$`; a line meant for
- * an agent (`prompt`) doesn't, and wraps on a phone instead of overflowing.
+ * A pill that copies a line. A shell command shows itself with a `$`; with
+ * a `label`, the pill shows that instead (a long prompt for an agent).
  */
-export function CopyInstall({ command, prompt = false }: { command: string; prompt?: boolean }) {
+export function CopyInstall({ command, label }: { command: string; label?: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <button
@@ -17,12 +17,16 @@ export function CopyInstall({ command, prompt = false }: { command: string; prom
         setCopied(true);
         setTimeout(() => setCopied(false), 1600);
       }}
-      className={`group flex items-center gap-3 rounded-full bg-neutral-900 py-2.5 pr-4 pl-5 font-mono text-sm text-white ${prompt ? 'text-left' : ''} shadow-[0_1px_2px_rgba(0,0,0,0.2)] transition-colors hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200`}
+      className={`group flex items-center gap-3 rounded-full bg-neutral-900 py-2.5 pr-4 pl-5 font-mono text-sm text-white shadow-[0_1px_2px_rgba(0,0,0,0.2)] transition-colors hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200`}
       aria-label={`Copy: ${command}`}
     >
       <span>
-        {prompt ? null : <span className="text-white/45 select-none dark:text-black/40">$ </span>}
-        {command}
+        {label ?? (
+          <>
+            <span className="text-white/45 select-none dark:text-black/40">$ </span>
+            {command}
+          </>
+        )}
       </span>
       {copied ? (
         <Check className="size-4 shrink-0 text-emerald-400 dark:text-emerald-600" />
