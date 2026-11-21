@@ -63,7 +63,13 @@ describe("heel serve", () => {
     const ping = await adminCall(config.adminSocketPath, { method: "ping" });
     expect(ping).toEqual({
       ok: true,
-      result: { version: "test", vault: "unavailable", pid: process.pid, background: false },
+      result: {
+        version: "test",
+        vault: "unavailable",
+        pid: process.pid,
+        background: false,
+        passkeys: 0,
+      },
     });
     expect(output()).toContain("agent plane refused");
   });
