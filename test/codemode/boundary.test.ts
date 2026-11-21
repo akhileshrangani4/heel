@@ -1,12 +1,17 @@
+import { spawn } from "node:child_process";
 import { readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { PassThrough } from "node:stream";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { lineReader, parseFromWorker } from "../../src/codemode/protocol.ts";
+import { runScript } from "../../src/codemode/run.ts";
 import { SandboxedCodeWorker } from "../../src/codemode/sandboxed.ts";
+import { accountModule } from "../../src/codemode/stubs.ts";
 import { plainValue } from "../../src/codemode/values.ts";
 import { DEFAULT_LIMITS } from "../../src/codemode/worker.ts";
-import type { SandboxHost, SandboxOutcome } from "../../src/runner/index.ts";
+import type { Pipeline } from "../../src/gateway/pipeline/pipeline.ts";
+import type { SandboxHost, SandboxOutcome, SandboxProcess } from "../../src/runner/index.ts";
 
 /** The worker boundary (D6b): what crosses it, checked, and a worker that dies mid-call. */
 
@@ -142,4 +147,73 @@ describe("the sandboxed worker", () => {
     const after = readdirSync(tmpdir()).filter((n) => n.startsWith("heel-codemode-")).length;
     expect(after).toBe(before);
   });
+});
+
+/**
+ * `heel codemode-worker` itself, started as a plain process: bubblewrap only
+ * runs on Linux, and the worker's side of the protocol should be checked on
+ * every OS. The escape corpus covers the sandbox around it.
+ */
+describe("the worker process, without its sandbox", () => {
+  const INSTALL_DIR = fileURLToPath(new URL("../..", import.meta.url));
+  const AGENT = { orgId: "org", agentId: "agt", agentName: "bot", ownerId: "usr", tokenId: "tok" };
+  const MODULE = accountModule("acct", [
+    { name: "ok", inputSchema: { type: "object", properties: {} } },
+  ]);
+  const allowAll: Pipeline = {
+    run: async () => ({
+      status: "allowed",
+      result: { ok: true },
+      via: {
+        kind: "rule",
+        rule: { name: null, file: "rules/owner.yaml", line: 1 },
+        standingApprovalId: null,
+      },
+    }),
+  };
+
+  function unsandboxed() {
+    return new SandboxedCodeWorker({
+      host: { node: process.execPath } as SandboxHost,
+      installDir: INSTALL_DIR,
+      start: async (_host, spec): Promise<SandboxProcess> => {
+        const child = spawn(spec.binary, spec.args, { stdio: ["pipe", "pipe", "pipe"] });
+        const done = new Promise<SandboxOutcome>((resolve) => {
+          child.once("exit", (code) => resolve({ kind: "exited", code: code ?? 137 }));
+        });
+        return {
+          stdin: child.stdin,
+          stdout: child.stdout,
+          stderr: child.stderr,
+          done,
+          kill: () => void child.kill("SIGKILL"),
+        };
+      },
+    });
+  }
+
+  function run(code: string, limits = {}) {
+    if (MODULE === null) throw new Error("no module");
+    return runScript({
+      code,
+      agent: AGENT,
+      modules: [{ ...MODULE, account: "acct" }],
+      pipeline: allowAll,
+      worker: unsandboxed(),
+      limits,
+    });
+  }
+
+  it("runs a script, relays its call to heel and resumes it with the result", async () => {
+    const result = await run(`import acct\nprint("before")\nr = acct.ok()\nprint(r["ok"])\n7`);
+    expect(result).toMatchObject({ status: "completed", output: 7, error: null });
+    expect(result.stdout).toBe("before\nTrue\n");
+    expect(result.calls).toEqual([{ account: "acct", tool: "ok", decision: "allow" }]);
+  }, 60_000);
+
+  it("drops stdout past the script's limit", async () => {
+    const result = await run(`print("abcdefghij")\nprint("more")`, { maxStdout: 4 });
+    expect(result.status).toBe("completed");
+    expect(result.stdout).toBe("abcd");
+  }, 60_000);
 });

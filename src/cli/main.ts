@@ -245,9 +245,9 @@ export function parseExportTime(text: string, now: Date): string | null {
 
 /** Pure: the MCP URL an agent should be given, from the agent plane's listen address. */
 export function agentMcpUrl(listen: ListenAddress, publicUrl: URL | null = null): string {
-  // Direct tools work on every host; code mode (bare /mcp) needs the Linux sandbox.
-  if (publicUrl !== null)
-    return new URL("mcp?tools=direct", publicUrl.href.replace(/\/?$/, "/")).href;
+  // Code mode (bare /mcp) runs on every host, so that's what an agent gets: two tools,
+  // however many accounts are connected. `?tools=direct` stays for clients that want one tool each.
+  if (publicUrl !== null) return new URL("mcp", publicUrl.href.replace(/\/?$/, "/")).href;
   // A wildcard listen address (a container) is reached at localhost, not 0.0.0.0.
   const wildcard = listen.host === "0.0.0.0" || listen.host === "::";
   const host = wildcard
@@ -255,7 +255,7 @@ export function agentMcpUrl(listen: ListenAddress, publicUrl: URL | null = null)
     : listen.host.includes(":")
       ? `[${listen.host}]`
       : listen.host;
-  return `http://${host}:${listen.port}/mcp?tools=direct`;
+  return `http://${host}:${listen.port}/mcp`;
 }
 
 /** Sends one admin request; a refusal becomes a RefusedError carrying heel's message. */
@@ -1380,6 +1380,13 @@ async function dispatch(argv: string[], io: CliIo): Promise<number> {
       // (D6b). It never returns; it exits when the script ends.
       const { codemodeWorkerMain } = await import("../codemode/worker-main.ts");
       await codemodeWorkerMain();
+      return new Promise<number>(() => {});
+    }
+    case "codemode-host": {
+      // Internal: where bubblewrap isn't available, heel starts one when the first script
+      // needs it, locked down with Node's permission model. It runs until heel closes it.
+      const { codemodeHostMain } = await import("../codemode/host-main.ts");
+      await codemodeHostMain();
       return new Promise<number>(() => {});
     }
     case "run":

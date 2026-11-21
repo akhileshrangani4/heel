@@ -230,3 +230,32 @@ jobs:
             /usr/bin/true
       - name: Sandbox e2e (real bubblewrap)
         run: bwrap --version && pnpm test:e2e
+
+  code-mode-other-os:
+    # Code mode runs on every OS: without bubblewrap, on the locked-down
+    # WebAssembly helper. This runs its tests and the escape corpus on the
+    # hosts that use that path, so "runs on Windows and macOS" is checked,
+    # not claimed.
+    name: code mode on ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, windows-2025]
+        tests: [test/codemode]
+        include:
+          # Monty ships no native build for Windows on Arm. heel never needs one there (no
+          # bubblewrap, so every script runs on the WebAssembly helper), so this runner checks
+          # the helper path only.
+          - os: windows-11-arm
+            tests: test/codemode/hosted.test.ts test/codemode/hoisted.test.ts
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec vitest run ${{ matrix.tests }}
+      - run: pnpm exec vitest run --config vitest.e2e.config.ts e2e/codemode

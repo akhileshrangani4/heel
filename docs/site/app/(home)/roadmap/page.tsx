@@ -132,6 +132,11 @@ const PHASES: Phase[] = [
       ],
       ['everything in the web app', 'anything the cli can do, the web app can do too.'],
       [
+        'code mode on every machine',
+        'your agent writes one short script instead of loading a tool for every action, so connecting more accounts doesn’t fill its context. it now runs on macos and windows too, and every call in the script still goes through your rules.',
+        'shipped',
+      ],
+      [
         'it learns from what you approve',
         'approve the same kind of call five times (you pick the number) and heel suggests a rule so it stops asking. agents can see the pattern and propose it; you approve with a passkey. only calls through heel count.',
       ],

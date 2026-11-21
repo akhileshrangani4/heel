@@ -4,7 +4,7 @@
 
 heel is one process. Agents reach it on port 7300 (MCP, the HTTP proxy and `heel run`); you reach the approval page on port 7301. The `heel` command talks to it through a local socket.
 
-You need Node 26.13 or later, or Docker. `heel run`, code mode and local MCP servers also need Linux with bubblewrap ([Sandbox and credentials](sandbox.md)); on other hosts heel turns them off and everything else works.
+You need Node 26.13 or later, or Docker. `heel run` and local MCP servers also need Linux with bubblewrap ([Sandbox and credentials](sandbox.md)); on other hosts heel turns them off and everything else works. Code mode runs everywhere.
 
 ## Choose where heel runs
 
@@ -103,7 +103,7 @@ heel agent add desktop-codex --owner <you>
 }
 ```
 
-On a server that isn't Linux (a Mac mini), add `?tools=direct` to the URL: code mode needs [the sandbox](sandbox.md). Each call is decided by your rules on the server and asks your phone when a rule says `ask`, wherever the agent runs.
+Each call is decided by your rules on the server and asks your phone when a rule says `ask`, wherever the agent runs.
 
 What to know:
 

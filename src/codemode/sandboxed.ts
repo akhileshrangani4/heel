@@ -1,10 +1,17 @@
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, resolve } from "node:path";
 import type { SandboxHost, SandboxProcess } from "../runner/index.ts";
 import { startSandboxed } from "../runner/index.ts";
-import { lineReader, parseFromWorker, type ToWorker, type WireStep } from "./protocol.ts";
+import { hoistedDependencies } from "./install.ts";
+import {
+  fromWire,
+  lineReader,
+  parseFromWorker,
+  type ToWorker,
+  toWireModules,
+  type WireStep,
+} from "./protocol.ts";
 import type { StubModule } from "./stubs.ts";
 import type { CodeWorker, ScriptLimits, Step } from "./worker.ts";
 
@@ -40,43 +47,6 @@ const WALL_SLACK_MS = 10_000;
 const OUTPUT_CEILING = 64 * 1024 * 1024;
 /** What the worker needs of heel's install: `src` from source, `dist` in the npm package. */
 const INSTALL_PARTS = ["bin", "src", "dist", "node_modules", "package.json"] as const;
-
-/** Where Monty's entry point resolves: the worker needs it and what sits beside it. */
-function resolvedDependency(): string | null {
-  try {
-    return fileURLToPath(import.meta.resolve("@pydantic/monty"));
-  } catch {
-    return null;
-  }
-}
-
-/** True when `path` is `dir` or below it. */
-function within(dir: string, path: string): boolean {
-  const rel = relative(dir, path);
-  return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
-}
-
-/**
- * The `node_modules` holding heel's dependencies when they aren't inside the
- * install, or null when they are (a checkout, the OCI image, `npm install -g`).
- *
- * A local or npx install puts heel at `<dir>/node_modules/useheel` and
- * hoists its dependencies beside it; pnpm keeps them in
- * `<dir>/node_modules/.pnpm`. Either way the outermost `node_modules` above
- * the install holds them all, so that's what's mounted (read-only), and only
- * when Monty actually resolves inside it.
- */
-export function hoistedDependencies(
-  install: string,
-  entry: string | null = resolvedDependency(),
-): string | null {
-  if (entry === null || within(install, entry)) return null;
-  const parts = install.split(sep);
-  const at = parts.indexOf("node_modules");
-  if (at < 0) return null;
-  const dir = parts.slice(0, at + 1).join(sep);
-  return within(dir, entry) ? dir : null;
-}
 
 /** The sandbox's memory ceiling: Node and Monty's worker on top of the script's budget. */
 const MEMORY_CEILING = 1024 * 1024 * 1024;
@@ -151,16 +121,7 @@ export class SandboxedCodeWorker implements CodeWorker {
       };
       this.#deliver(this.#ended);
     });
-    return this.#next({
-      type: "start",
-      code,
-      modules: modules.map((m) => ({
-        module: m.module,
-        stubs: m.stubs,
-        functions: [...m.functions],
-      })),
-      limits,
-    });
+    return this.#next({ type: "start", code, modules: toWireModules(modules), limits });
   }
 
   #deliver(step: WireStep): void {
@@ -174,16 +135,7 @@ export class SandboxedCodeWorker implements CodeWorker {
       if (this.#ended !== null) return resolve(this.#ended);
       this.#waiting = resolve;
       this.#process?.stdin?.write(`${JSON.stringify(message)}\n`);
-    }).then((step) => this.#step(step));
-  }
-
-  #step(step: WireStep): Step {
-    if (step.kind !== "call") return step;
-    return {
-      ...step,
-      resume: (value) => this.#next({ type: "resume", value }),
-      raise: (errorType, message) => this.#next({ type: "raise", errorType, message }),
-    };
+    }).then((step) => fromWire(step, (answer) => this.#next(answer)));
   }
 
   async stop(): Promise<void> {

@@ -1,5 +1,12 @@
-import { type FromWorker, lineReader, type ToWorker, toWire } from "./protocol.ts";
-import type { StubModule } from "./stubs.ts";
+import {
+  applyAnswer,
+  type FromWorker,
+  fromWireModules,
+  lineReader,
+  stdoutUpTo,
+  type ToWorker,
+  toWire,
+} from "./protocol.ts";
 import type { Step } from "./worker.ts";
 
 /**
@@ -24,33 +31,14 @@ export async function codemodeWorkerMain(): Promise<void> {
   const handle = async (message: ToWorker | null): Promise<void> => {
     if (message === null) return fail("heel sent a line that didn't parse");
     if (message.type === "start") {
-      const modules: StubModule[] = message.modules.map((m) => ({
-        module: m.module,
-        stubs: m.stubs,
-        functions: new Map(m.functions),
-        renamed: new Map(),
-        skipped: [],
-      }));
       // Output past the script's limit is dropped here, so the sandbox's own ceiling isn't reached.
-      let sent = 0;
-      const max = message.limits.maxStdout;
+      const stdout = stdoutUpTo(message.limits.maxStdout, (text) => send({ type: "stdout", text }));
       report(
-        await worker.start(message.code, modules, message.limits, (text) => {
-          if (sent >= max) return;
-          const part = text.slice(0, max - sent);
-          sent += part.length;
-          send({ type: "stdout", text: part });
-        }),
+        await worker.start(message.code, fromWireModules(message.modules), message.limits, stdout),
       );
       return;
     }
-    const step = current;
-    if (step?.kind !== "call") return fail("heel answered a call that wasn't waiting");
-    report(
-      message.type === "resume"
-        ? await step.resume(message.value)
-        : await step.raise(message.errorType, message.message),
-    );
+    report(await applyAnswer(current, message));
   };
   // One message at a time, in order: an answer must wait for the step it answers.
   let queue: Promise<void> = Promise.resolve();

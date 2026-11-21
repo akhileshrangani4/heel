@@ -12,7 +12,7 @@ heel agent add my-agent
 Added agent "my-agent".
 Token (shown once; heel keeps only its hash): heel_…
 Expires: 2027-02-17. Before then, get a new one with: heel agent rotate my-agent
-MCP URL: http://127.0.0.1:7300/mcp?tools=direct
+MCP URL: http://127.0.0.1:7300/mcp
 ```
 
 Give each agent and machine its own token, so you can see which one made a call and pause one without the others.
@@ -22,7 +22,7 @@ Give each agent and machine its own token, so you can see which one made a call 
 **Claude Code**
 
 ```sh
-claude mcp add --transport http heel "http://127.0.0.1:7300/mcp?tools=direct" \
+claude mcp add --transport http heel "http://127.0.0.1:7300/mcp" \
   --header "Authorization: Bearer heel_…"
 ```
 
@@ -30,7 +30,7 @@ claude mcp add --transport http heel "http://127.0.0.1:7300/mcp?tools=direct" \
 
 ```sh
 export HEEL_TOKEN=heel_…
-codex mcp add heel --url "http://127.0.0.1:7300/mcp?tools=direct" --bearer-token-env-var HEEL_TOKEN
+codex mcp add heel --url "http://127.0.0.1:7300/mcp" --bearer-token-env-var HEEL_TOKEN
 ```
 
 **Cursor, or any client with an `mcp.json`**
@@ -39,7 +39,7 @@ codex mcp add heel --url "http://127.0.0.1:7300/mcp?tools=direct" --bearer-token
 {
   "mcpServers": {
     "heel": {
-      "url": "http://127.0.0.1:7300/mcp?tools=direct",
+      "url": "http://127.0.0.1:7300/mcp",
       "headers": { "Authorization": "Bearer heel_…" }
     }
   }
@@ -54,7 +54,8 @@ Then remove the agent's own access to those accounts (its GitHub MCP server, `gh
 
 One MCP server with every connected account's tools, named by alias: `github__merge_pull_request`, `gmail-work__send`. Or one account at a time at `/mcp/<alias>`.
 
-- **On Linux,** `/mcp` without `?tools=direct` is code mode: one `run_code` tool where the agent writes a short Python script against your accounts (`github.list_pull_requests(...)`).
+- **`/mcp` is code mode,** on every OS: the agent gets one `run_code` tool and writes a short Python script against your accounts (`github.list_pull_requests(...)`), so its context stays small however many accounts you connect. Every call in the script is decided by your rules like any other. See [How code mode runs](sandbox.md#how-code-mode-runs).
+- **`/mcp?tools=direct`** gives one tool per account action instead, for clients that work better that way.
 - **HTTP APIs** are at `/http/<alias>/<path>`, and **CLIs** run with `heel run`. Neither is an MCP tool.
 - **`heel_status`** tells the agent where an approval stands. **`heel_propose_rules`** lets it [propose rules and hide entries](rules.md#your-agent-can-propose-rules) for you to add. **`heel_request_connection`** lets it [ask you to connect an account](connect.md#your-agent-can-ask-for-a-connection).
 
