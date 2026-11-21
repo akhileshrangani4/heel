@@ -1,13 +1,17 @@
 /**
  * The code-mode escape corpus (D6b; spec: D6 acceptance, STK §11.3). Each
- * script runs in a real `heel codemode-worker` under bubblewrap and tries to
- * reach something it mustn't: files, sockets, the environment, `eval`
- * tricks, memory and loop bombs, too many host calls, and a `try/except`
- * around an ask. Every one must fail safely, and the worker must never get
- * past heel.
+ * script tries to reach something it mustn't: files, sockets, the
+ * environment, `eval` tricks, memory and loop bombs, too many host calls,
+ * and a `try/except` around an ask. Every one must fail safely, and the
+ * worker must never get past heel.
  *
- * Locally the suite skips when this host can't run a sandbox. CI sets
- * HEEL_REQUIRE_SANDBOX, so there a skip is a failure.
+ * The corpus runs three times, once per way of running a script: in a real
+ * `heel codemode-worker` under bubblewrap, in Monty's WebAssembly build
+ * in-process, and in the locked-down `heel codemode-host` helper.
+ *
+ * Locally the bubblewrap run skips when this host can't run a sandbox. CI
+ * sets HEEL_REQUIRE_SANDBOX, so there a skip is a failure. The other two run
+ * on every OS.
  */
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";

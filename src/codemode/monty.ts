@@ -25,11 +25,14 @@ import type { CodeWorker, ScriptLimits, Step } from "./worker.ts";
  * - Over the suspension budget, Monty raises an error the script can't catch.
  * - The clock is fixed at the script's start and `random` is seeded, so a
  *   script can't read the time or entropy.
- * - Every script gets a fresh worker process, retired after it, so a stopped
- *   (never-resumed) script never shares a worker with the next.
+ * - Every script gets a fresh Monty worker (a process for the native build, a
+ *   thread for WebAssembly), retired after it, so a stopped (never-resumed)
+ *   script never shares a worker with the next. Monty hands workers out from
+ *   a pool, so here a pool is always one worker used once.
  *
- * In D6b this runs inside `heel codemode-worker` under bubblewrap; heel's own
- * process never loads Monty's native addon.
+ * heel's own process never loads Monty. This runs inside `heel
+ * codemode-worker` under bubblewrap with the native build, or inside `heel
+ * codemode-host` with the WebAssembly build; tests also run it in-process.
  */
 
 /** Suspensions each imported module costs: its stubs and the import itself. */
@@ -38,24 +41,33 @@ const SUSPENSIONS_PER_IMPORT = 2;
 /** Which Monty build runs the script: the native addon, or WebAssembly in a worker thread. */
 export type MontyBackend = "native" | "wasm";
 
-async function createPool(backend: MontyBackend): Promise<Pick<Monty, "checkout">> {
-  const options = { minProcesses: 0, maxProcesses: 1, maxCheckoutsPerWorker: 1 };
+/** One Monty worker that runs one script. Closing it kills the worker, suspended script and all. */
+export type MontyPool = Pick<Monty, "checkout"> & Partial<AsyncDisposable>;
+
+/**
+ * Makes a pool of one single-use worker. `warm` starts the worker now instead
+ * of on checkout, for a pool made ahead of the script that will use it.
+ */
+export async function createPool(backend: MontyBackend, warm = false): Promise<MontyPool> {
+  const options = { minProcesses: warm ? 1 : 0, maxProcesses: 1, maxCheckoutsPerWorker: 1 };
   if (backend === "native") return (await import("@pydantic/monty")).Monty.create(options);
   const wasm = await import("@pydantic/monty/wasm");
   return wasm.Monty.create(options);
 }
 
 export class MontyWorker implements CodeWorker {
-  readonly #backend: MontyBackend;
-  #pool: Pick<Monty, "checkout"> | null = null;
+  readonly #source: MontyBackend | MontyPool;
+  /** The pool this worker made for itself, and so closes itself. */
+  #ownPool: MontyPool | null = null;
   #session: MontySession | null = null;
 
-  /** Set when the pool is shared: the worker then closes only its session, never the pool. */
-  readonly #shared: Pick<Monty, "checkout"> | null;
-
-  constructor(backend: MontyBackend = "native", shared: Pick<Monty, "checkout"> | null = null) {
-    this.#backend = backend;
-    this.#shared = shared;
+  /**
+   * `source` is the Monty build to make a worker from, or a pool the caller
+   * made ahead of time. The caller keeps a pool it passes in: this worker
+   * closes only its session on it, and the caller closes the pool.
+   */
+  constructor(source: MontyBackend | MontyPool = "native") {
+    this.#source = source;
   }
 
   async start(
@@ -64,8 +76,10 @@ export class MontyWorker implements CodeWorker {
     limits: ScriptLimits,
     stdout: (text: string) => void,
   ): Promise<Step> {
-    this.#pool = this.#shared ?? (await createPool(this.#backend));
-    this.#session = await this.#pool.checkout({
+    const source = this.#source;
+    if (typeof source === "string") this.#ownPool = await createPool(source);
+    const pool = this.#ownPool ?? (source as MontyPool);
+    this.#session = await pool.checkout({
       typeCheck: true,
       limits: {
         maxSuspensions: limits.maxCalls + SUSPENSIONS_PER_IMPORT * modules.length + 1,
@@ -145,16 +159,16 @@ export class MontyWorker implements CodeWorker {
   }
 
   async stop(): Promise<void> {
-    const pool = this.#pool;
+    const ownPool = this.#ownPool;
     const session = this.#session;
-    this.#pool = null;
+    this.#ownPool = null;
     this.#session = null;
-    if (this.#shared !== null) {
-      // A shared pool retires this session's worker (one checkout per worker), suspended script and all.
+    if (typeof this.#source !== "string") {
+      // The caller's pool retires this session's worker (one checkout per worker), suspended script and all.
       await session?.close();
       return;
     }
     // Closing the pool kills its one worker, suspended script and all.
-    await (pool as Partial<AsyncDisposable> | null)?.[Symbol.asyncDispose]?.();
+    await ownPool?.[Symbol.asyncDispose]?.();
   }
 }

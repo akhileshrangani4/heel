@@ -1383,8 +1383,8 @@ async function dispatch(argv: string[], io: CliIo): Promise<number> {
       return new Promise<number>(() => {});
     }
     case "codemode-host": {
-      // Internal: heel starts one at boot where bubblewrap isn't available,
-      // locked down with Node's permission model. It runs until heel closes it.
+      // Internal: where bubblewrap isn't available, heel starts one when the first script
+      // needs it, locked down with Node's permission model. It runs until heel closes it.
       const { codemodeHostMain } = await import("../codemode/host-main.ts");
       await codemodeHostMain();
       return new Promise<number>(() => {});
