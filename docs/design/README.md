@@ -31,3 +31,9 @@ Records from after the export, written while deciding how to continue the build:
 | [2026-11-17-flow.html](2026-11-17-flow.html) | **The call flow as a diagram:** every pipeline stage, the outcomes returned to the agent, and the approval loop, marked built, in review or planned as of Nov 17. Open it in a browser. |
 | [../research/2026-11-13-strongdm-leash-notes.md](../research/2026-11-13-strongdm-leash-notes.md) | **StrongDM Leash notes:** what heel takes (modes, rules from traffic, structured events, a linter) and what it doesn't (kernel enforcement, deny-only MCP rules). |
 | [../research/2026-11-17-ibac-and-composio-firewall.md](../research/2026-11-17-ibac-and-composio-firewall.md) | **IBAC, Composio Firewall and WorkOS Airlock:** what a model may decide in each, and why heel's adapters only tighten. |
+
+## Added on 2026-11-20
+
+| File | What it is |
+| --- | --- |
+| [code-mode-architecture.md](code-mode-architecture.md) | **Code mode: how it runs.** The two ways heel runs a script (under bubblewrap, and on the locked-down helper where bubblewrap is not available) side by side, the life of one script, who cleans up what, the security walls and the known limits. |

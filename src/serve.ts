@@ -11,6 +11,7 @@ import { startAdminServer } from "./admin/server.ts";
 import { SiemSink } from "./audit/siem.ts";
 import { CodemodeHost, HostedCodeWorker } from "./codemode/hosted.ts";
 import { SandboxedCodeWorker } from "./codemode/sandboxed.ts";
+import type { CodeWorker } from "./codemode/worker.ts";
 import { rulesPaths } from "./config/rules.ts";
 import { type ReloadOutcome, RulesHolder, watchRules } from "./config/rules-reload.ts";
 import type { OidcConfig } from "./config/schema.ts";
@@ -578,16 +579,20 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         looksLike,
         onHidden: (reason) => hideCounts.record(reason),
       });
-      // Started on the first script, not at boot, and closed with heel.
-      let helper: CodemodeHost | null = null;
-      const codemodeHost = () => {
-        if (helper === null) {
-          helper = new CodemodeHost({ installDir: INSTALL_DIR });
-          const started = helper;
-          closers.push(() => started.close());
-        }
-        return helper;
-      };
+      // Code mode everywhere, and heel never loads Monty itself: each script in its own
+      // worker under bubblewrap where that runs (D6b), otherwise on one locked-down helper
+      // running Monty as WebAssembly.
+      let codeWorker: () => CodeWorker;
+      let closeHelper: Closer | null = null;
+      if (sandbox.ok) {
+        const host = sandbox.host;
+        codeWorker = () => new SandboxedCodeWorker({ host, installDir: INSTALL_DIR });
+      } else {
+        // Making the handle starts nothing: the helper process starts on the first script.
+        const helper = new CodemodeHost({ installDir: INSTALL_DIR });
+        closeHelper = () => helper.close();
+        codeWorker = () => new HostedCodeWorker(helper);
+      }
       const mcp = createMcpSurface({
         db: store.db,
         pipeline,
@@ -599,12 +604,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         // Tell the owner a proposal is waiting, the same way as a request (roadmap 2.1).
         onRuleProposal: (proposalId) => notifier.ruleProposed(proposalId),
         onAgentRequest: (requestId) => notifier.agentRequested(requestId),
-        // Code mode everywhere, and heel never loads Monty itself: each script in its own
-        // worker under bubblewrap where that runs (D6b), otherwise on one locked-down helper
-        // running Monty as WebAssembly.
-        codeWorker: sandbox.ok
-          ? () => new SandboxedCodeWorker({ host: sandbox.host, installDir: INSTALL_DIR })
-          : () => new HostedCodeWorker(codemodeHost()),
+        codeWorker,
       });
       closers.push(() => mcp.close());
       const app = createAgentApp({
@@ -622,6 +622,9 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
       });
       const server = await listenHttp(app.fetch, config.listen.agent);
       closers.push(() => closeHttp(server));
+      // Registered last, so it runs first: a script still running gets its last step while
+      // its client can still read the result, with the calls that already ran.
+      if (closeHelper !== null) closers.push(closeHelper);
       agent = { state: "listening", url: boundUrl(server) };
       log.info({ url: agent.url }, "agent plane listening");
     }
