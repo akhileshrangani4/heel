@@ -152,11 +152,16 @@ describe("code-mode lanes", () => {
   it("starts an agent's first script on the spare, without waiting for a process", async () => {
     const l = makeLanes({ maxLanes: 2 });
     await run(l, "a", PID);
-    // The spare has had time to start.
-    await new Promise((r) => setTimeout(r, 1500));
-    const t = performance.now();
+    // The spare was made and started as soon as a's lane took the first helper.
+    expect(hosts).toHaveLength(2);
+    const spare = hosts[1];
+    const sparePid = spare?.pid;
+    expect(sparePid).not.toBeNull();
     const b = await run(l, "b", `print("quick")`);
     expect(b.stdout).toContain("quick");
-    expect(performance.now() - t).toBeLessThan(400);
+    // b ran on that already-running process, and a new spare took its place.
+    expect(spare?.pid).toBe(sparePid);
+    expect(hosts).toHaveLength(3);
+    expect(l.agents().sort()).toEqual(["a", "b"]);
   }, 60_000);
 });
