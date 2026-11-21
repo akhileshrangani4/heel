@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.2.8](https://github.com/akhileshrangani4/heel/compare/v0.2.7...v0.2.8) (2026-11-21)
+
+
+### Features
+
+* a heel skill for agents, installable with npx skills add akhileshrangani4/heel ([#181](https://github.com/akhileshrangani4/heel/issues/181)) ([d2a6459](https://github.com/akhileshrangani4/heel/commit/d2a6459e8c7532e67206999b88c738005c415c94))
+* the heel skill covers setup without docs access, denials and pauses; its install line is one click to copy ([#183](https://github.com/akhileshrangani4/heel/issues/183)) ([9a8d5dc](https://github.com/akhileshrangani4/heel/commit/9a8d5dce9180f81ba36037b4d1e370f9264493f5))
+
+
+### Bug Fixes
+
+* **site:** every button shows the pointer cursor, copy buttons included ([#184](https://github.com/akhileshrangani4/heel/issues/184)) ([7eb0c2b](https://github.com/akhileshrangani4/heel/commit/7eb0c2b22473771efa74ce7dfe081bc63fd05e7c))
+* **web:** every clickable control in heel's web app shows the pointer cursor ([#185](https://github.com/akhileshrangani4/heel/issues/185)) ([274f109](https://github.com/akhileshrangani4/heel/commit/274f1091529efb99aa91381a809844d76efb73f2))
+
 ## [0.2.7](https://github.com/akhileshrangani4/heel/compare/v0.2.6...v0.2.7) (2026-11-21)
 
 
