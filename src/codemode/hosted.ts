@@ -1,6 +1,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { join, resolve } from "node:path";
+import { hoistedDependencies } from "./install.ts";
 import {
   fromWire,
   lineReader,
@@ -9,7 +10,6 @@ import {
   toWireModules,
   type WireStep,
 } from "./protocol.ts";
-import { hoistedDependencies } from "./sandboxed.ts";
 import type { StubModule } from "./stubs.ts";
 import type { CodeWorker, ScriptLimits, Step } from "./worker.ts";
 

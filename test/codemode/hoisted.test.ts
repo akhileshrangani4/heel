@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { hoistedDependencies } from "../../src/codemode/sandboxed.ts";
+import { hoistedDependencies } from "../../src/codemode/install.ts";
 
 const monty = "@pydantic/monty/index.js";
 
