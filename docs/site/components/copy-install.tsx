@@ -18,7 +18,7 @@ export function CopyInstall({ command, label, quiet }: { command: string; label?
         setCopied(true);
         setTimeout(() => setCopied(false), 1600);
       }}
-      className={`group flex max-w-full items-center gap-3 rounded-full py-2.5 pr-4 pl-5 font-mono text-sm transition-colors ${
+      className={`group flex max-w-full cursor-pointer items-center gap-3 rounded-full py-2.5 pr-4 pl-5 font-mono text-sm transition-colors ${
         quiet
           ? 'border border-black/10 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.06)] hover:bg-neutral-50 dark:border-white/15 dark:bg-white/5 dark:hover:bg-white/10'
           : 'bg-neutral-900 text-white shadow-[0_1px_2px_rgba(0,0,0,0.2)] hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200'
