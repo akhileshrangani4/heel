@@ -2,8 +2,9 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
- * The setup prompt, as plain text an agent reads: "set up heel for me by
- * following useheel.dev/setup.md" is all an owner has to say. It's the
+ * The setup prompt, as plain text an agent reads: "set up heel for me: run
+ * curl -fsSL https://useheel.dev/setup.md and follow it" is all an owner has
+ * to say (curl, so the agent reads it whole, not a summary). It's the
  * prompt block of docs/setup.md (copied in at build by scripts/sync.mjs),
  * which heel's own tests keep identical to the prompt heel serves.
  */

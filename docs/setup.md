@@ -5,7 +5,7 @@
 heel is set up by your agent. Tell Claude Code, Codex or any coding agent:
 
 ```text
-Set up heel for me by following https://useheel.dev/setup.md
+Set up heel for me: run curl -fsSL https://useheel.dev/setup.md and follow it
 ```
 
 It installs heel, starts it, connects itself, then finds the services you use and asks heel to connect each one. You do two things by hand and approve the rest with your passkey.
@@ -35,7 +35,7 @@ Set up heel for me. heel is a permission gateway: you'll reach my accounts throu
 Some steps may be done already, for example if I restarted you partway: check each one first and skip it if it's done. If heel's tools (such as heel_accounts) are already available to you, skip straight to the part after step 6.
 
 Rules for the whole task:
-- Never read, print, copy or send the value of a key, token, password or secret. The one exception is heel's own token for you in step 5: pass it straight to the command that adds heel to your app, and don't repeat it in our chat.
+- Never read, print, copy or send the value of a key, token, password or secret. The one exception is heel's own token for you in step 5, if heel prints it: pass it straight to the command that adds heel to your app, and don't repeat it in our chat.
 - Use heel's command line only for the steps below. Don't run heel connect, edit heel's rules files or approve anything yourself: connections and rules go through requests I approve.
 - Don't install system software, edit shell profiles or change files outside heel without asking me first.
 
@@ -47,7 +47,7 @@ Rules for the whole task:
 
 4. My passkey: run heel user enroll owner and give me the link it prints. Ask me to open it and choose Create a passkey. Wait until I say I'm done, then run heel status and check that Passkeys is 1 or more.
 
-5. Add yourself as an agent: heel agent add <a short name for you, like claude-code> --client claude-code (or --client codex). Run the command it prints to add heel to your app. For any other app, leave out --client and tell me the MCP URL to add, with the token as a bearer token.
+5. Add yourself as an agent: heel agent add <a short name for you, like claude-code> --client claude-code. heel adds itself to Claude Code for every project, and the token goes straight into Claude Code's config, so you never see it. If heel says it couldn't, run the command it prints instead. For Codex, use --client codex and run the commands it prints. For any other app, leave out --client and tell me the MCP URL to add, with the token as a bearer token.
 
 6. Ask me to load heel in your app (in Claude Code, run /mcp or restart), and to tell you when it's done. Then check that heel's tools are there, such as heel_accounts.
 
@@ -73,7 +73,7 @@ Rules for the whole task:
 
 3. For each one heel can hold, call heel_request_connection with a short alias and a one-line why. heel takes Gmail, Google Calendar, Outlook, GitHub, Slack, Linear, Notion, Stripe, and remote MCP servers on public https hosts. For anything else, tell me it stays as it is.
 
-4. Propose rules with heel_propose_rules, one short why per rule. A good start for each new account: reads run, anything that sends, merges, pays or deletes asks me, and nothing else is allowed. Keep it to what you need for the work I do with you.
+4. Rules. heel's starter rules (from heel init) already let reads run and ask me for everything else, so a new account is safe without new rules. Propose rules with heel_propose_rules only where I'd want something different, such as a routine write I'd otherwise approve every time, or something to block outright. One short why per rule, and keep it to the work I do with you. If none are needed, say so.
 
 5. Tell me what's waiting for me and where to approve it. Then wait for me; call heel_accounts again when I say I've approved.
 

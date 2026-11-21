@@ -13,7 +13,7 @@ const INTRO = `# heel
 
 ## Set up heel for your user
 
-Follow ${siteUrl}/setup.md. It installs heel on your user's machine, connects you to it, and puts their services behind it. Your user makes a passkey and approves each connection and rule; you never hold their keys.
+Run curl -fsSL ${siteUrl}/setup.md and follow it, read whole (a summarizing fetch can drop steps). It installs heel on your user's machine, connects you to it, and puts their services behind it. Your user makes a passkey and approves each connection and rule; you never hold their keys.
 
 If you already reach heel over MCP, use its \`setup\` prompt and the \`heel_accounts\`, \`heel_request_connection\` and \`heel_propose_rules\` tools.
 

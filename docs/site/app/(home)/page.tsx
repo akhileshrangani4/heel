@@ -167,7 +167,7 @@ export default function HomePage() {
           >
             <CopyInstall
               label="copy prompt"
-              command="Set up heel for me by following https://useheel.dev/setup.md"
+              command="Set up heel for me: run curl -fsSL https://useheel.dev/setup.md and follow it"
             />
             <Link href="/docs" className={pill}>
               read the docs
@@ -255,7 +255,7 @@ export default function HomePage() {
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
               <CopyInstall
                 label="copy prompt"
-                command="Set up heel for me by following https://useheel.dev/setup.md"
+                command="Set up heel for me: run curl -fsSL https://useheel.dev/setup.md and follow it"
               />
               <Link href="/docs/setup" className={pill}>
                 how it works

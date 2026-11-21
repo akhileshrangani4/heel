@@ -33,6 +33,7 @@ async function run(
   argv: string[],
   env: Record<string, string | undefined>,
   stdin: string[] = [],
+  exec?: CliIo["exec"],
 ): Promise<Run> {
   let stdout = "";
   let stderr = "";
@@ -43,6 +44,7 @@ async function run(
     })(),
     stdout: { write: (text) => (stdout += text) },
     stderr: { write: (text) => (stderr += text) },
+    ...(exec === undefined ? {} : { exec }),
   };
   const code = await main(argv, io);
   return { code, stdout, stderr };
@@ -162,9 +164,9 @@ describe("heel CLI", () => {
     expect(second.stderr).toContain("never replaces");
   });
 
-  it("prints the command that adds heel to an agent app, for an agent setting heel up", () => {
+  it("prints the command that adds heel to an agent app, for every project", () => {
     expect(addToClient("claude-code", "http://127.0.0.1:7300/mcp", "heel_x")).toContain(
-      'claude mcp add --transport http heel "http://127.0.0.1:7300/mcp" --header "Authorization: Bearer heel_x"',
+      'claude mcp add --scope user --transport http heel "http://127.0.0.1:7300/mcp" --header "Authorization: Bearer heel_x"',
     );
     const codex = addToClient("codex", "http://127.0.0.1:7300/mcp", "heel_x");
     expect(codex).toContain("export HEEL_TOKEN=heel_x");
@@ -173,20 +175,113 @@ describe("heel CLI", () => {
     );
   });
 
-  it("agent add --client prints the add command; status says when no one can approve yet", async () => {
+  it("agent add --client claude-code puts the token in Claude Code, never on the screen", async () => {
     const home = heelHome();
     await serveIn(home);
     const status = await run(["status"], { HEEL_HOME: home });
     expect(status.stdout).toContain("Passkeys:  none yet: run heel user enroll owner");
-    const added = await run(["agent", "add", "setup-bot", "--client", "claude-code"], {
-      HEEL_HOME: home,
-    });
+    const calls: string[][] = [];
+    const exec: NonNullable<CliIo["exec"]> = async (command, args) => {
+      calls.push([command, ...args]);
+      return { code: 0, output: "Added HTTP MCP server heel" };
+    };
+    const added = await run(
+      ["agent", "add", "setup-bot", "--client", "claude-code"],
+      { HEEL_HOME: home },
+      [],
+      exec,
+    );
     expect(added.code).toBe(EXIT.ok);
-    const token = /^Token .*: (heel_\S+)$/m.exec(added.stdout)?.[1];
-    expect(added.stdout).toContain(`--header "Authorization: Bearer ${token}"`);
+    expect(added.stdout).not.toMatch(/heel_[A-Za-z0-9_-]{8}/);
+    expect(added.stdout).toContain("Added heel to Claude Code for every project");
+    expect(calls).toHaveLength(1);
+    const [command, ...args] = calls[0] ?? [];
+    expect(command).toBe("claude");
+    expect(args.slice(0, 8)).toEqual([
+      "mcp",
+      "add",
+      "--scope",
+      "user",
+      "--transport",
+      "http",
+      "heel",
+      "http://127.0.0.1:0/mcp",
+    ]);
+    const header = args[9] ?? "";
+    expect(header).toMatch(/^Authorization: Bearer heel_\S+$/);
+
+    // Rotating with --client swaps the entry: the old one out, the new token in.
+    calls.length = 0;
+    const rotated = await run(
+      ["agent", "rotate", "setup-bot", "--client", "claude-code"],
+      { HEEL_HOME: home },
+      [],
+      exec,
+    );
+    expect(rotated.code).toBe(EXIT.ok);
+    expect(rotated.stdout).not.toMatch(/heel_[A-Za-z0-9_-]{8}/);
+    expect(calls.map((c) => c.slice(0, 3).join(" "))).toEqual([
+      "claude mcp remove",
+      "claude mcp add",
+    ]);
+    expect(calls[1]?.[10]).not.toBe(header);
+
     const wrong = await run(["agent", "add", "x", "--client", "vim"], { HEEL_HOME: home });
     expect(wrong.code).not.toBe(EXIT.ok);
     expect(wrong.stderr).toContain("--client is one of claude-code, codex");
+  });
+
+  it("agent add --client falls back to printing the command, so the token isn't lost", async () => {
+    const home = heelHome();
+    await serveIn(home);
+    // No program runner (tests, an embedding): print the command.
+    const printed = await run(["agent", "add", "a1", "--client", "claude-code"], {
+      HEEL_HOME: home,
+    });
+    const token = /^Token .*: (heel_\S+)$/m.exec(printed.stdout)?.[1];
+    expect(token).toBeDefined();
+    expect(printed.stdout).toContain(`--header "Authorization: Bearer ${token}"`);
+
+    // Claude Code already has a heel entry: say how to replace it, and keep the token.
+    const exists: NonNullable<CliIo["exec"]> = async () => ({
+      code: 1,
+      output: "MCP server heel already exists in user config",
+    });
+    const clash = await run(
+      ["agent", "add", "a2", "--client", "claude-code"],
+      { HEEL_HOME: home },
+      [],
+      exists,
+    );
+    expect(clash.stdout).toContain(
+      "heel couldn't add itself to Claude Code (MCP server heel already exists",
+    );
+    expect(clash.stdout).toContain("heel agent rotate a2 --client claude-code");
+    expect(clash.stdout).toMatch(/^Token .*: heel_\S+$/m);
+
+    // claude isn't installed.
+    const missing: NonNullable<CliIo["exec"]> = async () => ({ code: 127, output: "" });
+    const none = await run(
+      ["agent", "add", "a3", "--client", "claude-code"],
+      { HEEL_HOME: home },
+      [],
+      missing,
+    );
+    expect(none.stdout).toContain("the claude command isn't on this PATH");
+    expect(none.stdout).toMatch(/^Token .*: heel_\S+$/m);
+
+    // Codex reads its token from a variable heel can't set: always printed, never run.
+    const never: NonNullable<CliIo["exec"]> = async () => {
+      throw new Error("codex must not be run");
+    };
+    const codex = await run(
+      ["agent", "add", "a4", "--client", "codex"],
+      { HEEL_HOME: home },
+      [],
+      never,
+    );
+    expect(codex.code).toBe(EXIT.ok);
+    expect(codex.stdout).toContain("export HEEL_TOKEN=heel_");
   });
 
   it("agent add prints a working token once, with the agent plane's MCP URL", async () => {

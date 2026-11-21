@@ -15,11 +15,12 @@ const hasSource = (() => {
   }
 })();
 const entry = hasSource ? source : new URL("../dist/cli/main.js", import.meta.url);
-const { main } = await import(entry.href);
+const { main, runProgram } = await import(entry.href);
 
 process.exitCode = await main(process.argv.slice(2), {
   env: process.env,
   stdin: process.stdin,
   stdout: process.stdout,
   stderr: process.stderr,
+  exec: runProgram,
 });

@@ -45,7 +45,9 @@ describe("the setup prompt", () => {
   it("is printed in docs/setup.md whole, install first, so one line to an agent sets heel up", () => {
     const doc = readFileSync(new URL("../../docs/setup.md", import.meta.url), "utf8");
     expect(doc).toContain(`\`\`\`text\n${fullSetupPrompt(null)}\n\`\`\``);
-    expect(doc).toContain("Set up heel for me by following https://useheel.dev/setup.md");
+    expect(doc).toContain(
+      "Set up heel for me: run curl -fsSL https://useheel.dev/setup.md and follow it",
+    );
     expect(fullSetupPrompt(null).startsWith(installPrompt())).toBe(true);
     expect(fullSetupPrompt(null).endsWith(setupPrompt(null))).toBe(true);
   });

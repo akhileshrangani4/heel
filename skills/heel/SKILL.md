@@ -9,9 +9,9 @@ heel sits between you and your user's accounts. It holds the keys; you hold only
 
 ## Set heel up
 
-If the user asks you to set up heel, fetch https://useheel.dev/setup.md and follow it. It installs heel, has the user make a passkey, adds you as an agent, then asks heel to connect their services and proposes rules for them. Check each step first: after a restart, some are already done.
+If the user asks you to set up heel, run `curl -fsSL https://useheel.dev/setup.md` and follow what it says. Read it whole: a web-fetch tool that summarizes pages can drop or flip a step. It installs heel, has the user make a passkey, adds you as an agent, then asks heel to connect their services and proposes rules for them. Check each step first: after a restart, some are already done.
 
-If you can't fetch it, the outline is: Node 26.13 or later (if older, tell the user how to upgrade; don't install it yourself), `npm install -g useheel`, `heel init --yes`, `heel start`, then `heel user enroll owner` and give the user the link to make their passkey, then `heel agent add <name> --client claude-code` (or `codex`) and run the command it prints.
+If you can't fetch it, the outline is: Node 26.13 or later (if older, tell the user how to upgrade; don't install it yourself), `npm install -g useheel`, `heel init --yes`, `heel start`, then `heel user enroll owner` and give the user the link to make their passkey, then `heel agent add <name> --client claude-code`, which adds heel to Claude Code itself (for Codex, `--client codex` and run the commands it prints).
 
 ## Rules when working through heel
 

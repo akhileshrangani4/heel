@@ -21,8 +21,16 @@ Give each agent and machine its own token, so you can see which one made a call 
 
 **Claude Code**
 
+Let heel add itself, for every project, with the token going straight into Claude Code's config:
+
 ```sh
-claude mcp add --transport http heel "http://127.0.0.1:7300/mcp" \
+heel agent add my-agent --client claude-code
+```
+
+`heel agent rotate my-agent --client claude-code` swaps in a new token the same way. Or add it yourself:
+
+```sh
+claude mcp add --scope user --transport http heel "http://127.0.0.1:7300/mcp" \
   --header "Authorization: Bearer heel_…"
 ```
 
