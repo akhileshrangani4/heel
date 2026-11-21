@@ -11,23 +11,23 @@ An agent connected to bare `/mcp` gets one tool, `run_code`, instead of one tool
 ## The pieces
 
 ```
-agent ── run_code ──> gateway/mcp/server.ts   takes a slot, makes a CodeWorker, calls runScript
-                             │
-                             ▼
+agent -> run_code -> gateway/mcp/server.ts    takes a slot, makes a CodeWorker, calls runScript
+                             |
+                             v
                       codemode/run.ts          the loop: one step at a time, each call through the pipeline
-                             │  CodeWorker (worker.ts): start() -> Step, step.resume() / step.raise(), stop()
-              ┌──────────────┴───────────────┐
-              ▼                              ▼
-   SandboxedCodeWorker               HostedCodeWorker ──> CodemodeHost
-   (sandboxed.ts)                    (hosted.ts)          (hosted.ts, one per heel)
-              │ JSON lines                                   │ JSON lines, each with a script id
-              ▼                                              ▼
+                             |  CodeWorker (worker.ts): start() -> Step, step.resume() / step.raise(), stop()
+              +--------------+---------------+
+              v                              v
+   SandboxedCodeWorker               HostedCodeWorker -> CodemodeHost
+   (sandboxed.ts)                    (hosted.ts)         (hosted.ts, one per heel)
+              | JSON lines                                   | JSON lines, each with a script id
+              v                                              v
    heel codemode-worker              heel codemode-host  (the "helper")
    (worker-main.ts)                  (host-main.ts)
    one process per script,           one process for every script,
    under bubblewrap                  under Node's permission model
-              │                                              │
-              ▼                                              ▼
+              |                                              |
+              v                                              v
    MontyWorker (monty.ts)            MontyWorker (monty.ts)
    Monty's native build              Monty's WebAssembly build, one worker thread per script
 ```
@@ -110,7 +110,7 @@ On the bubblewrap path the same event is smaller: one sandbox dying fails one sc
 | The sandbox process and its temp directory | `SandboxedCodeWorker.stop()` | Kill, wait, remove |
 | A script's worker thread in the helper | `discard()` in `host-main.ts` | When the script's last step is sent, or on `stop` |
 | heel's record of a helper script | `CodemodeHost.stop()` | Dropped once the worker is known to be gone |
-| The helper process | `CodemodeHost`, made and closed by `serve.ts` | Started on the first script, restarted after a crash, closed with heel after the agent plane |
+| The helper process | `CodemodeHost`, made and closed by `serve.ts` | Started on the first script, restarted after a crash, closed first when heel closes, so a running script's result can still reach its client |
 
 `stop()` is called more than once for the same script, and sometimes before `start()`. Every `CodeWorker` has to be safe both ways. The slot is only released after `stop()` settles, so a `stop()` that settles early lets an agent run more scripts than its limit.
 
