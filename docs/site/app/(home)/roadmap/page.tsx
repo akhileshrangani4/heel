@@ -128,7 +128,7 @@ const PHASES: Phase[] = [
       ],
       [
         'one setup prompt',
-        'tell any agent one line. it installs heel, connects itself, asks for your connections and proposes rules, then walks you through swapping out raw keys. you make a passkey and approve each step.',
+        'tell any agent one line. it installs heel, connects itself, asks for your connections and proposes rules, then walks you through swapping out raw keys. you make a passkey and approve each step. tested end to end with a real agent on an empty machine; it never sees its own heel token.',
         'shipped',
       ],
       ['everything in the web app', 'anything the cli can do, the web app can do too.'],
