@@ -43,12 +43,21 @@ export async function codemodeHostMain(): Promise<void> {
 
   const scripts = new Map<string, Script>();
   const send = (message: FromHost) => process.stdout.write(`${JSON.stringify(message)}\n`);
-  const end = async (id: string) => {
+  // One ending per script, shared: a script that finished on its own may still be
+  // discarding its worker when heel's `stop` arrives, and `ended` must wait for that.
+  const ending = new Map<string, Promise<void>>();
+  const end = (id: string): Promise<void> => {
+    const already = ending.get(id);
+    if (already !== undefined) return already;
     const script = scripts.get(id);
-    if (script === undefined) return;
+    if (script === undefined) return Promise.resolve();
     scripts.delete(id);
-    await script.worker.stop().catch(() => {});
-    await Promise.resolve(script.pool[Symbol.asyncDispose]?.()).catch(() => {});
+    const done = (async () => {
+      await script.worker.stop().catch(() => {});
+      await Promise.resolve(script.pool[Symbol.asyncDispose]?.()).catch(() => {});
+    })().finally(() => ending.delete(id));
+    ending.set(id, done);
+    return done;
   };
   const report = (id: string, step: Step) => {
     const script = scripts.get(id);
@@ -60,7 +69,13 @@ export async function codemodeHostMain(): Promise<void> {
 
   const handle = async (message: ToHost): Promise<void> => {
     const { id } = message;
-    if (message.type === "stop") return end(id);
+    if (message.type === "stop") {
+      // Queued behind the script's other messages, so a script still computing ends at its
+      // time limit at the latest; `ended` goes back only once its worker is gone.
+      await end(id);
+      send({ id, type: "ended" });
+      return;
+    }
     if (message.type === "start") {
       if (scripts.has(id)) return;
       const pool = await (ready.shift() ??

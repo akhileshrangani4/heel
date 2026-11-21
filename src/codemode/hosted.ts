@@ -33,7 +33,17 @@ interface Running {
   stdout: (text: string) => void;
   waiting: ((step: WireStep) => void) | null;
   ended: WireStep | null;
+  /** The script's own time limit: a stopped script's worker is gone by then. */
+  limitMs: number;
+  /** Set once heel stops the script; settles when the helper says its worker is gone. */
+  stopping: Promise<void> | null;
+  gone: (() => void) | null;
+  /** The script ended on its own in the helper, which is already discarding its idle worker. */
+  finished: boolean;
 }
+
+/** How long past a script's time limit heel waits for its worker to go before restarting the helper. */
+const STOP_SLACK_MS = 10_000;
 
 export class CodemodeHost {
   readonly #installDir: string;
@@ -77,15 +87,21 @@ export class CodemodeHost {
         if (message === null) return;
         const script = this.#scripts.get(message.id);
         if (script === undefined) return;
-        if (message.type === "stdout") script.stdout(message.text);
-        else this.#deliver(message.id, message.step);
+        if (message.type === "ended") script.gone?.();
+        else if (message.type === "stdout") script.stdout(message.text);
+        else {
+          if (message.step.kind !== "call") script.finished = true;
+          this.#deliver(message.id, message.step);
+        }
       }),
     );
     const gone = () => {
       if (this.#child !== child) return;
       this.#child = null;
-      for (const id of [...this.#scripts.keys()]) {
+      // Every script it ran is over, and so are their workers.
+      for (const [id, script] of [...this.#scripts]) {
         this.#end(id, { kind: "failed", error: "the code-mode helper stopped" });
+        script.gone?.();
       }
     };
     child.on("exit", gone);
@@ -125,18 +141,50 @@ export class CodemodeHost {
     });
   }
 
-  open(stdout: (text: string) => void): string {
+  open(stdout: (text: string) => void, limits: ScriptLimits): string {
     if (this.#closed) throw new Error("code mode is shut down");
     const id = randomUUID();
-    this.#scripts.set(id, { stdout, waiting: null, ended: null });
+    this.#scripts.set(id, {
+      stdout,
+      waiting: null,
+      ended: null,
+      limitMs: limits.maxSeconds * 1000,
+      stopping: null,
+      gone: null,
+      finished: false,
+    });
     return id;
   }
 
-  stop(id: string): void {
-    if (!this.#scripts.has(id)) return;
+  /**
+   * Ends a script and settles once its worker is gone, so the caller holds the
+   * script's slot until then. A script still computing can't be cut off
+   * mid-turn; its worker goes at its time limit. If the helper hasn't let it go
+   * soon after that, heel restarts the helper.
+   */
+  stop(id: string): Promise<void> {
+    const script = this.#scripts.get(id);
+    if (script === undefined) return Promise.resolve();
+    if (script.stopping !== null) return script.stopping;
+    if (script.finished) {
+      this.#scripts.delete(id);
+      return Promise.resolve();
+    }
     this.#end(id, { kind: "failed", error: "the script was stopped" });
-    this.#scripts.delete(id);
-    if (this.#child !== null) this.#send({ type: "stop", id });
+    const child = this.#child;
+    script.stopping = new Promise<void>((settle) => {
+      if (child === null) return settle();
+      const backstop = setTimeout(() => {
+        if (this.#child === child) child.kill("SIGKILL");
+        settle();
+      }, script.limitMs + STOP_SLACK_MS);
+      script.gone = () => {
+        clearTimeout(backstop);
+        settle();
+      };
+      this.#send({ type: "stop", id });
+    }).finally(() => this.#scripts.delete(id));
+    return script.stopping;
   }
 
   /** Kills the helper (tests use this to check heel survives it). */
@@ -146,7 +194,12 @@ export class CodemodeHost {
 
   async close(): Promise<void> {
     this.#closed = true;
-    for (const id of [...this.#scripts.keys()]) this.stop(id);
+    // Closing ends the helper, and every worker with it: nothing to wait for per script.
+    for (const [id, script] of [...this.#scripts]) {
+      this.#end(id, { kind: "failed", error: "code mode is shut down" });
+      script.gone?.();
+      this.#scripts.delete(id);
+    }
     const child = this.#child;
     this.#child = null;
     if (child === null) return;
@@ -179,7 +232,7 @@ export class HostedCodeWorker implements CodeWorker {
     limits: ScriptLimits,
     stdout: (text: string) => void,
   ): Promise<Step> {
-    const id = this.#host.open(stdout);
+    const id = this.#host.open(stdout, limits);
     this.#id = id;
     return this.#step(
       await this.#host.next(id, {
@@ -209,7 +262,7 @@ export class HostedCodeWorker implements CodeWorker {
   }
 
   async stop(): Promise<void> {
-    if (this.#id !== null) this.#host.stop(this.#id);
-    this.#id = null;
+    const id = this.#id;
+    if (id !== null) await this.#host.stop(id);
   }
 }

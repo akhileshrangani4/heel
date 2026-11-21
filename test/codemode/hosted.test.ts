@@ -84,6 +84,28 @@ describe("the code-mode helper", () => {
     expect(second.stdout).not.toContain("s3cret");
   }, 60_000);
 
+  it("holds a stopped script's slot until its worker is gone: a busy one at its time limit", async () => {
+    const worker = new HostedCodeWorker(host);
+    const started = Date.now();
+    const running = runScript({
+      code: "while True:\n    pass",
+      agent: AGENT,
+      modules: [],
+      pipeline: pipeline(),
+      worker,
+      limits: { maxSeconds: 2 },
+    });
+    await new Promise((r) => setTimeout(r, 300));
+    await worker.stop();
+    const held = Date.now() - started;
+    // Not cut off mid-turn, and not held past the limit plus Monty's grace.
+    expect(held).toBeGreaterThan(1_500);
+    expect(held).toBeLessThan(6_000);
+    expect((await running).status).toBe("error");
+    const next = await run(`import acct\nacct.ok()\nprint("next")`);
+    expect(next.stdout).toContain("next");
+  }, 60_000);
+
   it("survives the helper dying mid-call: the script fails, never retried, and the next one runs", async () => {
     const calls: string[] = [];
     const dying = await run(
