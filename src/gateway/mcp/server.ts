@@ -75,7 +75,8 @@ export interface McpSurfaceDeps {
   version: string;
   now?: () => Date;
   /** A fresh sandboxed worker per script; absent where the sandbox can't run. */
-  codeWorker?: () => CodeWorker;
+  /** Makes the worker for one script of this agent (the helper path keeps each agent on its own lane). */
+  codeWorker?: (agentId: string) => CodeWorker;
   /** How many scripts may run at once, shared with `heel run`; unlimited when absent. */
   slots?: SandboxSlots;
   /** Pauses that stop an agent's proposals too; heel's own store when absent. */
@@ -209,7 +210,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     const slot = deps.slots?.tryAcquire(agent.agentId) ?? UNLIMITED_SLOT;
     if (!slot.ok)
       return runCodeResult({ status: "busy", stdout: "", calls: [], error: slot.message });
-    const worker = makeWorker();
+    const worker = makeWorker(agent.agentId);
     // An aborted request (the HTTP request closing) stops its script, so its slot frees now.
     const stop = () => void worker.stop().catch(() => {});
     signal.addEventListener("abort", stop, { once: true });

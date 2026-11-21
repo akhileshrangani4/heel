@@ -12,6 +12,7 @@ import {
   toWireModules,
   type WireStep,
 } from "./protocol.ts";
+import { SANDBOX_EXEC, seatbeltAvailable, seatbeltProfile } from "./seatbelt.ts";
 import type { StubModule } from "./stubs.ts";
 import type { CodeWorker, ScriptLimits, Step } from "./worker.ts";
 
@@ -54,6 +55,11 @@ export interface CodemodeHostOptions {
   installDir: string;
   /** Node to run the helper with; heel's own by default. */
   node?: string;
+  /**
+   * Wrap the helper in macOS's Seatbelt sandbox: on by default wherever it
+   * exists, so a breakout into JavaScript still reaches nothing (`seatbelt.ts`).
+   */
+  seatbelt?: boolean;
   /** Told when the helper exits, with the end of what it wrote to stderr; heel logs it. */
   onExit?: (exit: HelperExit) => void;
 }
@@ -106,6 +112,7 @@ export class CodemodeHost {
   readonly #installDir: string;
   readonly #node: string;
   readonly #onExit: ((exit: HelperExit) => void) | undefined;
+  readonly #seatbelt: boolean;
   #child: ChildProcess | null = null;
   readonly #scripts = new Map<string, HostedScript>();
   #closed = false;
@@ -116,6 +123,17 @@ export class CodemodeHost {
     this.#installDir = existsSync(install) ? realpathSync(install) : install;
     this.#node = options.node ?? process.execPath;
     this.#onExit = options.onExit;
+    this.#seatbelt = options.seatbelt ?? seatbeltAvailable();
+  }
+
+  /** The helper's process id while it runs (for status and tests). */
+  get pid(): number | null {
+    return this.#child?.pid ?? null;
+  }
+
+  /** Whether the helper runs inside Seatbelt. */
+  get seatbelt(): boolean {
+    return this.#seatbelt;
   }
 
   /**
@@ -125,13 +143,7 @@ export class CodemodeHost {
    */
   args(): string[] {
     const install = this.#installDir;
-    const reads = [
-      ...INSTALL_PARTS.map((part) => join(install, part)).filter((p) => existsSync(p)),
-      hoistedDependencies(install),
-    ].filter((p) => p !== null);
-    if ([install, ...reads].some((p) => p.includes("*"))) {
-      throw new Error(`code mode can't run from a path with "*" in it: ${install}`);
-    }
+    const reads = this.#reads();
     return [
       "--permission",
       ...reads.map((p) => `--allow-fs-read=${p}`),
@@ -142,10 +154,36 @@ export class CodemodeHost {
     ];
   }
 
+  /** What the helper may read: the parts of heel's install it runs, and hoisted dependencies. */
+  #reads(): string[] {
+    const install = this.#installDir;
+    const reads = [
+      ...INSTALL_PARTS.map((part) => join(install, part)).filter((p) => existsSync(p)),
+      hoistedDependencies(install),
+    ].filter((p) => p !== null);
+    if ([install, ...reads].some((p) => p.includes("*"))) {
+      throw new Error(`code mode can't run from a path with "*" in it: ${install}`);
+    }
+    return reads;
+  }
+
+  /** The program heel starts: Node with `args()`, inside Seatbelt where that's on. */
+  command(): { file: string; args: string[] } {
+    const args = this.args();
+    if (!this.#seatbelt) return { file: this.#node, args };
+    const profile = seatbeltProfile({
+      node: this.#node,
+      install: this.#installDir,
+      reads: this.#reads(),
+    });
+    return { file: SANDBOX_EXEC, args: ["-p", profile, this.#node, ...args] };
+  }
+
   /** The running helper, started now if there isn't one. */
   #helper(): ChildProcess {
     if (this.#child !== null) return this.#child;
-    const child = spawn(this.#node, this.args(), {
+    const { file, args } = this.command();
+    const child = spawn(file, args, {
       cwd: this.#installDir,
       env: {},
       stdio: ["pipe", "pipe", "pipe"],
@@ -325,6 +363,16 @@ export class CodemodeHost {
       };
       this.#send({ type: "stop", id });
     });
+  }
+
+  /** Starts the helper now, ahead of its first script. A helper that can't start is found then. */
+  warm(): void {
+    if (this.#closed) return;
+    try {
+      this.#helper();
+    } catch {
+      // The first script reports why.
+    }
   }
 
   /** Kills the helper (tests use this to check heel survives it). */

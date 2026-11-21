@@ -9,7 +9,7 @@ import { JevAdapter } from "./adapters/jev.ts";
 import { createAdminHandler } from "./admin/handlers.ts";
 import { startAdminServer } from "./admin/server.ts";
 import { SiemSink } from "./audit/siem.ts";
-import { CodemodeHost, HostedCodeWorker } from "./codemode/hosted.ts";
+import { CodemodeLanes } from "./codemode/lanes.ts";
 import { SandboxedCodeWorker } from "./codemode/sandboxed.ts";
 import type { CodeWorker } from "./codemode/worker.ts";
 import { rulesPaths } from "./config/rules.ts";
@@ -580,16 +580,16 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         onHidden: (reason) => hideCounts.record(reason),
       });
       // Code mode everywhere, and heel never loads Monty itself: each script in its own
-      // worker under bubblewrap where that runs (D6b), otherwise on one locked-down helper
-      // running Monty as WebAssembly.
-      let codeWorker: () => CodeWorker;
+      // worker under bubblewrap where that runs (D6b), otherwise on a locked-down helper
+      // running Monty as WebAssembly, one per agent (a lane), a few at a time.
+      let codeWorker: (agentId: string) => CodeWorker;
       let closeHelper: Closer | null = null;
       if (sandbox.ok) {
         const host = sandbox.host;
         codeWorker = () => new SandboxedCodeWorker({ host, installDir: INSTALL_DIR });
       } else {
-        // Making the handle starts nothing: the helper process starts on the first script.
-        const helper = new CodemodeHost({
+        // Making the lanes starts nothing: a helper process starts on an agent's first script.
+        const lanes = new CodemodeLanes({
           installDir: INSTALL_DIR,
           onExit: (exit) =>
             log.warn(
@@ -597,8 +597,8 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
               "code-mode helper exited; its running scripts failed",
             ),
         });
-        closeHelper = () => helper.close();
-        codeWorker = () => new HostedCodeWorker(helper);
+        closeHelper = () => lanes.close();
+        codeWorker = (agentId) => lanes.worker(agentId);
       }
       const mcp = createMcpSurface({
         db: store.db,
