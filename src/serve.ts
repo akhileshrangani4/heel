@@ -589,7 +589,14 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         codeWorker = () => new SandboxedCodeWorker({ host, installDir: INSTALL_DIR });
       } else {
         // Making the handle starts nothing: the helper process starts on the first script.
-        const helper = new CodemodeHost({ installDir: INSTALL_DIR });
+        const helper = new CodemodeHost({
+          installDir: INSTALL_DIR,
+          onExit: (exit) =>
+            log.warn(
+              { code: exit.code, signal: exit.signal, detail: exit.detail },
+              "code-mode helper exited; its running scripts failed",
+            ),
+        });
         closeHelper = () => helper.close();
         codeWorker = () => new HostedCodeWorker(helper);
       }

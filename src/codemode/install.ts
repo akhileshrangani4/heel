@@ -31,7 +31,8 @@ function within(dir: string, path: string): boolean {
  * hoists its dependencies beside it; pnpm keeps them in
  * `<dir>/node_modules/.pnpm`. Either way the outermost `node_modules` above
  * the install holds them all, so that's what's mounted (read-only), and only
- * when Monty actually resolves inside it.
+ * when Monty actually resolves inside it. In a workspace, where heel's folder
+ * has no `node_modules` above it, it is the outermost one above Monty.
  */
 export function hoistedDependencies(
   install: string,
@@ -40,7 +41,13 @@ export function hoistedDependencies(
   if (entry === null || within(install, entry)) return null;
   const parts = install.split(sep);
   const at = parts.indexOf("node_modules");
-  if (at < 0) return null;
-  const dir = parts.slice(0, at + 1).join(sep);
-  return within(dir, entry) ? dir : null;
+  if (at >= 0) {
+    const dir = parts.slice(0, at + 1).join(sep);
+    return within(dir, entry) ? dir : null;
+  }
+  // A workspace: heel's own folder holds no `node_modules` above it, and its dependencies are
+  // hoisted to the workspace's. The outermost `node_modules` above Monty's entry holds them.
+  const entryParts = entry.split(sep);
+  const outer = entryParts.indexOf("node_modules");
+  return outer < 0 ? null : entryParts.slice(0, outer + 1).join(sep);
 }

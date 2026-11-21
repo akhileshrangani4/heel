@@ -1,10 +1,12 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { existsSync, realpathSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { hoistedDependencies } from "./install.ts";
 import {
   fromWire,
   lineReader,
+  MAX_LINE,
   parseFromHost,
   type ToHost,
   toWireModules,
@@ -52,6 +54,15 @@ export interface CodemodeHostOptions {
   installDir: string;
   /** Node to run the helper with; heel's own by default. */
   node?: string;
+  /** Told when the helper exits, with the end of what it wrote to stderr; heel logs it. */
+  onExit?: (exit: HelperExit) => void;
+}
+
+export interface HelperExit {
+  code: number | null;
+  signal: NodeJS.Signals | null;
+  /** The last few KB of the helper's stderr, or a spawn error. */
+  detail: string;
 }
 
 /** What heel keeps about one script while the helper runs it. */
@@ -76,6 +87,16 @@ interface HostedScript {
 
 /** How long past a script's time limit heel waits for its worker to go before restarting the helper. */
 const STOP_SLACK_MS = 10_000;
+/** How long past a script's time limit heel waits for any one step before giving up on the script. */
+const STEP_SLACK_MS = 10_000;
+/** The longest delay a Node timer takes; past it, setTimeout fires at once. */
+const MAX_TIMER_MS = 2 ** 31 - 1;
+/** How much of the helper's stderr heel keeps for the log. */
+const STDERR_TAIL = 4096;
+/** What the helper may read of heel's install: the parts it runs, as the bubblewrap worker mounts. */
+const INSTALL_PARTS = ["bin", "src", "dist", "node_modules", "package.json"] as const;
+
+const timerMs = (ms: number) => Math.min(Math.max(0, ms), MAX_TIMER_MS);
 /** How long a closing heel waits for the helper to exit before killing it. */
 const CLOSE_GRACE_MS = 2000;
 
@@ -84,19 +105,33 @@ const failed = (error: string): WireStep => ({ kind: "failed", error });
 export class CodemodeHost {
   readonly #installDir: string;
   readonly #node: string;
+  readonly #onExit: ((exit: HelperExit) => void) | undefined;
   #child: ChildProcess | null = null;
   readonly #scripts = new Map<string, HostedScript>();
   #closed = false;
 
   constructor(options: CodemodeHostOptions) {
-    this.#installDir = resolve(options.installDir);
+    // The real path: Node checks reads against where a file really is, not the link to it.
+    const install = resolve(options.installDir);
+    this.#installDir = existsSync(install) ? realpathSync(install) : install;
     this.#node = options.node ?? process.execPath;
+    this.#onExit = options.onExit;
   }
 
-  /** The flags that lock the helper down: read heel's install, start worker threads, nothing else. */
+  /**
+   * The flags that lock the helper down: read the parts of heel's install it
+   * runs, start worker threads, nothing else. Node reads `*` in a path as a
+   * wildcard, so an install path holding one is refused rather than widened.
+   */
   args(): string[] {
     const install = this.#installDir;
-    const reads = [install, hoistedDependencies(install)].filter((p) => p !== null);
+    const reads = [
+      ...INSTALL_PARTS.map((part) => join(install, part)).filter((p) => existsSync(p)),
+      hoistedDependencies(install),
+    ].filter((p) => p !== null);
+    if ([install, ...reads].some((p) => p.includes("*"))) {
+      throw new Error(`code mode can't run from a path with "*" in it: ${install}`);
+    }
     return [
       "--permission",
       ...reads.map((p) => `--allow-fs-read=${p}`),
@@ -113,32 +148,44 @@ export class CodemodeHost {
     const child = spawn(this.#node, this.args(), {
       cwd: this.#installDir,
       env: {},
-      stdio: ["pipe", "pipe", "ignore"],
+      stdio: ["pipe", "pipe", "pipe"],
     });
     this.#child = child;
+    let stderr = "";
+    child.stderr?.setEncoding("utf8");
+    child.stderr?.on("data", (text: string) => {
+      stderr = (stderr + text).slice(-STDERR_TAIL);
+    });
     child.stdin?.on("error", () => {});
+    // A line heel can't read, or one past the protocol's longest, means the helper is broken
+    // (or broken into): it goes, and every script on it fails.
+    const broken = () => this.#kill(child);
     child.stdout?.on(
       "data",
-      lineReader((raw) => this.#receive(raw)),
+      lineReader((raw) => this.#receive(raw, broken), {
+        maxLine: MAX_LINE + 1024,
+        onOverflow: broken,
+      }),
     );
-    const onExit = () => {
+    const onExit = (code: number | null, signal: NodeJS.Signals | null, error?: Error) => {
       if (this.#child !== child) return;
       this.#child = null;
+      this.#onExit?.({ code, signal, detail: error?.message ?? stderr.trim() });
       // Every script it ran is over, and so are their workers.
       for (const [id, script] of [...this.#scripts]) {
         this.#endWith(id, "the code-mode helper stopped");
         script.workerGone?.();
       }
     };
-    child.on("exit", onExit);
-    child.on("error", onExit);
+    child.on("exit", (code, signal) => onExit(code, signal));
+    child.on("error", (error) => onExit(null, null, error));
     return child;
   }
 
-  /** One line from the helper. A line that doesn't parse, or names no script heel knows, is dropped. */
-  #receive(raw: unknown): void {
+  /** One line from the helper. One that doesn't parse breaks the helper; one for a script heel forgot is dropped. */
+  #receive(raw: unknown, broken: () => void): void {
     const message = parseFromHost(raw);
-    if (message === null) return;
+    if (message === null) return broken();
     const script = this.#scripts.get(message.id);
     if (script === undefined) return;
     if (message.type === "ended") script.workerGone?.();
@@ -149,8 +196,25 @@ export class CodemodeHost {
     }
   }
 
+  /**
+   * Sends the helper one message. A result too big for the protocol goes as
+   * an error at the call instead, so the script can carry on without it.
+   */
   #send(message: ToHost): void {
-    this.#helper().stdin?.write(`${JSON.stringify(message)}\n`);
+    let line = JSON.stringify(message);
+    if (line.length > MAX_LINE && message.type === "resume") {
+      line = JSON.stringify({
+        id: message.id,
+        type: "raise",
+        errorType: "RuntimeError",
+        message: "the result is too large for code mode",
+      } satisfies ToHost);
+    }
+    this.#helper().stdin?.write(`${line}\n`);
+  }
+
+  #kill(child: ChildProcess): void {
+    child.kill("SIGKILL");
   }
 
   /** Hands a step to whoever is waiting for it; a step that isn't a call is the script's last. */
@@ -187,14 +251,32 @@ export class CodemodeHost {
     return id;
   }
 
-  /** Sends one message for a script and waits for the step that answers it. */
+  /**
+   * Sends one message for a script and waits for the step that answers it.
+   * A step that doesn't come within the script's time limit (plus slack) ends
+   * the script: whoever made it then stops it, which frees its worker.
+   */
   next(id: string, message: ToHost): Promise<WireStep> {
     const script = this.#scripts.get(id);
     if (script === undefined) return Promise.resolve(failed("the script was stopped"));
     return new Promise<WireStep>((resolve) => {
       if (script.finalStep !== null) return resolve(script.finalStep);
-      script.awaitingStep = resolve;
-      this.#send(message);
+      const deadline = setTimeout(
+        () => this.#endWith(id, "the script didn't answer in time"),
+        timerMs(script.timeLimitMs + STEP_SLACK_MS),
+      );
+      script.awaitingStep = (step) => {
+        clearTimeout(deadline);
+        resolve(step);
+      };
+      try {
+        this.#send(message);
+      } catch (error) {
+        this.#endWith(
+          id,
+          `code mode couldn't start: ${error instanceof Error ? error.message : error}`,
+        );
+      }
     });
   }
 
@@ -227,10 +309,13 @@ export class CodemodeHost {
     // No helper, so no worker: it died, or the script never reached it.
     if (child === null) return Promise.resolve();
     return new Promise<void>((settle) => {
-      const backstop = setTimeout(() => {
-        if (this.#child === child) child.kill("SIGKILL");
-        settle();
-      }, script.timeLimitMs + STOP_SLACK_MS);
+      const backstop = setTimeout(
+        () => {
+          if (this.#child === child) child.kill("SIGKILL");
+          settle();
+        },
+        timerMs(script.timeLimitMs + STOP_SLACK_MS),
+      );
       script.workerGone = () => {
         clearTimeout(backstop);
         settle();
@@ -241,7 +326,7 @@ export class CodemodeHost {
 
   /** Kills the helper (tests use this to check heel survives it). */
   kill(): void {
-    this.#child?.kill("SIGKILL");
+    if (this.#child !== null) this.#kill(this.#child);
   }
 
   /** Ends every script and the helper, for good: no script starts after this. */

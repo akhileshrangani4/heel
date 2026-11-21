@@ -39,6 +39,12 @@ describe("the dependencies code mode mounts", () => {
     expect(hoistedDependencies("/opt/heel", "/somewhere/monty.js")).toBeNull();
   });
 
+  it("finds a workspace's node_modules when heel's folder has none above it", () => {
+    expect(hoistedDependencies("/ws/packages/heel", `/ws/node_modules/${monty}`)).toBe(
+      "/ws/node_modules",
+    );
+  });
+
   it("treats a directory named like ..foo as inside, not above", () => {
     expect(hoistedDependencies("/opt/heel", `/opt/heel/..cache/node_modules/${monty}`)).toBeNull();
   });

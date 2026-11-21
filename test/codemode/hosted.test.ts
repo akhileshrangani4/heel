@@ -17,6 +17,7 @@ const AGENT = { orgId: "org", agentId: "agt", agentName: "bot", ownerId: "usr", 
 const MODULE = accountModule("acct", [
   { name: "ok", inputSchema: { type: "object", properties: {} } },
   { name: "ask", inputSchema: { type: "object", properties: {} } },
+  { name: "note", inputSchema: { type: "object", properties: { note: {} } } },
 ]);
 const RULE = { name: null, file: "rules/owner.yaml", line: 1 };
 
@@ -161,4 +162,52 @@ describe("the code-mode helper", () => {
     expect(result).toMatchObject({ status: "error", error: "the script was stopped" });
     expect(calls).toEqual([]);
   }, 20_000);
+
+  it("refuses an argument too large to send, before it reaches heel, and keeps the helper up", async () => {
+    const calls: string[] = [];
+    const big = await run(
+      `import acct\ns = "a" * 1_000_000\nacct.note(note=s * 20)`,
+      pipeline((tool) => calls.push(tool)),
+    );
+    expect(big.status).toBe("error");
+    expect(big.error).toContain("too large");
+    expect(calls).toEqual([]);
+    // A list of one string repeated is small in Monty but big once sent: refused as it's counted.
+    const repeated = await run(`import acct\ns = "a" * 1_000_000\nacct.note(note=[s] * 450)`);
+    expect(repeated.status).toBe("error");
+    const next = await run(`import acct\nacct.ok()\nprint("up")`);
+    expect(next.stdout).toContain("up");
+  }, 60_000);
+
+  it("refuses a __proto__ key rather than dropping it", async () => {
+    const calls: string[] = [];
+    const result = await run(
+      `import acct\nacct.note(note={"__proto__": 1})`,
+      pipeline((tool) => calls.push(tool)),
+    );
+    expect(result.status).toBe("error");
+    expect(calls).toEqual([]);
+  }, 30_000);
+
+  it("hands the script an error, not the result, when a result is too large to send", async () => {
+    const huge: Pipeline = {
+      async run(): Promise<PipelineResult> {
+        return {
+          status: "allowed",
+          result: { body: "x".repeat(17 * 1024 * 1024) },
+          via: { kind: "rule", rule: RULE, standingApprovalId: null },
+        };
+      },
+    };
+    const result = await run(
+      `import acct\ntry:\n    acct.ok()\nexcept RuntimeError as e:\n    print("caught", e)`,
+      huge,
+    );
+    expect(result.stdout).toContain("too large");
+  }, 60_000);
+
+  it("won't widen what the helper may read when heel's path holds a wildcard", () => {
+    const starred = new CodemodeHost({ installDir: "/opt/he*el" });
+    expect(() => starred.args()).toThrow(/\*/);
+  });
 });

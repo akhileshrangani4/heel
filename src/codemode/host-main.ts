@@ -4,6 +4,7 @@ import {
   type FromHost,
   fromWireModules,
   lineReader,
+  MAX_LINE,
   stdoutUpTo,
   type ToHost,
   toWire,
@@ -27,6 +28,8 @@ import type { Step } from "./worker.ts";
 
 /** Fresh workers kept ready, each in its own single-use pool. */
 const SPARE_WORKERS = 2;
+/** Everything one script may send heel, as the bubblewrap worker's output ceiling. */
+const SCRIPT_OUTPUT_CEILING = 64 * 1024 * 1024;
 
 interface Script {
   worker: MontyWorker;
@@ -34,6 +37,8 @@ interface Script {
   pool: MontyPool;
   /** The script's latest step; heel's next answer applies to it when it's a call. */
   latest: Step | null;
+  /** What the script has sent heel so far, in characters. */
+  sent: number;
 }
 
 export async function codemodeHostMain(): Promise<void> {
@@ -50,7 +55,39 @@ export async function codemodeHostMain(): Promise<void> {
   refill();
 
   const scripts = new Map<string, Script>();
-  const send = (message: FromHost) => process.stdout.write(`${JSON.stringify(message)}\n`);
+  // heel reading too slowly, or going away, ends the helper rather than leaving it half-written.
+  process.stdout.on("error", () => process.exit(1));
+  const write = (message: FromHost) => process.stdout.write(`${JSON.stringify(message)}\n`);
+  /**
+   * Sends heel one message for a script. One too big to send, or past the
+   * script's output ceiling, fails the script instead: heel reads every line
+   * whole, and one script mustn't fill heel's memory or stall the others.
+   */
+  const send = (message: FromHost) => {
+    let line: string | null;
+    try {
+      line = JSON.stringify(message);
+    } catch {
+      line = null;
+    }
+    const script = scripts.get(message.id);
+    if (script !== undefined && line !== null) script.sent += line.length;
+    const tooBig =
+      line === null ||
+      line.length > MAX_LINE ||
+      (script !== undefined && script.sent > SCRIPT_OUTPUT_CEILING);
+    if (!tooBig) {
+      process.stdout.write(`${line}\n`);
+      return;
+    }
+    if (script === undefined) return;
+    write({
+      id: message.id,
+      type: "step",
+      step: { kind: "failed", error: "the script sent more than code mode allows" },
+    });
+    void discard(message.id);
+  };
 
   // One discard per script, shared: a script that finished on its own may still be
   // discarding its worker when heel's `stop` arrives, and `ended` must wait for that.
@@ -84,7 +121,7 @@ export async function codemodeHostMain(): Promise<void> {
     if (scripts.has(id)) return;
     const pool = await (spares.shift() ?? newPool());
     refill();
-    const script: Script = { worker: new MontyWorker(pool), pool, latest: null };
+    const script: Script = { worker: new MontyWorker(pool), pool, latest: null, sent: 0 };
     scripts.set(id, script);
     const stdout = stdoutUpTo(message.limits.maxStdout, (text) => {
       if (scripts.has(id)) send({ id, type: "stdout", text });
@@ -104,7 +141,7 @@ export async function codemodeHostMain(): Promise<void> {
         // Queued behind the script's other messages, so a script still computing ends at its
         // time limit at the latest; `ended` goes back only once its worker is gone.
         await discard(id);
-        send({ id, type: "ended" });
+        write({ id, type: "ended" });
         return;
       default:
         report(id, await applyAnswer(scripts.get(id)?.latest ?? null, message));
@@ -125,7 +162,7 @@ export async function codemodeHostMain(): Promise<void> {
         // worker couldn't start, say, fails here instead.
         .catch((error: unknown) => {
           const step = { kind: "failed", error: `the code-mode helper failed: ${error}` } as const;
-          send({ id, type: "step", step });
+          write({ id, type: "step", step });
           return discard(id);
         });
       queues.set(id, next);

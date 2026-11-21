@@ -213,6 +213,9 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     // An aborted request (the HTTP request closing) stops its script, so its slot frees now.
     const stop = () => void worker.stop().catch(() => {});
     signal.addEventListener("abort", stop, { once: true });
+    // A listener added to a signal that already fired never runs: a client that hung up
+    // before this point gets its script stopped now, before it starts.
+    if (signal.aborted) stop();
     try {
       const result = await runScript({
         code,

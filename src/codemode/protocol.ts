@@ -163,30 +163,64 @@ export function parseFromWorker(raw: unknown): FromWorker | null {
 }
 
 /**
+ * The longest line either side of the helper protocol sends: a script's
+ * arguments, a result or a step. A step past it fails its script instead of
+ * being sent, so heel never buffers a line without end.
+ */
+export const MAX_LINE = 16 * 1024 * 1024;
+
+/**
  * Splits a byte stream into JSON lines; a line that doesn't parse is `null`.
  * Bytes are decoded as a stream, so a character split across two chunks
- * stays whole.
+ * stays whole. Only the new chunk is searched for a newline, so a long line
+ * costs the same however it is split up.
+ *
+ * With `maxLine`, a line longer than that is dropped unread and `onOverflow`
+ * is told; reading picks up again after its newline.
  */
 export function lineReader(
   onMessage: (message: unknown) => void,
+  limit?: { maxLine: number; onOverflow: () => void },
 ): (chunk: Buffer | string) => void {
-  let buffer = "";
+  let parts: string[] = [];
+  let length = 0;
+  let overflowed = false;
   const decoder = new StringDecoder("utf8");
-  return (chunk) => {
-    buffer += typeof chunk === "string" ? chunk : decoder.write(chunk);
-    let newline = buffer.indexOf("\n");
-    while (newline >= 0) {
-      const line = buffer.slice(0, newline);
-      buffer = buffer.slice(newline + 1);
-      if (line.trim() !== "") {
-        try {
-          onMessage(JSON.parse(line));
-        } catch {
-          onMessage(null);
-        }
-      }
-      newline = buffer.indexOf("\n");
+  const emit = (line: string) => {
+    if (line.trim() === "") return;
+    let message: unknown;
+    try {
+      message = JSON.parse(line);
+    } catch {
+      message = null;
     }
+    onMessage(message);
+  };
+  return (chunk) => {
+    let text = typeof chunk === "string" ? chunk : decoder.write(chunk);
+    let newline = text.indexOf("\n");
+    while (newline >= 0) {
+      const tail = text.slice(0, newline);
+      if (!overflowed) {
+        if (limit !== undefined && length + tail.length > limit.maxLine) limit.onOverflow();
+        else emit(parts.length === 0 ? tail : parts.join("") + tail);
+      }
+      parts = [];
+      length = 0;
+      overflowed = false;
+      text = text.slice(newline + 1);
+      newline = text.indexOf("\n");
+    }
+    if (text === "" || overflowed) return;
+    if (limit !== undefined && length + text.length > limit.maxLine) {
+      parts = [];
+      length = 0;
+      overflowed = true;
+      limit.onOverflow();
+      return;
+    }
+    parts.push(text);
+    length += text.length;
   };
 }
 
