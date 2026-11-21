@@ -59,6 +59,14 @@ One MCP server with every connected account's tools, named by alias: `github__me
 - **HTTP APIs** are at `/http/<alias>/<path>`, and **CLIs** run with `heel run`. Neither is an MCP tool.
 - **`heel_status`** tells the agent where an approval stands. **`heel_accounts`** lists the accounts it can use and what it asked for that still waits, by name only. **`heel_propose_rules`** lets it [propose rules and hide entries](rules.md#your-agent-can-propose-rules) for you to add. **`heel_request_connection`** lets it [ask you to connect an account](connect.md#your-agent-can-ask-for-a-connection). heel also serves a **`setup`** prompt that has the agent put the rest of your services behind heel ([Set up heel with one prompt](setup.md)).
 
+## Give your agent the heel skill
+
+```sh
+npx skills add akhileshrangani4/heel
+```
+
+It teaches Claude Code, Codex and other agents that support skills how to set heel up and how to work through it: what to do when a call needs approval, is denied or is paused, and to ask for a connection instead of a key. It's listed on [skills.sh](https://skills.sh).
+
 ## What happens to each call
 
 | Outcome | The agent gets | It should |
