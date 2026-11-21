@@ -19,7 +19,7 @@ describe("the dependencies code mode mounts", () => {
         p("/app/node_modules/.pnpm/useheel@0.1.0/node_modules/useheel"),
         p(`/app/node_modules/.pnpm/@pydantic+monty@1.6.0/node_modules/${monty}`),
       ),
-    ).toBe("/app/node_modules");
+    ).toBe(p("/app/node_modules"));
   });
 
   it("adds nothing when they're inside the install (a checkout, the image, a global install)", () => {
