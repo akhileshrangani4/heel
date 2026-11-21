@@ -165,13 +165,16 @@ export default function HomePage() {
             className="rise mt-6 flex flex-wrap items-center justify-center gap-3"
             style={{ animationDelay: '180ms' }}
           >
-            <CopyInstall command="npm install -g useheel" />
+            <CopyInstall
+              label="copy prompt"
+              command="Set up heel for me by following https://useheel.dev/setup.md"
+            />
             <Link href="/docs" className={pill}>
               read the docs
             </Link>
           </div>
           <p className="rise mt-3 text-xs text-neutral-400 short:hidden" style={{ animationDelay: '220ms' }}>
-            open source · self-hosted · node 26.13 or later
+            paste it into your agent · open source · self-hosted
           </p>
 
           <div className="rise mt-8 w-full max-w-[960px] short:mt-6" style={{ animationDelay: '280ms' }}>
