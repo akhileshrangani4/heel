@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.2.7](https://github.com/akhileshrangani4/heel/compare/v0.2.6...v0.2.7) (2026-11-21)
+
+
+### Features
+
+* code mode runs on every OS, and agents get it by default ([#177](https://github.com/akhileshrangani4/heel/issues/177)) ([652d850](https://github.com/akhileshrangani4/heel/commit/652d850c8e7f930860870aefdbefb926a69e2112))
+* **codemode:** one helper per agent, and Seatbelt around it on macOS ([#178](https://github.com/akhileshrangani4/heel/issues/178)) ([f63b55a](https://github.com/akhileshrangani4/heel/commit/f63b55a2f30e5c0a35eb6b9c26748a934d3af64c))
+* heel is set up by your agent, from nothing, with one prompt; useheel.dev is readable by agents ([#180](https://github.com/akhileshrangani4/heel/issues/180)) ([f4a2c57](https://github.com/akhileshrangani4/heel/commit/f4a2c572ec98b85df8b913f07d748bd835777d34))
+
+
+### Documentation
+
+* **site:** the roadmap adds learning from what you approve, mcp events, a js package and an mcp catalog ([#174](https://github.com/akhileshrangani4/heel/issues/174)) ([9915a75](https://github.com/akhileshrangani4/heel/commit/9915a752cc0e7386f127f09d68ac2aa63c2cefab))
+* **site:** the roadmap says how learning from approvals works, and adds mcp elicitation ([#176](https://github.com/akhileshrangani4/heel/issues/176)) ([4049626](https://github.com/akhileshrangani4/heel/commit/4049626971202883a34730fe79b198e551c984da))
+* **site:** the roadmap's code-mode line says each agent's scripts get a sandbox of their own ([#179](https://github.com/akhileshrangani4/heel/issues/179)) ([a37b5aa](https://github.com/akhileshrangani4/heel/commit/a37b5aac0f590739c4d5d98b568d471831f68ba5))
+
 ## [0.2.6](https://github.com/akhileshrangani4/heel/compare/v0.2.5...v0.2.6) (2026-11-20)
 
 
