@@ -73,14 +73,14 @@ Then add heel to your agent as an MCP server:
 **Claude Code**
 
 ```sh
-claude mcp add --transport http heel "http://127.0.0.1:7300/mcp?tools=direct" \
+claude mcp add --transport http heel "http://127.0.0.1:7300/mcp" \
   --header "Authorization: Bearer heel_…"
 ```
 
 **Codex**
 
 ```sh
-codex mcp add heel --url "http://127.0.0.1:7300/mcp?tools=direct" \
+codex mcp add heel --url "http://127.0.0.1:7300/mcp" \
   --bearer-token-env-var HEEL_TOKEN
 ```
 
@@ -92,7 +92,7 @@ Set `HEEL_TOKEN` to the token first.
 {
   "mcpServers": {
     "heel": {
-      "url": "http://127.0.0.1:7300/mcp?tools=direct",
+      "url": "http://127.0.0.1:7300/mcp",
       "headers": { "Authorization": "Bearer heel_…" }
     }
   }

@@ -1,11 +1,13 @@
+import type { Monty } from "@pydantic/monty";
+// The classes come from the WebAssembly entry, which never loads the native addon: the
+// locked-down helper refuses native addons. Both entries share these classes.
 import {
   ExternalModule,
   FunctionSnapshot,
-  Monty,
   MontyComplete,
   type MontySession,
   type Snapshot,
-} from "@pydantic/monty";
+} from "@pydantic/monty/wasm";
 import type { StubModule } from "./stubs.ts";
 import { plainValue } from "./values.ts";
 import type { CodeWorker, ScriptLimits, Step } from "./worker.ts";
@@ -38,7 +40,7 @@ export type MontyBackend = "native" | "wasm";
 
 async function createPool(backend: MontyBackend): Promise<Pick<Monty, "checkout">> {
   const options = { minProcesses: 0, maxProcesses: 1, maxCheckoutsPerWorker: 1 };
-  if (backend === "native") return Monty.create(options);
+  if (backend === "native") return (await import("@pydantic/monty")).Monty.create(options);
   const wasm = await import("@pydantic/monty/wasm");
   return wasm.Monty.create(options);
 }
@@ -51,10 +53,7 @@ export class MontyWorker implements CodeWorker {
   /** Set when the pool is shared: the worker then closes only its session, never the pool. */
   readonly #shared: Pick<Monty, "checkout"> | null;
 
-  constructor(
-    backend: MontyBackend = "native",
-    shared: Pick<Monty, "checkout"> | null = null,
-  ) {
+  constructor(backend: MontyBackend = "native", shared: Pick<Monty, "checkout"> | null = null) {
     this.#backend = backend;
     this.#shared = shared;
   }

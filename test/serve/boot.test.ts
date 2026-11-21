@@ -115,10 +115,10 @@ describe("heel serve", () => {
     const unknown = await fetch(`${agentUrl}/mcp`, bearer(`heel_${"A".repeat(43)}`));
     expect(unknown.status).toBe(401);
 
-    // A valid token gets past authentication: bare /mcp then says code mode isn't built yet.
+    // A valid token gets past authentication: bare /mcp is code mode, on every host, and a
+    // bare GET isn't an MCP request.
     const valid = await fetch(`${agentUrl}/mcp`, bearer(token));
-    expect(valid.status).toBe(501);
-    expect(await valid.json()).toMatchObject({ status: "denied", reason: "surface_unavailable" });
+    expect(valid.status).toBe(405);
 
     const revoke = await adminCall(config.adminSocketPath, {
       method: "agent.revoke",
@@ -129,7 +129,7 @@ describe("heel serve", () => {
     expect(revoked.status).toBe(401);
   });
 
-  it("answers surfaces that aren't built with 501, and an account the agent can't use with 404", async () => {
+  it("answers an account the agent can't use with 404", async () => {
     // /http is built (D7a): an account the agent can't use reads as unknown.
     const home = tempDir("heel-boot-");
     const config = configIn(home);
@@ -138,10 +138,6 @@ describe("heel serve", () => {
     const token = await addAgentToken(config, "ci-bot");
     const headers = { authorization: `Bearer ${token}` };
 
-    for (const path of ["/mcp"]) {
-      const response = await fetch(`${agentUrl}${path}`, { method: "POST", headers });
-      expect(response.status, path).toBe(501);
-    }
     const noSuchHttpAccount = await fetch(`${agentUrl}/http/github/repos`, {
       method: "POST",
       headers,

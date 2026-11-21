@@ -119,3 +119,21 @@ export function lineReader(
     }
   };
 }
+
+/**
+ * The helper's protocol (`heel codemode-host`): the same messages, each
+ * tagged with the script it belongs to, since one helper runs many scripts
+ * at once. heel also sends `stop`, which ends a script and discards its
+ * worker; the helper never answers it.
+ */
+export type ToHost = (ToWorker & { id: string }) | { type: "stop"; id: string };
+export type FromHost = FromWorker & { id: string };
+
+/** A helper message: its script id plus a worker message, checked as `parseFromWorker` does. */
+export function parseFromHost(raw: unknown): FromHost | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const id = (raw as Record<string, unknown>)["id"];
+  if (typeof id !== "string") return null;
+  const message = parseFromWorker(raw);
+  return message === null ? null : { ...message, id };
+}

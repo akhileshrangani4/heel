@@ -2,11 +2,11 @@
 
 [README](../README.md) · [Quickstart](quickstart.md) · [Connect accounts](connect.md) · [Connect your agent](agents.md) · [Rules](rules.md) · [Approvals](approvals.md) · [Running](running.md)
 
-`heel run`, code mode and local MCP servers run in heel's sandbox, on Linux. This page is how it works and how to connect programs to it. To use `heel run`, start with [Run CLIs with heel run](heel-run.md).
+`heel run` and local MCP servers run in heel's sandbox, on Linux. Code mode runs on every OS: under bubblewrap where it's available, otherwise in a locked-down helper ([How code mode runs](#how-code-mode-runs)). This page is how it works and how to connect programs to it. To use `heel run`, start with [Run CLIs with heel run](heel-run.md).
 
 ## Requirements
 
-`heel run` and code mode run commands under bubblewrap, which needs unprivileged user namespaces.
+`heel run` and local MCP servers run under bubblewrap, which needs unprivileged user namespaces. So does code mode on Linux, when it's available.
 
 - **On a Linux host:** install `bubblewrap` and `util-linux`.
 - **In Docker:** the default seccomp profile blocks user namespaces, and the default masked `/proc` paths stop bubblewrap mounting its own `/proc`, so heel starts with both turned off. To turn them on, run with `--security-opt seccomp=unconfined --security-opt systempaths=unconfined` (or a seccomp profile that allows `unshare` and `clone` with `CLONE_NEWUSER`), on a host kernel that allows unprivileged user namespaces.
@@ -86,3 +86,13 @@ heel account set notes --credential-delivery env
 ```
 
 `heel account set` works for local MCP servers and for CLIs other than `gh`, and takes effect at once: a running server stops and starts again on its next call with the new settings. Left out, `--credential-auth` keeps the account's current auth (`bearer` if it had none). Until now the program held the credential, so anything it ran could have copied it: rotate it with the provider and pipe the new one in with `--credential-stdin`, as above. Without `--credential-stdin` the stored credential stays, and heel reminds you to rotate it. A pause also stops the proxy adding the credential, including to a local server's requests between calls.
+
+## How code mode runs
+
+The agent's script runs in [Monty](https://github.com/pydantic/monty), a Python interpreter built for code a model wrote. It has no files, network, environment or clock, and it can only call the functions heel gives it. Each of those calls leaves the script, goes through your rules like any other call, and only an allowed result goes back in. The script never holds a credential.
+
+Around Monty:
+
+- **On Linux with bubblewrap,** each script runs in its own `heel codemode-worker`, with no network and only heel's install mounted read-only.
+- **Everywhere else** (macOS, Windows, a container without the flags above, a server without user namespaces), heel starts one `heel codemode-host` helper. It runs Monty compiled to WebAssembly, and Node's permission model locks it down: it can read heel's install and start worker threads, and nothing else. No other files, no network and no programs, with an empty environment. Every script gets a fresh worker, so nothing from one script reaches the next. If the helper dies, the scripts it was running fail (heel never retries them, since a write may have happened), and the next script starts a new helper.
+

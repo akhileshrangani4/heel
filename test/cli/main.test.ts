@@ -67,22 +67,18 @@ async function serveIn(
 
 describe("agentMcpUrl", () => {
   it("builds the MCP URL from the agent listen address, on the direct tools until code mode", () => {
-    expect(agentMcpUrl({ host: "127.0.0.1", port: 7300 })).toBe(
-      "http://127.0.0.1:7300/mcp?tools=direct",
-    );
-    expect(agentMcpUrl({ host: "::1", port: 7300 })).toBe("http://[::1]:7300/mcp?tools=direct");
+    expect(agentMcpUrl({ host: "127.0.0.1", port: 7300 })).toBe("http://127.0.0.1:7300/mcp");
+    expect(agentMcpUrl({ host: "::1", port: 7300 })).toBe("http://[::1]:7300/mcp");
   });
 
   it("names localhost for a wildcard listen address, and the public URL when there is one", () => {
-    expect(agentMcpUrl({ host: "0.0.0.0", port: 7300 })).toBe(
-      "http://localhost:7300/mcp?tools=direct",
-    );
-    expect(agentMcpUrl({ host: "::", port: 7300 })).toBe("http://localhost:7300/mcp?tools=direct");
+    expect(agentMcpUrl({ host: "0.0.0.0", port: 7300 })).toBe("http://localhost:7300/mcp");
+    expect(agentMcpUrl({ host: "::", port: 7300 })).toBe("http://localhost:7300/mcp");
     expect(
       agentMcpUrl({ host: "0.0.0.0", port: 7300 }, new URL("https://agents.example.com")),
-    ).toBe("https://agents.example.com/mcp?tools=direct");
+    ).toBe("https://agents.example.com/mcp");
     expect(agentMcpUrl({ host: "0.0.0.0", port: 7300 }, new URL("https://example.com/heel"))).toBe(
-      "https://example.com/heel/mcp?tools=direct",
+      "https://example.com/heel/mcp",
     );
   });
 });
@@ -177,7 +173,8 @@ describe("heel CLI", () => {
     expect(added.stdout).toContain("MCP URL: http://127.0.0.1:0/mcp");
 
     const call = await fetch(`${agentUrl}/mcp`, { headers: { authorization: `Bearer ${token}` } });
-    expect(call.status).toBe(501);
+    // The token is accepted (not 401): code mode answers, and a bare GET isn't an MCP request.
+    expect(call.status).toBe(405);
 
     const duplicate = await run(["agent", "add", "inbox-bot"], { HEEL_HOME: home });
     expect(duplicate.code).toBe(EXIT.failed);

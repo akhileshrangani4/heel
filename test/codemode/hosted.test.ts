@@ -1,0 +1,102 @@
+import { fileURLToPath } from "node:url";
+import { afterAll, describe, expect, it } from "vitest";
+import { CodemodeHost, HostedCodeWorker } from "../../src/codemode/hosted.ts";
+import { runScript } from "../../src/codemode/run.ts";
+import { accountModule } from "../../src/codemode/stubs.ts";
+import type { Pipeline } from "../../src/gateway/pipeline/pipeline.ts";
+import type { CallRequest, PipelineResult } from "../../src/gateway/pipeline/ports.ts";
+
+/**
+ * Code mode on the locked-down helper (`heel codemode-host`), where
+ * bubblewrap isn't available: scripts run side by side, a stopped script
+ * leaves nothing behind for the next, and heel outlives the helper.
+ */
+
+const INSTALL_DIR = fileURLToPath(new URL("../..", import.meta.url));
+const AGENT = { orgId: "org", agentId: "agt", agentName: "bot", ownerId: "usr", tokenId: "tok" };
+const MODULE = accountModule("acct", [
+  { name: "ok", inputSchema: { type: "object", properties: {} } },
+  { name: "ask", inputSchema: { type: "object", properties: {} } },
+]);
+const RULE = { name: null, file: "rules/owner.yaml", line: 1 };
+
+const host = new CodemodeHost({ installDir: INSTALL_DIR });
+afterAll(() => host.close());
+
+function pipeline(onCall: (tool: string) => void = () => {}): Pipeline {
+  return {
+    async run(request: CallRequest): Promise<PipelineResult> {
+      onCall(request.tool);
+      return request.tool === "ask"
+        ? { status: "pending", approvalId: "apr_1", rule: RULE }
+        : {
+            status: "allowed",
+            result: { ok: true },
+            via: { kind: "rule", rule: RULE, standingApprovalId: null },
+          };
+    },
+  };
+}
+
+function run(code: string, p = pipeline()) {
+  if (MODULE === null) throw new Error("no module");
+  return runScript({
+    code,
+    agent: AGENT,
+    modules: [{ ...MODULE, account: "acct" }],
+    pipeline: p,
+    worker: new HostedCodeWorker(host),
+    limits: {},
+  });
+}
+
+describe("the code-mode helper", () => {
+  it("is locked down: Node's permission model, reads only, no writes, network or child processes", () => {
+    const args = host.args();
+    expect(args[0]).toBe("--permission");
+    expect(args).toContain("--allow-worker");
+    expect(args.some((a) => /^--allow-(fs-write|net|child-process|addons|wasi)/.test(a))).toBe(
+      false,
+    );
+    for (const read of args.filter((a) => a.startsWith("--allow-fs-read="))) {
+      expect(read).not.toBe("--allow-fs-read=*");
+    }
+  });
+
+  it("runs scripts side by side", async () => {
+    const results = await Promise.all(
+      [1, 2, 3, 4].map((n) => run(`import acct\nacct.ok()\nprint(${n})`)),
+    );
+    expect(results.map((r) => r.status)).toEqual([
+      "completed",
+      "completed",
+      "completed",
+      "completed",
+    ]);
+    expect(results.map((r) => r.stdout.trim())).toEqual(["1", "2", "3", "4"]);
+  }, 60_000);
+
+  it("leaves nothing of a stopped script for the next one", async () => {
+    const first = await run(`import acct\nsecret = "s3cret"\nacct.ask()`);
+    expect(first).toMatchObject({ status: "pending", approvalId: "apr_1" });
+    const second = await run(`print(secret)`);
+    expect(second.status).toBe("error");
+    expect(second.stdout).not.toContain("s3cret");
+  }, 60_000);
+
+  it("survives the helper dying mid-call: the script fails, never retried, and the next one runs", async () => {
+    const calls: string[] = [];
+    const dying = await run(
+      `import acct\nacct.ok()\nacct.ok()`,
+      pipeline((tool) => {
+        calls.push(tool);
+        if (calls.length === 1) host.kill();
+      }),
+    );
+    expect(dying.status).toBe("error");
+    expect(calls).toEqual(["ok"]);
+    const next = await run(`import acct\nacct.ok()\nprint("fine")`);
+    expect(next).toMatchObject({ status: "completed" });
+    expect(next.stdout).toContain("fine");
+  }, 60_000);
+});

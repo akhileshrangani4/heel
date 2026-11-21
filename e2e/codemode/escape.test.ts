@@ -10,7 +10,8 @@
  * HEEL_REQUIRE_SANDBOX, so there a skip is a failure.
  */
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
+import { CodemodeHost, HostedCodeWorker } from "../../src/codemode/hosted.ts";
 import { MontyWorker } from "../../src/codemode/monty.ts";
 import { runScript, type ScriptResult } from "../../src/codemode/run.ts";
 import { SandboxedCodeWorker } from "../../src/codemode/sandboxed.ts";
@@ -50,6 +51,9 @@ function fakePipeline(seen: string[]): Pipeline {
   };
 }
 
+const HOST = new CodemodeHost({ installDir: INSTALL_DIR });
+afterAll(() => HOST.close());
+
 const WORKERS: [string, boolean, () => CodeWorker][] = [
   [
     "under bubblewrap",
@@ -60,6 +64,7 @@ const WORKERS: [string, boolean, () => CodeWorker][] = [
     },
   ],
   ["in WebAssembly", true, () => new MontyWorker("wasm")],
+  ["in the locked-down helper", true, () => new HostedCodeWorker(HOST)],
 ];
 
 for (const [where, available, makeWorker] of WORKERS) {
