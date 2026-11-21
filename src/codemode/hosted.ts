@@ -126,6 +126,11 @@ export class CodemodeHost {
     this.#seatbelt = options.seatbelt ?? seatbeltAvailable();
   }
 
+  /** The helper's process id while it runs (for status and tests). */
+  get pid(): number | null {
+    return this.#child?.pid ?? null;
+  }
+
   /** Whether the helper runs inside Seatbelt. */
   get seatbelt(): boolean {
     return this.#seatbelt;
@@ -358,6 +363,16 @@ export class CodemodeHost {
       };
       this.#send({ type: "stop", id });
     });
+  }
+
+  /** Starts the helper now, ahead of its first script. A helper that can't start is found then. */
+  warm(): void {
+    if (this.#closed) return;
+    try {
+      this.#helper();
+    } catch {
+      // The first script reports why.
+    }
   }
 
   /** Kills the helper (tests use this to check heel survives it). */
