@@ -2,6 +2,14 @@
 @import 'fumadocs-ui/css/neutral.css';
 @import 'fumadocs-ui/css/preset.css';
 
+/* Tailwind 4 gives buttons the default cursor; every button here (the copy pills, the docs' code-block copy buttons) is clickable, so it shows the pointer. */
+@layer base {
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']) {
+    cursor: pointer;
+  }
+}
+
 /* Short screens (a laptop with browser chrome): the hero tightens so the whole flow fits without scrolling. */
 @custom-variant short (@media (max-height: 820px));
 
