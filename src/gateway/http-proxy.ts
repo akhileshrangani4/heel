@@ -145,7 +145,14 @@ function respond(c: Context, result: PipelineResult): Response {
     case "expired":
       return c.json({ status: "expired", approvalId: result.approvalId }, 410);
     case "upstream_error":
-      return c.json({ status: "upstream_error", upstreamStatus: result.upstreamStatus }, 502);
+      return c.json(
+        {
+          status: "upstream_error",
+          upstreamStatus: result.upstreamStatus,
+          ...(result.message === undefined ? {} : { message: result.message }),
+        },
+        502,
+      );
     case "upstream_outcome_unknown":
       return c.json({ status: "upstream_outcome_unknown" }, 502);
   }
@@ -276,9 +283,6 @@ async function builtInRest(
   });
   if (result.status === "allowed") {
     return c.json(result.result as object, 200, { "heel-decision": "allow" });
-  }
-  if (result.status === "upstream_error") {
-    return c.json({ status: "upstream_error", upstreamStatus: result.upstreamStatus }, 502);
   }
   return respond(c, result);
 }

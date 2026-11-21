@@ -28,6 +28,7 @@ If you can't fetch it, the outline is: Node 26.13 or later (if older, tell the u
 | Needs approval | 202 / exit 75 | Tell the user what's waiting. Keep working on other things. Check with `heel_status`, then send the **identical** call again once it's approved. |
 | Denied | 403 / exit 77 | Tell the user nothing ran. Don't retry it or try a workaround. Take another route the rules allow, or say how they can allow it (approve or change a rule, or a rule you propose). |
 | Paused | 423 / exit 69 | Tell the user nothing ran. Stop and wait for them to resume it in heel. Don't move the call to another account to get past the pause, even if they suggest it: the pause is the user's own stop. |
+| Key rejected (the service turned down heel's key for that account) | 502 with `upstreamStatus` 401 and a `message` saying so | Tell the user nothing ran and that the account's key needs replacing on heel's Connections page. Don't retry, and don't reach for a raw key. |
 
 In code mode (`run_code`), an ask stops the whole script and returns the approval id with what already ran. After approval, send the rest as a new script.
 

@@ -60,7 +60,12 @@ import type {
   PipelineStage,
   ResponseAdapter,
 } from "./ports.ts";
-import { ResponseUnparseableError, UpstreamError } from "./ports.ts";
+import {
+  CredentialRejectedError,
+  keyRejectedMessage,
+  ResponseUnparseableError,
+  UpstreamError,
+} from "./ports.ts";
 
 /**
  * The single decision pipeline every surface calls (spec: Call model,
@@ -439,6 +444,11 @@ class DecisionPipeline implements Pipeline {
         request.signal,
       );
     } catch (error) {
+      if (error instanceof CredentialRejectedError) {
+        const message = keyRejectedMessage(error.service, call.account);
+        log.warn(logContext(call), message);
+        return { status: "upstream_error", upstreamStatus: 401, body: error.body, message };
+      }
       if (error instanceof UpstreamError) {
         return { status: "upstream_error", upstreamStatus: error.status, body: error.body };
       }

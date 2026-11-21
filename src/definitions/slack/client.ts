@@ -1,3 +1,4 @@
+import { CredentialRejectedError } from "../../gateway/pipeline/ports.ts";
 import type { FetchFn } from "../sign-in.ts";
 
 /**
@@ -29,6 +30,15 @@ export class SlackRefused extends Error {
     this.status = status;
   }
 }
+
+/** Slack's answers to a token that's wrong, expired or revoked: nothing ran. */
+const KEY_REJECTED = new Set([
+  "not_authed",
+  "invalid_auth",
+  "account_inactive",
+  "token_revoked",
+  "token_expired",
+]);
 
 const NOT_FOUND = new Set(["channel_not_found", "message_not_found", "thread_not_found"]);
 
@@ -109,6 +119,8 @@ export class SlackClient {
     const body = (await response.json()) as Record<string, unknown>;
     if (body["ok"] === true) return body;
     const error = typeof body["error"] === "string" ? body["error"] : "unknown_error";
+    // A bad token: Slack turned it down before doing anything.
+    if (KEY_REJECTED.has(error)) throw new CredentialRejectedError("Slack");
     if (!write && NOT_FOUND.has(error)) throw new SlackNotFoundError(`${method}: ${error}`);
     if (!write) throw new Error(`Slack refused ${method}: ${error}`);
     if (NOTHING_HAPPENED.has(error)) throw new SlackRefused(method, error, 400);

@@ -1,3 +1,4 @@
+import { CredentialRejectedError } from "../../gateway/pipeline/ports.ts";
 import type { FetchFn } from "../sign-in.ts";
 
 /**
@@ -55,6 +56,13 @@ export class LinearClient {
       redirect: "error",
       signal,
     });
+    // A bad key: Linear answers 400 with an authentication error, or 401, before doing anything.
+    if (response.status === 400 || response.status === 401) {
+      const answer = (await response.json().catch(() => null)) as { errors?: unknown } | null;
+      if (response.status === 401 || isAuthenticationError(answer?.errors)) {
+        throw new CredentialRejectedError("Linear");
+      }
+    }
     if (response.status !== 200) {
       // Rate limited: Linear rejects before running anything
       // (https://linear.app/developers/rate-limiting).
@@ -78,4 +86,15 @@ export class LinearClient {
     }
     throw new Error(`Linear answered with errors: ${errors.join("; ")}`);
   }
+}
+
+/** Pure: whether Linear's GraphQL errors say the key wasn't accepted. */
+function isAuthenticationError(errors: unknown): boolean {
+  if (!Array.isArray(errors)) return false;
+  return errors.some((e) => {
+    const error = e as { extensions?: { code?: unknown; type?: unknown } };
+    return /authentication/i.test(
+      `${error.extensions?.code ?? ""} ${error.extensions?.type ?? ""}`,
+    );
+  });
 }

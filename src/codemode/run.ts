@@ -157,7 +157,8 @@ export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
         record("error");
         step = await step.raise(
           "RuntimeError",
-          `${module.account} answered ${tool} with an error (${result.upstreamStatus})`,
+          result.message ??
+            `${module.account} answered ${tool} with an error (${result.upstreamStatus})`,
         );
         break;
       case "pending":
