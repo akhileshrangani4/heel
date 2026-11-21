@@ -121,7 +121,13 @@ export async function codemodeHostMain(): Promise<void> {
       const id = message.id;
       const next = (queues.get(id) ?? Promise.resolve())
         .then(() => handle(message))
-        .catch(() => {});
+        // heel is waiting for a step, and would wait for good without one: a script whose
+        // worker couldn't start, say, fails here instead.
+        .catch((error: unknown) => {
+          const step = { kind: "failed", error: `the code-mode helper failed: ${error}` } as const;
+          send({ id, type: "step", step });
+          return discard(id);
+        });
       queues.set(id, next);
       void next.then(() => {
         if (queues.get(id) === next && !scripts.has(id)) queues.delete(id);

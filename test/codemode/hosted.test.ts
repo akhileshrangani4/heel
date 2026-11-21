@@ -121,4 +121,44 @@ describe("the code-mode helper", () => {
     expect(next).toMatchObject({ status: "completed" });
     expect(next.stdout).toContain("fine");
   }, 60_000);
+
+  it("fails a script whose worker can't start, instead of leaving it waiting", async () => {
+    // A helper that may not start worker threads can't make a worker for any script.
+    class NoWorkers extends CodemodeHost {
+      override args(): string[] {
+        return super.args().filter((a) => a !== "--allow-worker");
+      }
+    }
+    const broken = new NoWorkers({ installDir: INSTALL_DIR });
+    try {
+      const result = await runScript({
+        code: `print("never")`,
+        agent: AGENT,
+        modules: [],
+        pipeline: pipeline(),
+        worker: new HostedCodeWorker(broken),
+        limits: {},
+      });
+      expect(result.status).toBe("error");
+      expect(result.stdout).toBe("");
+    } finally {
+      await broken.close();
+    }
+  }, 20_000);
+
+  it("never starts a script that was stopped before it started, as when the client hangs up early", async () => {
+    const calls: string[] = [];
+    const worker = new HostedCodeWorker(host);
+    await worker.stop();
+    const result = await runScript({
+      code: `import acct\nacct.ok()`,
+      agent: AGENT,
+      modules: MODULE === null ? [] : [{ ...MODULE, account: "acct" }],
+      pipeline: pipeline((tool) => calls.push(tool)),
+      worker,
+      limits: {},
+    });
+    expect(result).toMatchObject({ status: "error", error: "the script was stopped" });
+    expect(calls).toEqual([]);
+  }, 20_000);
 });

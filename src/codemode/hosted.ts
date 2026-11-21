@@ -275,6 +275,7 @@ export class CodemodeHost {
 export class HostedCodeWorker implements CodeWorker {
   readonly #host: CodemodeHost;
   #id: string | null = null;
+  #stopped = false;
 
   constructor(host: CodemodeHost) {
     this.#host = host;
@@ -286,6 +287,8 @@ export class HostedCodeWorker implements CodeWorker {
     limits: ScriptLimits,
     stdout: (text: string) => void,
   ): Promise<Step> {
+    // Stopped before it started (the client hung up first): the script never reaches the helper.
+    if (this.#stopped) return { kind: "failed", error: "the script was stopped" };
     const id = this.#host.open(stdout, limits);
     this.#id = id;
     const start: ToHost = { id, type: "start", code, modules: toWireModules(modules), limits };
@@ -299,6 +302,7 @@ export class HostedCodeWorker implements CodeWorker {
   }
 
   async stop(): Promise<void> {
+    this.#stopped = true;
     const id = this.#id;
     if (id !== null) await this.#host.stop(id);
   }
