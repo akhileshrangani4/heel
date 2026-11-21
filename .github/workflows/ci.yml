@@ -247,7 +247,7 @@ jobs:
           # bubblewrap, so every script runs on the WebAssembly helper), so this runner checks
           # the helper path only.
           - os: windows-11-arm
-            tests: test/codemode/hosted.test.ts test/codemode/hoisted.test.ts
+            tests: test/codemode/hosted.test.ts test/codemode/hoisted.test.ts test/codemode/lanes.test.ts
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
