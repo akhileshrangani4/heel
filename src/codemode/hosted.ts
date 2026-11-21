@@ -185,7 +185,10 @@ export class CodemodeHost {
   /** One line from the helper. One that doesn't parse breaks the helper; one for a script heel forgot is dropped. */
   #receive(raw: unknown, broken: () => void): void {
     const message = parseFromHost(raw);
-    if (message === null) return broken();
+    if (message === null) {
+      broken();
+      return;
+    }
     const script = this.#scripts.get(message.id);
     if (script === undefined) return;
     if (message.type === "ended") script.workerGone?.();

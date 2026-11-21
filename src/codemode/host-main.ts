@@ -18,8 +18,11 @@ import type { Step } from "./worker.ts";
  * when the first script needs it (`hosted.ts`), under Node's permission
  * model: it may read heel's install and start worker threads, and nothing
  * else (no other files, no network, no child processes), with an empty
- * environment. Monty's own sandbox is the first wall, WebAssembly the
- * second, this process the third.
+ * environment. Monty's own sandbox is the first wall and WebAssembly the
+ * second. This process keeps a crash away from heel and the environment
+ * empty; its permission flags hold against Python, but not against code
+ * that already escaped into JavaScript, which `--allow-worker` would let
+ * start an unrestricted worker (see docs/design/code-mode-architecture.md).
  *
  * Every script gets a fresh worker thread, made ahead of time so the script
  * doesn't wait for it, and discarded when the script ends: a stopped script

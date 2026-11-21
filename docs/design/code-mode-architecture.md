@@ -48,8 +48,8 @@ agent -> run_code -> gateway/mcp/server.ts    takes a slot, makes a CodeWorker, 
 | A script's own worker | The whole sandboxed process | A worker thread, made ahead of time, used once |
 | Protocol | `ToWorker` / `FromWorker` | `ToHost` / `FromHost`: the same messages plus a script `id`, and `stop` / `ended` |
 | How heel ends a script | Kills the sandbox | Sends `stop`, waits for `ended` |
-| Backstops heel adds | 1 GiB memory, 10 minutes wall time, 64 MB of output | The script's time limit plus 10 seconds on `stop` only |
-| What the process can read | `bin`, `src`, `dist`, `node_modules`, `package.json` of the install | The whole install directory |
+| Backstops heel adds | 1 GiB memory, 10 minutes wall time, 64 MB of output | Each step within the script's time limit plus 10 s; 16 MB a line and 64 MB a script; values over 8 MB refused as they're read; a stop within the time limit plus 10 s |
+| What the process can read | `bin`, `src`, `dist`, `node_modules`, `package.json` of the install | The same parts, from the install's real path, plus the `node_modules` heel's dependencies were hoisted to |
 
 What the two share lives in one place each:
 
@@ -120,24 +120,20 @@ From the inside out:
 
 1. **Monty.** The script has no files, network, environment or clock. It can only call the functions heel listed. Monty enforces the script's time, memory and call limits.
 2. **The process around Monty.**
-   - Bubblewrap path: no network, a clean environment, only heel's install mounted read-only, its own HOME and TMPDIR, and heel's own ceilings on memory, wall time and output.
-   - Helper path: WebAssembly first, then Node's permission model. The process may read heel's install and start worker threads. It has no file writes, no network, no child processes, no native addons, and an empty environment.
+   - Bubblewrap path: no network, a clean environment, only heel's install mounted read-only, its own HOME and TMPDIR, and heel's own ceilings on memory, wall time and output. This is an OS boundary.
+   - Helper path: WebAssembly. Breaking out means a bug in Monty's WebAssembly build that also escapes V8's WebAssembly sandbox. Around it, the helper runs with an empty environment, as its own process (so a crash takes the helper down, not heel), under Node's permission model: no file writes, no network, no child processes, no native addons, reads only of heel's install. The permission model is not a wall against code that already escaped into JavaScript: with `--allow-worker`, that code could start a worker thread with its own flags and none of the limits (Node documents this as intended). Against Python, which is all a script can write, it holds.
 3. **heel's side of the pipe.** Nothing a process sends is trusted. Each message is checked field by field. Each call goes through the rule pipeline. Results are hidden before they go back in. heel caps stdout again itself. heel holds every credential and neither process ever sees one.
 
 ## Known limits
 
 Mostly on the helper path, which is the newer and weaker of the two:
 
-- **One helper serves every agent.** A script that broke out of Monty and WebAssembly into the helper could see other agents' scripts, their arguments and their results, and send calls in their name. Those calls would still go through the other agent's rules. On the bubblewrap path a breakout reaches only its own script.
-- **The helper may read the whole install directory.** The bubblewrap path mounts five named parts. In a checkout, anything else in the folder is readable by the helper (a `.heel/` home kept inside the checkout, for example).
-- **No ceiling on what the helper sends.** The bubblewrap path caps output at 64 MB and memory at 1 GiB. The helper has neither, and heel buffers a line until its newline arrives.
-- **A busy script holds its slot until its time limit** when stopped, because a worker thread can't be interrupted mid-turn.
-- **A stuck stop kills the helper,** which fails every other script running on it.
-- **No overall time limit on heel's side.** If the helper never sends a step, heel waits until the client hangs up. The bubblewrap path has its 10-minute backstop.
-- **The helper's stderr is discarded,** so when it dies heel can't say why.
+- **One helper serves every agent.** A script that broke out of Monty and WebAssembly into the helper could see other agents' scripts, their arguments and their results, and send calls in their name. Those calls would still go through the other agent's rules. On the bubblewrap path a breakout reaches only its own script. One helper per agent would narrow this, at about 400 MB of memory per agent with a script running.
+- **Node's permission model only holds against Python.** See the security walls above. An OS sandbox around the helper (Seatbelt on macOS, bubblewrap where it partly works) would make it a real wall.
+- **A busy script holds its slot until its time limit** when stopped, because Monty can't interrupt a worker thread mid-turn. That's deliberate: heel keeps counting it, so an agent can't start more than its limit by hanging up.
+- **A stuck stop, or a helper that sends a line heel can't read, kills the helper,** which fails every other script running on it.
 - **Windows is claimed, not tested.** This was written with the helper path running on macOS.
 
 On both paths:
 
-- **A request that is already closed when `run_code` begins isn't noticed,** so its script runs to the end with nobody reading the result.
 - **The script's last expression isn't returned to the agent.** Only stdout, the status and the list of calls are. A script has to `print` what it wants to see.

@@ -5,7 +5,16 @@
 import { existsSync } from "node:fs";
 
 const source = new URL("../src/cli/main.ts", import.meta.url);
-const entry = existsSync(source) ? source : new URL("../dist/cli/main.js", import.meta.url);
+// Under code mode's locked-down helper, checking a path heel may not read throws instead of
+// answering false; it is only ever refused where there's no source to read.
+const hasSource = (() => {
+  try {
+    return existsSync(source);
+  } catch {
+    return false;
+  }
+})();
+const entry = hasSource ? source : new URL("../dist/cli/main.js", import.meta.url);
 const { main } = await import(entry.href);
 
 process.exitCode = await main(process.argv.slice(2), {
