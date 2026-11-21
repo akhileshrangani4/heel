@@ -154,7 +154,7 @@ const PHASES: Phase[] = [
       ['how heel was built', 'a write-up of the research, the decisions and what we learned.'],
       [
         'a heel skill',
-        'npx skills add akhileshrangani4/heel teaches any agent that supports skills how to set heel up and work through it. listed on skills.sh.',
+        'npx skills add akhileshrangani4/heel teaches any agent that supports skills how to set heel up and work through it, tested against agents without it. listed on skills.sh, and one click to copy on the home page.',
         'shipped',
       ],
       [

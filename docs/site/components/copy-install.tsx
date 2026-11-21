@@ -6,8 +6,9 @@ import { useState } from 'react';
 /**
  * A pill that copies a line. A shell command shows itself with a `$`; with
  * a `label`, the pill shows that instead (a long prompt for an agent).
+ * `quiet` is the outlined look, for a line that sits below the main one.
  */
-export function CopyInstall({ command, label }: { command: string; label?: string }) {
+export function CopyInstall({ command, label, quiet }: { command: string; label?: string; quiet?: boolean }) {
   const [copied, setCopied] = useState(false);
   return (
     <button
@@ -17,13 +18,17 @@ export function CopyInstall({ command, label }: { command: string; label?: strin
         setCopied(true);
         setTimeout(() => setCopied(false), 1600);
       }}
-      className={`group flex items-center gap-3 rounded-full bg-neutral-900 py-2.5 pr-4 pl-5 font-mono text-sm text-white shadow-[0_1px_2px_rgba(0,0,0,0.2)] transition-colors hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200`}
+      className={`group flex max-w-full items-center gap-3 rounded-full py-2.5 pr-4 pl-5 font-mono text-sm transition-colors ${
+        quiet
+          ? 'border border-black/10 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.06)] hover:bg-neutral-50 dark:border-white/15 dark:bg-white/5 dark:hover:bg-white/10'
+          : 'bg-neutral-900 text-white shadow-[0_1px_2px_rgba(0,0,0,0.2)] hover:bg-neutral-800 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200'
+      }`}
       aria-label={`Copy: ${command}`}
     >
-      <span>
+      <span className="min-w-0 truncate">
         {label ?? (
           <>
-            <span className="text-white/45 select-none dark:text-black/40">$ </span>
+            <span className={`select-none ${quiet ? 'text-black/35 dark:text-white/40' : 'text-white/45 dark:text-black/40'}`}>$ </span>
             {command}
           </>
         )}
