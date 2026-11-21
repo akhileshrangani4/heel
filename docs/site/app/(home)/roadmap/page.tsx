@@ -153,6 +153,11 @@ const PHASES: Phase[] = [
       ['the email demo', 'an agent that reads and drafts your mail, but asks before anything is sent.'],
       ['how heel was built', 'a write-up of the research, the decisions and what we learned.'],
       [
+        'a heel skill',
+        'npx skills add akhileshrangani4/heel teaches any agent that supports skills how to set heel up and work through it. listed on skills.sh.',
+        'shipped',
+      ],
+      [
         'readable by agents',
         'useheel.dev serves llms.txt, every docs page as markdown, and the setup prompt at /setup.md, so an agent can find heel and set it up.',
         'shipped',
