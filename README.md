@@ -26,6 +26,16 @@ heel sits between an agent and everything it touches (MCP servers, HTTP APIs and
 
 ## Get started
 
+Tell your agent (Claude Code, Codex or any coding agent):
+
+```text
+Set up heel for me by following https://useheel.dev/setup.md
+```
+
+It installs heel, connects itself and puts your services behind heel. You make a passkey and approve each connection and rule ([Set up heel with one prompt](docs/setup.md)).
+
+Or by hand:
+
 ```sh
 npm install -g useheel          # Node 26.13 or later
 heel init                       # master key, heel.yaml and starter rules

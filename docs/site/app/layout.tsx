@@ -20,7 +20,8 @@ export const metadata: Metadata = {
     ],
     apple: '/heel-icon-180.png',
   },
-  alternates: { canonical: '/' },
+  // What an agent reads instead of this page (llmstxt.org).
+  alternates: { canonical: '/', types: { 'text/markdown': '/llms.txt' } },
   openGraph: { type: 'website', siteName: 'heel', url: '/', locale: 'en_US' },
   twitter: { card: 'summary_large_image' },
 };

@@ -7,8 +7,21 @@ const { rewrite: rewriteDocs } = rewritePath(
   `/llms.mdx${docsRoute}{/*path}.md`,
 );
 
+/** Pages outside the docs that have a markdown twin for agents. */
+const MARKDOWN_TWINS: Record<string, string> = { '/': '/llms.txt', '/setup': '/setup.md' };
+
 export default function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const twin = isMarkdownPreferred(request) ? MARKDOWN_TWINS[pathname] : undefined;
+  if (twin !== undefined) {
+    return NextResponse.rewrite(new URL(twin, request.nextUrl), { headers: { Vary: 'Accept' } });
+  }
+  // A person who types useheel.dev/setup gets the page about it.
+  if (pathname === '/setup') {
+    return NextResponse.redirect(new URL('/docs/setup', request.nextUrl), {
+      headers: { Vary: 'Accept' },
+    });
+  }
   // files like `/docs/page.md` are served by the rewrites of the Next.js config
   const result =
     isMarkdownPreferred(request) && !/\.(md|txt)$/.test(pathname) && rewriteDocs(pathname);

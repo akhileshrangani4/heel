@@ -247,16 +247,16 @@ export default function HomePage() {
               give your agent a heel
             </h2>
             <p className="mt-4 text-lg text-balance text-neutral-600 sm:text-xl dark:text-neutral-300">
-              ten minutes, one terminal, from install to your first approval.
+              tell your agent one line. it sets heel up; you approve with a passkey.
             </p>
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-              <CopyInstall command="npm install -g useheel" />
-              <Link href="/docs/quickstart" className={pill}>
-                quick start
+              <CopyInstall prompt command="Set up heel for me by following https://useheel.dev/setup.md" />
+              <Link href="/docs/setup" className={pill}>
+                how it works
               </Link>
             </div>
             <div className="mt-10 w-full max-w-2xl text-left">
-              <Window title="the quick start">
+              <Window title="or by hand: the quick start">
                 <pre className="overflow-x-auto px-4 py-4 font-mono text-[12px] leading-[1.7] whitespace-pre-wrap sm:px-6 sm:py-5 sm:text-[12.5px] sm:leading-[1.8] sm:whitespace-pre">
                   {QUICKSTART.map(([kind, line]) => (
                     <span key={line} className={`block pl-[2ch] -indent-[2ch] sm:pl-0 sm:indent-0 ${kind === '#' ? 'mt-2 text-white/35 first:mt-0' : ''}`}>
