@@ -89,7 +89,9 @@ export const USAGE = `usage:
   heel agent add <name> [--owner <user>] [--expires <days>d|never]
                                           add an agent; prints its token once. The
                                           token expires in 90 days unless --expires
-                                          says otherwise
+                                          says otherwise. --client claude-code|codex
+                                          also prints the command that adds heel to
+                                          that app
   heel agent workdir <name>               list the directories heel run may work in
   heel agent workdir <name> <dir>...      set them (replaces the list); each <dir> is
                                           an absolute path that exists on heel's host
@@ -241,6 +243,35 @@ export function parseExportTime(text: string, now: Date): string | null {
     return new Date(text).toISOString();
   }
   return null;
+}
+
+/** The agent apps `heel agent add --client` prints a ready command for. */
+export const AGENT_CLIENTS = ["claude-code", "codex"] as const;
+export type AgentClient = (typeof AGENT_CLIENTS)[number];
+
+function isAgentClient(value: string): value is AgentClient {
+  return (AGENT_CLIENTS as readonly string[]).includes(value);
+}
+
+/**
+ * Pure: how to add heel to an agent app, as commands to run. An agent
+ * setting heel up for its owner runs these itself, so it never has to put
+ * the token anywhere else.
+ */
+export function addToClient(client: AgentClient, url: string, token: string): string {
+  switch (client) {
+    case "claude-code":
+      return (
+        "Add heel to Claude Code (then run /mcp, or restart, to load it):\n" +
+        `  claude mcp add --transport http heel "${url}" --header "Authorization: Bearer ${token}"`
+      );
+    case "codex":
+      return (
+        "Add heel to Codex (keep HEEL_TOKEN set where Codex runs, for example in your shell profile):\n" +
+        `  export HEEL_TOKEN=${token}\n` +
+        `  codex mcp add heel --url "${url}" --bearer-token-env-var HEEL_TOKEN`
+      );
+  }
 }
 
 /** Pure: the MCP URL an agent should be given, from the agent plane's listen address. */
@@ -513,12 +544,19 @@ async function agentCommand(args: string[], io: CliIo): Promise<number> {
         owner: { type: "string" },
         clear: { type: "boolean" },
         expires: { type: "string" },
+        client: { type: "string" },
       },
       allowPositionals: true,
       strict: true,
     }),
   );
   const [subcommand, ...rest] = positionals;
+  if (values.client !== undefined && subcommand !== "add") {
+    throw new UsageError("--client is for heel agent add");
+  }
+  if (values.client !== undefined && !isAgentClient(values.client)) {
+    throw new UsageError(`--client is one of ${AGENT_CLIENTS.join(", ")}`);
+  }
   if (values.clear === true && subcommand !== "workdir") {
     throw new UsageError("--clear is for heel agent workdir");
   }
@@ -536,11 +574,15 @@ async function agentCommand(args: string[], io: CliIo): Promise<number> {
         ...expiry,
       };
       const issued = IssuedAgentResult.parse(await admin(config, { method: "agent.add", params }));
+      const url = agentMcpUrl(config.listen.agent, config.agentPublicUrl);
       io.stdout.write(
         `Added agent "${issued.name}".\n` +
           `Token (shown once; heel keeps only its hash): ${issued.token}\n` +
           `${expiresLine(issued.name, issued.expiresAt)}\n` +
-          `MCP URL: ${agentMcpUrl(config.listen.agent, config.agentPublicUrl)}\n`,
+          `MCP URL: ${url}\n` +
+          (values.client === undefined || !isAgentClient(values.client)
+            ? ""
+            : `\n${addToClient(values.client, url, issued.token)}\n`),
       );
       return EXIT.ok;
     }
@@ -1305,7 +1347,11 @@ async function statusCommand(args: string[], io: CliIo): Promise<number> {
   );
   if (positionals.length > 0) throw new UsageError(`unexpected argument "${positionals[0]}"`);
   const config = configFrom(io, values.config);
-  const ping = (await admin(config, { method: "ping" })) as { version?: string; vault?: string };
+  const ping = (await admin(config, { method: "ping" })) as {
+    version?: string;
+    vault?: string;
+    passkeys?: number;
+  };
   const approvals = (await admin(config, { method: "approvals.list" })) as {
     status: string;
     summary: string;
@@ -1324,6 +1370,7 @@ async function statusCommand(args: string[], io: CliIo): Promise<number> {
   const waiting = approvals.filter((a) => a.status === "pending");
   const lines = [
     `heel ${ping.version ?? ""} is running${ping.vault === "unavailable" ? ", but the vault is closed (no master key)" : ""}.`,
+    `  Passkeys:  ${ping.passkeys === 0 ? "none yet: run heel user enroll owner and open its link" : (ping.passkeys ?? "?")}`,
     `  Agents:    ${agents.filter((a) => a.revokedAt === null).length}`,
     `  Accounts:  ${accounts.length}${
       accounts.some((a) => a.status !== "active")

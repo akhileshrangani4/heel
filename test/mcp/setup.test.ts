@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { addAgent } from "../../src/gateway/agents.ts";
-import { setupPrompt } from "../../src/gateway/mcp/setup-prompt.ts";
+import { fullSetupPrompt, installPrompt, setupPrompt } from "../../src/gateway/mcp/setup-prompt.ts";
 import { mcpHarness } from "../helpers/mcp.ts";
 
 /**
@@ -42,9 +42,29 @@ describe("the setup prompt", () => {
     );
   });
 
-  it("is printed in docs/setup.md exactly as heel serves it", () => {
+  it("is printed in docs/setup.md whole, install first, so one line to an agent sets heel up", () => {
     const doc = readFileSync(new URL("../../docs/setup.md", import.meta.url), "utf8");
-    expect(doc).toContain(`\`\`\`text\n${setupPrompt(null)}\n\`\`\``);
+    expect(doc).toContain(`\`\`\`text\n${fullSetupPrompt(null)}\n\`\`\``);
+    expect(doc).toContain("Set up heel for me by following https://useheel.dev/setup.md");
+    expect(fullSetupPrompt(null).startsWith(installPrompt())).toBe(true);
+    expect(fullSetupPrompt(null).endsWith(setupPrompt(null))).toBe(true);
+  });
+
+  it("keeps the install half to installing, starting, the passkey link and adding itself", () => {
+    const text = installPrompt();
+    for (const step of [
+      "npm install -g useheel",
+      "heel init --yes",
+      "heel start",
+      "heel user enroll owner",
+      "heel agent add",
+    ]) {
+      expect(text).toContain(step);
+    }
+    expect(text).toContain(
+      "Don't run heel connect, edit heel's rules files or approve anything yourself",
+    );
+    expect(text).toContain("check each one first and skip it if it's done");
   });
 });
 

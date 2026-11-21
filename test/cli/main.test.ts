@@ -4,7 +4,7 @@ import { existsSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, onTestFinished } from "vitest";
 import { formatTable } from "../../src/cli/common.ts";
-import { agentMcpUrl, type CliIo, EXIT, main, usageFor } from "../../src/cli/main.ts";
+import { addToClient, agentMcpUrl, type CliIo, EXIT, main, usageFor } from "../../src/cli/main.ts";
 import { loadConfig, resolveConfigSource } from "../../src/config/load.ts";
 import { createLogger } from "../../src/log.ts";
 import { startHeel } from "../../src/serve.ts";
@@ -160,6 +160,33 @@ describe("heel CLI", () => {
     const second = await run(["vault", "init"], { HEEL_HOME: home });
     expect(second.code).toBe(EXIT.failed);
     expect(second.stderr).toContain("never replaces");
+  });
+
+  it("prints the command that adds heel to an agent app, for an agent setting heel up", () => {
+    expect(addToClient("claude-code", "http://127.0.0.1:7300/mcp", "heel_x")).toContain(
+      'claude mcp add --transport http heel "http://127.0.0.1:7300/mcp" --header "Authorization: Bearer heel_x"',
+    );
+    const codex = addToClient("codex", "http://127.0.0.1:7300/mcp", "heel_x");
+    expect(codex).toContain("export HEEL_TOKEN=heel_x");
+    expect(codex).toContain(
+      'codex mcp add heel --url "http://127.0.0.1:7300/mcp" --bearer-token-env-var HEEL_TOKEN',
+    );
+  });
+
+  it("agent add --client prints the add command; status says when no one can approve yet", async () => {
+    const home = heelHome();
+    await serveIn(home);
+    const status = await run(["status"], { HEEL_HOME: home });
+    expect(status.stdout).toContain("Passkeys:  none yet: run heel user enroll owner");
+    const added = await run(["agent", "add", "setup-bot", "--client", "claude-code"], {
+      HEEL_HOME: home,
+    });
+    expect(added.code).toBe(EXIT.ok);
+    const token = /^Token .*: (heel_\S+)$/m.exec(added.stdout)?.[1];
+    expect(added.stdout).toContain(`--header "Authorization: Bearer ${token}"`);
+    const wrong = await run(["agent", "add", "x", "--client", "vim"], { HEEL_HOME: home });
+    expect(wrong.code).not.toBe(EXIT.ok);
+    expect(wrong.stderr).toContain("--client is one of claude-code, codex");
   });
 
   it("agent add prints a working token once, with the agent plane's MCP URL", async () => {
