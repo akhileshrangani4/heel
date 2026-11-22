@@ -15,7 +15,7 @@ const hasSource = (() => {
   }
 })();
 const entry = hasSource ? source : new URL("../dist/cli/main.js", import.meta.url);
-const { main, runProgram } = await import(entry.href);
+const { main, runProgram, checkKeyOnline } = await import(entry.href);
 
 process.exitCode = await main(process.argv.slice(2), {
   env: process.env,
@@ -23,4 +23,5 @@ process.exitCode = await main(process.argv.slice(2), {
   stdout: process.stdout,
   stderr: process.stderr,
   exec: runProgram,
+  checkKey: checkKeyOnline,
 });

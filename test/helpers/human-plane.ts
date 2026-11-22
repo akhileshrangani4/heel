@@ -9,6 +9,7 @@ import type { MicrosoftClient } from "../../src/definitions/microsoft/oauth.ts";
 import { LOCAL_OWNER_NAME } from "../../src/store/install.ts";
 import type { OidcClient } from "../../src/teams/oidc.ts";
 import { KEY_BYTES } from "../../src/vault/crypto.ts";
+import type { KeyCheck } from "../../src/vault/key-check.ts";
 import { Vault } from "../../src/vault/vault.ts";
 import { createHumanApp } from "../../src/web/app.ts";
 import { CSRF_HEADER } from "../../src/web/http.ts";
@@ -96,6 +97,8 @@ export function humanPlaneHarness(
     oidc?: { client: () => Promise<OidcClient>; name: string };
     /** Turns on adding proposed rules (roadmap 2.1), to the owner files under this home. */
     rulesHome?: string;
+    /** Checks pasted keys (roadmap T12); none when absent, as in every other test. */
+    checkKey?: (provider: string, key: string) => Promise<KeyCheck>;
     /** heel's built-in Google client (roadmap 1.14), used when `providerClients.google` is unset. */
     builtInGoogle?: BuiltInGoogleClient;
     /** What host names resolve to (connection requests check this before approval). */
@@ -134,6 +137,7 @@ export function humanPlaneHarness(
     ...(options.rulesHome === undefined
       ? {}
       : { ruleFiles: { paths: rulesPaths(options.rulesHome), reload: () => {} } }),
+    ...(options.checkKey === undefined ? {} : { checkKey: options.checkKey }),
     now: () => h.clock.now,
   });
 

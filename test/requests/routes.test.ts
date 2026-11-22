@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { revokeAgent } from "../../src/gateway/agents.ts";
 import { findRequest, requestConnection } from "../../src/requests/connection.ts";
 import { accounts } from "../../src/store/schema.ts";
+import type { KeyCheck } from "../../src/vault/key-check.ts";
 import { removeAccount } from "../../src/vault/manage.ts";
 import { attribute, humanPlaneHarness } from "../helpers/human-plane.ts";
 import { oneRule } from "../helpers/pipeline.ts";
@@ -17,10 +18,12 @@ function setUp(
     alias: "inbox-new",
     why: "so I can triage your work mail",
   },
+  checkKey?: (provider: string, key: string) => Promise<KeyCheck>,
 ) {
   let fetched = 0;
   const h = humanPlaneHarness({
     owner: READS,
+    ...(checkKey === undefined ? {} : { checkKey }),
     upstreamOAuth: {
       fetch: async () => {
         fetched++;
@@ -232,6 +235,58 @@ describe("services that use a pasted key (2.5, part 2)", () => {
     const after = await (await h.fetch(`/requests/${id}?approved`, { as: owner })).text();
     expect(after).toContain("Connected as");
     expect(after).not.toContain(KEY);
+  });
+
+  it("won't store a key the service rejects; the request keeps waiting for a good one", async () => {
+    const asked: string[] = [];
+    const { h, id } = setUp({ service: "github", alias: "gh-new" }, async (provider, key) => {
+      asked.push(`${provider}:${key}`);
+      return key === KEY
+        ? { status: "ok" }
+        : { status: "rejected", message: "GitHub rejected this key (wrong, expired or revoked)" };
+    });
+    const owner = await h.signIn(await h.enroll());
+    const page = await (await h.fetch(`/requests/${id}`, { as: owner })).text();
+    const bad = await h.ceremony(
+      owner,
+      { url: "/requests/challenge", body: { requestId: id, hash: attribute(page, "data-hash") } },
+      "/requests/confirm",
+      { key: "ghp_placeholder" },
+    );
+    expect(bad.status).toBe(409);
+    expect(await bad.text()).toContain("GitHub rejected this key");
+    expect(accountNamed(h, "gh-new")).toBeUndefined();
+    expect(findRequest(h.t.db, h.t.orgId, id)?.status).toBe("pending");
+
+    const good = await h.ceremony(
+      owner,
+      { url: "/requests/challenge", body: { requestId: id, hash: attribute(page, "data-hash") } },
+      "/requests/confirm",
+      { key: KEY },
+    );
+    expect(good.status).toBe(200);
+    expect(accountNamed(h, "gh-new")).toMatchObject({ status: "active" });
+    expect(asked).toEqual(["github:ghp_placeholder", `github:${KEY}`]);
+  });
+
+  it("connects a key heel couldn't check, and says so", async () => {
+    const { h, id } = setUp({ service: "notion", alias: "notion-new" }, async () => ({
+      status: "unchecked",
+      message: "heel couldn't check this key",
+    }));
+    const owner = await h.signIn(await h.enroll());
+    const page = await (await h.fetch(`/requests/${id}`, { as: owner })).text();
+    const done = await h.ceremony(
+      owner,
+      { url: "/requests/challenge", body: { requestId: id, hash: attribute(page, "data-hash") } },
+      "/requests/confirm",
+      { key: KEY },
+    );
+    expect(done.status).toBe(200);
+    const next = ((await done.json()) as { next: string }).next;
+    expect(next).toContain("unchecked");
+    const after = await (await h.fetch(next, { as: owner })).text();
+    expect(after).toContain("check the key with the service, so it connected it as it is");
   });
 
   it("won't connect without a key, and the request keeps waiting", async () => {

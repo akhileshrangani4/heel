@@ -84,6 +84,8 @@ export interface RequestPageProps {
   /** After approving: the form that starts the account's sign-in, when it needs one. */
   signIn: FormTarget | null;
   outcome: "approved" | "rejected" | null;
+  /** heel couldn't check the pasted key with its service, so it was stored as it is. */
+  unchecked?: boolean;
   /** For a service that uses a key: what key it takes. The owner pastes it here, never the agent. */
   key: { hint: string } | null;
 }
@@ -139,7 +141,15 @@ export function requestPage(props: RequestPageProps): Html {
       ? notice(
           "ok",
           props.signIn === null
-            ? html`<p>Connected as <span class="mono">${props.alias}</span>.</p>`
+            ? html`<p>Connected as <span class="mono">${props.alias}</span>.</p>
+                ${
+                  props.unchecked === true
+                    ? html`<p>
+                        heel couldn't check the key with the service, so it connected it as it is.
+                        If calls fail, replace the key on the Connections page.
+                      </p>`
+                    : ""
+                }`
             : html`<p>
                 Added as <span class="mono">${props.alias}</span>. Sign in now so heel can use it;
                 ${props.agent} never sees what you sign in with.

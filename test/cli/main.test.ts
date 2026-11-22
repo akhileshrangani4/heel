@@ -34,6 +34,7 @@ async function run(
   env: Record<string, string | undefined>,
   stdin: string[] = [],
   exec?: CliIo["exec"],
+  checkKey?: CliIo["checkKey"],
 ): Promise<Run> {
   let stdout = "";
   let stderr = "";
@@ -45,6 +46,7 @@ async function run(
     stdout: { write: (text) => (stdout += text) },
     stderr: { write: (text) => (stderr += text) },
     ...(exec === undefined ? {} : { exec }),
+    ...(checkKey === undefined ? {} : { checkKey }),
   };
   const code = await main(argv, io);
   return { code, stdout, stderr };
@@ -395,6 +397,38 @@ describe("heel CLI", () => {
 
     const listed = await run(["account", "list"], { HEEL_HOME: home });
     expect(listed.stdout).not.toContain(secret);
+  });
+
+  it("connect refuses a key the service rejects, and notes one it couldn't check", async () => {
+    const home = heelHome();
+    await serveIn(home);
+    const rejected = await run(
+      ["connect", "github", "--as", "gh-bad", "--credential-stdin"],
+      { HEEL_HOME: home },
+      ["ghp_placeholder\n"],
+      undefined,
+      async () => ({
+        status: "rejected",
+        message: "GitHub rejected this key, so heel didn't connect it.",
+      }),
+    );
+    expect(rejected.code).toBe(EXIT.failed);
+    expect(rejected.stderr).toContain("GitHub rejected this key");
+    expect((await run(["account", "list"], { HEEL_HOME: home })).stdout).not.toContain("gh-bad");
+
+    const unchecked = await run(
+      ["connect", "slack", "--as", "slack-work", "--credential-stdin"],
+      { HEEL_HOME: home },
+      ["xoxb-maybe\n"],
+      undefined,
+      async () => ({
+        status: "unchecked",
+        message: "heel couldn't check this key with the service.",
+      }),
+    );
+    expect(unchecked.code).toBe(EXIT.ok);
+    expect(unchecked.stdout).toContain('Connected slack as "slack-work"');
+    expect(unchecked.stderr).toContain("couldn't check this key");
   });
 
   it("connect gmail without providers.google says how to set up Google sign-in", async () => {

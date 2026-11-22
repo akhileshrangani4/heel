@@ -12,6 +12,7 @@ import { createLogger } from "../log.ts";
 import { type RunningHeel, startHeel } from "../serve.ts";
 import { hasErrnoCode } from "../util/errno.ts";
 import { createMasterKeyFile } from "../vault/key.ts";
+import { checkKey, type KeyCheck } from "../vault/key-check.ts";
 import { SecretFileError } from "../vault/secret-file.ts";
 import { HEEL_VERSION } from "../version.ts";
 import { AGENT_CLIENTS, type ClientResult, connectClient, isAgentClient } from "./clients.ts";
@@ -249,6 +250,11 @@ export function parseExportTime(text: string, now: Date): string | null {
 }
 
 export { addToClient, runProgram } from "./clients.ts";
+
+/** `CliIo.checkKey` for the `heel` binary: the service's own API, with the global fetch. */
+export function checkKeyOnline(provider: string, key: string): Promise<KeyCheck> {
+  return checkKey(provider, key, fetch);
+}
 
 /** Pure: the MCP URL an agent should be given, from the agent plane's listen address. */
 export function agentMcpUrl(listen: ListenAddress, publicUrl: URL | null = null): string {
@@ -736,6 +742,12 @@ async function connectCommand(args: string[], io: CliIo): Promise<number> {
     if (value === "") throw new UsageError("--credential-stdin read nothing from stdin");
     credential = { type: "static", value };
   }
+  // A key the service turns down is never stored; one heel couldn't check is, with a note.
+  const checked =
+    credential === undefined || io.checkKey === undefined
+      ? null
+      : await io.checkKey(provider, credential.value);
+  if (checked?.status === "rejected") throw new RefusedError(checked.message);
   const params = {
     provider,
     alias: values.as,
@@ -780,6 +792,7 @@ async function connectCommand(args: string[], io: CliIo): Promise<number> {
     await admin(config, { method: "account.connect", params }),
   );
   io.stdout.write(`Connected ${account.provider} as "${account.alias}" (${account.status}).\n`);
+  if (checked?.status === "unchecked") io.stderr.write(`heel: ${checked.message}\n`);
   const setup = signInSetupFor(account.provider);
   if (account.signIn === "needs_setup" && setup !== null) {
     io.stdout.write(

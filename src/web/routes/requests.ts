@@ -199,6 +199,8 @@ export function requestRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
             : "rejected" in query && row.status === "rejected"
               ? "rejected"
               : null,
+        // Only a caution, so a crafted link can show it and do no harm.
+        unchecked: "unchecked" in query,
         key: needsKey(details.provider)
           ? { hint: KEY_HINTS[details.provider as keyof typeof KEY_HINTS] }
           : null,
@@ -277,6 +279,12 @@ export function requestRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
         400,
       );
     }
+    // A key the service turns down is never stored, and the request keeps waiting (T12).
+    const checked =
+      needsKey(details.provider) && deps.checkKey !== undefined
+        ? await deps.checkKey(details.provider, pasted)
+        : null;
+    if (checked?.status === "rejected") return c.json({ ok: false, message: checked.message }, 409);
     // A name the agent gave may resolve inside the network; check before heel ever contacts it.
     if (details.url !== undefined) {
       const unsafe = await publicHostProblem(details.url, deps.resolveHost ?? resolveAll);
@@ -324,7 +332,11 @@ export function requestRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       },
       "requested connection added",
     );
-    return c.json({ ok: true, next: `/requests/${encodeURIComponent(row.id)}?approved` });
+    const unchecked = checked?.status === "unchecked" ? "&unchecked" : "";
+    return c.json({
+      ok: true,
+      next: `/requests/${encodeURIComponent(row.id)}?approved${unchecked}`,
+    });
   });
 
   return app;
