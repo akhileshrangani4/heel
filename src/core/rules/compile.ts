@@ -56,6 +56,8 @@ export interface CompiledRule {
   /** The rule's `then`, renamed so a compiled rule is never mistaken for a thenable. */
   decision: Decision;
   watch: boolean;
+  /** The rule's `match` as written: heel's suggestions (2.10) carry the asking rule's conditions. */
+  match: Readonly<Record<string, unknown>>;
   /** The plain conditions, ANDed. */
   conditions: readonly Condition<FieldRef>[];
   items: ItemsCheck | null;
@@ -69,6 +71,11 @@ export interface CompiledRule {
     tools: ReadonlySet<string>;
     accounts: ReadonlySet<string>;
   };
+  /**
+   * `persistence: false`: the rule never matches a call that outlives heel,
+   * so it doesn't count as naming one either (I-70).
+   */
+  excludesPersistence: boolean;
 }
 
 export type HideField = "from" | "to" | "subject" | "labels";
@@ -186,6 +193,9 @@ function compileRule(
   if (match.recipients !== undefined)
     add("recipients", match.recipients, { kind: "recipients" }, true);
   if (match.argv !== undefined) add("argv", match.argv, { kind: "argv" }, false);
+  if (match.persistence !== undefined) {
+    add("persistence", match.persistence, { kind: "persistence" }, false);
+  }
   for (const name of PROVIDER_FIELDS) {
     const raw = match[name];
     if (raw !== undefined) add(name, raw, { kind: "provider", name }, false);
@@ -219,10 +229,14 @@ function compileRule(
     hash: ruleContentHash(rule),
     decision: rule.then,
     watch: rule.watch ?? false,
+    match: rule.match,
     conditions,
     items:
       match.items === undefined ? null : { over: match.items.over, per: match.items.per ?? null },
     stateChecks,
+    excludesPersistence:
+      match.persistence === false ||
+      (typeof match.persistence === "object" && match.persistence.equals === false),
     names: {
       actions: literalStrings(match.action),
       tools: literalStrings(match.tool),

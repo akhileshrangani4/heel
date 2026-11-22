@@ -2,6 +2,7 @@ import type { FetchLike } from "@modelcontextprotocol/client";
 import type { Context, MiddlewareHandler } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { RulesPaths } from "../config/rules.ts";
+import type { LearningThreshold } from "../core/learning.ts";
 import type { BuiltInGoogleClient } from "../definitions/google/builtin.ts";
 import type { GoogleClient } from "../definitions/google/oauth.ts";
 import type { UpstreamSignIns } from "../definitions/mcp/upstream-oauth.ts";
@@ -55,6 +56,8 @@ export interface HumanPlaneDeps {
   rules: RulesSource;
   /** The configured approval adapters' names, so the page can say hints are on the way. */
   hintAdapters?: readonly string[];
+  /** When heel suggests rules from what people decide (2.10); absent or null turns suggestions off. */
+  learning?: LearningThreshold | null;
   /** The VAPID public key devices subscribe to approval notifications with. */
   vapidPublicKey: string;
   /** The agent plane's public URL when OAuth for connectors is on (A2); null when off. */

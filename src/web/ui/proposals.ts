@@ -13,6 +13,8 @@ export interface ProposalCard {
   hide: number;
   workdirs: number;
   reason: string | null;
+  /** `heel` when heel drafted it from your own decisions (2.10), not the agent. */
+  origin: "agent" | "heel";
   createdAt: Date;
   expiresAt: Date;
 }
@@ -43,13 +45,17 @@ export function proposalCards(cards: readonly ProposalCard[], now: Date): Html |
           </div>
           <h2 class="req-title">
             <a href="/proposals/${encodeURIComponent(card.id)}"
-              >${card.agent} proposes <mark>${describeProposal(card.rules, card.hide, card.workdirs)}</mark>${
-                card.rules + card.hide > 0 ? " for your rules file" : " for its heel run"
+              >${
+                card.origin === "heel"
+                  ? html`heel suggests <mark>${describeProposal(card.rules, card.hide, card.workdirs)}</mark> for ${card.agent}, from your decisions`
+                  : html`${card.agent} proposes <mark>${describeProposal(card.rules, card.hide, card.workdirs)}</mark>${
+                      card.rules + card.hide > 0 ? " for your rules file" : " for its heel run"
+                    }`
               }</a
             >
           </h2>
           ${
-            card.reason === null
+            card.reason === null || card.origin === "heel"
               ? ""
               : html`<p class="req-reason"><span class="muted">${card.agent} says:</span> ${card.reason}</p>`
           }
@@ -67,6 +73,8 @@ export interface ProposalPageProps {
   agent: string;
   status: RuleProposalStatus;
   reason: string | null;
+  /** `heel` when heel drafted it from the owner's decisions (2.10): `agent` didn't ask. */
+  origin: "agent" | "heel";
   /** The file the rules go into, relative to heel's home: `rules/alice.yaml`. */
   file: string;
   /** Each rule as heel will write it, and in plain words (roadmap 2.3). */
@@ -91,6 +99,8 @@ export interface ProposalPageProps {
         sha: string;
         existing: number;
         existingNames: readonly string[];
+        /** For heel's suggestions: the rule it goes right before, and how many rules stay above it. */
+        placedBefore?: { rule: string; above: number } | null;
         diff: string;
       }
     | { ok: false; problem: string };
@@ -129,12 +139,23 @@ function effectView(props: ProposalPageProps): Html {
           messages drop out of what they read, and fetching, replying to or deleting one is
           denied.
         </p>`;
+  const placed = effect.placedBefore ?? null;
   const before =
     props.rules.length === 0
       ? ""
-      : effect.existing === 0
-        ? html`<p>${props.file} has no rules yet, so these become its first.</p>`
-        : html`<p>
+      : placed !== null
+        ? html`<p>
+          It goes right before <strong>${placed.rule}</strong>, the rule that asked about these
+          requests, and keeps that rule's conditions, so it only decides requests that rule would
+          have asked you about. ${
+            placed.above === 0
+              ? "No rule comes before it."
+              : `Your ${count(placed.above)} above it still decide first.`
+          }
+        </p>`
+        : effect.existing === 0
+          ? html`<p>${props.file} has no rules yet, so these become its first.</p>`
+          : html`<p>
           They go <strong>first</strong> in ${props.file}, before your ${count(effect.existing)}${
             effect.existingNames.length > 0 ? html` (${effect.existingNames.join(", ")})` : ""
           }. The first rule that matches decides, so a call these match is decided by them, even
@@ -182,7 +203,10 @@ export function proposalPage(props: ProposalPageProps): Html {
             : html`<p>Added. ${props.agent}'s heel run can work there now.</p>`,
         )
       : props.outcome === "rejected"
-        ? notice("info", html`<p>Rejected. Nothing ${props.agent} proposed was added.</p>`)
+        ? notice(
+            "info",
+            html`<p>Rejected. Nothing ${props.origin === "heel" ? "heel suggested" : html`${props.agent} proposed`} was added.</p>`,
+          )
         : "";
   const pending = props.status === "pending" && props.expiresAt > props.now;
   return html`${outcome}
@@ -193,14 +217,26 @@ export function proposalPage(props: ProposalPageProps): Html {
         ${badge(status.label, status.tone)}
       </div>
       <h1 class="ap-title">
-        ${props.agent} proposes
-        ${describeProposal(props.rules.length, props.hide.length, props.workdirs.length)}
-        ${changesFile ? html`for ${props.file}` : "for its heel run"}
+        ${
+          props.origin === "heel"
+            ? html`heel suggests
+              ${describeProposal(props.rules.length, props.hide.length, props.workdirs.length)}
+              for ${props.file}, from your own decisions`
+            : html`${props.agent} proposes
+              ${describeProposal(props.rules.length, props.hide.length, props.workdirs.length)}
+              ${changesFile ? html`for ${props.file}` : "for its heel run"}`
+        }
       </h1>
       ${
-        props.reason === null
-          ? ""
-          : html`<figure class="reason">
+        props.origin === "heel"
+          ? html`<p>
+              ${props.agent} didn't ask for this. heel drafted it from requests you decided in
+              the last 30 days, counted from heel's own records, and kept it to what those
+              requests had in common.
+            </p>`
+          : props.reason === null
+            ? ""
+            : html`<figure class="reason">
               <figcaption>${props.agent} says (its own words; heel didn't check them)</figcaption>
               <blockquote>${props.reason}</blockquote>
             </figure>`
@@ -216,7 +252,9 @@ export function proposalPage(props: ProposalPageProps): Html {
           ${
             rule.why === null
               ? ""
-              : html`<p><span class="muted">${props.agent} says: </span>${rule.why}</p>`
+              : props.origin === "heel"
+                ? html`<p><span class="muted">Why: </span>${rule.why}</p>`
+                : html`<p><span class="muted">${props.agent} says: </span>${rule.why}</p>`
           }
           <details>
             <summary>As YAML</summary>

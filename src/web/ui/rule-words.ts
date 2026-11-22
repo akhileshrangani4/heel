@@ -145,7 +145,20 @@ function recipients(condition: Condition): Clause[] {
       case "any_domain_in":
         return { when: `anyone it goes to is at ${either((value as unknown[]).map(String))}` };
       case "max":
+        if (value === 0) return { pre: "with no one invited or addressed" };
         return { pre: `to at most ${String(value)} ${value === 1 ? "person" : "people"}` };
+      case "equals":
+        if (Array.isArray(value) && value.length === 0) {
+          return { pre: "with no one invited or addressed" };
+        }
+        if (Array.isArray(value)) {
+          const all = value.map(String);
+          const last = all.pop();
+          return {
+            pre: `only to exactly ${all.length === 0 ? last : `${all.join(", ")} and ${last}`}`,
+          };
+        }
+        return { when: `recipients ${spelled({ [op]: value })}` };
       case "all_in_thread":
         return { pre: "only to people already on the thread" };
       default:
@@ -186,6 +199,16 @@ function clauses(key: string, condition: Condition): Clause[] {
       return [listed(condition, (k) => k) === "read" ? { pre: "(reads only)" } : spelledOut];
     case "checks":
       return [{ pre: "once the pull request's required checks pass" }];
+    case "persistence": {
+      const value = isOps(condition) ? condition["equals"] : condition;
+      if (value === false)
+        return [
+          { pre: "(leaving out anything that keeps acting on its own, like a forwarding filter)" },
+        ];
+      if (value === true)
+        return [{ pre: "(only what keeps acting on its own, like a forwarding filter)" }];
+      return [spelledOut];
+    }
     case "external": {
       const value = isOps(condition) ? condition["equals"] : condition;
       if (value === true) return [{ pre: "in channels shared with people outside your workspace" }];

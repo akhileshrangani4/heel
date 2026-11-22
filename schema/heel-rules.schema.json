@@ -105,6 +105,9 @@
         "argv": {
           "$ref": "#/$defs/TextListCondition"
         },
+        "persistence": {
+          "$ref": "#/$defs/BooleanCondition"
+        },
         "channel": {
           "$ref": "#/$defs/ChannelCondition"
         },
@@ -155,6 +158,7 @@
               "verb",
               "subcommand",
               "argv",
+              "persistence",
               "channel",
               "external",
               "team",
@@ -392,6 +396,22 @@
         }
       ]
     },
+    "BooleanCondition": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "equals": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
     "ChannelCondition": {
       "anyOf": [
         {
@@ -423,22 +443,6 @@
             },
             "matches": {
               "type": "string"
-            }
-          },
-          "additionalProperties": false
-        }
-      ]
-    },
-    "BooleanCondition": {
-      "anyOf": [
-        {
-          "type": "boolean"
-        },
-        {
-          "type": "object",
-          "properties": {
-            "equals": {
-              "type": "boolean"
             }
           },
           "additionalProperties": false

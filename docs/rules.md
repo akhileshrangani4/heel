@@ -80,7 +80,7 @@ rules:
 - **One person, or the org default:** the **Modes** page (admins). Switching to Watch needs a passkey; switching back to Enforce doesn't.
 - **One rule:** add `watch: true` to it.
 
-Pause, org rules, hidden mail and calls heel can't check safely hold in every mode. **Activity** also suggests rules from what got asked or denied often.
+Pause, org rules, hidden mail and calls heel can't check safely hold in every mode. **Activity** also suggests rules from what Watch mode saw, as text to paste.
 
 ## Editing rules
 
@@ -115,12 +115,25 @@ Any list can be left out, but a proposal needs at least one rule, hide entry or 
 ![A proposed rule: vendor-mail, with the agent's why and where it goes](images/proposal.png)
 
 - **Nothing changes until you add them.** heel tells you a proposal is waiting the same way it tells you about a request (push, email or Slack, whichever you set up), and it shows in `heel status` and `heel tui`. The notification says only which agent and how many rules or hide entries; read them on the page. The proposal shows up under **Rule changes** on the Approvals page. Its page says what each rule does in plain words ("claude-code may open a GitHub issue on github without asking you."), written by heel from the rule itself, never from the agent's why. Under it come the agent's why, the rule as YAML, which of your rules they come before, and the whole file after the change. A condition heel has no words for is spelled out as it is ("when args.force is true"), never left out. **Add these rules** asks for your passkey; **Reject** doesn't.
-- **Rules go first in your file,** above your own rules, each with a `# Proposed by <agent>: <why>` comment. The first rule that matches decides, so a proposed `allow` decides a call that one of your rules would have asked about. The page says so.
+- **Rules go first in your file,** above your own rules, each with a `# Proposed by <agent>: <why>` comment. (heel's own suggestions go elsewhere; see [below](#heel-suggests-rules-from-what-you-decide).) The first rule that matches decides, so a proposed `allow` decides a call that one of your rules would have asked about. The page says so.
 - **Hide entries go at the end of your `hide:` list,** with the same comment. A hide entry only takes email away from agents, never gives them anything, and the page says that too.
 - **heel writes the file, never the agent.** The agent sends rule objects, not YAML, and only ever for its own owner's file. It never sees your file: a proposal is checked on its own, and only its own problems go back to the agent. heel can't add a `watch: true` rule or org rules this way.
 - **The passkey signs the exact file.** If the file changes between opening the page and touching your passkey, heel writes nothing and asks you to reload. It won't add to a file that has an error; fix that first.
-- **One proposal per agent waits at a time.** A newer one replaces the older, and a proposal expires after 7 days. A paused agent can't propose.
+- **One proposal per agent waits at a time.** A newer one replaces the older (heel's own suggestions don't replace an agent's proposal, or each other), and a proposal expires after 7 days. A paused agent can't propose.
 - **Proposals are the history.** Each one keeps which agent proposed it, who added or rejected it, and when.
+
+## heel suggests rules from what you decide
+
+When you keep approving the same kind of request, heel suggests a rule that would stop the asking. After 5 approvals on at least 2 different days in the last 30, a card appears under **Suggested rules** at the top of the Approvals page and on Activity: what the rule would do, in plain words, and what it rests on ("You approved 6 times on 3 days since Nov 12, all to ann@work.com"). Denials work the same way and suggest a deny rule.
+
+- **Nothing changes until you add it.** **Review and add** opens the suggestion as a rule change, like an agent's proposal: you read the file after the change and add it with your passkey. heel checks it again then, and refuses if you've since decided a request it covers the other way, or your rules changed. **Don't suggest this again**, or rejecting the rule change, stops heel suggesting a rule for that kind of request (that agent, account, action, repo and calendar).
+- **It only decides what used to ask you.** Unlike an agent's proposal, it goes right before the rule that asked about those requests, and keeps that rule's conditions as well as its own. Every rule above it still decides first, so a deny above it still denies.
+- **It's never wider than what you approved.** The rule names the agent the requests came from, the account, the action and the tool, and exactly what they had in common that a rule can check: the repo, the calendar, and the exact set of recipients (an event with no guests suggests a rule for events with no guests; mail to ann and bob, a rule for mail to ann and bob, not to either alone). Requests to different recipients count separately, so one approval can't widen the rest. It also says `persistence: false`, so it never covers something that keeps acting on its own, such as a filter that forwards mail ([more](rules-reference.md#calls-that-outlive-heel)). Requests with none of those (a refund of any amount, say) aren't suggested as an allow at all. A rule that would also cover a request you denied in the last 30 days isn't suggested.
+- **It doesn't skip your guards.** heel won't suggest a rule where the rule that asked has a count or a state check (`items`, `checks: passing`), or where that rule has since changed or no longer asks. Nor a deny while a standing approval you gave lets those requests through.
+- **Only what you decided counts.** An agent asking over and over earns nothing until you approve, and decisions in one sitting count as one day. Requests org rules asked about aren't counted.
+- **In the file,** the rule's comment says `# Suggested by heel for <agent>: ...`, not that the agent proposed it.
+
+Change the numbers, or turn suggestions off, in `heel.yaml` ([`learning`](configuration.md)).
 
 ## Hiding what the agent reads
 
