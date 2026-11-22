@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, gt, isNull, lt } from "drizzle-orm";
 import { hashAgentToken, issueAgentToken } from "../gateway/agent-tokens.ts";
 import { isValidAgentName } from "../gateway/agents.ts";
 import type { HeelDb, HeelTx } from "../store/db.ts";
@@ -33,6 +33,45 @@ export class OAuthError extends Error {
 }
 
 /** Dynamic client registration (RFC 7591), for public clients only. */
+/** A registered client nobody connected with is dropped after this. */
+const UNUSED_CLIENT_MS = 24 * 60 * 60 * 1000;
+/**
+ * At most this many clients registered in the last day and never used: with
+ * heel on the public internet (a Cloudflare tunnel, 2.7), registration is
+ * open to anyone, and each one is a row.
+ */
+export const MAX_UNUSED_CLIENTS = 50;
+
+function clientUsed(db: HeelDb, clientId: string): boolean {
+  return (
+    db.select({ id: agents.id }).from(agents).where(eq(agents.oauthClientId, clientId)).get() !==
+      undefined ||
+    db
+      .select({ hash: oauthCodes.codeHash })
+      .from(oauthCodes)
+      .where(eq(oauthCodes.clientId, clientId))
+      .get() !== undefined
+  );
+}
+
+/** Drops clients registered over a day ago that no agent and no code points at. */
+function pruneUnusedClients(db: HeelDb, orgId: string, now: Date): void {
+  const old = db
+    .select({ id: oauthClients.id })
+    .from(oauthClients)
+    .where(
+      and(
+        eq(oauthClients.orgId, orgId),
+        lt(oauthClients.createdAt, new Date(now.getTime() - UNUSED_CLIENT_MS)),
+      ),
+    )
+    .all();
+  for (const client of old) {
+    if (!clientUsed(db, client.id))
+      db.delete(oauthClients).where(eq(oauthClients.id, client.id)).run();
+  }
+}
+
 export function registerClient(
   db: HeelDb,
   input: { orgId: string; name: string; redirectUris: readonly string[]; now: Date },
@@ -43,6 +82,24 @@ export function registerClient(
   for (const uri of input.redirectUris) {
     const problem = redirectUriProblem(uri);
     if (problem !== null) throw new OAuthError("invalid_redirect_uri", `${uri}: ${problem}`);
+  }
+  pruneUnusedClients(db, input.orgId, input.now);
+  const recent = db
+    .select({ id: oauthClients.id })
+    .from(oauthClients)
+    .where(
+      and(
+        eq(oauthClients.orgId, input.orgId),
+        gt(oauthClients.createdAt, new Date(input.now.getTime() - UNUSED_CLIENT_MS)),
+      ),
+    )
+    .all()
+    .filter((client) => !clientUsed(db, client.id));
+  if (recent.length >= MAX_UNUSED_CLIENTS) {
+    throw new OAuthError(
+      "temporarily_unavailable",
+      "too many clients registered without being used; try again later",
+    );
   }
   const row: ClientRow = {
     id: newId("oauthClient"),

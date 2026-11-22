@@ -67,4 +67,9 @@ describe("exposureWarnings", () => {
     // Loopback in a container says nothing.
     expect(codes({ ...SAFE, container: true })).toEqual([]);
   });
+
+  it("warns that a Cloudflare tunnel puts both planes on the public internet (2.7)", () => {
+    expect(codes({ ...SAFE, publicTunnel: true })).toContain("public_tunnel");
+    expect(codes(SAFE)).not.toContain("public_tunnel");
+  });
 });

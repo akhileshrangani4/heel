@@ -65,7 +65,7 @@ You can run one heel on an always-on machine (a VPS, a Mac mini, a home server) 
 
 **1. Start heel on the server.** Install it [with npm](#with-npm) or [with Docker](#with-docker) and run `heel init`, then `heel start`. Keep both planes on `127.0.0.1`: the next step puts HTTPS in front of them.
 
-**2. Give both planes an HTTPS address.** With Tailscale, only devices your tailnet lets in can reach them (on a shared tailnet, check its access rules), and every agent call still needs the agent's own token. `heel init --approve-from tailscale` does this step and the next for you; by hand:
+**2. Give both planes an HTTPS address.** With Tailscale, only devices your tailnet lets in can reach them (on a shared tailnet, check its access rules), and every agent call still needs the agent's own token. `heel init --approve-from tailscale` (or `--approve-from cloudflare --hostname <yours>`) does this step and the next for you; by hand:
 
 ```sh
 tailscale serve --bg --https=443 7301     # the approval page

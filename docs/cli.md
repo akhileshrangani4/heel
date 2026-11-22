@@ -9,7 +9,7 @@ The `heel` command sets heel up and runs it. Except for `heel run`, it works on 
 | Task | Command |
 | --- | --- |
 | Set up heel's home, key, config and starter rules | `heel init` |
-| Set up heel and where you approve from (this computer or your phone over Tailscale) | `heel init --approve-from tailscale` |
+| Set up heel and where you approve from: this computer, your phone over Tailscale, or a Cloudflare tunnel on your domain | `heel init --approve-from tailscale`, or `heel init --approve-from cloudflare --hostname heel.example.com` |
 | Start heel in the background | `heel start` (`--watch` to let calls through and only log) |
 | Watch its log live | `heel logs -f` (`-n 200` for more history, `--json` for raw lines) |
 | Stop or restart it | `heel stop`, `heel restart` |

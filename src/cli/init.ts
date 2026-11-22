@@ -101,7 +101,7 @@ export function initSummary(
   }
   if (addresses !== null) {
     lines.push(
-      `Approve from anywhere on your tailnet: ${addresses.approvals}`,
+      `Approve at ${addresses.approvals}`,
       `Agents on your other machines connect at ${addresses.agents}/mcp`,
       "",
     );
@@ -160,20 +160,21 @@ export async function confirm(question: string): Promise<boolean> {
  */
 export async function chooseApproveFrom(out: {
   write(text: string): unknown;
-}): Promise<"this-computer" | "tailscale"> {
+}): Promise<"this-computer" | "tailscale" | "cloudflare"> {
   if (!process.stdin.isTTY) return "this-computer";
   out.write(
     [
       "Where will you approve from?",
       "  1. This computer only (the approval page stays on 127.0.0.1)",
       "  2. Your phone and other devices, over Tailscale (needs Tailscale signed in here)",
+      "  3. Anywhere, through a Cloudflare tunnel on your own domain (rerun with --hostname)",
       "",
     ].join("\n"),
   );
   const rl = createInterface({ input: process.stdin, output: process.stderr });
   try {
-    const answer = (await rl.question("Choose 1 or 2 [1] ")).trim();
-    return answer === "2" ? "tailscale" : "this-computer";
+    const answer = (await rl.question("Choose 1, 2 or 3 [1] ")).trim();
+    return answer === "2" ? "tailscale" : answer === "3" ? "cloudflare" : "this-computer";
   } finally {
     rl.close();
   }

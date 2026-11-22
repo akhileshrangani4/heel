@@ -41,6 +41,7 @@ import { createMcpSurface } from "./gateway/mcp/server.ts";
 import { createPipeline } from "./gateway/pipeline/pipeline.ts";
 import type { ApprovalAdapter } from "./gateway/pipeline/ports.ts";
 import { defaultTotalSandboxes, SandboxSlots } from "./gateway/sandbox-slots.ts";
+import { superviseTunnel } from "./gateway/tunnel.ts";
 import type { Logger } from "./log.ts";
 import { defaultLooksLikeJudge, HideCounts } from "./lookslike/judge.ts";
 import { logAdminAlerts } from "./notify/admin-alerts.ts";
@@ -337,6 +338,7 @@ function exposureFacts(config: HeelConfig): ExposureFacts {
     homeOwnerUid,
     userHome: homedir(),
     container: process.env["HEEL_CONTAINER"] === "1",
+    publicTunnel: config.tunnel.cloudflare !== null,
   };
 }
 
@@ -694,6 +696,14 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
       siem.start();
       closers.push(() => siem.close());
       log.info({ sink: config.audit.siem.url.href }, "SIEM sink started");
+    }
+
+    // The Cloudflare tunnel heel init set up (2.7), last: only once this heel owns the admin
+    // socket and both planes listen, so a second heel never starts a second tunnel. Being
+    // last, it's also the first thing stopped on shutdown.
+    if (config.tunnel.cloudflare !== null) {
+      const tunnel = superviseTunnel({ config: config.tunnel.cloudflare.config, log });
+      closers.push(() => tunnel.stop());
     }
 
     let closing: Promise<void> | null = null;

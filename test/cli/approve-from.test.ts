@@ -103,9 +103,7 @@ describe("approving over Tailscale (2.7)", () => {
       exec: fakeTailscale().exec,
     };
     expect(await main(["init", "--yes", "--approve-from", "tailscale"], io)).toBe(EXIT.ok);
-    expect(stdout).toContain(
-      "Approve from anywhere on your tailnet: https://heel-box.tail1234.ts.net",
-    );
+    expect(stdout).toContain("Approve at https://heel-box.tail1234.ts.net");
     expect(stdout).toContain("https://heel-box.tail1234.ts.net:8443/mcp");
     expect(readFileSync(join(home, "heel.yaml"), "utf8")).toContain(
       "public_url: https://heel-box.tail1234.ts.net",

@@ -1,6 +1,9 @@
-import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { parseDocument } from "yaml";
 import { z } from "zod";
 import { AdminClientError, adminCall } from "../admin/client.ts";
 import { type AdminRequest, AUDIT_EXPORT_MAX_PAGE } from "../admin/protocol.ts";
@@ -1258,6 +1261,8 @@ async function initCommand(args: string[], io: CliIo): Promise<number> {
         home: { type: "string" },
         yes: { type: "boolean", short: "y" },
         "approve-from": { type: "string" },
+        hostname: { type: "string" },
+        "agent-hostname": { type: "string" },
         "new-address": { type: "boolean" },
       },
       allowPositionals: true,
@@ -1270,12 +1275,17 @@ async function initCommand(args: string[], io: CliIo): Promise<number> {
   );
   const {
     addressProblem,
+    agentHostnameFor,
+    sameParent,
     APPROVE_FROM,
     isApproveFrom,
+    isHostname,
     listenPorts,
     passkeyProblem,
+    setUpCloudflare,
     setUpTailscale,
     writeAddresses,
+    writeTunnelConfig,
   } = await import("./approve-from.ts");
   const flag = values["approve-from"];
   if (flag !== undefined && !isApproveFrom(flag)) {
@@ -1297,11 +1307,106 @@ async function initCommand(args: string[], io: CliIo): Promise<number> {
       return EXIT.ok;
     }
   }
+  if (
+    (values.hostname !== undefined || values["agent-hostname"] !== undefined) &&
+    flag !== "cloudflare" &&
+    flag !== undefined
+  ) {
+    throw new UsageError("--hostname and --agent-hostname go with --approve-from cloudflare");
+  }
   // Where the owner approves from (2.7): asked in a terminal, this computer under --yes.
   const approveFrom =
     flag ?? (values.yes === true ? "this-computer" : await chooseApproveFrom(io.stderr));
   const steps = initHome(home);
   let addresses: { approvals: string; agents: string } | null = null;
+  if (approveFrom === "cloudflare") {
+    const hostname = values.hostname?.toLowerCase();
+    if (hostname === undefined || !isHostname(hostname)) {
+      throw new UsageError(
+        "--approve-from cloudflare needs --hostname, the address on your Cloudflare domain to approve at, like heel.example.com",
+      );
+    }
+    const agentHostname = (
+      values["agent-hostname"] ??
+      agentHostnameFor(hostname) ??
+      ""
+    ).toLowerCase();
+    if (agentHostname === "") {
+      throw new UsageError(
+        `--hostname ${hostname} is a bare domain: use a name under it, like heel.${hostname}, so the agent plane can sit beside it`,
+      );
+    }
+    if (!isHostname(agentHostname) || !sameParent(hostname, agentHostname)) {
+      throw new UsageError(
+        "--agent-hostname must sit beside --hostname under the same parent domain, like heel.example.com and heel-agents.example.com",
+      );
+    }
+    const configPath = join(home, "heel.yaml");
+    const ports = listenPorts(readFileSync(configPath, "utf8"));
+    if (io.exec === undefined) {
+      throw new UsageError(
+        "heel init --approve-from cloudflare runs cloudflared, which this heel can't",
+      );
+    }
+    // Checked before cloudflared creates anything: heel.yaml's addresses, and a passkey it would orphan.
+    const want = { approvals: `https://${hostname}`, agents: `https://${agentHostname}` };
+    const blocked =
+      addressProblem(configPath, want) ??
+      (values["new-address"] === true ? null : passkeyProblem(join(home, "heel.db"), want));
+    if (blocked !== null) {
+      io.stdout.write(initSteps(steps));
+      io.stderr.write(`heel: ${blocked}\n`);
+      return EXIT.failed;
+    }
+    // Already set up for these hostnames: nothing to make again.
+    const existing = parseDocument(readFileSync(configPath, "utf8"));
+    if (
+      existing.getIn(["tunnel", "cloudflare", "config"]) !== undefined &&
+      String(existing.get("public_url") ?? "").replace(/\/$/, "") === want.approvals &&
+      String(existing.get("agent_public_url") ?? "").replace(/\/$/, "") === want.agents
+    ) {
+      io.stdout.write(
+        initSummary(
+          home,
+          steps,
+          fromEnv || home === io.env["HEEL_HOME"] || home === defaultHeelHome(),
+          want,
+        ),
+      );
+      io.stderr.write(
+        "heel: the Cloudflare tunnel for these hostnames is already set up; nothing changed.\n",
+      );
+      return EXIT.ok;
+    }
+    // cloudflared won't make the folder its credentials go in.
+    mkdirSync(join(home, "cloudflared"), { recursive: true, mode: 0o700 });
+    const set = await setUpCloudflare(io.exec, {
+      home,
+      hostname,
+      agentHostname,
+      ports,
+      loggedIn: [
+        io.env["TUNNEL_ORIGIN_CERT"],
+        join(homedir(), ".cloudflared", "cert.pem"),
+        join(homedir(), ".cloudflare-warp", "cert.pem"),
+        "/etc/cloudflared/cert.pem",
+      ].some((path) => path !== undefined && existsSync(path)),
+      suffix: randomBytes(3).toString("hex"),
+    });
+    if (!set.ok || set.addresses === null || set.config === undefined) {
+      io.stdout.write(initSteps(steps));
+      io.stderr.write(`heel: ${set.ok ? "cloudflared gave no tunnel" : set.problem}\n`);
+      return EXIT.failed;
+    }
+    const written = writeAddresses(configPath, set.addresses);
+    if (!written.ok) {
+      io.stderr.write(`heel: ${written.problem}\n`);
+      return EXIT.failed;
+    }
+    writeFileSync(join(home, "cloudflared.yml"), set.config, { mode: 0o600 });
+    writeTunnelConfig(configPath, "cloudflared.yml");
+    addresses = set.addresses;
+  }
   if (approveFrom === "tailscale") {
     const configPath = join(home, "heel.yaml");
     const ports = listenPorts(readFileSync(configPath, "utf8"));
