@@ -363,7 +363,7 @@ export const HEEL_ACCOUNTS_TOOL: Tool = {
   description:
     "What's behind heel for you: the accounts you can use (by alias and service), and your connection requests and rule proposals still waiting for your owner. " +
     "Names and services only; heel never shows a key. Read-only. " +
-    "With wait: true and something still waiting, it answers once your owner decides one of them (or after a few minutes), " +
+    "With wait: true and something still waiting, it answers once that changes, usually because your owner decided one (or after a while), " +
     "so you don't need your owner to tell you they've approved.",
   inputSchema: {
     type: "object",

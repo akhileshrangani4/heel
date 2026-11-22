@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MontyWorker } from "../../src/codemode/monty.ts";
+import { MAX_HELD_PER_AGENT } from "../../src/gateway/mcp/server.ts";
 import { DEFAULT_APPROVAL_WAIT } from "../../src/gateway/mcp/wait.ts";
 import { rejectRequest } from "../../src/requests/connection.ts";
 import { decideApproval, SqliteApprovalStore } from "../../src/store/approvals.ts";
@@ -123,7 +124,10 @@ describe("a call that needs approval waits for the decision (2.11)", () => {
       output: "done",
     });
     const calls = (result.structuredContent as { calls: { tool: string }[] }).calls;
-    expect(calls.map((c) => c.tool)).toEqual(["search_notes", "delete_note", "delete_note"]);
+    expect(calls.map((c) => [c.tool, (c as { decision?: string }).decision])).toEqual([
+      ["search_notes", "allow"],
+      ["delete_note", "allow"],
+    ]);
     expect(h.upstream.calls.map((c) => c.name)).toEqual(["search_notes", "delete_note"]);
   });
 
@@ -147,9 +151,38 @@ describe("a call that needs approval waits for the decision (2.11)", () => {
     expect(answer.waiting.connections).toEqual([]);
   });
 
-  it("holds Codex under its 60-second limit and other clients for a few minutes", () => {
-    expect(DEFAULT_APPROVAL_WAIT.windowMs("codex-mcp-client")).toBeLessThan(60_000);
+  it("holds Claude Code for four minutes, and every other client under the 60 seconds it waits", () => {
     expect(DEFAULT_APPROVAL_WAIT.windowMs("claude-code")).toBe(240_000);
-    expect(DEFAULT_APPROVAL_WAIT.windowMs(null)).toBe(240_000);
+    expect(DEFAULT_APPROVAL_WAIT.windowMs("codex-mcp-client")).toBeLessThan(60_000);
+    expect(DEFAULT_APPROVAL_WAIT.windowMs("my-claude-code-fork")).toBeLessThan(60_000);
+    expect(DEFAULT_APPROVAL_WAIT.windowMs(null)).toBeLessThan(60_000);
+  });
+
+  it("two identical held calls: one runs on the approval, the other says so and asks nothing new", async () => {
+    const h = await mcpHarness({ owner: RULES, approvalWait: wait(5_000) });
+    const client = await h.connect("/mcp/notes");
+    const call = () => client.callTool({ name: "delete_note", arguments: { id: "n1" } });
+    const [a, b] = await Promise.all([call(), call(), decideWhenAsked(h, "approve")]);
+    const statuses = [a, b].map((r) =>
+      r.isError ? (r.structuredContent as { status: string }).status : "ran",
+    );
+    expect(statuses).toContain("ran");
+    expect(statuses.filter((s) => s !== "ran")).toEqual([expect.stringMatching(/^(used|denied)$/)]);
+    expect(h.upstream.calls).toHaveLength(1);
+    expect(h.t.db.select().from(approvals).all()).toHaveLength(1);
+  });
+
+  it("holds at most a few calls per agent; the rest answer pending at once", async () => {
+    const h = await mcpHarness({ owner: RULES, approvalWait: wait(400) });
+    const client = await h.connect("/mcp/notes");
+    const started = Date.now();
+    const answers = await Promise.all(
+      Array.from({ length: MAX_HELD_PER_AGENT + 2 }, (_, i) =>
+        client
+          .callTool({ name: "delete_note", arguments: { id: `n${i}` } })
+          .then(() => Date.now() - started),
+      ),
+    );
+    expect(answers.filter((ms) => ms < 300)).toHaveLength(2);
   });
 });

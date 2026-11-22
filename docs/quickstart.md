@@ -117,7 +117,7 @@ Open it to see exactly what will run. Select **Approve once** and confirm with y
 
 ![The merge request: pull request 42 on acme/web into main](images/approval-merge.png)
 
-The agent checks back and sends the call again, and this time it runs. Every decision shows up under **Activity**.
+The agent's call was waiting for you, so it runs now and the agent carries on. (If you take longer than a few minutes, the agent sends the call again and it runs then.) Every decision shows up under **Activity**.
 
 ## Next steps
 

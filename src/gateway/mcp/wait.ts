@@ -24,16 +24,20 @@ export interface ApprovalWait {
 }
 
 /**
- * Codex gives up on a tool call after 60 seconds unless `tool_timeout_sec`
- * is raised; Claude Code allows long calls but closes a remote one that
- * sends nothing for 5 minutes. So: under a minute for Codex, four for the rest.
+ * A client that stops waiting doesn't close the request, so heel holds a call
+ * only as long as the client will read the answer: past that, an approved call
+ * would run with no one to see it. Claude Code allows long calls (it closes a
+ * remote one that sends nothing for 5 minutes; heel's notifications prevent
+ * that), so it gets four minutes. Codex stops at 60 seconds unless
+ * `tool_timeout_sec` is raised, and the MCP SDK's own clients at 60 by
+ * default, so every other client gets 50.
  */
-export const CODEX_WAIT_MS = 50_000;
-export const DEFAULT_WAIT_MS = 240_000;
+export const LONG_WAIT_MS = 240_000;
+export const DEFAULT_WAIT_MS = 50_000;
 
 export const DEFAULT_APPROVAL_WAIT: ApprovalWait = {
   windowMs: (clientName) =>
-    clientName !== null && /codex/i.test(clientName) ? CODEX_WAIT_MS : DEFAULT_WAIT_MS,
+    clientName !== null && /^claude-code\b/i.test(clientName) ? LONG_WAIT_MS : DEFAULT_WAIT_MS,
   pollMs: 1_000,
   beatMs: 20_000,
 };
@@ -41,8 +45,8 @@ export const DEFAULT_APPROVAL_WAIT: ApprovalWait = {
 /** Doesn't hold: answers at once, as heel did before 2.11. */
 export const NO_APPROVAL_WAIT: ApprovalWait = { windowMs: () => 0, pollMs: 1_000, beatMs: 20_000 };
 
-/** Tells the client heel is still waiting; `elapsedMs` since the wait began. */
-export type Beat = (elapsedMs: number) => Promise<void>;
+/** Tells the client heel is still waiting. */
+export type Beat = () => Promise<void>;
 
 /**
  * Resolves true once `decided()` is true, false when the window ends or the
@@ -62,7 +66,7 @@ export async function waitFor(
     if (options.beat !== undefined && elapsed >= nextBeat) {
       nextBeat = elapsed + options.beatMs;
       // A client that can't take the notification still gets its answer.
-      await options.beat(elapsed).catch(() => {});
+      await options.beat().catch(() => {});
     }
     await sleep(Math.min(options.pollMs, options.windowMs - elapsed), options.signal);
   }

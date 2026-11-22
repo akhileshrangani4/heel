@@ -7,7 +7,7 @@ import {
   Server,
   type Tool,
 } from "@modelcontextprotocol/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { BackgroundRunner } from "../../codemode/background.ts";
 import {
   type ClaimedScript,
@@ -35,7 +35,7 @@ import type { HeelDb } from "../../store/db.ts";
 import { type AccountRecord, findAccount } from "../../store/directory.ts";
 import { historyFor, proposeSuggestion } from "../../store/learning.ts";
 import { SqlitePauseStore } from "../../store/pauses.ts";
-import { agentTokens } from "../../store/schema.ts";
+import { agentRequests, agentTokens, ruleProposals } from "../../store/schema.ts";
 import { accountsUsableBy } from "../../store/sharing.ts";
 import { errorShape } from "../../util/error-shape.ts";
 import { isBuiltInProvider, isMcpProvider } from "../../vault/connect.ts";
@@ -66,7 +66,7 @@ import {
   splitDirectName,
   takeReason,
 } from "./names.ts";
-import { toolResult } from "./results.ts";
+import { decisionResult, toolResult, usedDecision } from "./results.ts";
 import { SETUP_PROMPT_NAME, setupPrompt } from "./setup-prompt.ts";
 import { type ApprovalWait, type Beat, NO_APPROVAL_WAIT, waitFor } from "./wait.ts";
 
@@ -125,11 +125,15 @@ export interface McpSurfaceDeps {
 
 /** What a held call needs from its request: the client going away, and a way to say it's still waiting. */
 interface Held {
+  agentId: string;
   signal: AbortSignal;
   beat: Beat;
   /** When the call stops waiting (epoch ms). */
   until: number;
 }
+
+/** How many calls one agent may have held at once; more answer at once (2.11). */
+export const MAX_HELD_PER_AGENT = 8;
 
 /**
  * What a parked script's answer tells the agent to do. In a dry run an agent
@@ -194,19 +198,30 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
   const pauses = deps.pauses ?? new SqlitePauseStore();
   const now = deps.now ?? (() => new Date());
   const approvalWait = deps.approvalWait ?? NO_APPROVAL_WAIT;
+  /** Calls held right now, per agent. */
+  const heldCalls = new Map<string, number>();
 
   /**
    * Holds the request until `decided()` or the call's window ends (2.11);
    * true once decided. A script that asks twice shares one window.
    */
-  function hold(held: Held, decided: () => boolean): Promise<boolean> {
-    return waitFor(decided, {
-      windowMs: Math.max(0, held.until - Date.now()),
-      pollMs: approvalWait.pollMs,
-      beatMs: approvalWait.beatMs,
-      signal: held.signal,
-      beat: held.beat,
-    });
+  async function hold(held: Held, decided: () => boolean): Promise<boolean> {
+    const holding = heldCalls.get(held.agentId) ?? 0;
+    if (holding >= MAX_HELD_PER_AGENT) return decided();
+    heldCalls.set(held.agentId, holding + 1);
+    try {
+      return await waitFor(decided, {
+        windowMs: Math.max(0, held.until - Date.now()),
+        pollMs: approvalWait.pollMs,
+        beatMs: approvalWait.beatMs,
+        signal: held.signal,
+        beat: held.beat,
+      });
+    } finally {
+      const left = (heldCalls.get(held.agentId) ?? 1) - 1;
+      if (left === 0) heldCalls.delete(held.agentId);
+      else heldCalls.set(held.agentId, left);
+    }
   }
 
   /** Whether an approval this agent asked for has been decided (or has expired). */
@@ -472,13 +487,22 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
       }
       if (!(await hold(held, () => approvalDecided(agent, approvalId)))) return result;
       const next = await runCode(agent, { resume }, runId, held.signal);
-      // A resumed script reports only what it did from the parked call on: put the two together.
       const after = (next.structuredContent ?? {}) as Record<string, unknown>;
+      if (after["status"] === "busy") {
+        // No slot to carry it on now: the agent keeps its resume id and does it itself.
+        return runCodeResult({
+          ...(body as Parameters<typeof runCodeResult>[0]),
+          message: `The approval is decided, but heel is running as many scripts as it allows. Shortly, call run_code with {"resume": "${resume}"} and no code; don't send the script again.`,
+        });
+      }
       if (typeof after["stdout"] !== "string" || !Array.isArray(after["calls"])) return next;
+      // A resumed script reports only what it did from the parked call on, that call included:
+      // put the two together, without the parked call's earlier "ask".
+      const before = (body["calls"] as CallRecord[] | undefined) ?? [];
       result = runCodeResult({
         ...(after as Parameters<typeof runCodeResult>[0]),
         stdout: String(body["stdout"] ?? "") + after["stdout"],
-        calls: [...((body["calls"] as CallRecord[] | undefined) ?? []), ...after["calls"]],
+        calls: [...before.slice(0, -1), ...after["calls"]],
       });
     }
   }
@@ -678,14 +702,27 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
 
   /** The ids of what this agent asked for that still waits for its owner, as one string. */
   function waitingKey(agent: AuthenticatedAgent): string {
-    const at = now();
-    const requests = pendingRequests(deps.db, agent.ownerId, at)
-      .filter((r) => r.agentId === agent.agentId)
-      .map((r) => r.id);
-    const proposals = pendingProposals(deps.db, agent.ownerId, at)
-      .filter((p) => p.agentId === agent.agentId && p.origin === "agent")
-      .map((p) => p.id);
-    return [...requests, ...proposals].sort().join(",");
+    // Read-only and narrow, as it runs every poll; expiring rows is left to heelAccounts.
+    const requests = deps.db
+      .select({ id: agentRequests.id })
+      .from(agentRequests)
+      .where(and(eq(agentRequests.agentId, agent.agentId), eq(agentRequests.status, "pending")))
+      .all();
+    const proposals = deps.db
+      .select({ id: ruleProposals.id })
+      .from(ruleProposals)
+      .where(
+        and(
+          eq(ruleProposals.agentId, agent.agentId),
+          eq(ruleProposals.origin, "agent"),
+          eq(ruleProposals.status, "pending"),
+        ),
+      )
+      .all();
+    return [...requests, ...proposals]
+      .map((row) => row.id)
+      .sort()
+      .join(",");
   }
 
   /**
@@ -701,6 +738,9 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     if (args["wait"] === true) {
       const before = waitingKey(agent);
       if (before !== "") await hold(held, () => waitingKey(agent) !== before);
+      if (!agentStillLive(deps.db, agent, now())) {
+        throw new ProtocolError(ProtocolErrorCode.InvalidRequest, "This agent is no longer active");
+      }
     }
     return heelAccounts(agent);
   }
@@ -784,7 +824,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     }
     // The agent's reason travels beside the call, never inside it (spec: The approval page).
     const { args: callArgs, reason } = takeReason(args);
-    const run = () =>
+    const run = (noAsk: boolean) =>
       deps.pipeline.run({
         agent,
         surface: "mcp",
@@ -793,20 +833,30 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
         args: callArgs,
         runId: params._meta?.[RUN_ID_META_KEY],
         ...(reason !== undefined && { reason }),
+        ...(noAsk && { noAsk }),
       });
-    let result = await run();
-    // Held for the decision (2.11); once made, the same call again runs on it, or gets the denial.
-    while (result.status === "pending") {
-      const { approvalId } = result;
-      if (!(await hold(held, () => approvalDecided(agent, approvalId)))) break;
-      // Revoked, disabled or expired while it waited: what runs now is only for a live agent.
-      if (!agentStillLive(deps.db, agent, now())) break;
-      result = await run();
-    }
     // The pipeline already checked the account; this only tells a native tool from a passthrough.
     const account = findAccount(deps.db, agent.orgId, target.alias);
-    const native = account !== null && !isMcpProvider(account.provider);
-    return toolResult(result, { account: target.alias, tool: target.tool, native });
+    const label = {
+      account: target.alias,
+      tool: target.tool,
+      native: account !== null && !isMcpProvider(account.provider),
+    };
+    let result = await run(false);
+    if (result.status === "pending") {
+      const { approvalId } = result;
+      const decided = await hold(held, () => approvalDecided(agent, approvalId));
+      // Revoked, disabled or expired while it waited: nothing more runs for it.
+      if (decided && agentStillLive(deps.db, agent, now())) {
+        if (approvalStatusForAgent(deps.db, agent, approvalId, now()) === "executed") {
+          return decisionResult(usedDecision(approvalId, label));
+        }
+        // Once, on this decision: it runs on the approval, or gets the denial or expiry. An
+        // identical call that used the approval first leaves this one denied, never a new request.
+        result = await run(true);
+      }
+    }
+    return toolResult(result, label);
   }
 
   /**
@@ -870,11 +920,13 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     server.setRequestHandler("tools/call", async (request, ctx) => {
       // The SDK hands the request's `_meta` (and its progress token) on the context.
       const progressToken = ctx.mcpReq._meta?.progressToken;
+      const started = Date.now();
       const held: Held = {
+        agentId: agent.agentId,
         signal: ctx.mcpReq.signal,
         until: Date.now() + approvalWait.windowMs(agent.clientName ?? null),
         // Progress when the client asked for it, else a log line: either keeps the stream open.
-        beat: (elapsedMs) =>
+        beat: () =>
           ctx.mcpReq.notify(
             progressToken === undefined
               ? {
@@ -885,7 +937,8 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
                   method: "notifications/progress",
                   params: {
                     progressToken,
-                    progress: elapsedMs,
+                    // Milliseconds since the call came in: only ever goes up, across every wait.
+                    progress: Date.now() - started,
                     message: WAITING_NOTE,
                   },
                 },

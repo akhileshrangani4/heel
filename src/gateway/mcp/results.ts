@@ -24,6 +24,7 @@ export type Decision =
     }
   | { status: "paused"; scope: string; message: string }
   | { status: "expired"; approvalId: string; message: string }
+  | { status: "used"; approvalId: string; message: string }
   | { status: "upstream_error"; upstreamStatus: number; body: unknown; message: string }
   | { status: "upstream_outcome_unknown"; message: string };
 
@@ -112,6 +113,15 @@ export function decisionFor(
         message: `heel doesn't know whether ${what} took effect, and won't retry it.`,
       };
   }
+}
+
+/** An identical call used this call's approval while it waited (2.11): it ran there, not here. */
+export function usedDecision(approvalId: string, call: CallLabel): Decision {
+  return {
+    status: "used",
+    approvalId,
+    message: `An identical ${call.tool} on ${call.account} used this approval and ran. Nothing ran here; send the call again only if you mean to do it twice.`,
+  };
 }
 
 /** The tool result for a decision: an error result carrying it twice. */
