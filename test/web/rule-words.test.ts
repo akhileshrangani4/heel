@@ -84,7 +84,7 @@ describe("a proposed rule in plain words (roadmap 2.3)", () => {
       ),
     );
     expect(words).toBe(
-      "Any of your agents may do github.read when the agent matches /^ci-/, account matches /^gh-/, args.force is true and query.per_page is at most 100, without asking you.",
+      "Any of your agents may read GitHub when the agent matches /^ci-/, account matches /^gh-/, args.force is true and query.per_page is at most 100, without asking you.",
     );
   });
 

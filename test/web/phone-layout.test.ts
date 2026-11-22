@@ -51,10 +51,11 @@ describe("the top menu (1.11)", () => {
     const tabs = page.match(/<nav class="subnav"[\s\S]*?<\/nav>/)?.[0] ?? "";
     expect(tabs).toContain(">Standing approvals<");
     expect(tabs).toMatch(/aria-current="page"\s*>Grants</);
-    // A section with one page has no tabs.
-    expect(await (await h.fetch("/activity", { as: admin })).text()).not.toContain(
-      'class="subnav"',
-    );
+    // Your rules and their history sit beside Activity.
+    const activity = await (await h.fetch("/activity", { as: admin })).text();
+    const activityTabs = activity.match(/<nav class="subnav"[\s\S]*?<\/nav>/)?.[0] ?? "";
+    expect(activityTabs).toContain(">Rules<");
+    expect(activityTabs).toContain(">Rule history<");
   });
 });
 

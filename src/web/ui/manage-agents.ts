@@ -25,12 +25,16 @@ function daysSelect(id: string): Html {
 export function addAgentForm(): Html {
   return html`<section aria-labelledby="add-agent-heading" class="card">
     <h2 id="add-agent-heading">Add an agent</h2>
-    <form id="add-agent-form" onsubmit="return false">
+    <form id="add-agent-form" class="stack-form" onsubmit="return false">
       <input type="hidden" name="op" value="add" />
-      <label for="add-agent-name">Name</label>
-      <input id="add-agent-name" name="name" maxlength="64" placeholder="claude-code" autocomplete="off" />
-      <label for="add-agent-days">Token lasts</label>
-      ${daysSelect("add-agent-days")}
+      <div class="row">
+        <label for="add-agent-name">Name</label>
+        <input id="add-agent-name" name="name" maxlength="64" placeholder="claude-code" autocomplete="off" />
+      </div>
+      <div class="row">
+        <label for="add-agent-days">Token lasts</label>
+        ${daysSelect("add-agent-days")}
+      </div>
       ${ceremonyButton({
         callback: { handler: "manageAgent" },
         intent: "manage-agent",

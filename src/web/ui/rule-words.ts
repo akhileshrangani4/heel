@@ -79,14 +79,32 @@ function spelled(condition: Condition): string {
   return both(parts);
 }
 
+/** Reads by service, for actions the summaries have no phrase for. */
+const READS: Readonly<Record<string, string>> = {
+  "github.read": "read GitHub",
+  "calendar.read": "read calendars",
+  "linear.read": "read Linear",
+  "notion.read": "read Notion",
+  "slack.read": "read Slack",
+  "stripe.read": "read Stripe",
+  "email.read": "read email",
+};
+
 function actionWords(action: string): string {
-  return ACTION_PHRASES[action] ?? `do ${action}`;
+  return ACTION_PHRASES[action] ?? READS[action] ?? `do ${action}`;
 }
 
 /** What the rule lets or stops the agent do, and which keys that used up. */
 function doing(match: Record<string, Condition>): { what: string; used: string[] } {
   if (match["action"] !== undefined) {
     const words = listed(match["action"], actionWords);
+    // A tool named alongside it narrows it to that one: "(with get issue)", not "when tool is get_issue".
+    const tool =
+      match["tool"] === undefined
+        ? null
+        : listed(match["tool"], (t) => t.replace(/[_-]+/g, " ").trim());
+    if (words !== null && tool !== null)
+      return { what: `${words} (with ${tool})`, used: ["action", "tool"] };
     return {
       what: words ?? `do anything whose action ${spelled(match["action"])}`,
       used: ["action"],

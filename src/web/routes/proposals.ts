@@ -238,7 +238,7 @@ export function proposalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     return renderPage(c, {
       title: "Rule history",
       viewer: viewerOf(session),
-      current: "activity",
+      current: "rule-history",
       body: ruleHistoryPage({
         changes: listRuleChanges(deps.db, deps.orgId, everyone ? null : [session.userId]),
         now: deps.now(),

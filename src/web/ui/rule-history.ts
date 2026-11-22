@@ -41,7 +41,6 @@ export function ruleHistoryPage(props: {
   everyone: boolean;
 }): Html {
   return html`<h1>Rule history</h1>
-    <p><a href="/rules">See and change your rules</a></p>
     <p class="muted">
       Every change to ${props.everyone ? "the rules files" : "your rules file"}, newest first:
       those added from a proposal, with who proposed and who added them, and those made outside

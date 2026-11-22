@@ -92,7 +92,7 @@ export function rulesEditorRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     return renderPage(c, {
       title: "Rules",
       viewer: viewerOf(session),
-      current: "activity",
+      current: "rules",
       body: rulesEditorPage({
         file:
           file === null
@@ -126,6 +126,11 @@ export function rulesEditorRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       diff: lineDiff(file.text, after.text),
       ...rulesCheck(after.text, file.display),
       trusted,
+      // toString can respace a file even when the decision is the same, so ask the rule too.
+      unchanged:
+        after.text === file.text ||
+        (edit.kind === "decision" &&
+          viewRules(file.text, file.display).rules[edit.index]?.decision === edit.decision),
       view: viewRules(after.text, file.display),
     };
   }
