@@ -174,6 +174,11 @@ export const AdminRequestSchema = z.discriminatedUnion("method", [
     params: z.strictObject({ alias: z.string().min(1).max(64) }),
   }),
   z.strictObject({
+    /** `heel user add` (2.9): a new member by name, on an install without a sign-in provider. */
+    method: z.literal("user.add"),
+    params: z.strictObject({ name: z.string().min(1).max(64) }),
+  }),
+  z.strictObject({
     /** `heel user enroll`: a one-time passkey enrollment link (bootstrap and recovery, Q-N2). */
     method: z.literal("user.enroll"),
     params: z.strictObject({ name: z.string().min(1).max(128) }),

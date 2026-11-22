@@ -172,6 +172,8 @@ export const USAGE = `usage:
                                           who decides its asks (default: the owner);
                                           no --user or --group clears that scope
   heel account sharing <alias>
+  heel user add <name>                    add a person by name (installs without a sign-in
+                                          provider); then give them an enrollment link
   heel user enroll <user>                 print a one-time passkey enrollment link
                                           (valid 15 minutes; also adds a device or
                                           recovers a lost passkey)
@@ -1001,6 +1003,15 @@ async function userCommand(args: string[], io: CliIo): Promise<number> {
     parseArgs({ args, options: CONFIG_OPTION, allowPositionals: true, strict: true }),
   );
   const [subcommand, ...rest] = positionals;
+  if (subcommand === "add") {
+    const name = onePositional(rest, "name");
+    await admin(configFrom(io, values.config), { method: "user.add", params: { name } });
+    io.stdout.write(
+      `Added "${name}". Next, make their passkey link: heel user enroll ${name}\n` +
+        "(or from the People page in the web app).\n",
+    );
+    return EXIT.ok;
+  }
   if (subcommand !== "enroll") {
     throw new UsageError(
       subcommand === undefined

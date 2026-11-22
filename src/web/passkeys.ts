@@ -303,7 +303,8 @@ export type AssertionSubject =
         | "rules"
         | "connection"
         | "manage"
-        | "account";
+        | "account"
+        | "people";
       userId: string;
     };
 
