@@ -31,9 +31,11 @@ function fakeGitHub() {
     inFlight -= 1;
     const issue = /^\/repos\/acme\/web\/issues\/(\d+)$/.exec(url.pathname);
     if (issue !== null) {
+      const n = Number(issue[1]);
+      // Issue 99 is huge: past what one parallel result may carry.
       return Response.json({
-        number: Number(issue[1]),
-        title: `Issue ${issue[1]}`,
+        number: n,
+        title: n === 99 ? "x".repeat(5 * 1024 * 1024) : `Issue ${n}`,
         state: "open",
         user: { login: "dev" },
         labels: [],
@@ -166,4 +168,22 @@ describe("parallel reads in code mode (C4)", () => {
     expect(out.filter((v) => typeof v === "number")).toHaveLength(2);
     void run;
   });
+
+  it("hands a result too large to send back as a RuntimeError at its await, and the rest as usual", async () => {
+    const { run } = await setUp(READS);
+    const answer = await run(
+      [
+        "import asyncio",
+        "import github",
+        "async def one(n):",
+        "    try:",
+        "        return len((await github.get_issue_async(repo='acme/web', number=n))['title'])",
+        "    except RuntimeError as e:",
+        "        return str(e)",
+        "await asyncio.gather(one(1), one(99), one(2))",
+      ].join("\n"),
+    );
+    expect(answer.status).toBe("completed");
+    expect(answer.output).toEqual([7, "the result is too large for code mode", 7]);
+  }, 30_000);
 });

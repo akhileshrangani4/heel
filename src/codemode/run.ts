@@ -15,6 +15,13 @@ import {
 
 /** How many of a script's parallel calls heel runs at once (C4). */
 export const MAX_PARALLEL = 8;
+/**
+ * The most of one parallel result, and of one batch, heel hands back, as
+ * JSON: a batch goes to the worker as one line (MAX_LINE). Past either, the
+ * result is a RuntimeError at its `await` instead.
+ */
+export const MAX_FUTURE_RESULT_CHARS = 4 * 1024 * 1024;
+export const MAX_FUTURE_BATCH_CHARS = 12 * 1024 * 1024;
 
 /**
  * Runs one code-mode script (D6a; spec: Code mode). Each host call in the
@@ -260,7 +267,24 @@ export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
       for (let id = queue.shift(); id !== undefined; id = queue.shift()) await one(id);
     };
     await Promise.all(Array.from({ length: Math.min(MAX_PARALLEL, queue.length) }, lane));
-    return { results, stop };
+    return { results: capped(results), stop };
+  };
+
+  /** Results too large to hand back become errors at their `await`; so do those past the batch cap. */
+  const capped = (results: FutureResult[]): FutureResult[] => {
+    let total = 0;
+    return results.map((r) => {
+      const size = JSON.stringify(r).length;
+      if (size <= MAX_FUTURE_RESULT_CHARS && total + size <= MAX_FUTURE_BATCH_CHARS) {
+        total += size;
+        return r;
+      }
+      return {
+        callId: r.callId,
+        errorType: "RuntimeError",
+        message: "the result is too large for code mode",
+      };
+    });
   };
 
   let step: Step = await input.worker.start(
