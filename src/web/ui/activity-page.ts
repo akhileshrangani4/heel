@@ -58,6 +58,8 @@ export function activityPage(props: {
   suggestions: readonly Suggestion[];
   /** Rules suggested from what the viewer decided (2.10), as cards. */
   learned?: Html | "";
+  /** An admin: they may download the whole audit log. */
+  canExport?: boolean;
 }): Html {
   const latest = props.rows[0]?.id ?? 0;
   const params = (extra: Record<string, string>) =>
@@ -117,6 +119,25 @@ export function activityPage(props: {
     )}
     ${props.nextBefore === null ? "" : html`<p><a href="/activity?${params({ before: String(props.nextBefore) })}">Older</a></p>`}
     ${props.learned ?? ""}
+    ${
+      props.canExport === true
+        ? html`<details class="audit-export">
+          <summary>Download the audit log</summary>
+          <p class="muted">Every decision for everyone on this heel, one JSON object per line, as <code>heel audit export</code> writes it. Leave the days empty for all of it.</p>
+          <form method="get" action="/activity/export" class="stack-form">
+            <div class="row">
+              <label for="export-since">From (day)</label>
+              <input id="export-since" name="since" type="date" />
+            </div>
+            <div class="row">
+              <label for="export-until">To (day, included)</label>
+              <input id="export-until" name="until" type="date" />
+            </div>
+            <button type="submit" class="btn btn-secondary">Download (.jsonl)</button>
+          </form>
+        </details>`
+        : ""
+    }
     <h2>Suggested from Watch mode</h2>
     <p class="muted">
       Drawn from Watch mode: calls your rules would have stopped, grouped by account and

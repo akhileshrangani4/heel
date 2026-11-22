@@ -1,6 +1,8 @@
 import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
+import { AUDIT_EXPORT_MAX_PAGE } from "../../admin/protocol.ts";
+import { exportAuditPage } from "../../audit/export.ts";
 import { AUDIT_KINDS, type AuditKind } from "../../core/audit.ts";
 import { suggestRules } from "../../core/suggestions.ts";
 import { listAgents, workRootsOf } from "../../gateway/agents.ts";
@@ -40,6 +42,13 @@ const STREAM_LIFETIME_MS = 10 * 60_000;
 
 function visibleOwners(session: SessionView): string[] | null {
   return session.role === "admin" ? null : [session.userId];
+}
+
+/** A day from a date field (`YYYY-MM-DD`, UTC), or null for none or a bad one. */
+function dayOf(text: string | undefined): Date | null {
+  if (text === undefined || !/^\d{4}-\d{2}-\d{2}$/.test(text)) return null;
+  const day = new Date(`${text}T00:00:00Z`);
+  return Number.isNaN(day.getTime()) ? null : day;
 }
 
 function isKind(value: string | undefined): value is AuditKind {
@@ -167,6 +176,7 @@ export function activityRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
         nextBefore: rows.length === PAGE ? (rows.at(-1)?.id ?? null) : null,
         hidden: deps.hiddenCounts === undefined ? null : deps.hiddenCounts(),
         suggestions: suggestRules(stopped),
+        canExport: session.role === "admin",
         learned: suggestionCards(
           suggestionsOf(deps, session, deps.now()),
           session.csrfToken,
@@ -174,6 +184,53 @@ export function activityRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
         ),
       }),
       script: ACTIVITY_SCRIPT,
+    });
+  });
+
+  /**
+   * The whole audit log as JSON Lines, as `heel audit export` writes it
+   * (spec: Teams, "Audit"): admins only, since it's everyone's. Optional
+   * `since` and `until` are days, both included. Paged from one snapshot, so
+   * rows written meanwhile don't shift it.
+   */
+  app.get("/activity/export", signedIn, (c) => {
+    const session = c.get("session");
+    if (session.role !== "admin") return c.text("Only an admin exports the audit log.", 403);
+    const since = dayOf(c.req.query("since"));
+    const untilDay = dayOf(c.req.query("until"));
+    const until = untilDay === null ? null : new Date(untilDay.getTime() + DAY_MS);
+    deps.log.warn({ by: session.userId }, "audit log exported from the web app");
+    let afterId = 0;
+    let throughId: number | undefined;
+    let done = false;
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (done) {
+          controller.close();
+          return;
+        }
+        const page = exportAuditPage(deps.db, deps.orgId, {
+          afterId,
+          limit: AUDIT_EXPORT_MAX_PAGE,
+          ...(since === null ? {} : { since }),
+          ...(until === null ? {} : { until }),
+          ...(throughId === undefined ? {} : { throughId }),
+        });
+        if (page.lines.length > 0) controller.enqueue(encoder.encode(page.lines.join("")));
+        afterId = page.nextAfterId;
+        throughId = page.throughId;
+        done = page.done;
+        if (done) controller.close();
+      },
+    });
+    const day = deps.now().toISOString().slice(0, 10);
+    return new Response(body, {
+      headers: {
+        "content-type": "application/x-ndjson; charset=utf-8",
+        "content-disposition": `attachment; filename="heel-audit-${day}.jsonl"`,
+        "cache-control": "no-store",
+      },
     });
   });
 
