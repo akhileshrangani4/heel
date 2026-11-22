@@ -1,14 +1,28 @@
 import { Hono } from "hono";
-import { type HumanPlaneDeps, jsonBody, renderPage, stringField } from "../http.ts";
+import { pushSubscriptionsOf } from "../../store/notifications.ts";
+import {
+  type HumanPlaneDeps,
+  jsonBody,
+  renderPage,
+  requireSession,
+  type SignedInEnv,
+  setSessionCookie,
+  stringField,
+  viewerOf,
+} from "../http.ts";
 import { findEnrollment, type PasskeyRefusal } from "../passkeys.ts";
+import { startSession } from "../sessions.ts";
 import { clientScript } from "../ui/client.ts";
 import { enrollPage } from "../ui/enroll.ts";
+import { welcomePage } from "../ui/welcome.ts";
 
 /**
  * One-time enrollment links (spec: Q-N2). `heel user enroll <user>` on the
  * host prints `/enroll/<token>`; the token is the only thing that lets this
  * page register a passkey, it works once, and it lasts 15 minutes. No
- * session is needed or started: after enrolling, the person signs in.
+ * session is needed. Making the passkey proves the person holds it, so heel
+ * signs them in and shows the welcome page, where they turn on notifications
+ * for this device (roadmap 2.7). With team sign-in (OIDC) they sign in there.
  *
  * - `GET /enroll/:token` shows the page.
  * - `POST /enroll/:token/options` returns WebAuthn creation options.
@@ -65,8 +79,33 @@ export function enrollRoutes(deps: HumanPlaneDeps): Hono {
       return c.json({ ok: false, message: REFUSALS[finished.reason] ?? "Enrollment failed." }, 400);
     }
     deps.log.info({ userId: finished.userId }, "passkey enrolled");
-    return c.json({ ok: true, next: "/sign-in?enrolled" });
+    if (deps.oidc != null) return c.json({ ok: true, next: "/sign-in?enrolled" });
+    const started = startSession(deps.db, {
+      orgId: deps.orgId,
+      userId: finished.userId,
+      method: "passkey",
+      now: deps.now(),
+    });
+    setSessionCookie(c, deps, started);
+    return c.json({ ok: true, next: "/welcome" });
   });
+
+  // Right after enrolling (2.7): turn on notifications for this device, then go to Approvals.
+  const signedIn = new Hono<SignedInEnv>();
+  signedIn.get("/welcome", requireSession(deps), (c) => {
+    const session = c.get("session");
+    return renderPage(c, {
+      title: "Welcome",
+      viewer: viewerOf(session),
+      current: "approvals",
+      body: welcomePage({
+        vapidPublicKey: deps.vapidPublicKey,
+        devices: pushSubscriptionsOf(deps.db, session.userId).length,
+      }),
+      script: clientScript(session.csrfToken),
+    });
+  });
+  app.route("/", signedIn);
 
   return app;
 }

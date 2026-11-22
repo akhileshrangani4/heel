@@ -69,6 +69,7 @@ describe("heel serve", () => {
         pid: process.pid,
         background: false,
         passkeys: 0,
+        notifiedDevices: 0,
       },
     });
     expect(output()).toContain("agent plane refused");

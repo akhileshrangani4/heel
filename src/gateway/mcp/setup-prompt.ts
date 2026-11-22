@@ -65,9 +65,9 @@ Rules for the whole task:
 
 2. If heel --version fails, install heel: npm install -g useheel
 
-3. Set heel up and start it: heel init --yes, then heel start. Run heel status to check it's running.
+3. Ask me where I'll approve from: this computer only, or my phone and other devices over Tailscale. Tailscale has to be installed and signed in on this machine already; don't install it yourself, and if it isn't there, say so and offer this computer for now. Then set heel up and start it: heel init --yes --approve-from this-computer (or --approve-from tailscale), then heel start. If heel init stops with a problem, tell me what it says. Run heel status to check it's running.
 
-4. My passkey: run heel user enroll owner and give me the link it prints. Ask me to open it and choose Create a passkey. Wait until I say I'm done, then run heel status and check that Passkeys is 1 or more.
+4. My passkey: run heel user enroll owner and give me the link it prints. Ask me to open it (on my phone, if I chose Tailscale) and choose Create a passkey, then Turn on notifications on the page that follows. Wait until I say I'm done, then run heel status and check that Passkeys is 1 or more.
 
 5. Add yourself as an agent: heel agent add <a short name for you, like claude-code> --client claude-code. heel adds itself to Claude Code for every project, and the token goes straight into Claude Code's config, so you never see it. If heel says it couldn't, run the command it prints instead. For Codex, use --client codex and run the commands it prints. For any other app, leave out --client and tell me the MCP URL to add, with the token as a bearer token.
 

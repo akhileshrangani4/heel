@@ -24,7 +24,7 @@ import type { HeelDb } from "../store/db.ts";
 import { LOCAL_OWNER_NAME } from "../store/install.ts";
 import { setUserEmail } from "../store/notifications.ts";
 import { ADMIN_SOCKET_ACTOR, listPauses, type PauseKey, pause } from "../store/pauses.ts";
-import { accounts, agents, passkeys, users } from "../store/schema.ts";
+import { accounts, agents, passkeys, pushSubscriptions, users } from "../store/schema.ts";
 import {
   SharingError,
   setApprovers,
@@ -185,6 +185,13 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
         // For `heel status`, and an agent setting heel up: whether anyone can approve yet.
         passkeys:
           db.select({ n: count() }).from(passkeys).where(eq(passkeys.orgId, orgId)).get()?.n ?? 0,
+        // Devices that get approval notifications (2.7).
+        notifiedDevices:
+          db
+            .select({ n: count() })
+            .from(pushSubscriptions)
+            .where(eq(pushSubscriptions.orgId, orgId))
+            .get()?.n ?? 0,
       });
     case "agent.add": {
       const ownerId = resolveOwner(db, orgId, request.params.owner);
