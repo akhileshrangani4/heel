@@ -7,7 +7,7 @@ import {
   Server,
   type Tool,
 } from "@modelcontextprotocol/server";
-import { and, eq } from "drizzle-orm";
+import { and, eq, gt } from "drizzle-orm";
 import { BackgroundRunner } from "../../codemode/background.ts";
 import {
   type ClaimedScript,
@@ -200,6 +200,14 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
   const approvalWait = deps.approvalWait ?? NO_APPROVAL_WAIT;
   /** Calls held right now, per agent. */
   const heldCalls = new Map<string, number>();
+  /**
+   * Each tools/call in flight, by agent and JSON-RPC id, so a client's
+   * `notifications/cancelled` (which arrives as its own request, to another
+   * server) stops a held call: approved later, it then doesn't run unseen.
+   */
+  const inFlight = new Map<string, AbortController>();
+  const flightKey = (agentId: string, requestId: string | number) =>
+    `${agentId}\0${typeof requestId}:${requestId}`;
 
   /**
    * Holds the request until `decided()` or the call's window ends (2.12);
@@ -702,11 +710,18 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
 
   /** The ids of what this agent asked for that still waits for its owner, as one string. */
   function waitingKey(agent: AuthenticatedAgent): string {
-    // Read-only and narrow, as it runs every poll; expiring rows is left to heelAccounts.
+    // Read-only and narrow, as it runs every poll; marking rows expired is left to heelAccounts.
+    const at = now();
     const requests = deps.db
       .select({ id: agentRequests.id })
       .from(agentRequests)
-      .where(and(eq(agentRequests.agentId, agent.agentId), eq(agentRequests.status, "pending")))
+      .where(
+        and(
+          eq(agentRequests.agentId, agent.agentId),
+          eq(agentRequests.status, "pending"),
+          gt(agentRequests.expiresAt, at),
+        ),
+      )
       .all();
     const proposals = deps.db
       .select({ id: ruleProposals.id })
@@ -716,6 +731,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
           eq(ruleProposals.agentId, agent.agentId),
           eq(ruleProposals.origin, "agent"),
           eq(ruleProposals.status, "pending"),
+          gt(ruleProposals.expiresAt, at),
         ),
       )
       .all();
@@ -917,13 +933,21 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
         ],
       };
     });
+    // A cancel for one of this agent's calls in flight stops it (see inFlight).
+    server.setNotificationHandler("notifications/cancelled", (notification) => {
+      const { requestId } = notification.params;
+      if (requestId !== undefined) inFlight.get(flightKey(agent.agentId, requestId))?.abort();
+    });
     server.setRequestHandler("tools/call", async (request, ctx) => {
       // The SDK hands the request's `_meta` (and its progress token) on the context.
       const progressToken = ctx.mcpReq._meta?.progressToken;
       const started = Date.now();
+      const cancel = new AbortController();
+      const key = flightKey(agent.agentId, ctx.mcpReq.id);
+      inFlight.set(key, cancel);
       const held: Held = {
         agentId: agent.agentId,
-        signal: ctx.mcpReq.signal,
+        signal: AbortSignal.any([ctx.mcpReq.signal, cancel.signal]),
         until: Date.now() + approvalWait.windowMs(agent.clientName ?? null),
         // Progress when the client asked for it, else a log line: either keeps the stream open.
         beat: () =>
@@ -944,11 +968,15 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
                 },
           ),
       };
-      return withExpiryNote(
-        await callTool(agent, scope, request.params, held),
-        agent,
-        deps.now?.() ?? new Date(),
-      );
+      try {
+        return withExpiryNote(
+          await callTool(agent, scope, request.params, held),
+          agent,
+          deps.now?.() ?? new Date(),
+        );
+      } finally {
+        if (inFlight.get(key) === cancel) inFlight.delete(key);
+      }
     });
     return server;
   });

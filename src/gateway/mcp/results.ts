@@ -80,7 +80,7 @@ export function decisionFor(
         status: "pending",
         approvalId: result.approvalId,
         check: "heel_status",
-        message: `Approval needed: ${what}. heel held the call while it waited and no one has decided yet. Check with heel_status, then re-send the same call once it's approved.`,
+        message: `Approval needed: ${what}. No one has decided yet. Check with heel_status, then re-send the same call once it's approved.`,
       };
     case "denied":
       return {

@@ -74,12 +74,33 @@ describe("a call that needs approval waits for the decision (2.12)", () => {
     expect(first.structuredContent).toMatchObject({
       status: "pending",
       check: "heel_status",
-      message: expect.stringMatching(/no one has decided yet/),
+      message: expect.stringMatching(/No one has decided yet/),
     });
     await decideWhenAsked(h, "approve");
     const again = await client.callTool({ name: "delete_note", arguments: { id: "n1" } });
     expect(again.isError).toBeFalsy();
     expect(h.upstream.calls).toHaveLength(1);
+  });
+
+  it("stops waiting when the client cancels the call, so a later approval doesn't run it unseen", async () => {
+    const h = await mcpHarness({ owner: RULES, approvalWait: wait(5_000) });
+    const client = await h.connect("/mcp/notes");
+    const controller = new AbortController();
+    const call = client.callTool(
+      { name: "delete_note", arguments: { id: "n1" } },
+      { signal: controller.signal },
+    );
+    while (h.t.db.select().from(approvals).get() === undefined) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    controller.abort();
+    await expect(call).rejects.toThrow();
+    // Give the cancel time to arrive and the held call time to let go.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await decideWhenAsked(h, "approve");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(h.upstream.calls).toEqual([]);
+    expect(h.t.db.select().from(approvals).get()?.status).toBe("approved");
   });
 
   it("tells a client that asked for progress that it's still waiting", async () => {
