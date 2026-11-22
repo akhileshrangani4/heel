@@ -7,7 +7,14 @@ import {
   publicHostProblem,
   REQUESTABLE_SERVICES,
 } from "../../requests/connection.ts";
-import { accounts } from "../../store/schema.ts";
+import { accounts, users } from "../../store/schema.ts";
+import {
+  type Principal,
+  SharingError,
+  setApprovers,
+  shareAccount,
+  unshareAccount,
+} from "../../store/sharing.ts";
 import { ConnectError, connectAccount, isValidAlias } from "../../vault/connect.ts";
 import { removeAccount, setAccountCredential } from "../../vault/manage.ts";
 import { accountNotes } from "../account-notes.ts";
@@ -31,6 +38,10 @@ import type { SessionView } from "../sessions.ts";
  * A pasted key is read from the confirm body only, after the passkey, and goes
  * to the vault and nowhere else: not the challenge, a log line, or a redirect.
  * A key the service turns down is never stored.
+ *
+ * Sharing an account and naming its approvers (D13b, as `heel account share`
+ * and `heel account approvers`) also ask for a passkey: both give someone
+ * else a say. Unsharing only takes access away, so it's a plain form.
  */
 
 const MAX_KEY_CHARS = 8_192;
@@ -54,6 +65,54 @@ export function manageAccountRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
         )
         .get() ?? null
     );
+  }
+
+  /** An account this person owns, by its id (what a passkey signed). */
+  function ownedById(session: SessionView, id: unknown) {
+    if (typeof id !== "string") return null;
+    return (
+      deps.db
+        .select({ id: accounts.id, alias: accounts.alias, provider: accounts.provider })
+        .from(accounts)
+        .where(
+          and(
+            eq(accounts.orgId, deps.orgId),
+            eq(accounts.id, id),
+            eq(accounts.ownerId, session.userId),
+          ),
+        )
+        .get() ?? null
+    );
+  }
+
+  /** Someone else on this heel who can be named, by name; null for anyone else. */
+  function personNamed(session: SessionView, name: string) {
+    const user = deps.db
+      .select({ id: users.id, name: users.name, disabledAt: users.disabledAt })
+      .from(users)
+      .where(and(eq(users.orgId, deps.orgId), eq(users.name, name)))
+      .get();
+    return user === undefined || user.disabledAt !== null || user.id === session.userId
+      ? null
+      : user;
+  }
+
+  function personById(id: string) {
+    const user = deps.db
+      .select({ name: users.name, disabledAt: users.disabledAt })
+      .from(users)
+      .where(and(eq(users.orgId, deps.orgId), eq(users.id, id)))
+      .get();
+    return user === undefined || user.disabledAt !== null ? null : user.name;
+  }
+
+  /** A group as the IdP sends it, and only where people sign in with one. */
+  function groupProblem(name: string): string | null {
+    if (deps.oidc == null) return "Groups come from a sign-in provider, and this heel has none.";
+    if (name === "" || name.length > 256 || name.trim() !== name) {
+      return "A group name is 1 to 256 characters, exactly as your sign-in provider sends it.";
+    }
+    return null;
   }
 
   function intentOf(session: SessionView, body: Record<string, unknown> | null) {
@@ -100,7 +159,95 @@ export function manageAccountRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       // The account itself, not just its name: one removed and reconnected meanwhile isn't it.
       return { binding: { op, alias, account: account.id } };
     }
+    if (op === "share") {
+      const account = owned(session, alias);
+      if (account === null) return { problem: "There's no account of yours by that name." };
+      const kind = stringField(body, "kind") === "group" ? "group" : "user";
+      const name = stringField(body, kind === "group" ? "group" : "person") ?? "";
+      if (kind === "group") {
+        const problem = groupProblem(name);
+        if (problem !== null) return { problem };
+        return { binding: { op, account: account.id, kind, principal: name } };
+      }
+      const person = personNamed(session, name);
+      if (person === null) return { problem: "Pick someone on this heel to share it with." };
+      return { binding: { op, account: account.id, kind, principal: person.id } };
+    }
+    if (op === "approvers") {
+      const account = owned(session, alias);
+      if (account === null) return { problem: "There's no account of yours by that name." };
+      const repo = (stringField(body, "repo") ?? "").trim();
+      if (repo !== "" && account.provider !== "github" && account.provider !== "cli:gh") {
+        return { problem: "Approvers for one repo are only for GitHub accounts." };
+      }
+      if (repo !== "" && !/^[a-z0-9_.-]+\/[a-z0-9_.-]+$/i.test(repo)) {
+        return { problem: "A repo is owner/name, like nodejs/node." };
+      }
+      const approvers: { kind: "user" | "group"; principal: string }[] = [];
+      for (const [field, value] of Object.entries(body ?? {})) {
+        if (!field.startsWith("user:") || value !== "on") continue;
+        const person = personNamed(session, field.slice("user:".length));
+        if (person === null) return { problem: "Someone you picked isn't on this heel any more." };
+        approvers.push({ kind: "user", principal: person.id });
+      }
+      const groups = (stringField(body, "groups") ?? "")
+        .split(",")
+        .map((g) => g.trim())
+        .filter((g) => g !== "");
+      for (const group of groups) {
+        const problem = groupProblem(group);
+        if (problem !== null) return { problem };
+        approvers.push({ kind: "group", principal: group });
+      }
+      if (approvers.length > 64) return { problem: "That's more approvers than heel keeps." };
+      return {
+        binding: { op, account: account.id, repo, approvers: JSON.stringify(approvers) },
+      };
+    }
     return { problem: "Unknown change." };
+  }
+
+  /** Shares an account, or names its approvers, exactly as a passkey signed it. */
+  function applySharing(
+    session: SessionView,
+    binding: Readonly<Record<string, string>>,
+  ): { ok: true; alias: string } | { ok: false; message: string } {
+    const account = ownedById(session, binding["account"]);
+    if (account === null) return { ok: false, message: "That change isn't yours to make." };
+    // A person by the id that was signed, still on this heel: never by a name read now.
+    const principalOf = (kind: unknown, principal: unknown): Principal | null => {
+      if (typeof principal !== "string") return null;
+      if (kind === "group")
+        return groupProblem(principal) === null ? { kind, name: principal } : null;
+      if (kind !== "user" || principal === session.userId) return null;
+      const name = personById(principal);
+      return name === null ? null : { kind, name };
+    };
+    if (binding["op"] === "share") {
+      const principal = principalOf(binding["kind"], binding["principal"]);
+      if (principal === null)
+        return { ok: false, message: "That person isn't on this heel any more." };
+      shareAccount(deps.db, deps.orgId, account.alias, principal, deps.now());
+      return { ok: true, alias: account.alias };
+    }
+    let listed: unknown;
+    try {
+      listed = JSON.parse(binding["approvers"] ?? "");
+    } catch {
+      listed = null;
+    }
+    if (!Array.isArray(listed)) return { ok: false, message: "That change isn't yours to make." };
+    const approvers: Principal[] = [];
+    for (const entry of listed as { kind?: unknown; principal?: unknown }[]) {
+      const principal = principalOf(entry?.kind, entry?.principal);
+      if (principal === null) {
+        return { ok: false, message: "Someone you picked isn't on this heel any more." };
+      }
+      approvers.push(principal);
+    }
+    const repo = binding["repo"] === "" ? null : (binding["repo"] ?? null);
+    setApprovers(deps.db, deps.orgId, account.alias, repo, approvers, deps.now());
+    return { ok: true, alias: account.alias };
   }
 
   app.post("/connections/manage/challenge", signedIn, requireCsrfHeader(), async (c) => {
@@ -132,6 +279,24 @@ export function manageAccountRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     if (!verified.ok) return c.json({ ok: false, message: "The passkey check didn't pass." }, 401);
     // What to do comes from the signed challenge; the one thing read from this body is a key.
     const { op, service, alias, url, oauth, account } = verified.binding;
+    if (op === "share" || op === "approvers") {
+      try {
+        const done = applySharing(session, verified.binding);
+        if (!done.ok) return c.json({ ok: false, message: done.message }, 409);
+        deps.log.warn(
+          { account: done.alias, op, by: session.userId },
+          "account sharing changed from the web app",
+        );
+        return c.json({
+          ok: true,
+          next: `/connections?note=${accountNotes(deps).add(session.userId, { kind: "sharing", alias: done.alias, unchecked: false })}`,
+        });
+      } catch (error) {
+        if (error instanceof SharingError)
+          return c.json({ ok: false, message: error.message }, 409);
+        throw error;
+      }
+    }
     if (typeof alias !== "string")
       return c.json({ ok: false, message: "That change isn't yours to make." }, 409);
     const pasted = stringField(body, "key")?.trim() ?? "";
@@ -221,6 +386,30 @@ export function manageAccountRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     deps.log.warn({ account: alias, by: session.userId }, "account removed from the web app");
     const note = accountNotes(deps).add(session.userId, {
       kind: "removed",
+      alias,
+      unchecked: false,
+    });
+    return c.redirect(`/connections?note=${note}`, 303);
+  });
+
+  // Only takes access away: a plain form, no passkey.
+  app.post("/connections/:alias/unshare", signedIn, requireCsrfField(), async (c) => {
+    const session = c.get("session");
+    const alias = c.req.param("alias");
+    if (owned(session, alias) === null)
+      return c.text("There's no account of yours by that name.", 404);
+    const form = await c.req.parseBody();
+    const kind = form["kind"] === "group" ? "group" : "user";
+    const name = typeof form["name"] === "string" ? form["name"] : "";
+    try {
+      unshareAccount(deps.db, deps.orgId, alias, { kind, name });
+    } catch (error) {
+      if (error instanceof SharingError) return c.text(error.message, 400);
+      throw error;
+    }
+    deps.log.warn({ account: alias, by: session.userId }, "account unshared from the web app");
+    const note = accountNotes(deps).add(session.userId, {
+      kind: "sharing",
       alias,
       unchecked: false,
     });

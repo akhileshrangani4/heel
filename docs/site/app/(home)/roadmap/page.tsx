@@ -137,7 +137,7 @@ const PHASES: Phase[] = [
       ],
       [
         'everything in the web app',
-        'anything the cli can do, the web app can do too: agents, accounts, rules, people and audit export, each change behind your passkey. agents, accounts and rules are in.',
+        'anything the cli can do, the web app can do too: agents, accounts, rules, people and audit export, each change behind your passkey. agents, accounts (with sharing and approvers) and rules are in.',
         'started',
       ],
       [
