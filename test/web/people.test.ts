@@ -107,6 +107,19 @@ describe("people in the web app (2.9)", () => {
     expect(row?.notBefore).not.toBeNull();
   });
 
+  it("a link for someone with no passkey yet works at once", async () => {
+    const { h, owner } = await setUp();
+    h.addUser("pat", "member");
+    await people(h, owner, { op: "link", name: "pat" });
+    const pat = h.t.db.select().from(users).where(eq(users.name, "pat")).get();
+    const row = h.t.db
+      .select()
+      .from(enrollments)
+      .all()
+      .find((e) => e.userId === pat?.id);
+    expect(row?.notBefore).toBeNull();
+  });
+
   it("a member can't find out who else is here from the email form", async () => {
     const { h } = await setUp();
     h.addUser("pat", "member");
