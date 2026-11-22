@@ -216,10 +216,7 @@ export function agentForClient(
   const before = sameNamedAgent(tx, input);
   if (before !== null) {
     // The agent moves to the new client; the old client's tokens stop working.
-    tx.update(agents)
-      .set({ oauthClientId: input.client.id })
-      .where(eq(agents.id, before.id))
-      .run();
+    tx.update(agents).set({ oauthClientId: input.client.id }).where(eq(agents.id, before.id)).run();
     tx.update(agentTokens)
       .set({ revokedAt: input.now })
       .where(and(eq(agentTokens.agentId, before.id), isNull(agentTokens.revokedAt)))
