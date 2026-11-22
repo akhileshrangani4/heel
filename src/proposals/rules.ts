@@ -20,7 +20,6 @@ import {
   type ProposedHide,
   type ProposedRule,
   type ProposedWorkdir,
-  type RuleProposalOrigin,
   ruleProposals,
   users,
 } from "../store/schema.ts";
