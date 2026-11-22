@@ -358,12 +358,35 @@ describe("heel_propose_rules", () => {
     expect(row?.rules[0]?.why).toBe("so I can tidy duplicate notes");
   });
 
+  it("refuses a rule with no why, saying what to add (2.2)", async () => {
+    const h = await mcpHarness({ owner: READS_ALLOWED });
+    const client = await h.connect("/mcp/notes");
+    for (const why of [undefined, "   "]) {
+      const result = await client.callTool({
+        name: "heel_propose_rules",
+        arguments: {
+          rules: [
+            {
+              rule: ruleOf({ match: { tool: "search_notes" } }, "allow"),
+              ...(why === undefined ? {} : { why }),
+            },
+          ],
+        },
+      });
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result.structuredContent)).toContain(
+        "rules.0.why: say in one plain sentence why",
+      );
+    }
+    expect(h.t.db.select().from(ruleProposals).all()).toEqual([]);
+  });
+
   it("answers what's wrong with an invalid rule, and stores nothing", async () => {
     const h = await mcpHarness({ owner: READS_ALLOWED });
     const client = await h.connect("/mcp?tools=direct");
     const result = await client.callTool({
       name: "heel_propose_rules",
-      arguments: { rules: [{ rule: ruleOf({ match: { tooll: "x" } }, "allow") }] },
+      arguments: { rules: [{ rule: ruleOf({ match: { tooll: "x" } }, "allow"), why: "w" }] },
     });
     expect(result.isError).toBe(true);
     expect(JSON.stringify(result.structuredContent)).toContain("tooll");

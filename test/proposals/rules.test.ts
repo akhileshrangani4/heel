@@ -74,7 +74,7 @@ describe("proposing rules", () => {
     const outcome = proposeRules(
       t.db,
       who,
-      { rules: [{ rule: ruleOf({ match: { acount: "x" } }, "allow") }] },
+      { rules: [{ rule: ruleOf({ match: { acount: "x" } }, "allow"), why: "w" }] },
       NOW,
     );
     expect(outcome.ok).toBe(false);
@@ -88,7 +88,7 @@ describe("proposing rules", () => {
     const outcome = proposeRules(
       t.db,
       who,
-      { rules: [{ rule: ruleOf({ match: {}, watch: true }, "allow") }] },
+      { rules: [{ rule: ruleOf({ match: {}, watch: true }, "allow"), why: "w" }] },
       NOW,
     );
     expect(outcome).toMatchObject({ ok: false });
@@ -277,7 +277,7 @@ hide:
     const outcome = proposeRules(
       t.db,
       who,
-      { hide: [{ entry: { email: { form: "x@example.com" } } }] },
+      { hide: [{ entry: { email: { form: "x@example.com" } }, why: "w" }] },
       NOW,
     );
     expect(outcome.ok).toBe(false);
@@ -340,15 +340,25 @@ describe("proposing workdirs", () => {
 
   it("checks only the path's form when proposed, so the agent learns nothing about heel's host", () => {
     const { t, who } = setUp(ASKS);
-    const relative = proposeRules(t.db, who, { workdirs: [{ path: "project" }] }, NOW);
+    const relative = proposeRules(t.db, who, { workdirs: [{ path: "project", why: "w" }] }, NOW);
     expect(relative).toEqual({
       ok: false,
       problems: ["workdirs.0: an absolute, normalized path, such as /home/me/project"],
     });
-    const dotted = proposeRules(t.db, who, { workdirs: [{ path: "/home/me/../etc" }] }, NOW);
+    const dotted = proposeRules(
+      t.db,
+      who,
+      { workdirs: [{ path: "/home/me/../etc", why: "w" }] },
+      NOW,
+    );
     expect(dotted.ok).toBe(false);
     // A path that doesn't exist is the owner's to see, not the agent's.
-    const missing = proposeRules(t.db, who, { workdirs: [{ path: "/no/such/dir" }] }, NOW);
+    const missing = proposeRules(
+      t.db,
+      who,
+      { workdirs: [{ path: "/no/such/dir", why: "w" }] },
+      NOW,
+    );
     expect(missing.ok).toBe(true);
   });
 
@@ -389,7 +399,7 @@ describe("proposing workdirs", () => {
       ["/no/such/dir", "it doesn't exist"],
       [paths.home, "it overlaps heel's own files"],
     ] as const) {
-      const proposed = proposeRules(t.db, who, { workdirs: [{ path }] }, NOW);
+      const proposed = proposeRules(t.db, who, { workdirs: [{ path, why: "w" }] }, NOW);
       if (!proposed.ok) throw new Error(proposed.problems.join("; "));
       const row = findProposal(t.db, t.orgId, proposed.proposalId);
       if (row === null) throw new Error("stored");
@@ -402,7 +412,12 @@ describe("proposing workdirs", () => {
   it("refuses when the agent's workdirs changed after the passkey signed", () => {
     const setup = setUp(ASKS);
     const { t, who, file } = setup;
-    const proposed = proposeRules(t.db, who, { workdirs: [{ path: tempDir("heel-wd-") }] }, NOW);
+    const proposed = proposeRules(
+      t.db,
+      who,
+      { workdirs: [{ path: tempDir("heel-wd-"), why: "w" }] },
+      NOW,
+    );
     if (!proposed.ok) throw new Error(proposed.problems.join("; "));
     const row = findProposal(t.db, t.orgId, proposed.proposalId);
     if (row === null) throw new Error("stored");
