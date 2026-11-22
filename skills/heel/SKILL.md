@@ -18,7 +18,7 @@ If you can't fetch it, the outline is: Node 26.13 or later (if older, tell the u
 - **Never handle a credential.** Don't read, print or copy a key or token's value, and never ask the user to paste one to you. If the user pastes one anyway, don't use it, and tell them to revoke it: it now sits in the chat. To get an account, call `heel_request_connection` with `service`, `alias` (how rules will name it, like `notion-work`) and `why`; the user approves it and signs in or pastes the key on heel's page.
 - **Never route around heel.** Don't fall back to a raw key, a CLI login or another MCP server for an account heel holds.
 - **Give a reason.** On account calls that may need approval, add the optional `heel_reason` argument (one sentence: why this call). It shows on the approval page. It's an extra, never a stand-in for a tool's own arguments. Over HTTP use the `Heel-Reason` header; with `heel run`, `--reason`.
-- **Change rules only by proposing.** Use `heel_propose_rules`, with a short why on each rule. When `heel run` refuses a directory (`workdir_not_allowed`), propose it the same way, as `workdirs: [{ path, why }]`. You can't edit heel's rules or approve anything; only the user's passkey can.
+- **Change rules only by proposing.** Use `heel_propose_rules`, with a short why on each rule. When the same kind of call keeps asking, check `heel_history` first: it shows how the user decided your past requests and any rule heel suggests from them; ask for one with `heel_propose_rules({ suggestion: "<id>" })`. When `heel run` refuses a directory (`workdir_not_allowed`), propose it the same way, as `workdirs: [{ path, why }]`. You can't edit heel's rules or approve anything; only the user's passkey can.
 
 ## What a call's outcome means
 

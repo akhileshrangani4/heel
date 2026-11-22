@@ -33,6 +33,33 @@ export const HEEL_STATUS_TOOL: Tool = {
   },
 };
 
+export const HEEL_HISTORY = "heel_history";
+
+/**
+ * What the calling agent's owner decided about its requests (roadmap 2.10),
+ * so it can propose rules from the pattern. heel's own, like `heel_status`.
+ */
+export const HEEL_HISTORY_TOOL: Tool = {
+  name: HEEL_HISTORY,
+  description:
+    "What your owner decided about your requests that asked for approval, in the last 30 days: " +
+    "grouped by account, action and what a rule can match (repo, calendar, recipients' domains), " +
+    "with how many were approved and denied and on how many days. Only your own requests; never their contents. " +
+    "Also lists rules heel would suggest for you from them (what it would allow or deny, from your own calls), each with an id. To ask for one, call " +
+    'heel_propose_rules with {"suggestion": "<id>"}; nothing changes until your owner adds it with a passkey. ' +
+    "Use it when the same kind of call keeps asking, before proposing a rule.",
+  inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  outputSchema: {
+    type: "object",
+    properties: {
+      window_days: { type: "number" },
+      decisions: { type: "array", items: { type: "object" } },
+      suggestions: { type: "array", items: { type: "object" } },
+      message: { type: "string" },
+    },
+  },
+};
+
 export const HEEL_PROPOSE_RULES = "heel_propose_rules";
 
 /**
@@ -121,6 +148,12 @@ export const HEEL_PROPOSE_RULES_TOOL: Tool = {
       reason: {
         type: "string",
         description: "Optional. What you're working on that needs these changes.",
+      },
+      suggestion: {
+        type: "string",
+        description:
+          "Instead of rules: the id of a rule heel_history suggests for you. heel writes that rule itself " +
+          "and puts it where it belongs in your owner's file; send nothing else with it.",
       },
     },
     required: [],

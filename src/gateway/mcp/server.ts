@@ -7,7 +7,6 @@ import {
   Server,
   type Tool,
 } from "@modelcontextprotocol/server";
-
 import { eq } from "drizzle-orm";
 import { BackgroundRunner } from "../../codemode/background.ts";
 import {
@@ -22,6 +21,8 @@ import {
 import { type CallRecord, runScript, type ScriptStatus } from "../../codemode/run.ts";
 import { accountModule } from "../../codemode/stubs.ts";
 import { type CodeWorker, DEFAULT_LIMITS } from "../../codemode/worker.ts";
+import { LEARNING_WINDOW_DAYS, type LearningThreshold } from "../../core/learning.ts";
+import type { RuleSet } from "../../core/rules/evaluate.ts";
 import type { Logger } from "../../log.ts";
 import { ProposeRulesInput, pendingProposals, proposeRules } from "../../proposals/rules.ts";
 import {
@@ -32,6 +33,7 @@ import {
 import { approvalStatusForAgent } from "../../store/approvals.ts";
 import type { HeelDb } from "../../store/db.ts";
 import { type AccountRecord, findAccount } from "../../store/directory.ts";
+import { historyFor, proposeSuggestion } from "../../store/learning.ts";
 import { SqlitePauseStore } from "../../store/pauses.ts";
 import { agentTokens } from "../../store/schema.ts";
 import { accountsUsableBy } from "../../store/sharing.ts";
@@ -48,6 +50,8 @@ import {
   directName,
   HEEL_ACCOUNTS,
   HEEL_ACCOUNTS_TOOL,
+  HEEL_HISTORY,
+  HEEL_HISTORY_TOOL,
   HEEL_PROPOSE_RULES,
   HEEL_PROPOSE_RULES_TOOL,
   HEEL_REQUEST_CONNECTION,
@@ -108,6 +112,8 @@ export interface McpSurfaceDeps {
   parking?: { sealer: Sealer };
   /** Called after an agent proposes rules, to tell its owner. */
   onRuleProposal?: (proposalId: string) => void;
+  /** For `heel_history` (2.10): the rules in force, and when heel suggests rules (null: never). */
+  learning?: { rules: { readonly set: RuleSet | null }; threshold: LearningThreshold | null };
   /** Called after an agent asks for a connection, to tell its owner. */
   onAgentRequest?: (requestId: string) => void;
   /** heel's approval page, named in the setup prompt; the prompt says "heel's approval page" without it. */
@@ -149,6 +155,7 @@ export function lastExpression(output: unknown): { output?: unknown; output_omit
 const HEEL_TOOLS = [
   HEEL_STATUS_TOOL,
   HEEL_ACCOUNTS_TOOL,
+  HEEL_HISTORY_TOOL,
   HEEL_PROPOSE_RULES_TOOL,
   HEEL_REQUEST_CONNECTION_TOOL,
 ];
@@ -432,6 +439,88 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
   }
 
   /** Stores a rule proposal for the agent's owner; the target file is never the agent's choice. */
+  /** The agent's own decided requests and heel's suggestions for it (2.10). */
+  function heelHistory(agent: AuthenticatedAgent): CallToolResult {
+    const { decisions, suggestions } = historyFor(
+      {
+        db: deps.db,
+        rules: deps.learning?.rules.set ?? null,
+        threshold: deps.learning?.threshold ?? null,
+      },
+      agent,
+      now(),
+    );
+    const body = {
+      window_days: LEARNING_WINDOW_DAYS,
+      decisions,
+      suggestions: suggestions.map((s) => ({
+        suggestion: s.key,
+        // Only what heel drew from this agent's own calls: the conditions heel adds from the
+        // owner's rule that asked stay with heel, as the owner's file always does.
+        decision: s.decision,
+        match: s.own,
+        evidence: s.evidence,
+      })),
+      message:
+        suggestions.length === 0
+          ? "No rule to suggest yet. Propose one with heel_propose_rules only if your owner keeps approving the same kind of call."
+          : 'To ask for a suggested rule, call heel_propose_rules with {"suggestion": "<its suggestion id>"}. heel writes the rule, adds the conditions of your owner\'s rule that asked, and places it before that rule; nothing changes until your owner adds it with a passkey.',
+    };
+    return { content: [{ type: "text", text: JSON.stringify(body) }], structuredContent: body };
+  }
+
+  /**
+   * An agent asks for one of heel's suggestions for it (2.10) by id: heel
+   * drafts the rule again from the owner's decisions and places it right
+   * before the rule that asked, exactly as the owner's own Review would.
+   */
+  function proposeSuggestionTool(
+    agent: AuthenticatedAgent,
+    args: Record<string, unknown>,
+    refuse: (body: Record<string, unknown>) => CallToolResult,
+  ): CallToolResult {
+    const key = args["suggestion"];
+    if (typeof key !== "string" || Object.keys(args).length !== 1) {
+      return refuse({
+        status: "invalid",
+        problems: ["suggestion: send only the id of a rule heel_history suggests, as a string"],
+      });
+    }
+    const learning = {
+      db: deps.db,
+      rules: deps.learning?.rules.set ?? null,
+      threshold: deps.learning?.threshold ?? null,
+    };
+    const outcome = proposeSuggestion(
+      learning,
+      { orgId: agent.orgId, userId: agent.ownerId },
+      key,
+      now(),
+      agent.agentId,
+    );
+    if (outcome === null) {
+      return refuse({
+        status: "invalid",
+        problems: ["suggestion: heel_history doesn't suggest that for you now"],
+      });
+    }
+    if (!outcome.ok) return refuse({ status: "invalid", problems: outcome.problems });
+    deps.log.info(
+      { agent: agent.agentName, proposal: outcome.proposalId },
+      "suggested rule proposed",
+    );
+    deps.onRuleProposal?.(outcome.proposalId);
+    const answer = {
+      status: "proposed",
+      proposalId: outcome.proposalId,
+      expiresAt: outcome.expiresAt.toISOString(),
+      message:
+        "Your owner will see heel's suggested rule on heel's approval page and can add it with a passkey. " +
+        "Nothing changes until then.",
+    };
+    return { content: [{ type: "text", text: JSON.stringify(answer) }], structuredContent: answer };
+  }
+
   function proposeRulesTool(
     agent: AuthenticatedAgent,
     args: Record<string, unknown>,
@@ -449,6 +538,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
       provider: "",
     });
     if (paused !== null) return refuse({ status: "paused", scope: paused });
+    if ("suggestion" in args) return proposeSuggestionTool(agent, args, refuse);
     const input = ProposeRulesInput.safeParse(args);
     if (!input.success) {
       return refuse({
@@ -582,6 +672,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     const args = params.arguments ?? {};
     if (params.name === HEEL_STATUS) return heelStatus(agent, args);
     if (params.name === HEEL_ACCOUNTS) return heelAccounts(agent);
+    if (params.name === HEEL_HISTORY) return heelHistory(agent);
     if (params.name === HEEL_PROPOSE_RULES) return proposeRulesTool(agent, args);
     if (params.name === HEEL_REQUEST_CONNECTION) return requestConnectionTool(agent, args);
     if (scope.kind === "code") {

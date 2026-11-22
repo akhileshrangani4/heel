@@ -133,6 +133,8 @@ When you keep approving the same kind of request, heel suggests a rule that woul
 - **Only what you decided counts.** An agent asking over and over earns nothing until you approve, and decisions in one sitting count as one day. Requests org rules asked about aren't counted.
 - **In the file,** the rule's comment says `# Suggested by heel for <agent>: ...`, not that the agent proposed it.
 
+**Agents see the pattern too.** heel's `heel_history` tool tells an agent how you decided its own requests in the last 30 days, grouped the same way (account, action, repo, calendar or recipients' domains, with counts and days), and which rules heel would suggest for it: only what heel drew from its own calls, never the conditions of your rule that asked. It never shows another agent's requests, your rules file, or what a call carried. The agent can then ask for one by its id (`heel_propose_rules` with `{"suggestion": "<id>"}`): heel writes and places the rule itself, exactly as if you'd pressed **Review and add**, and it reaches you like any other proposal.
+
 Change the numbers, or turn suggestions off, in `heel.yaml` ([`learning`](configuration.md)).
 
 ## Hiding what the agent reads

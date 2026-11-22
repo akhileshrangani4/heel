@@ -145,7 +145,7 @@ const PHASES: Phase[] = [
       [
         'it learns from what you approve',
         'approve the same kind of call five times on two different days (you pick the numbers) and heel suggests a rule, kept to that agent and to what those calls had in common, so it stops asking. agents can see the pattern and propose it; you approve with a passkey. only calls through heel count.',
-        'started',
+        'shipped',
       ],
     ],
     gate: 'on a fresh server, one prompt to an agent puts github and gmail behind heel, and all you do is tap approve.',

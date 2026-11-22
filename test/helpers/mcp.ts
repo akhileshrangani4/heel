@@ -106,6 +106,8 @@ export async function mcpHarness(options: {
   slots?: SandboxSlots;
   /** Adds a built-in GitHub account, `github`, answered by this fetch. */
   github?: { fetch: (input: string | URL | Request, init?: RequestInit) => Promise<Response> };
+  /** When heel_history suggests rules (2.10); never without it. */
+  learning?: { decisions: number; days: number };
 }): Promise<McpHarness> {
   const t = testStore();
   const { logger } = captureLogger();
@@ -155,9 +157,10 @@ export async function mcpHarness(options: {
     gmail: null,
     ...(options.github === undefined ? {} : { github: { vault, fetch: options.github.fetch } }),
   });
+  const rules = { set: compileRules({ owner: options.owner }) };
   const pipeline = createPipeline({
     db: t.db,
-    rules: { set: compileRules({ owner: options.owner }) },
+    rules,
     definitions,
     pauses: new SqlitePauseStore(),
     approvals: new SqliteApprovalStore(),
@@ -174,6 +177,7 @@ export async function mcpHarness(options: {
     ...(options.codeWorker === undefined ? {} : { codeWorker: options.codeWorker }),
     ...(options.slots === undefined ? {} : { slots: options.slots }),
     ...(options.parking === true ? { parking: { sealer: vault } } : {}),
+    ...(options.learning === undefined ? {} : { learning: { rules, threshold: options.learning } }),
     version: "test",
   });
   const app = createAgentApp({ db: t.db, log: logger, mcp });

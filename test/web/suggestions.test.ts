@@ -122,7 +122,7 @@ describe("suggested rules from what you approve (2.10)", () => {
 
     const page = await (await h.fetch(location, { as: owner })).text();
     expect(page).toContain("heel suggests");
-    expect(page).toContain("didn't ask for this");
+    expect(page).toContain("heel drafted this, not");
     // While it waits as a proposal, it isn't offered again.
     expect(await (await h.fetch("/approvals", { as: owner })).text()).not.toContain(
       `/suggestions/${key}/propose`,
