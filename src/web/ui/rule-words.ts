@@ -148,6 +148,9 @@ function recipients(condition: Condition): Clause[] {
         if (value === 0) return { pre: "with no one invited or addressed" };
         return { pre: `to at most ${String(value)} ${value === 1 ? "person" : "people"}` };
       case "equals":
+        if (Array.isArray(value) && value.length === 0) {
+          return { pre: "with no one invited or addressed" };
+        }
         if (Array.isArray(value)) {
           const all = value.map(String);
           const last = all.pop();
@@ -199,9 +202,11 @@ function clauses(key: string, condition: Condition): Clause[] {
     case "persistence": {
       const value = isOps(condition) ? condition["equals"] : condition;
       if (value === false)
-        return [{ pre: "(never a filter, rule or workflow that keeps acting on its own)" }];
+        return [
+          { pre: "(leaving out anything that keeps acting on its own, like a forwarding filter)" },
+        ];
       if (value === true)
-        return [{ pre: "(only things that keep acting on their own, like a forwarding filter)" }];
+        return [{ pre: "(only what keeps acting on its own, like a forwarding filter)" }];
       return [spelledOut];
     }
     case "external": {

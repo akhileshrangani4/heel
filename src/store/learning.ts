@@ -10,7 +10,7 @@ import {
   learnRules,
 } from "../core/learning.ts";
 import type { RuleSet } from "../core/rules/evaluate.ts";
-import { type ProposeOutcome, proposeRules } from "../proposals/rules.ts";
+import { expireProposals, type ProposeOutcome, proposeRules } from "../proposals/rules.ts";
 import type { HeelDb } from "./db.ts";
 import {
   agents,
@@ -86,7 +86,8 @@ function dismissed(db: HeelDb, userId: string): Set<string> {
 }
 
 /** Kind keys waiting as one of heel's proposals. */
-function pendingKinds(db: HeelDb, userId: string): Set<string> {
+function pendingKinds(db: HeelDb, userId: string, now: Date): Set<string> {
+  expireProposals(db, now);
   const keys = new Set<string>();
   const pending = db
     .select({ agentId: ruleProposals.agentId, rules: ruleProposals.rules })
@@ -111,14 +112,14 @@ function learned(
   deps: LearningDeps,
   userId: string,
   now: Date,
-  options: { skipPending: boolean; limit?: number },
+  options: { skipPending: boolean; limit?: number; agentId?: string },
 ): LearnedRule[] {
   if (deps.threshold === null) return [];
   const user = deps.db.select({ name: users.name }).from(users).where(eq(users.id, userId)).get();
   if (user === undefined) return [];
   const since = new Date(now.getTime() - LEARNING_WINDOW_DAYS * DAY_MS);
   const skip = dismissed(deps.db, userId);
-  if (options.skipPending) for (const key of pendingKinds(deps.db, userId)) skip.add(key);
+  if (options.skipPending) for (const key of pendingKinds(deps.db, userId, now)) skip.add(key);
   return learnRules(decidedBy(deps.db, userId, since, deps.rules, user.name), {
     owner: user.name,
     rules: deps.rules,
@@ -126,6 +127,7 @@ function learned(
     now,
     skip,
     ...(options.limit === undefined ? {} : { limit: options.limit }),
+    ...(options.agentId === undefined ? {} : { agentId: options.agentId }),
     standing: (agentId, ruleHash) =>
       deps.db
         .select({ id: standingApprovals.id })
@@ -145,6 +147,16 @@ function learned(
 /** The rules heel suggests to this person now; none when learning is off. */
 export function suggestionsFor(deps: LearningDeps, userId: string, now: Date): LearnedRule[] {
   return learned(deps, userId, now, { skipPending: true });
+}
+
+/** The same, for one of their agents only (`heel_history`). */
+export function suggestionsForAgent(
+  deps: LearningDeps,
+  userId: string,
+  agentId: string,
+  now: Date,
+): LearnedRule[] {
+  return learned(deps, userId, now, { skipPending: true, agentId });
 }
 
 /**
@@ -174,8 +186,14 @@ export function proposeSuggestion(
   who: { orgId: string; userId: string },
   key: string,
   now: Date,
+  /** When an agent asks: only among its own suggestions. */
+  agentId?: string,
 ): ProposeOutcome | null {
-  const found = suggestionsFor(deps, who.userId, now).find((s) => s.key === key);
+  const offered =
+    agentId === undefined
+      ? suggestionsFor(deps, who.userId, now)
+      : suggestionsForAgent(deps, who.userId, agentId, now);
+  const found = offered.find((s) => s.key === key);
   if (found === undefined) return null;
   return proposeRules(
     deps.db,

@@ -100,4 +100,27 @@ describe("a proposed rule in plain words (roadmap 2.3)", () => {
       "Hide email from anyone at bank.com and whose subject matches /statement/ from every agent.",
     );
   });
+
+  it("words heel's suggested rules: exact recipients, nobody, and leaving out what keeps acting", () => {
+    const words = ruleInWords(
+      rule(
+        {
+          agent: "claude-code",
+          account: "gmail",
+          action: "email.send",
+          persistence: false,
+          recipients: { equals: ["ann@work.com", "bob@work.com"] },
+        },
+        "deny",
+      ),
+    );
+    expect(words).toContain("only to exactly ann@work.com and bob@work.com");
+    expect(words).toContain("leaving out anything that keeps acting on its own");
+    expect(
+      ruleInWords(rule({ action: "calendar.event.create", recipients: { equals: [] } }, "allow")),
+    ).toContain("with no one invited or addressed");
+    expect(
+      ruleInWords(rule({ action: "calendar.event.create", recipients: { max: 0 } }, "allow")),
+    ).toContain("with no one invited or addressed");
+  });
 });
