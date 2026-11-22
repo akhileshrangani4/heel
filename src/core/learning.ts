@@ -280,7 +280,7 @@ function shapeOf(group: Group): string {
 }
 
 function evidence(group: Group, count: number, days: number, since: Date): string {
-  return `${group.decision} ${count} times on ${days} days since ${shortDate(since)}${shapeOf(group)}`;
+  return `${group.decision} ${count} times on ${days} ${days === 1 ? "day" : "days"} since ${shortDate(since)}${shapeOf(group)}`;
 }
 
 /**
