@@ -97,8 +97,21 @@ describe("heel CLI", () => {
   it("exits 64 with usage on an unknown command or flag", async () => {
     const unknownCommand = await run(["frobnicate"], {});
     expect(unknownCommand.code).toBe(EXIT.usage);
-    expect(unknownCommand.stderr).toContain('unknown command "frobnicate"');
-    expect(unknownCommand.stderr).toContain("usage:");
+    expect(unknownCommand.stderr).toBe(
+      'heel: unknown command "frobnicate"\nEvery command: heel help\n',
+    );
+
+    // A near miss names the command it probably meant, not all 127 lines of usage.
+    const typo = await run(["accounts"], {});
+    expect(typo.code).toBe(EXIT.usage);
+    expect(typo.stderr).toBe(
+      'heel: unknown command "accounts". Did you mean heel account?\nEvery command: heel help\n',
+    );
+
+    expect((await run(["stauts"], {})).stderr).toContain("Did you mean heel status?");
+
+    // No command at all still gets the whole list.
+    expect((await run([], {})).stderr).toContain("usage:");
 
     const unknownFlag = await run(["agent", "add", "bot", "--nope"], { HEEL_HOME: heelHome() });
     expect(unknownFlag.code).toBe(EXIT.usage);

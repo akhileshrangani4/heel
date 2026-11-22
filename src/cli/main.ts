@@ -1495,6 +1495,41 @@ function resumeHint(io: CliIo): number {
   return EXIT.usage;
 }
 
+/** The commands USAGE lists: the word after each `  heel `. */
+function usageCommands(): string[] {
+  const names = [...USAGE.matchAll(/^ {2}heel ([a-z][a-z-]*)/gm)].map((m) => m[1] as string);
+  return [...new Set(names)];
+}
+
+/** Pure: edit distance where swapping two neighbouring letters is one edit, for "did you mean". */
+function distance(a: string, b: string): number {
+  const d: number[][] = Array.from({ length: a.length + 1 }, (_, i) =>
+    Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)),
+  );
+  const at = (i: number, j: number): number => d[i]?.[j] ?? 0;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      let best = Math.min(at(i - 1, j) + 1, at(i, j - 1) + 1, at(i - 1, j - 1) + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        best = Math.min(best, at(i - 2, j - 2) + 1);
+      }
+      (d[i] as number[])[j] = best;
+    }
+  }
+  return at(a.length, b.length);
+}
+
+/** The listed command a mistyped one most likely meant (`accounts` → `account`), or null. */
+export function nearestCommand(typed: string): string | null {
+  let best: { name: string; d: number } | null = null;
+  for (const name of usageCommands()) {
+    const d = distance(typed, name);
+    if (d <= 2 && (best === null || d < best.d)) best = { name, d };
+  }
+  return best?.name ?? null;
+}
+
 /** The `heel` command. Returns the process exit code. */
 export async function main(argv: string[], io: CliIo): Promise<number> {
   try {
@@ -1502,8 +1537,17 @@ export async function main(argv: string[], io: CliIo): Promise<number> {
   } catch (error) {
     if (error instanceof UsageError) {
       // Only the command's own usage; the whole list buries the one line that matters.
-      const usage = argv[0] === undefined ? null : usageFor(argv[0]);
-      io.stderr.write(`heel: ${error.message}\n\n${usage ?? USAGE}`);
+      const command = argv[0];
+      const usage = command === undefined ? null : usageFor(command);
+      if (usage !== null || command === undefined || command.startsWith("-")) {
+        io.stderr.write(`heel: ${error.message}\n\n${usage ?? USAGE}`);
+      } else {
+        const near = nearestCommand(command);
+        io.stderr.write(
+          `heel: ${error.message}${near === null ? "" : `. Did you mean heel ${near}?`}\n` +
+            "Every command: heel help\n",
+        );
+      }
       return EXIT.usage;
     }
     if (error instanceof AdminClientError || error instanceof AdminSocketError) {
