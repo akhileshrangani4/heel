@@ -28,18 +28,23 @@ const DECISION_WORDS: Record<string, string> = {
   deny: "refuses it",
 };
 
-function describe(edit: RulesEdit, view: RulesFileView): string {
+/** What a change does, in words: the rule as it will read, or the one going. */
+function describe(edit: RulesEdit, before: RulesFileView, after: RulesFileView): string {
   switch (edit.kind) {
     case "decision": {
-      const rule = view.rules[edit.index];
-      return `This rule will ${edit.then === "allow" ? "let it happen" : edit.then === "ask" ? "ask you first" : "refuse it"}${
-        rule === undefined ? "" : `: ${ruleInWords(rule.rule)}`
-      }`;
+      const rule = after.rules[edit.index];
+      return rule === undefined
+        ? "This changes what one rule decides."
+        : `This rule will read: ${ruleInWords(rule.rule)}`;
     }
-    case "remove-rule":
-      return "This removes one rule. Calls it decided go on to the rules below it.";
-    case "remove-hide":
-      return "This removes one hide entry. Agents may see that email again.";
+    case "remove-rule": {
+      const rule = before.rules[edit.index];
+      return `This removes the rule "${rule === undefined ? "?" : ruleInWords(rule.rule)}". Calls it decided go on to the rules below it.`;
+    }
+    case "remove-hide": {
+      const entry = before.hide[edit.index];
+      return `This removes the hide entry "${entry === undefined ? "?" : hideInWords(entry.entry)}". Agents may see that email again.`;
+    }
     case "replace":
       return "Your rules file as you edited it.";
   }
@@ -52,7 +57,7 @@ function problemsList(problems: readonly string[]): Html {
 function previewPanel(preview: RulesPreview, current: RulesFileView): Html {
   return html`<section class="card preview" aria-labelledby="preview-heading">
     <h2 id="preview-heading">Before you save</h2>
-    <p>${describe(preview.edit, current)}</p>
+    <p>${describe(preview.edit, current, preview.view)}</p>
     ${
       preview.problems === null
         ? html`<p class="muted">Afterwards, your rules read like this:</p>

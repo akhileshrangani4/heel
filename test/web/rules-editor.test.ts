@@ -82,7 +82,7 @@ describe("the rules page (2.9)", () => {
       await h.fetch("/rules?op=decision&index=1&then=deny", { as: owner })
     ).text();
     expect(preview).toContain("Before you save");
-    expect(preview).toContain("This rule will refuse it");
+    expect(preview).toContain("This rule will read: Any of your agents can&#39;t do anything");
     const done = await save(h, owner, saveOf(preview));
     expect(done.status).toBe(200);
     const written = readFileSync(file, "utf8");
