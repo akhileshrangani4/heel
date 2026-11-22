@@ -7,6 +7,7 @@ import {
   Server,
   type Tool,
 } from "@modelcontextprotocol/server";
+
 import { eq } from "drizzle-orm";
 import {
   type ClaimedScript,
@@ -19,7 +20,7 @@ import {
 } from "../../codemode/parking.ts";
 import { type CallRecord, runScript, type ScriptStatus } from "../../codemode/run.ts";
 import { accountModule } from "../../codemode/stubs.ts";
-import type { CodeWorker } from "../../codemode/worker.ts";
+import { type CodeWorker, DEFAULT_LIMITS } from "../../codemode/worker.ts";
 import type { Logger } from "../../log.ts";
 import { ProposeRulesInput, pendingProposals, proposeRules } from "../../proposals/rules.ts";
 import {
@@ -122,6 +123,24 @@ export function resumeMessage(resume: string): string {
     `Once heel_status says it's decided, call run_code with {"resume": "${resume}"} and no code: ` +
     "the script carries on from that call, with everything it already read. Don't resend the call or the script yourself."
   );
+}
+
+/**
+ * A finished script's last expression, beside what it printed, like a REPL
+ * (code mode round 2, C1): an agent that ends with `rows[:3]` sees the rows.
+ * None (a script ending in an assignment) adds nothing. A value larger than
+ * the stdout cap is left out with a note, so it can't flood the agent's context.
+ */
+export function lastExpression(output: unknown): { output?: unknown; output_omitted?: string } {
+  if (output === undefined || output === null) return {};
+  const text = JSON.stringify(output);
+  if (text === undefined) return {};
+  if (text.length > DEFAULT_LIMITS.maxStdout) {
+    return {
+      output_omitted: `the last expression's value is ${text.length} characters, more than heel returns; print the part you need`,
+    };
+  }
+  return { output };
 }
 
 /** heel's own tools, listed on every MCP scope. */
@@ -333,6 +352,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
           : { resume: result.resume, message: resumeMessage(result.resume) }),
         ...(result.notParked === undefined ? {} : { notParked: result.notParked }),
         stdout: result.stdout,
+        ...lastExpression(result.output),
         calls: result.calls,
         error: result.error,
       });
@@ -351,6 +371,8 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     message?: string;
     notParked?: string;
     stdout: string;
+    output?: unknown;
+    output_omitted?: string;
     calls: CallRecord[];
     error: string | null;
   }): CallToolResult {

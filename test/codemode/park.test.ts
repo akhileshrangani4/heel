@@ -84,7 +84,7 @@ describe("a script that asks is parked, and resumes after the decision (C2)", ()
 
     decide("approve");
     const done = await run({ resume: first.resume });
-    expect(done).toMatchObject({ status: "completed", stdout: "deleted\nafter\n" });
+    expect(done).toMatchObject({ status: "completed", stdout: "deleted\nafter\n", output: "done" });
     expect(done.calls.map((c) => [c.tool, c.decision])).toEqual([["delete_note", "allow"]]);
     expect(h.upstream.calls).toEqual([
       { name: "search_notes", arguments: { query: "q3" } },
