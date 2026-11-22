@@ -19,7 +19,10 @@ export interface RulesPreview {
   after: string;
   diff: string;
   problems: string[] | null;
+  warnings: string[];
   view: RulesFileView;
+  /** Opened from the person's own Rules page: only then is there a Save. */
+  trusted: boolean;
 }
 
 const DECISION_WORDS: Record<string, string> = {
@@ -69,14 +72,28 @@ function previewPanel(preview: RulesPreview, current: RulesFileView): Html {
             html`<p><strong>This wouldn't load, so it can't be saved:</strong></p>${problemsList(preview.problems)}`,
           )
     }
+    ${
+      preview.problems === null && preview.warnings.length > 0
+        ? notice(
+            "warn",
+            html`<p><strong>It would load, with a warning:</strong></p>${problemsList(preview.warnings)}`,
+          )
+        : ""
+    }
     <details>
       <summary>The exact change to the file</summary>
       ${diffLines(preview.diff, "The change to your rules file")}
     </details>
     ${
-      preview.problems === null
-        ? html`<div id="rules-save" class="form">
-            <textarea name="text" hidden>${preview.text}</textarea>
+      preview.problems === null && !preview.trusted
+        ? notice(
+            "warn",
+            html`<p>This change came from a link, not from your Rules page, so it can't be saved from here. If you want it, make it from <a href="/rules">your rules</a>.</p>`,
+          )
+        : preview.problems === null
+          ? html`<div id="rules-save" class="form">
+            <textarea name="text" hidden>
+${preview.text}</textarea>
             ${ceremonyButton({
               callback: { handler: "saveRules" },
               intent: "save-rules",
@@ -87,12 +104,12 @@ function previewPanel(preview: RulesPreview, current: RulesFileView): Html {
             })}
             <a class="btn btn-secondary" href="/rules">Cancel</a>
           </div>`
-        : html`<p><a class="btn btn-secondary" href="/rules">Back</a></p>`
+          : html`<p><a class="btn btn-secondary" href="/rules">Back</a></p>`
     }
   </section>`;
 }
 
-function ruleRow(r: RulesFileView["rules"][number], position: number): Html {
+function ruleRow(r: RulesFileView["rules"][number], position: number, csrf: string): Html {
   return html`<li class="card rule-row">
     <p class="rule-words">
       <span class="muted">${String(position)}.</span> <strong>${ruleInWords(r.rule)}</strong>
@@ -103,6 +120,7 @@ function ruleRow(r: RulesFileView["rules"][number], position: number): Html {
     <form method="get" action="/rules" class="rule-actions">
       <input type="hidden" name="op" value="decision" />
       <input type="hidden" name="index" value="${String(r.index)}" />
+      <input type="hidden" name="csrf" value="${csrf}" />
       <label for="then-${String(r.index)}">Change it to</label>
       <select id="then-${String(r.index)}" name="then">
         ${["allow", "ask", "deny"].map(
@@ -111,7 +129,7 @@ function ruleRow(r: RulesFileView["rules"][number], position: number): Html {
         )}
       </select>
       <button type="submit" class="btn btn-secondary">Preview</button>
-      <a class="btn btn-danger" href="/rules?op=remove-rule&amp;index=${String(r.index)}">Remove…</a>
+      <a class="btn btn-danger" href="/rules?op=remove-rule&amp;index=${String(r.index)}&amp;csrf=${encodeURIComponent(csrf)}">Remove…</a>
     </form>
   </li>`;
 }
@@ -120,7 +138,7 @@ export function rulesEditorPage(props: {
   file: { display: string; text: string; view: RulesFileView } | null;
   preview: RulesPreview | null;
   problem: string | null;
-  saved: boolean;
+  saved: "live" | "pending" | null;
   csrfToken: string;
 }): Html {
   const heading = html`<h1>Rules</h1>`;
@@ -135,7 +153,15 @@ export function rulesEditorPage(props: {
       <span class="mono">${props.file.display}</span>; every change is in the
       <a href="/rules/history">rule history</a>.
     </p>
-    ${props.saved ? notice("ok", html`<p>Saved. heel is using your rules now.</p>`) : ""}
+    ${props.saved === "live" ? notice("ok", html`<p>Saved. heel is using your rules now.</p>`) : ""}
+    ${
+      props.saved === "pending"
+        ? notice(
+            "warn",
+            html`<p>Saved, but heel isn't using it yet: another rules file has a problem, so heel keeps the last set that loaded. <code>heel rules check</code> on heel's machine says which.</p>`,
+          )
+        : ""
+    }
     ${props.problem === null ? "" : notice("error", html`<p>${props.problem}</p>`)}
     ${props.preview === null ? "" : previewPanel(props.preview, view)}
     ${
@@ -150,7 +176,7 @@ export function rulesEditorPage(props: {
     ${
       view.rules.length === 0
         ? html`<p class="muted">No rules yet: every call is refused. Agents can propose rules, and heel suggests some from what you approve.</p>`
-        : html`<ol class="rule-list" aria-label="Your rules, in order">${view.rules.map((r, i) => ruleRow(r, i + 1))}</ol>`
+        : html`<ol class="rule-list" aria-label="Your rules, in order">${view.rules.map((r, i) => ruleRow(r, i + 1, props.csrfToken))}</ol>`
     }
     ${
       view.hide.length === 0
@@ -160,7 +186,7 @@ export function rulesEditorPage(props: {
             ${view.hide.map(
               (h) => html`<li class="card rule-row">
                 <p class="rule-words">${hideInWords(h.entry)}</p>
-                <a class="btn btn-danger" href="/rules?op=remove-hide&amp;index=${String(h.index)}">Remove…</a>
+                <a class="btn btn-danger" href="/rules?op=remove-hide&amp;index=${String(h.index)}&amp;csrf=${encodeURIComponent(props.csrfToken)}">Remove…</a>
               </li>`,
             )}
           </ul>`
@@ -170,7 +196,8 @@ export function rulesEditorPage(props: {
       <p class="muted">For anything the menus above don't do. heel checks it and shows what it means before you save. <a href="https://useheel.dev/docs/rules-reference" target="_blank" rel="noopener">Every key</a>.</p>
       <form method="post" action="/rules/check">
         <input type="hidden" name="csrf" value="${props.csrfToken}" />
-        <textarea name="text" rows="18" class="mono" spellcheck="false">${props.file.text}</textarea>
+        <textarea name="text" rows="18" class="mono" spellcheck="false">
+${props.file.text}</textarea>
         <button type="submit" class="btn btn-secondary">Check it</button>
       </form>
     </details>`;

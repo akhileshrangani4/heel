@@ -6,12 +6,13 @@ import { lineDiff } from "../../drafting/draft.ts";
 import {
   applyEdit,
   type RulesEdit,
+  rulesCheck,
   rulesProblems,
   textHash,
   viewRules,
 } from "../../proposals/edit.ts";
 import { ownerRulesFile } from "../../proposals/rules.ts";
-import { recordWebChange } from "../../store/rule-changes.ts";
+import { noticeRuleFiles, recordWebChange } from "../../store/rule-changes.ts";
 import { users } from "../../store/schema.ts";
 import { hasErrnoCode } from "../../util/errno.ts";
 import {
@@ -99,7 +100,8 @@ export function rulesEditorRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
             : { display: file.display, text: file.text, view: viewRules(file.text, file.display) },
         preview,
         problem,
-        saved: "saved" in c.req.query(),
+        saved:
+          "saved" in c.req.query() ? "live" : "saved-pending" in c.req.query() ? "pending" : null,
         csrfToken: session.csrfToken,
       }),
       script: clientScript(session.csrfToken),
@@ -109,6 +111,8 @@ export function rulesEditorRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
   function previewOf(
     file: { text: string; display: string },
     edit: RulesEdit,
+    /** Opened from this person's own Rules page (its CSRF token), so it may offer Save. */
+    trusted: boolean,
   ): RulesPreview | string {
     const after = applyEdit(file.text, edit);
     if (!after.ok) return after.problem;
@@ -120,7 +124,8 @@ export function rulesEditorRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       before: textHash(file.text),
       after: textHash(after.text),
       diff: lineDiff(file.text, after.text),
-      problems: rulesProblems(after.text, file.display),
+      ...rulesCheck(after.text, file.display),
+      trusted,
       view: viewRules(after.text, file.display),
     };
   }
@@ -129,7 +134,8 @@ export function rulesEditorRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     const file = fileOf(c.get("session"));
     const edit = editFromQuery(c.req.query());
     if (file === null || edit === null) return page(c, null);
-    const preview = previewOf(file, edit);
+    // A link from anywhere else can show a change, but never offer to save it.
+    const preview = previewOf(file, edit, c.req.query("csrf") === c.get("session").csrfToken);
     return typeof preview === "string" ? page(c, null, preview) : page(c, preview);
   });
 
@@ -137,7 +143,7 @@ export function rulesEditorRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     const file = fileOf(c.get("session"));
     if (file === null) return page(c, null);
     const text = ((await formField(c, "text")) ?? "").replace(/\r\n/g, "\n");
-    const preview = previewOf(file, { kind: "replace", text });
+    const preview = previewOf(file, { kind: "replace", text }, true);
     return typeof preview === "string" ? page(c, null, preview) : page(c, preview);
   });
 
@@ -148,6 +154,9 @@ export function rulesEditorRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     if (file === null)
       return c.json({ ok: false, message: "heel can't edit rules files here." }, 404);
     const text = stringField(body, "text") ?? "";
+    if (Buffer.byteLength(text) > MAX_RULES_BYTES) {
+      return c.json({ ok: false, message: "That's larger than heel keeps a rules file." }, 413);
+    }
     if (stringField(body, "before") !== textHash(file.text)) {
       return c.json(
         { ok: false, message: "Your rules file changed since this page loaded. Reload it." },
@@ -210,6 +219,10 @@ export function rulesEditorRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
         409,
       );
     }
+    // Any edit made by hand since heel last looked gets its own entry, not folded into this one.
+    if (deps.ruleFiles !== undefined) {
+      noticeRuleFiles(deps.db, deps.orgId, deps.ruleFiles.paths, deps.now());
+    }
     mkdirSync(dirname(file.path), { recursive: true });
     writeFileSync(file.path, text);
     // In the same synchronous step as the write, so the reload doesn't count it as made outside heel.
@@ -221,9 +234,15 @@ export function rulesEditorRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       after: text,
       now: deps.now(),
     });
-    deps.ruleFiles?.reload();
+    // Saved either way; whether heel is using it yet depends on every rules file loading.
+    let live = false;
+    try {
+      live = deps.ruleFiles?.reload() !== false;
+    } catch (error) {
+      deps.log.error({ err: error }, "rules saved, but reloading them failed");
+    }
     deps.log.warn({ file: file.display, by: session.userId }, "rules changed in the web app");
-    return c.json({ ok: true, next: "/rules?saved" });
+    return c.json({ ok: true, next: live ? "/rules?saved" : "/rules?saved-pending" });
   });
 
   return app;

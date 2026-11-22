@@ -31,12 +31,24 @@ export function textHash(text: string): string {
 
 /** Every problem the text has, as `heel rules check` would list them, or null when it loads. */
 export function rulesProblems(text: string, display: string): string[] | null {
+  return rulesCheck(text, display).problems;
+}
+
+/** The file's problems (null when it loads) and its warnings, as `heel rules check` gives them. */
+export function rulesCheck(
+  text: string,
+  display: string,
+): { problems: string[] | null; warnings: string[] } {
   try {
-    compileRulesText(text, display, display, "owner");
-    return null;
+    const { warnings } = compileRulesText(text, display, display, "owner");
+    return { problems: null, warnings: warnings.map(formatYamlIssue) };
   } catch (error) {
-    if (!(error instanceof YamlValidationError)) throw error;
-    return error.issues.map(formatYamlIssue);
+    if (error instanceof YamlValidationError) {
+      return { problems: error.issues.map(formatYamlIssue), warnings: [] };
+    }
+    // A YAML alias with no anchor, say: not a rules problem heel names, but still not loadable.
+    if (error instanceof Error) return { problems: [error.message], warnings: [] };
+    throw error;
   }
 }
 
@@ -93,5 +105,6 @@ export function applyEdit(
   } else {
     list.items.splice(edit.index, 1);
   }
-  return { ok: true, text: doc.toString() };
+  // No line folding: only the edited rule's lines change.
+  return { ok: true, text: doc.toString({ lineWidth: 0 }) };
 }

@@ -46,7 +46,9 @@ function saveOf(page: string) {
   if (text === undefined || before === undefined || after === undefined)
     throw new Error("no Save on the page");
   return {
+    // A browser drops the one newline right after <textarea>, as heel's markup expects.
     text: text
+      .replace(/^\n/, "")
       .replace(/&#39;/g, "'")
       .replace(/&quot;/g, '"')
       .replace(/&lt;/g, "<")
@@ -79,7 +81,7 @@ describe("the rules page (2.9)", () => {
     const { h, file } = setUp();
     const owner = await h.signIn(await h.enroll());
     const preview = await (
-      await h.fetch("/rules?op=decision&index=1&then=deny", { as: owner })
+      await h.fetch(`/rules?op=decision&index=1&then=deny&csrf=${owner.csrf}`, { as: owner })
     ).text();
     expect(preview).toContain("Before you save");
     expect(preview).toContain("This rule will read: Any of your agents can&#39;t do anything");
@@ -97,7 +99,11 @@ describe("the rules page (2.9)", () => {
   it("won't save a change to a file that changed since, or a text it wasn't signed for", async () => {
     const { h, file } = setUp();
     const owner = await h.signIn(await h.enroll());
-    const s = saveOf(await (await h.fetch("/rules?op=remove-rule&index=0", { as: owner })).text());
+    const s = saveOf(
+      await (
+        await h.fetch(`/rules?op=remove-rule&index=0&csrf=${owner.csrf}`, { as: owner })
+      ).text(),
+    );
     // Signed for one text, sent with another.
     const start = await h.fetch("/rules/challenge", {
       as: owner,
@@ -143,5 +149,39 @@ describe("the rules page (2.9)", () => {
     expect(page).toContain("unknown match key");
     expect(page).not.toContain("Save with your passkey");
     expect(textHash("x")).toHaveLength(64);
+  });
+
+  it("shows a change from a link from elsewhere, but offers no Save", async () => {
+    const { h } = setUp();
+    const owner = await h.signIn(await h.enroll());
+    const page = await (
+      await h.fetch("/rules?op=decision&index=1&then=allow", { as: owner })
+    ).text();
+    expect(page).toContain("came from a link, not from your Rules page");
+    expect(page).not.toContain("Save with your passkey");
+  });
+
+  it("names a broken alias as a problem rather than failing, and refuses an oversized text", async () => {
+    const { h, file } = setUp();
+    const owner = await h.signIn(await h.enroll());
+    const checked = await h.fetch("/rules/check", {
+      as: owner,
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ csrf: owner.csrf, text: "rules: *x\n" }).toString(),
+    });
+    expect(checked.status).toBe(200);
+    expect(await checked.text()).toContain("This wouldn't load");
+    writeFileSync(file, "rules: *x\n");
+    expect((await h.fetch("/rules", { as: owner })).status).toBe(200);
+    writeFileSync(file, RULES);
+    const big = `${RULES}${"# padding\n".repeat(40_000)}`;
+    const refused = await h.fetch("/rules/challenge", {
+      as: owner,
+      method: "POST",
+      headers: { "content-type": "application/json", "x-csrf-token": owner.csrf },
+      body: JSON.stringify({ text: big, before: textHash(RULES), after: textHash(big) }),
+    });
+    expect(refused.status).toBe(413);
   });
 });
