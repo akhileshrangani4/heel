@@ -11,6 +11,7 @@ import {
   type Normalized,
   ResponseUnparseableError,
 } from "../../gateway/pipeline/ports.ts";
+import { returnsSchema } from "./returns-schema.ts";
 
 /**
  * The shape of one built-in mail tool, shared by Gmail and Outlook:
@@ -71,12 +72,19 @@ export interface MailTool<M, S extends z.ZodType = z.ZodType, P = unknown, R = u
   show(mailbox: M, result: R, hiding: Hiding, signal: AbortSignal): Promise<unknown>;
 }
 
+/** `outputSchema` for a tool whose `returns` describes an object (C5); nothing otherwise. */
+function outputSchemaOf(returns: string): { outputSchema?: Tool["outputSchema"] } {
+  const schema = returnsSchema(returns);
+  return schema === null ? {} : { outputSchema: schema as Tool["outputSchema"] };
+}
+
 /** The tools as MCP lists them. */
 export function listedTools<M>(tools: Record<string, MailTool<M>>): Tool[] {
   return Object.entries(tools).map(([name, tool]) => ({
     name,
     description: `${tool.description} Returns ${tool.returns}.`,
     inputSchema: z.toJSONSchema(tool.args, { io: "input" }) as Tool["inputSchema"],
+    ...outputSchemaOf(tool.returns),
     annotations: tool.readOnly
       ? { readOnlyHint: true }
       : { readOnlyHint: false, destructiveHint: false, openWorldHint: true },

@@ -35,7 +35,7 @@ import { SqlitePauseStore } from "../../store/pauses.ts";
 import { agentTokens } from "../../store/schema.ts";
 import { accountsUsableBy } from "../../store/sharing.ts";
 import { errorShape } from "../../util/error-shape.ts";
-import { isMcpProvider } from "../../vault/connect.ts";
+import { isBuiltInProvider, isMcpProvider } from "../../vault/connect.ts";
 import type { AuthenticatedAgent } from "../agent-tokens.ts";
 import { TOKEN_WARNING_DAYS } from "../agents.ts";
 import type { Pipeline } from "../pipeline/pipeline.ts";
@@ -179,13 +179,14 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
 
   /** An account's tools as this scope lists them. */
   async function accountTools(
-    { tools }: ListingAccount,
+    { account, tools }: ListingAccount,
     rename: (tool: string) => string,
   ): Promise<Tool[]> {
     const listed = await tools(AbortSignal.timeout(10_000));
+    const builtIn = isBuiltInProvider(account.provider);
     return listed
       .filter((tool) => !HEEL_TOOL_NAMES.has(tool.name))
-      .map((tool) => listedTool(tool, rename(tool.name)));
+      .map((tool) => listedTool(tool, rename(tool.name), builtIn));
   }
 
   async function listTools(agent: AuthenticatedAgent, scope: McpScope): Promise<Tool[]> {

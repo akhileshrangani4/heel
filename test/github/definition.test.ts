@@ -183,6 +183,14 @@ describe("the GitHub definition", () => {
     const keys = [...named.matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
     expect(Object.keys(issues[0] ?? {}).sort()).toEqual([...keys].sort());
 
+    // The outputSchema names the same keys (C5).
+    const schema = listed?.outputSchema as {
+      properties: { issues: { items: { properties: Record<string, unknown> } } };
+    };
+    expect(Object.keys(schema.properties.issues.items.properties).sort()).toEqual(
+      Object.keys(issues[0] ?? {}).sort(),
+    );
+
     const stubs = accountModule("github", GITHUB_TOOLS)?.stubs ?? "";
     expect(stubs).toContain('Returns {"issues": [{"number", "title"');
   });
