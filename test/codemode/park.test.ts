@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { MontyWorker } from "../../src/codemode/monty.ts";
 import type { CodeWorker, Step } from "../../src/codemode/worker.ts";
+import { readActivity } from "../../src/store/activity.ts";
 import { decideApproval, SqliteApprovalStore } from "../../src/store/approvals.ts";
 import { SqlitePauseStore } from "../../src/store/pauses.ts";
-import { approvals, parkedScripts } from "../../src/store/schema.ts";
+import { approvals, auditLog, parkedScripts } from "../../src/store/schema.ts";
 import { mcpHarness } from "../helpers/mcp.ts";
 
 /**
@@ -95,6 +96,26 @@ describe("a script that asks is parked, and resumes after the decision (C2)", ()
     expect(h.upstream.calls).toEqual([
       { name: "search_notes", arguments: { query: "q3" } },
       { name: "delete_note", arguments: { id: "n1" } },
+    ]);
+
+    // One script id across the park: Activity groups the script's calls (C3).
+    const rows = h.t.db.select().from(auditLog).all();
+    const ids = new Set(rows.map((r) => r.scriptId));
+    expect(ids.size).toBe(1);
+    const [scriptId] = [...ids];
+    expect(scriptId).toMatch(/^scr_/);
+    const grouped = readActivity(h.t.db, {
+      orgId: h.t.orgId,
+      ownerIds: null,
+      scriptId: scriptId ?? "",
+      limit: 50,
+    });
+    // The approver's decision and the run after it belong to the script too.
+    expect(grouped.map((r) => [r.tool, r.kind])).toEqual([
+      ["delete_note", "executed"],
+      ["delete_note", "approved"],
+      ["delete_note", "ask"],
+      ["search_notes", "allow"],
     ]);
 
     // Once only.

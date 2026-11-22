@@ -89,6 +89,8 @@ export interface AuditRecord {
   agentId: string;
   ownerId: string;
   runId: string | null;
+  /** The code-mode script the call came from (Call.scriptId), or null. */
+  scriptId: string | null;
   surface: Surface;
   account: string;
   provider: string;
@@ -118,6 +120,7 @@ export function toAuditRecord(event: AuditEvent, at: Date): AuditRecord {
     agentId: call.agentId,
     ownerId: call.ownerId,
     runId: call.runId ?? null,
+    scriptId: call.scriptId ?? null,
     surface: call.surface,
     account: call.account,
     provider: call.provider,

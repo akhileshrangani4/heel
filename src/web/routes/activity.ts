@@ -54,6 +54,7 @@ export function activityRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       agentId: nonEmpty(query["agent"]),
       account: nonEmpty(query["account"]),
       kind: isKind(kind) ? kind : undefined,
+      scriptId: nonEmpty(query["script"]),
     };
   }
 
@@ -118,7 +119,12 @@ export function activityRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       body: activityPage({
         rows,
         agents: agentChoices(session),
-        filter: { agent: filter.agentId, account: filter.account, kind: filter.kind },
+        filter: {
+          agent: filter.agentId,
+          account: filter.account,
+          kind: filter.kind,
+          script: filter.scriptId,
+        },
         nextBefore: rows.length === PAGE ? (rows.at(-1)?.id ?? null) : null,
         hidden: deps.hiddenCounts === undefined ? null : deps.hiddenCounts(),
         suggestions: suggestRules(stopped),

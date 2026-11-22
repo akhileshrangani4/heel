@@ -2,6 +2,7 @@ import type { AuthenticatedAgent } from "../gateway/agent-tokens.ts";
 import type { Pipeline } from "../gateway/pipeline/pipeline.ts";
 import { approvalScript } from "../gateway/pipeline/ports.ts";
 import type { HeelDb } from "../store/db.ts";
+import { newId } from "../store/ids.ts";
 import { type ClaimedScript, parkScript, type Sealer } from "./parking.ts";
 import type { StubModule } from "./stubs.ts";
 import { type CodeWorker, DEFAULT_LIMITS, type ScriptLimits, type Step } from "./worker.ts";
@@ -95,6 +96,8 @@ export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
     return { ...result, stdout, calls };
   };
 
+  // heel's id for the script, kept across a park, so Activity can group its calls.
+  const scriptId = input.resume?.scriptId ?? newId("script");
   // A resumed script runs no new code: its code is the one it parked with.
   const code = input.resume?.code ?? input.code;
   // A resumed script's earlier calls count toward its limit; the parked one runs again here.
@@ -133,6 +136,7 @@ export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
         approvalId,
         runId: input.runId,
         reason: input.reason,
+        scriptId,
         code,
         calls: [...(input.resume?.calls.slice(0, -1) ?? []), ...calls],
         modules: input.modules,
@@ -215,6 +219,7 @@ export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
       args,
       ...(input.runId === undefined ? {} : { runId: input.runId }),
       ...(input.reason === undefined ? {} : { reason: input.reason }),
+      scriptId,
       // The approver sees the script and what it already called (C3).
       script: approvalScript(code, [...(input.resume?.calls.slice(0, -1) ?? []), ...calls]),
     });
