@@ -62,6 +62,8 @@ export interface HumanPlaneDeps {
   vapidPublicKey: string;
   /** The agent plane's public URL when OAuth for connectors is on (A2); null when off. */
   agentPublicUrl: URL | null;
+  /** After an account's key changes or it goes: a running local MCP server for it restarts (2.9). */
+  onAccountConfigured?: (accountId: string) => void;
   /** The MCP address a new agent is given, as `heel agent add` prints it (2.9). */
   agentMcpUrl?: string;
   /**

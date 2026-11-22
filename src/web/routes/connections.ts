@@ -16,6 +16,7 @@ import {
   startSignIn,
 } from "../../definitions/sign-in.ts";
 import { missingSignInSetup } from "../../definitions/sign-in-setup.ts";
+import { needsKey } from "../../requests/connection.ts";
 import { accountsOwnedBy } from "../../store/directory.ts";
 import { errorShape } from "../../util/error-shape.ts";
 import {
@@ -87,9 +88,20 @@ function outcomeFrom(
   query: Record<string, string>,
   failures: FailureNotes,
   aliases: ReadonlySet<string>,
+  /** Every account this person has, signed in or not. */
+  all: ReadonlySet<string> = aliases,
 ): ConnectionsOutcome {
   const alias = query["account"] ?? "";
   if (query["connected"] !== undefined && aliases.has(alias)) return { kind: "connected", alias };
+  // From the web app's own changes (2.9): claimed only when the account's state agrees.
+  const unchecked = query["unchecked"] !== undefined;
+  const here = query["connected-here"] ?? query["rekeyed"];
+  if (here !== undefined && all.has(here)) {
+    return { kind: query["rekeyed"] !== undefined ? "rekeyed" : "added", alias: here, unchecked };
+  }
+  const removed = query["removed"];
+  if (removed !== undefined && !all.has(removed))
+    return { kind: "removed", alias: removed, unchecked: false };
   const failure = query["failed"] === undefined ? null : failures.get(query["failed"]);
   if (failure !== null) return { kind: "failed", alias: failure.alias, message: failure.message };
   return { kind: "none" };
@@ -145,6 +157,7 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       signsIn:
         providers.has(account.provider) || (oauth !== null && isOAuthUpstream(account.settings)),
       // From the config, not `providers`: that's also empty when the vault is closed.
+      holdsKey: needsKey(account.provider),
       setup: missingSignInSetup(account.provider, {
         google: deps.providerClients.google !== null || builtIn != null,
         microsoft: deps.providerClients.microsoft !== null,
@@ -161,8 +174,10 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
           c.req.query(),
           failures,
           new Set(rows.filter((row) => row.status === "active").map((row) => row.alias)),
+          new Set(rows.map((row) => row.alias)),
         ),
         signInForm: { action: "/connections/sign-in", csrfToken: session.csrfToken },
+        manage: { csrfToken: session.csrfToken },
       }),
     });
   });

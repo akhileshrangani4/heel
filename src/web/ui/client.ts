@@ -214,6 +214,22 @@ export function clientScript(csrfToken: string | null): string {
         sign: getAssertion,
         finish: "/grants/confirm",
       }),
+    manageAccount: ({ binding, options, status }) => {
+      const key = options && typeof options.key === "string" ? options.key : "";
+      const body = { ...options, ...binding };
+      // The key isn't part of what the passkey signs; it goes only with the signed answer.
+      delete body.key;
+      return run({
+        status,
+        start: { url: "/connections/manage/challenge", body },
+        sign: getAssertion,
+        finish: "/connections/manage/confirm",
+        extra: key ? { key } : {},
+      }).finally(() => {
+        // Whatever happened, the key doesn't stay on the page.
+        for (const field of document.querySelectorAll("input[name=key]")) field.value = "";
+      });
+    },
     manageAgent: ({ binding, options, status }) =>
       run({
         status,

@@ -4,6 +4,8 @@
 
 Connect each account once, on the machine heel runs on. heel keeps the credential encrypted, and your agent only ever sees the account's alias (`--as github`). Run these with `heel serve` running.
 
+**Or from the web app.** On **Connections**, **Connect another account** takes the service, a name and the key (or, for Gmail, Calendar, Outlook and MCP servers, you sign in right after), and asks for your passkey. The key goes only to heel's vault, checked with the service first: one the service turns down isn't stored. Each account's **Manage** replaces its key (passkey) or removes it.
+
 ![The Connections page: gmail-work and github, both ready](images/wide-connections.png)
 
 ## Built-in services

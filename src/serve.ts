@@ -500,6 +500,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         learning: config.learning,
         agentPublicUrl: config.agentPublicUrl,
         agentMcpUrl: agentMcpUrl(config.listen.agent, config.agentPublicUrl),
+        onAccountConfigured: (accountId) => evictLocalServer(accountId),
         upstreamOAuth: vault === null ? null : { signIns: upstreamSignIns, vault },
         checkKey: (provider, key) => checkKey(provider, key, fetch),
         background: {
