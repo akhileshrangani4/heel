@@ -495,7 +495,14 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         approvals: new SqliteApprovalStore(),
         pauses: new SqlitePauseStore(),
         rules,
-        ruleFiles: { paths: rules.paths, reload: () => logRulesOutcome(log, rules.reload()) },
+        ruleFiles: {
+          paths: rules.paths,
+          reload: () => {
+            const outcome = rules.reload();
+            logRulesOutcome(log, outcome);
+            return outcome.ok;
+          },
+        },
         vapidPublicKey: notify.vapidPublicKey,
         learning: config.learning,
         agentPublicUrl: config.agentPublicUrl,

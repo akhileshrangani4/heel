@@ -115,7 +115,8 @@ export interface HumanPlaneDeps {
    * 2.1), and a reload so they take effect at once. Absent where heel has no
    * rules files of its own to write, which turns adding off.
    */
-  ruleFiles?: { paths: RulesPaths; reload: () => void };
+  /** `reload` says whether every rules file loaded, so what was just saved is in force. */
+  ruleFiles?: { paths: RulesPaths; reload: () => boolean | void };
   /** `heel serve --watch`: rows with no stored mode behave as shadow (A3). */
   watchFallback: boolean;
   /** Resolves a host name to its addresses; tests pass a fake. Defaults to DNS. */

@@ -13,6 +13,9 @@ function changedOnly(diff: string): string {
 }
 
 function who(change: RuleChangeView): Html {
+  if (change.source === "web") {
+    return html`Changed by ${change.decidedBy ?? "someone no longer here"} in heel's rules page.`;
+  }
   if (change.source === "outside") {
     return html`Changed outside heel: edited by hand, or by git or another program.`;
   }
@@ -38,6 +41,7 @@ export function ruleHistoryPage(props: {
   everyone: boolean;
 }): Html {
   return html`<h1>Rule history</h1>
+    <p><a href="/rules">See and change your rules</a></p>
     <p class="muted">
       Every change to ${props.everyone ? "the rules files" : "your rules file"}, newest first:
       those added from a proposal, with who proposed and who added them, and those made outside
@@ -50,7 +54,14 @@ export function ruleHistoryPage(props: {
           ${props.changes.map(
             (change) => html`<li class="card req">
               <div class="ap-meta">
-                ${badge(change.source === "proposal" ? "Proposal added" : "Outside heel", change.source === "proposal" ? "ok" : "warn")}
+                ${badge(
+                  change.source === "proposal"
+                    ? "Proposal added"
+                    : change.source === "web"
+                      ? "Rules page"
+                      : "Outside heel",
+                  change.source === "outside" ? "warn" : "ok",
+                )}
                 <span class="mono">${change.file}</span>
                 <span class="muted">${formatRelative(change.at, props.now)}</span>
               </div>

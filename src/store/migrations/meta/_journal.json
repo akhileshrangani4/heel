@@ -239,6 +239,13 @@
       "when": 1795327847040,
       "tag": "0033_rule_changes",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "6",
+      "when": 1795334005695,
+      "tag": "0034_rule_change_web",
+      "breakpoints": true
     }
   ]
 }
