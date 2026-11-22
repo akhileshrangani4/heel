@@ -135,7 +135,11 @@ const PHASES: Phase[] = [
         'tell any agent one line. it installs heel, connects itself, asks for your connections and proposes rules, then walks you through swapping out raw keys. you make a passkey and approve each step. tested end to end with a real agent on an empty machine; it never sees its own heel token.',
         'shipped',
       ],
-      ['everything in the web app', 'anything the cli can do, the web app can do too.'],
+      [
+        'everything in the web app',
+        'anything the cli can do, the web app can do too: agents, accounts, rules, people and audit export, each change behind your passkey. agents are in.',
+        'started',
+      ],
       [
         'code mode on every machine',
         'your agent writes one short script instead of loading a tool for every action, so connecting more accounts doesn’t fill its context. it runs on linux, macos and windows, each agent’s scripts in a sandbox of their own, and every call in the script still goes through your rules.',

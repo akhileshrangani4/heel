@@ -38,6 +38,7 @@ import { expiringTokens, listAgents, workRootsOf } from "./gateway/agents.ts";
 import { createAgentApp } from "./gateway/app.ts";
 import { runApprovalHints } from "./gateway/approval-hints.ts";
 import { createMcpSurface } from "./gateway/mcp/server.ts";
+import { agentMcpUrl } from "./gateway/mcp-url.ts";
 import { createPipeline } from "./gateway/pipeline/pipeline.ts";
 import type { ApprovalAdapter } from "./gateway/pipeline/ports.ts";
 import { defaultTotalSandboxes, SandboxSlots } from "./gateway/sandbox-slots.ts";
@@ -498,6 +499,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         vapidPublicKey: notify.vapidPublicKey,
         learning: config.learning,
         agentPublicUrl: config.agentPublicUrl,
+        agentMcpUrl: agentMcpUrl(config.listen.agent, config.agentPublicUrl),
         upstreamOAuth: vault === null ? null : { signIns: upstreamSignIns, vault },
         checkKey: (provider, key) => checkKey(provider, key, fetch),
         background: {

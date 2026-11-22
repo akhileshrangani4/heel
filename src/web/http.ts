@@ -62,6 +62,8 @@ export interface HumanPlaneDeps {
   vapidPublicKey: string;
   /** The agent plane's public URL when OAuth for connectors is on (A2); null when off. */
   agentPublicUrl: URL | null;
+  /** The MCP address a new agent is given, as `heel agent add` prints it (2.9). */
+  agentMcpUrl?: string;
   /**
    * Sign-in to remote MCP servers that want OAuth (D5c). Null when the vault
    * is closed, since the tokens would have nowhere to go.

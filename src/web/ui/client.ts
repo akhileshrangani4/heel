@@ -214,6 +214,13 @@ export function clientScript(csrfToken: string | null): string {
         sign: getAssertion,
         finish: "/grants/confirm",
       }),
+    manageAgent: ({ binding, options, status }) =>
+      run({
+        status,
+        start: { url: "/agents/manage/challenge", body: { ...options, ...binding } },
+        sign: getAssertion,
+        finish: "/agents/manage/confirm",
+      }),
     applyRules: ({ binding, status }) =>
       run({
         status,

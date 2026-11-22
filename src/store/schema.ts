@@ -474,6 +474,7 @@ export const CHALLENGE_PURPOSES = [
   "add_device",
   "rules",
   "connection",
+  "manage",
 ] as const;
 export type ChallengePurpose = (typeof CHALLENGE_PURPOSES)[number];
 
