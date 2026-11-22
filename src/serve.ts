@@ -434,6 +434,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         orgId,
         vault,
         background: options.env["HEEL_BACKGROUND"] === "1",
+        teamSignIn: config.oidc != null,
         version,
         publicUrl: config.publicUrl,
         home: config.home,

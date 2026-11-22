@@ -32,6 +32,7 @@ export type CeremonyIntent =
   | "apply-rules"
   | "manage-agent"
   | "manage-account"
+  | "manage-people"
   | "save-rules";
 
 export interface CeremonyButtonProps {

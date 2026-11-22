@@ -24,6 +24,7 @@ import type { HeelDb } from "../store/db.ts";
 import { LOCAL_OWNER_NAME } from "../store/install.ts";
 import { setUserEmail } from "../store/notifications.ts";
 import { ADMIN_SOCKET_ACTOR, listPauses, type PauseKey, pause } from "../store/pauses.ts";
+import { addPerson } from "../store/people.ts";
 import { accounts, agents, passkeys, pushSubscriptions, users } from "../store/schema.ts";
 import {
   SharingError,
@@ -85,6 +86,8 @@ export interface AdminDeps {
   };
   /** Started by `heel start` (it sets HEEL_BACKGROUND=1), so `heel update` may restart it. */
   background?: boolean;
+  /** People sign in with an IdP (D13): they join by signing in, so `heel user add` is refused. */
+  teamSignIn?: boolean;
   now?: () => Date;
 }
 
@@ -302,6 +305,17 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
     }
     case "account.sharing":
       return adminOk(sharingOf(db, orgId, request.params.alias));
+    case "user.add": {
+      if (deps.teamSignIn === true) {
+        return adminError(
+          "invalid",
+          "people join this heel by signing in with its sign-in provider, not by name",
+        );
+      }
+      const added = addPerson(db, orgId, request.params.name, now);
+      if (!added.ok) return adminError("invalid", added.problem);
+      return adminOk({ name: request.params.name });
+    }
     case "user.enroll": {
       const enrollment = createEnrollment(db, {
         orgId,
