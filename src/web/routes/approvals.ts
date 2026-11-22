@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { parkedFor, stopParked } from "../../codemode/parking.ts";
 import {
   type ApprovalRecord,
   approverIds,
@@ -15,6 +16,7 @@ import {
   type HumanPlaneDeps,
   jsonBody,
   renderPage,
+  requireCsrfField,
   requireCsrfHeader,
   requireSession,
   type SignedInEnv,
@@ -246,6 +248,16 @@ export function approvalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
         pause,
         onDecide: DECIDE_HANDLER,
         folds: foldsFor(deps.db, session.userId, foldKind(view)),
+        parked:
+          parkedFor(deps.db, deps.orgId, record.row.id, now) === null
+            ? null
+            : {
+                stop: {
+                  action: `/approvals/${encodeURIComponent(record.row.id)}/stop-script`,
+                  csrfToken: session.csrfToken,
+                },
+              },
+        stopped: "script-stopped" in c.req.query(),
       })}`,
       script: clientScript(session.csrfToken),
     });
@@ -264,6 +276,20 @@ export function approvalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     }
     rememberFold(deps.db, { userId: c.get("session").userId, kind, section, open }, deps.now());
     return c.json({ ok: true });
+  });
+
+  // Stopping a parked script only takes something away, so it's a plain form, no passkey.
+  app.post("/approvals/:id/stop-script", signedIn, requireCsrfField(), (c) => {
+    const session = c.get("session");
+    const record = getApproval(deps.db, deps.orgId, c.req.param("id"), deps.now());
+    if (record === null || !mayDecide(deps, session, record)) {
+      return c.text(REFUSED.not_found, 404);
+    }
+    const stopped = stopParked(deps.db, deps.orgId, record.row.id);
+    if (stopped > 0) {
+      deps.log.info({ approval: record.row.id, by: session.userId }, "parked script stopped");
+    }
+    return c.redirect(`/approvals/${encodeURIComponent(record.row.id)}?script-stopped`, 303);
   });
 
   app.post("/approvals/:id/challenge", signedIn, csrf, async (c) => {

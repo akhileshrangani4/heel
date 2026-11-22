@@ -12,7 +12,16 @@ import {
   plural,
 } from "./format.ts";
 import { flag, type Html, html } from "./html.ts";
-import { badge, notice, type PauseNotice, scrollRegion, type Tone, time } from "./layout.ts";
+import {
+  badge,
+  type FormTarget,
+  notice,
+  type PauseNotice,
+  postForm,
+  scrollRegion,
+  type Tone,
+  time,
+} from "./layout.ts";
 import {
   argumentLines,
   clientLabel,
@@ -102,6 +111,12 @@ export interface ApprovalRequestProps {
   onDecide: CeremonyCallback;
   /** The viewer's remembered sections for this kind of request; none by default. */
   folds?: Folds;
+  /**
+   * The script parked at this call (C2), with the form that stops it; null
+   * when none is waiting. `stopped` is true right after the viewer stopped it.
+   */
+  parked?: { stop: FormTarget } | null;
+  stopped?: boolean;
 }
 
 /** What remembered folds are keyed by: the action, or `provider:tool` without one. */
@@ -380,9 +395,27 @@ function reasonView(request: ApprovalRequestView): Html | "" {
  * so the approver sees what else the script means to do; heel checks every
  * call in it on its own, whatever the code says.
  */
-function scriptView(request: ApprovalRequestView): Html | "" {
+function scriptView(
+  request: ApprovalRequestView,
+  parked: { stop: FormTarget } | null,
+  stopped: boolean,
+): Html | "" {
   const script = request.script;
   if (script === null) return "";
+  const waiting = stopped
+    ? notice(
+        "info",
+        html`<p>Stopped. The script won't carry on; ${request.agent} would have to start again.</p>`,
+      )
+    : parked === null
+      ? ""
+      : html`<div class="script-stop">
+          <p>
+            The script is paused at this call, waiting for you. Stopping it means it never
+            carries on, whatever you decide here.
+          </p>
+          ${postForm(parked.stop, {}, html`<button type="submit" class="btn btn-secondary">Stop the script</button>`)}
+        </div>`;
   const before =
     script.before.length === 0
       ? html`<p class="muted">This is the script's first call to your accounts.</p>`
@@ -400,6 +433,7 @@ function scriptView(request: ApprovalRequestView): Html | "" {
       here, and every later call in it is checked by your rules on its own.
     </p>
     ${before}
+    ${waiting}
     <details>
       <summary>The script (${request.agent}'s own code; heel didn't check what it says)</summary>
       <pre class="mono">${script.code}</pre>
@@ -648,7 +682,7 @@ export function approvalRequest(props: ApprovalRequestProps): Html {
         <mark>${said.place}</mark>${said.rest}
       </h1>
       ${reasonView(request)}
-      ${scriptView(request)}
+      ${scriptView(request, props.parked ?? null, props.stopped === true)}
       <ul class="ap-facts">
         <li class="ap-fact">
           <span>Asked by rule</span><strong>${request.rule.name ?? formatRule(request.rule)}</strong>

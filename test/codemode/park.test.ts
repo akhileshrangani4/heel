@@ -100,7 +100,7 @@ describe("a script that asks is parked, and resumes after the decision (C2)", ()
     // Once only.
     const again = await run({ resume: first.resume });
     expect(again.status).toBe("error");
-    expect(again.error).toMatch(/already ran, expired, or isn't yours/);
+    expect(again.error).toMatch(/already ran, expired, your owner stopped it, or it isn't yours/);
     expect(h.t.db.select().from(parkedScripts).all()).toEqual([]);
   });
 

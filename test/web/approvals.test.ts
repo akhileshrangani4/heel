@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { standingApprovals } from "../../src/store/schema.ts";
+import { approvals, parkedScripts, standingApprovals } from "../../src/store/schema.ts";
 import { pendingId, SEND } from "../helpers/approvals.ts";
 import {
   type Browser,
@@ -266,5 +266,51 @@ describe("the approval page", () => {
 
     await decide(h, owner, approvalId, { callHash, intent: "deny" });
     expect(h.status(approvalId)).toBe("denied");
+  });
+
+  it("stops a script parked at the call, without a passkey, so the agent can't resume it", async () => {
+    const { h, owner, approvalId } = await setUp();
+    const row = h.t.db.select().from(approvals).get();
+    if (row === undefined) throw new Error("no approval");
+    h.t.db
+      .update(approvals)
+      .set({ script: { code: "import gmail_work", truncated: false, before: [] } })
+      .run();
+    h.t.db
+      .insert(parkedScripts)
+      .values({
+        id: "pks_test",
+        orgId: row.orgId,
+        agentId: row.agentId,
+        approvalId,
+        runId: null,
+        reason: null,
+        calls: [],
+        code: "import gmail_work",
+        modulesHash: "x",
+        snapshot: Buffer.from("sealed"),
+        createdAt: new Date(),
+        expiresAt: row.expiresAt,
+      })
+      .run();
+    const page = await (await h.fetch(`/approvals/${approvalId}`, { as: owner })).text();
+    expect(page).toContain("The script is paused at this call");
+    expect(page).toContain("Stop the script");
+
+    const stopped = await h.fetch(`/approvals/${approvalId}/stop-script`, {
+      as: owner,
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ csrf: owner.csrf }).toString(),
+    });
+    expect(stopped.status).toBe(303);
+    expect(h.t.db.select().from(parkedScripts).all()).toEqual([]);
+    const after = await (
+      await h.fetch(`/approvals/${approvalId}?script-stopped`, { as: owner })
+    ).text();
+    expect(after).toContain("Stopped. The script won");
+    expect(after).not.toContain("Stop the script");
+    // The approval itself is untouched: it's still waiting for a decision.
+    expect(h.status(approvalId)).toBe("pending");
   });
 });
