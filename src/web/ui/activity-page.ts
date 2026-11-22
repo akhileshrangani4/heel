@@ -249,6 +249,7 @@ function agentCard(
           name: a.name,
           workRoots: manage.workRoots.get(a.agentId) ?? [],
           csrfToken: manage.csrfToken,
+          own: a.ownerId === manage.viewerId,
         })
       : "";
   const stat = (label: string, value: number) =>

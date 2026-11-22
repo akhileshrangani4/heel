@@ -58,15 +58,26 @@ export function manageAgentRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
   const tokens = new Map<string, PendingToken>();
   const protectedPaths = () => (deps.ruleFiles === undefined ? [] : [deps.ruleFiles.paths.home]);
 
-  /** The live agent by name that this person may manage, or null. */
-  function mine(session: SessionView, name: string) {
+  /**
+   * The live agent by name that this person may manage, or null. Admins may
+   * revoke anyone's agent or remove a workdir, but a new token or workdir
+   * only for their own (`own`): a new token would hand them a working
+   * credential for another person's agent, quietly ending that person's.
+   */
+  function mine(session: SessionView, name: string, own = false) {
     const row = deps.db
       .select({ id: agents.id, ownerId: agents.ownerId, revokedAt: agents.revokedAt })
       .from(agents)
       .where(and(eq(agents.orgId, deps.orgId), eq(agents.name, name)))
       .get();
     if (row === undefined || row.revokedAt !== null) return null;
-    return session.role === "admin" || row.ownerId === session.userId ? row : null;
+    return row.ownerId === session.userId || (!own && session.role === "admin") ? row : null;
+  }
+
+  function stopScriptsOf(agentId: string): void {
+    for (const script of deps.background?.list(null) ?? []) {
+      if (script.agentId === agentId) deps.background?.stop(script.id);
+    }
   }
 
   function keep(
@@ -103,7 +114,7 @@ export function manageAgentRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       if (!TOKEN_DAYS.has(days)) return { problem: "Pick how long the token lasts." };
       return { binding: { op, name, days } };
     }
-    if (mine(session, name) === null)
+    if (mine(session, name, true) === null)
       return { problem: "There's no live agent of yours by that name." };
     if (op === "rotate") {
       const days = stringField(body, "days") ?? "90";
@@ -171,8 +182,11 @@ export function manageAgentRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
         deps.log.info({ agent: name, by: session.userId }, "agent added from the web app");
         return c.json({ ok: true, next: `/agents/token/${keep(session, issued)}` });
       }
-      if (op === "rotate" && typeof name === "string" && mine(session, name) !== null) {
+      const agent = typeof name === "string" ? mine(session, name, true) : null;
+      if (op === "rotate" && typeof name === "string" && agent !== null) {
         const issued = rotateAgentToken(deps.db, deps.orgId, name, now, expires);
+        // Scripts started with the old token stop now, as `heel agent rotate` does.
+        stopScriptsOf(agent.id);
         deps.log.info({ agent: name, by: session.userId }, "agent token replaced from the web app");
         return c.json({ ok: true, next: `/agents/token/${keep(session, issued)}` });
       }
@@ -180,15 +194,24 @@ export function manageAgentRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
         op === "workdir" &&
         typeof name === "string" &&
         typeof path === "string" &&
-        mine(session, name) !== null
+        agent !== null
       ) {
-        setWorkRoots(
+        // Checked again as it would be stored now: a symlink swapped in after the passkey
+        // was asked for would point somewhere else than what was signed.
+        const roots = checkedWorkRoots(
           deps.db,
           deps.orgId,
           name,
           [...workRootsByName(deps.db, deps.orgId, name).workRoots, path],
           protectedPaths(),
-        );
+        ).workRoots;
+        if (roots.at(-1) !== path) {
+          return c.json(
+            { ok: false, message: "That folder changed since you approved it. Nothing was added." },
+            409,
+          );
+        }
+        setWorkRoots(deps.db, deps.orgId, name, roots, protectedPaths());
         deps.log.info({ agent: name, by: session.userId }, "workdir added from the web app");
         return c.json({ ok: true, next: "/agents?workdir-added" });
       }
@@ -202,6 +225,8 @@ export function manageAgentRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
   app.get("/agents/token/:id", signedIn, (c) => {
     const session = c.get("session");
     const id = c.req.param("id");
+    // The token is in this page: no browser or proxy may keep a copy.
+    c.header("Cache-Control", "no-store");
     const pending = tokens.get(id);
     // Once, to whoever made it, while it's fresh.
     tokens.delete(id);
@@ -234,9 +259,7 @@ export function manageAgentRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     if (agent === null) return c.text("There's no live agent of yours by that name.", 404);
     revokeAgent(deps.db, deps.orgId, name, deps.now());
     // Its background scripts stop too, as `heel agent revoke` does.
-    for (const script of deps.background?.list(null) ?? []) {
-      if (script.agentId === agent.id) deps.background?.stop(script.id);
-    }
+    stopScriptsOf(agent.id);
     deps.log.info({ agent: name, by: session.userId }, "agent revoked from the web app");
     return c.redirect("/agents?revoked", 303);
   });
@@ -247,10 +270,14 @@ export function manageAgentRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     if (mine(session, name) === null)
       return c.text("There's no live agent of yours by that name.", 404);
     const path = (await formField(c, "path")) ?? "";
+    const agent = mine(session, name);
     const left = workRootsByName(deps.db, deps.orgId, name).workRoots.filter(
       (root) => root !== path,
     );
-    setWorkRoots(deps.db, deps.orgId, name, left, protectedPaths());
+    // Removing only takes power away, so the rest aren't checked again: a folder that's
+    // since been deleted mustn't stop the owner removing another.
+    if (agent !== null)
+      deps.db.update(agents).set({ workRoots: left }).where(eq(agents.id, agent.id)).run();
     return c.redirect("/agents?workdir-removed", 303);
   });
 

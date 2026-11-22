@@ -1,8 +1,15 @@
+import { mkdirSync, rmSync, symlinkSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { hashAgentToken } from "../../src/gateway/agent-tokens.ts";
-import { workRootsOf } from "../../src/gateway/agents.ts";
-import { agents, agentTokens } from "../../src/store/schema.ts";
-import { type Browser, type HumanPlaneHarness, humanPlaneHarness } from "../helpers/human-plane.ts";
+import { addAgent, setWorkRoots, workRootsOf } from "../../src/gateway/agents.ts";
+import { agents, agentTokens, users } from "../../src/store/schema.ts";
+import {
+  type Browser,
+  type HumanPlaneHarness,
+  humanPlaneHarness,
+  PUBLIC_URL,
+} from "../helpers/human-plane.ts";
 import { tempDir } from "../helpers/store.ts";
 
 /**
@@ -115,5 +122,98 @@ describe("agents in the web app (2.9)", () => {
     );
     expect(removed.status).toBe(303);
     expect(workRootsOf(h.t.db, h.agent.agentId)).toEqual([]);
+  });
+
+  it("adds the workdir that was signed, not one a symlink swapped in during the passkey", async () => {
+    const h = humanPlaneHarness();
+    const owner = await h.signIn(await h.enroll());
+    const base = tempDir("heel-web-swap-");
+    const project = join(base, "proj");
+    const secret = join(base, "secret");
+    mkdirSync(project);
+    mkdirSync(secret);
+    const start = await h.fetch("/agents/manage/challenge", {
+      as: owner,
+      method: "POST",
+      headers: { "content-type": "application/json", "x-csrf-token": owner.csrf },
+      body: JSON.stringify({ op: "workdir", name: h.agent.agentName, path: project }),
+    });
+    const { challengeId, options } = (await start.json()) as {
+      challengeId: string;
+      options: never;
+    };
+    rmSync(project, { recursive: true });
+    symlinkSync(secret, project);
+    const done = await h.fetch("/agents/manage/confirm", {
+      as: owner,
+      method: "POST",
+      headers: { "content-type": "application/json", "x-csrf-token": owner.csrf },
+      body: JSON.stringify({
+        challengeId,
+        response: owner.authenticator.assert(options, PUBLIC_URL.origin),
+      }),
+    });
+    expect(done.status).toBe(409);
+    expect(workRootsOf(h.t.db, h.agent.agentId)).toEqual([]);
+  });
+
+  it("lets an admin revoke a member's agent but not take a token for it, and stops scripts on a new token", async () => {
+    const stopped: string[] = [];
+    const h = humanPlaneHarness({
+      background: {
+        approvalDecided: () => {},
+        list: () => [
+          {
+            id: "scr_1",
+            agentId: "",
+            agentName: "",
+            status: "running",
+            approvalId: null,
+            calls: 0,
+            startedAt: new Date(),
+          },
+        ],
+        stop: (id) => {
+          stopped.push(id);
+          return true;
+        },
+        waitsOn: () => false,
+        stopWaitingOn: () => {},
+      },
+    });
+    const owner = await h.signIn(await h.enroll());
+    h.addUser("sam", "member");
+    const samId =
+      h.t.db
+        .select()
+        .from(users)
+        .all()
+        .find((u) => u.name === "sam")?.id ?? "";
+    addAgent(h.t.db, { orgId: h.t.orgId, ownerId: samId, name: "sams-bot" }, new Date());
+    expect((await manage(h, owner, { op: "rotate", name: "sams-bot", days: "90" })).status).toBe(
+      400,
+    );
+    expect((await h.fetch("/agents/sams-bot/revoke", form(owner))).status).toBe(303);
+
+    // The new token page isn't cached anywhere.
+    const done = await manage(h, owner, { op: "rotate", name: h.agent.agentName, days: "90" });
+    const { next } = (await done.json()) as { next: string };
+    expect((await h.fetch(next, { as: owner })).headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("removes a workdir even when another one has since been deleted", async () => {
+    const h = humanPlaneHarness();
+    const owner = await h.signIn(await h.enroll());
+    const keepDir = tempDir("heel-web-keep-");
+    const goneDir = tempDir("heel-web-gone-");
+    setWorkRoots(h.t.db, h.t.orgId, h.agent.agentName, [keepDir, goneDir]);
+    const [kept, gone] = workRootsOf(h.t.db, h.agent.agentId);
+    rmSync(goneDir, { recursive: true });
+    const removed = await h.fetch(
+      `/agents/${h.agent.agentName}/workdirs/remove`,
+      form(owner, { path: kept ?? "" }),
+    );
+    expect(removed.status).toBe(303);
+    expect(workRootsOf(h.t.db, h.agent.agentId)).toEqual([gone]);
   });
 });
