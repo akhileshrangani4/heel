@@ -274,7 +274,7 @@ describe("proposed workdirs on the approval page", () => {
     const proposed = proposeRules(
       h.t.db,
       { orgId: h.t.orgId, ownerId: h.t.ownerId, agentId: h.agent.agentId },
-      { workdirs: [{ path: link }] },
+      { workdirs: [{ path: link, why: "to work there" }] },
       h.clock.now,
     );
     if (!proposed.ok) throw new Error(proposed.problems.join("; "));

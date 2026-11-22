@@ -56,6 +56,16 @@ const MAX_PROPOSAL_BYTES = 32 * 1024;
 const MAX_WHY_CHARS = 200;
 const MAX_REASON_CHARS = 500;
 
+/**
+ * Every proposed line says why, in the agent's words (roadmap 2.2): the owner
+ * reads it next to the rule, and it's written above the rule in the file.
+ */
+const WHY_MISSING = "say in one plain sentence why your owner should add this";
+const WHY = z
+  .string({ error: WHY_MISSING })
+  .max(2_000)
+  .refine((text) => text.trim() !== "", { message: WHY_MISSING });
+
 /** What `heel_propose_rules` takes: rules, hide entries, or both. */
 export const ProposeRulesInput = z
   .strictObject({
@@ -63,7 +73,7 @@ export const ProposeRulesInput = z
       .array(
         z.strictObject({
           rule: z.record(z.string(), z.unknown()),
-          why: z.string().max(2_000).optional(),
+          why: WHY,
         }),
       )
       .max(MAX_PROPOSED_RULES)
@@ -72,7 +82,7 @@ export const ProposeRulesInput = z
       .array(
         z.strictObject({
           entry: z.record(z.string(), z.unknown()),
-          why: z.string().max(2_000).optional(),
+          why: WHY,
         }),
       )
       .max(MAX_PROPOSED_HIDE)
@@ -81,7 +91,7 @@ export const ProposeRulesInput = z
       .array(
         z.strictObject({
           path: z.string().min(1).max(1_024),
-          why: z.string().max(2_000).optional(),
+          why: WHY,
         }),
       )
       .max(MAX_PROPOSED_WORKDIRS)

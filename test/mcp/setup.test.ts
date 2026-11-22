@@ -110,8 +110,16 @@ describe("heel_accounts", () => {
     // biome-ignore lint/suspicious/noThenProperty: `then` is the rules file's key.
     const rule = { match: { tool: "search_notes" }, then: "allow" };
     const who = { orgId: h.t.orgId, ownerId: h.t.ownerId, agentId };
-    const own = proposeRules(h.t.db, who, { rules: [{ rule }] }, new Date());
-    proposeRules(h.t.db, who, { rules: [{ rule }] }, new Date(), { by: "heel", before: "x" });
+    const own = proposeRules(
+      h.t.db,
+      who,
+      { rules: [{ rule, why: "to search notes" }] },
+      new Date(),
+    );
+    proposeRules(h.t.db, who, { rules: [{ rule, why: "to search notes" }] }, new Date(), {
+      by: "heel",
+      before: "x",
+    });
     const answer = (await client.callTool({ name: "heel_accounts", arguments: {} }))
       .structuredContent as Answer;
     expect(answer.waiting.ruleProposals.map((p) => p.proposalId)).toEqual([
