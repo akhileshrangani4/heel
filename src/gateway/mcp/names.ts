@@ -45,7 +45,7 @@ export const HEEL_HISTORY_TOOL: Tool = {
     "What your owner decided about your requests that asked for approval, in the last 30 days: " +
     "grouped by account, action and what a rule can match (repo, calendar, recipients' domains), " +
     "with how many were approved and denied and on how many days. Only your own requests; never their contents. " +
-    "Also lists rules heel would suggest for you from them, each with an id. To ask for one, call " +
+    "Also lists rules heel would suggest for you from them (what it would allow or deny, from your own calls), each with an id. To ask for one, call " +
     'heel_propose_rules with {"suggestion": "<id>"}; nothing changes until your owner adds it with a passkey. ' +
     "Use it when the same kind of call keeps asking, before proposing a rule.",
   inputSchema: { type: "object", properties: {}, additionalProperties: false },

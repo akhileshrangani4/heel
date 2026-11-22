@@ -455,13 +455,16 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
       decisions,
       suggestions: suggestions.map((s) => ({
         suggestion: s.key,
-        rule: s.rule,
+        // Only what heel drew from this agent's own calls: the conditions heel adds from the
+        // owner's rule that asked stay with heel, as the owner's file always does.
+        then: s.decision,
+        match: s.own,
         evidence: s.evidence,
       })),
       message:
         suggestions.length === 0
           ? "No rule to suggest yet. Propose one with heel_propose_rules only if your owner keeps approving the same kind of call."
-          : 'To ask for a suggested rule, call heel_propose_rules with {"suggestion": "<its suggestion id>"}. heel writes the rule and places it; nothing changes until your owner adds it with a passkey.',
+          : 'To ask for a suggested rule, call heel_propose_rules with {"suggestion": "<its suggestion id>"}. heel writes the rule, adds the conditions of your owner\'s rule that asked, and places it before that rule; nothing changes until your owner adds it with a passkey.',
     };
     return { content: [{ type: "text", text: JSON.stringify(body) }], structuredContent: body };
   }
@@ -488,10 +491,13 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
       rules: deps.learning?.rules.set ?? null,
       threshold: deps.learning?.threshold ?? null,
     };
-    const mine = historyFor(learning, agent, now()).suggestions.some((s) => s.key === key);
-    const outcome = mine
-      ? proposeSuggestion(learning, { orgId: agent.orgId, userId: agent.ownerId }, key, now())
-      : null;
+    const outcome = proposeSuggestion(
+      learning,
+      { orgId: agent.orgId, userId: agent.ownerId },
+      key,
+      now(),
+      agent.agentId,
+    );
     if (outcome === null) {
       return refuse({
         status: "invalid",

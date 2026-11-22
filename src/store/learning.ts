@@ -272,8 +272,6 @@ export function historyFor(
   const own = decidedBy(deps.db, agent.ownerId, since, deps.rules, user.name, agent.agentId);
   return {
     decisions: summarizeDecisions(own, now),
-    suggestions: suggestionsFor(deps, agent.ownerId, now).filter(
-      (s) => s.agentId === agent.agentId,
-    ),
+    suggestions: suggestionsForAgent(deps, agent.ownerId, agent.agentId, now),
   };
 }

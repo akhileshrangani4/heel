@@ -26,7 +26,8 @@ interface History {
   decisions: Record<string, unknown>[];
   suggestions: {
     suggestion: string;
-    rule: { match: Record<string, unknown>; then: string };
+    then: string;
+    match: Record<string, unknown>;
     evidence: string;
   }[];
   message: string;
@@ -82,10 +83,8 @@ describe("heel_history (2.10)", () => {
     expect(answer.suggestions).toEqual([
       {
         suggestion: expect.any(String),
-        rule: {
-          match: { agent: "inbox-bot", account: "notes", tool: "delete_note", persistence: false },
-          then: "deny",
-        },
+        then: "deny",
+        match: { agent: "inbox-bot", account: "notes", tool: "delete_note", persistence: false },
         evidence: expect.stringMatching(/^denied 5 times on \d days since/),
       },
     ]);
@@ -136,8 +135,58 @@ describe("heel_history (2.10)", () => {
       .where(eq(ruleProposals.id, done.proposalId ?? ""))
       .get();
     expect(row?.origin).toBe("heel");
-    expect(row?.rules[0]?.rule).toEqual(suggested?.rule);
+    expect(row?.rules[0]?.rule).toEqual({ match: suggested?.match, then: "deny" });
     // Placed right before the rule that asked, like the owner's own Review.
     expect(row?.rules[0]?.before).toEqual(expect.any(String));
+  });
+
+  it("never shows the agent the conditions of its owner's rule that asked", async () => {
+    const h = await mcpHarness({
+      owner: `rules:
+  - match: { tool: search_notes }
+    then: allow
+  - match: { tool: delete_note, args.id: { matches: "(secret|ceo-divorce|layoff-list)-.*" } }
+    then: ask
+`,
+      learning: { decisions: 5, days: 2 },
+    });
+    const client = await h.connect("/mcp/notes");
+    for (let i = 0; i < 5; i++) {
+      await client.callTool({ name: "delete_note", arguments: { id: `secret-${i}` } });
+    }
+    h.t.db
+      .select()
+      .from(approvals)
+      .where(eq(approvals.status, "pending"))
+      .all()
+      .forEach((row, i) => {
+        decideApproval(h.t.db, new SqliteApprovalStore(), new SqlitePauseStore(), {
+          approver: { orgId: h.t.orgId, userId: h.t.ownerId, role: "admin" },
+          approvalId: row.id,
+          callHash: row.callHash,
+          intent: "deny",
+          standing: null,
+          now: new Date(Date.now() - (i + 1) * 13 * HOUR),
+        });
+      });
+    const answer = (await client.callTool({ name: "heel_history", arguments: {} }))
+      .structuredContent as History;
+    expect(answer.suggestions).toHaveLength(1);
+    expect(JSON.stringify(answer)).not.toMatch(/ceo-divorce|layoff-list|args\.id/);
+    // The proposal heel writes still carries them.
+    const propose = (
+      await client.callTool({
+        name: "heel_propose_rules",
+        arguments: { suggestion: answer.suggestions[0]?.suggestion },
+      })
+    ).structuredContent as { proposalId?: string };
+    const row = h.t.db
+      .select()
+      .from(ruleProposals)
+      .where(eq(ruleProposals.id, propose.proposalId ?? ""))
+      .get();
+    expect(row?.rules[0]?.rule["match"]).toMatchObject({
+      "args.id": { matches: expect.any(String) },
+    });
   });
 });
