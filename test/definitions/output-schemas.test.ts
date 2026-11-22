@@ -9,6 +9,7 @@ import { OUTLOOK_TOOLS } from "../../src/definitions/outlook/definition.ts";
 import { SLACK_TOOLS } from "../../src/definitions/slack/definition.ts";
 import { STRIPE_TOOLS } from "../../src/definitions/stripe/definition.ts";
 import { listedTool } from "../../src/gateway/mcp/names.ts";
+import { mcpHarness } from "../helpers/mcp.ts";
 
 /**
  * Code mode round 2, C5: built-in tools list an MCP outputSchema, made from
@@ -63,5 +64,42 @@ describe("output schemas for built-in tools (C5)", () => {
     };
     expect(listedTool(tool, "x", true)).toHaveProperty("outputSchema");
     expect(listedTool(tool, "x")).not.toHaveProperty("outputSchema");
+  });
+
+  it("a client that checks results takes a built-in tool's answer, and heel's denials, without complaint", async () => {
+    const fetch = async (input: string | URL | Request): Promise<Response> => {
+      const url = new URL(input.toString());
+      if (url.pathname === "/repos/acme/web/issues") {
+        return Response.json([
+          { number: 7, title: "Bug", state: "open", user: { login: "dev" }, labels: [] },
+        ]);
+      }
+      return Response.json({}, { status: 404 });
+    };
+    const h = await mcpHarness({
+      owner: `rules:
+  - match: { account: github, kind: read }
+    then: allow
+`,
+      github: { fetch },
+    });
+    const client = await h.connect("/mcp?tools=direct");
+    const { tools } = await client.listTools();
+    expect(tools.find((t) => t.name === "github__list_issues")?.outputSchema).toMatchObject({
+      type: "object",
+    });
+    // The SDK client checks this result against the schema, and would throw if it didn't fit.
+    const allowed = await client.callTool({
+      name: "github__list_issues",
+      arguments: { repo: "acme/web" },
+    });
+    expect(allowed.isError).toBeFalsy();
+    expect(allowed.structuredContent).toMatchObject({ issues: [{ number: 7 }] });
+    // A denial is an error result: not checked against the schema, so it comes through.
+    const denied = await client.callTool({
+      name: "github__create_issue",
+      arguments: { repo: "acme/web", title: "x" },
+    });
+    expect(denied.isError).toBe(true);
   });
 });
