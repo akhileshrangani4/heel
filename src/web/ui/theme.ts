@@ -153,7 +153,7 @@ legend{font-weight:600;padding:0 .25rem}
 label{cursor:pointer}
 button:not(:disabled),[role="button"],summary,select,input[type="radio"],input[type="checkbox"],input[type="submit"]{cursor:pointer}
 .choice{display:flex;gap:.5rem;align-items:baseline;margin:.25rem 0}
-select,textarea,input[type="text"],input[type="url"],input[type="email"],input[type="search"],input:not([type]){font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:.45rem .6rem}
+select,textarea,input[type="text"],input[type="url"],input[type="email"],input[type="search"],input[type="password"],input:not([type]){font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:.45rem .6rem}
 textarea{width:100%;min-height:5rem}
 .paste-form{display:grid;gap:.5rem;margin:.75rem 0;max-width:40rem}
 .paste-form label{font-weight:600}
