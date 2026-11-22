@@ -191,6 +191,7 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
             .map((u) => u.name)
             .sort(),
           groups: deps.oidc != null,
+          admin: session.role === "admin",
         },
       }),
     });

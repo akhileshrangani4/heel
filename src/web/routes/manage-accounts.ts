@@ -41,7 +41,9 @@ import type { SessionView } from "../sessions.ts";
  *
  * Sharing an account and naming its approvers (D13b, as `heel account share`
  * and `heel account approvers`) also ask for a passkey: both give someone
- * else a say. Unsharing only takes access away, so it's a plain form.
+ * else a say. Owners share; only admins name approvers (spec: Teams), so a
+ * member can't remove the reviewer an admin put on their account. Unsharing
+ * only takes access away, so it's a plain form.
  */
 
 const MAX_KEY_CHARS = 8_192;
@@ -174,9 +176,15 @@ export function manageAccountRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       return { binding: { op, account: account.id, kind, principal: person.id } };
     }
     if (op === "approvers") {
+      // Admins assign approvers (spec: Teams): an owner can't clear the reviewer set on their account.
+      if (session.role !== "admin")
+        return { problem: "Only an admin names an account's approvers." };
       const account = owned(session, alias);
       if (account === null) return { problem: "There's no account of yours by that name." };
       const repo = (stringField(body, "repo") ?? "").trim();
+      // The form for a new repo, left empty, must not replace the approvers for every call.
+      if (repo === "" && stringField(body, "scope") === "repo")
+        return { problem: "Name the repo." };
       if (repo !== "" && account.provider !== "github" && account.provider !== "cli:gh") {
         return { problem: "Approvers for one repo are only for GitHub accounts." };
       }
@@ -245,6 +253,8 @@ export function manageAccountRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       }
       approvers.push(principal);
     }
+    // Checked again now: a role can change between the prompt and the tap.
+    if (session.role !== "admin") return { ok: false, message: "That change isn't yours to make." };
     const repo = binding["repo"] === "" ? null : (binding["repo"] ?? null);
     setApprovers(deps.db, deps.orgId, account.alias, repo, approvers, deps.now());
     return { ok: true, alias: account.alias };

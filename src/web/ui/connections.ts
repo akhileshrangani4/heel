@@ -38,6 +38,8 @@ export interface ConnectionsProps {
     people?: readonly string[];
     /** People sign in with an IdP, so its groups can be named. */
     groups?: boolean;
+    /** Admins name approvers (spec: Teams); owners see who they are. */
+    admin?: boolean;
   };
 }
 
@@ -155,6 +157,7 @@ function sharingControls(row: ConnectionRow, manage: Manage, key: string): Html 
   const general = sharing.approvers.filter((a) => a.repo === undefined);
   const byRepo = sharing.approvers.filter((a) => a.repo !== undefined);
   const isGitHub = row.provider === "github" || row.provider === "cli:gh";
+  const repos = [...new Set(byRepo.flatMap((a) => (a.repo === undefined ? [] : [a.repo])))];
   return html`<h3>Who can use it</h3>
     <ul class="plain-list">
       <li>You (it's yours)</li>
@@ -206,41 +209,90 @@ function sharingControls(row: ConnectionRow, manage: Manage, key: string): Html 
     <h3>Who approves its requests</h3>
     <p class="muted">${
       general.length === 0 ? "You do." : `${general.map(principalName).join(", ")}, instead of you.`
-    }${byRepo.length === 0 ? "" : ` For ${[...new Set(byRepo.map((a) => a.repo))].join(", ")}: ${byRepo.map((a) => `${principalName(a)} (${a.repo})`).join(", ")}.`}</p>
-    <div id="approvers-${key}" class="stack-form">
-      <input type="hidden" name="op" value="approvers" />
-      ${people.map(
-        (name, i) => html`<div class="row">
-          <label for="approvers-${key}-${String(i)}">${name}</label>
-          <input id="approvers-${key}-${String(i)}" type="checkbox" name="user:${name}"${general.some((a) => a.user === name) ? " checked" : ""} />
-        </div>`,
-      )}
-      ${
-        manage.groups === true
-          ? html`<div class="row">
-              <label for="approvers-${key}-groups">Groups (comma between)</label>
-              <input id="approvers-${key}-groups" name="groups" autocomplete="off" />
-            </div>`
-          : ""
-      }
-      ${
-        isGitHub
-          ? html`<div class="row">
-              <label for="approvers-${key}-repo">Only for repo (optional)</label>
-              <input id="approvers-${key}-repo" name="repo" placeholder="owner/name" autocomplete="off" />
-            </div>`
-          : ""
-      }
-      <p class="muted">Nobody ticked means you decide again.</p>
-      ${ceremonyButton({
-        callback: { handler: "manageAccount" },
-        intent: "manage-account",
-        label: "Save approvers with your passkey",
-        tone: "secondary",
-        binding: { alias: row.alias },
-        optionsFrom: `approvers-${key}`,
-      })}
-    </div>`;
+    }${repos
+      .map(
+        (repo) =>
+          ` For ${repo}: ${byRepo
+            .filter((a) => a.repo === repo)
+            .map(principalName)
+            .join(", ")}.`,
+      )
+      .join("")}</p>
+    ${
+      manage.admin === true
+        ? html`${approversForm(row, manage, `${key}-all`, null, general)}
+          ${repos.map((repo, i) =>
+            approversForm(
+              row,
+              manage,
+              `${key}-r${String(i)}`,
+              repo,
+              byRepo.filter((a) => a.repo === repo),
+            ),
+          )}
+          ${isGitHub ? approversForm(row, manage, `${key}-new`, "", []) : ""}`
+        : html`<p class="muted">An admin sets who approves an account's requests.</p>`
+    }`;
+}
+
+/**
+ * Approvers for one scope: every call (`repo` null), one repo already named,
+ * or a new repo (`""`). Each form starts from that scope's own approvers,
+ * since saving replaces exactly that scope.
+ */
+function approversForm(
+  row: ConnectionRow,
+  manage: Manage,
+  id: string,
+  repo: string | null,
+  current: readonly { user?: string; group?: string }[],
+): Html {
+  const people = manage.people ?? [];
+  const groups = current.flatMap((a) => (a.group === undefined ? [] : [a.group]));
+  const title =
+    repo === null ? "For every call" : repo === "" ? "For one repo" : `For ${repo} only`;
+  return html`<div id="approvers-${id}" class="stack-form approvers-form">
+    <p class="muted"><strong>${title}</strong></p>
+    <input type="hidden" name="op" value="approvers" />
+    ${
+      repo === ""
+        ? html`<input type="hidden" name="scope" value="repo" />
+          <div class="row">
+            <label for="approvers-${id}-repo">Repo</label>
+            <input id="approvers-${id}-repo" name="repo" placeholder="owner/name" autocomplete="off" />
+          </div>`
+        : html`<input type="hidden" name="repo" value="${repo ?? ""}" />`
+    }
+    ${people.map(
+      (name, i) => html`<div class="row">
+        <label for="approvers-${id}-${String(i)}">${name}</label>
+        <input id="approvers-${id}-${String(i)}" type="checkbox" name="user:${name}"${current.some((a) => a.user === name) ? " checked" : ""} />
+      </div>`,
+    )}
+    ${
+      manage.groups === true
+        ? html`<div class="row">
+            <label for="approvers-${id}-groups">Groups (comma between)</label>
+            <input id="approvers-${id}-groups" name="groups" autocomplete="off" value="${groups.join(", ")}" />
+          </div>`
+        : ""
+    }
+    <p class="muted">${
+      repo === null
+        ? "Nobody named means the owner decides again."
+        : repo === ""
+          ? "Calls on that repo go to them instead."
+          : "Nobody named means calls on this repo go back to the approvers for every call."
+    }</p>
+    ${ceremonyButton({
+      callback: { handler: "manageAccount" },
+      intent: "manage-account",
+      label: "Save with your passkey",
+      tone: "secondary",
+      binding: { alias: row.alias },
+      optionsFrom: `approvers-${id}`,
+    })}
+  </div>`;
 }
 
 function rowControls(row: ConnectionRow, manage: Manage, index: number): Html {

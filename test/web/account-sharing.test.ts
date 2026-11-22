@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { accounts, users } from "../../src/store/schema.ts";
-import { sharingOf } from "../../src/store/sharing.ts";
+import { setApprovers, sharingOf } from "../../src/store/sharing.ts";
 import {
   type Browser,
   type HumanPlaneHarness,
@@ -158,6 +158,58 @@ describe("sharing accounts in the web app (2.9)", () => {
     expect(
       (await manage(h, owner, { op: "approvers", alias: "gh-web", "user:nobody": "on" })).status,
     ).toBe(400);
+  });
+
+  it("only an admin names approvers: a member can't clear the one an admin put on their account", async () => {
+    const { h, owner, sam } = await setUp();
+    await manage(h, sam, { op: "connect", service: "github", alias: "sam-gh" });
+    await h.ceremony(
+      sam,
+      {
+        url: "/connections/manage/challenge",
+        body: { op: "connect", service: "github", alias: "sam-gh2" },
+      },
+      "/connections/manage/confirm",
+      { key: "ghp_y" },
+    );
+    setApprovers(
+      h.t.db,
+      h.t.orgId,
+      "sam-gh2",
+      null,
+      [{ kind: "user", name: "owner" }],
+      h.clock.now,
+    );
+    expect((await manage(h, sam, { op: "approvers", alias: "sam-gh2" })).status).toBe(400);
+    expect(sharingOf(h.t.db, h.t.orgId, "sam-gh2").approvers).toEqual([{ user: "owner" }]);
+    const page = await (await h.fetch("/connections", { as: sam })).text();
+    expect(page).toContain("An admin sets who approves");
+    expect(page).not.toContain("approvers-row0-all");
+    // The owner here is an admin.
+    expect(
+      (await manage(h, owner, { op: "approvers", alias: "gh-web", "user:sam": "on" })).status,
+    ).toBe(200);
+  });
+
+  it("gives each scope its own form, starting from that scope's approvers", async () => {
+    const { h, owner } = await setUp();
+    await manage(h, owner, { op: "approvers", alias: "gh-web", "user:sam": "on" });
+    // The new-repo form, left empty, doesn't replace the approvers for every call.
+    expect(
+      (await manage(h, owner, { op: "approvers", alias: "gh-web", scope: "repo", repo: "" }))
+        .status,
+    ).toBe(400);
+    expect(sharingOf(h.t.db, h.t.orgId, "gh-web").approvers).toEqual([{ user: "sam" }]);
+    await manage(h, owner, {
+      op: "approvers",
+      alias: "gh-web",
+      scope: "repo",
+      repo: "acme/prod",
+      "user:sam": "on",
+    });
+    const page = await (await h.fetch("/connections", { as: owner })).text();
+    expect(page).toMatch(/id="approvers-row0-all-0" type="checkbox" name="user:sam" checked/);
+    expect(page).toContain("For acme/prod only");
   });
 
   it("refuses repo approvers on an account that isn't GitHub", async () => {
