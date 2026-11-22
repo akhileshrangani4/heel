@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray } from "drizzle-orm";
+import { and, eq, gt, gte, inArray, isNull } from "drizzle-orm";
 import type { Call } from "../core/call.ts";
 import {
   type DecidedCall,
@@ -12,7 +12,15 @@ import {
 import type { RuleSet } from "../core/rules/evaluate.ts";
 import { type ProposeOutcome, proposeRules } from "../proposals/rules.ts";
 import type { HeelDb } from "./db.ts";
-import { agents, approvals, auditLog, learningDismissals, ruleProposals, users } from "./schema.ts";
+import {
+  agents,
+  approvals,
+  auditLog,
+  learningDismissals,
+  ruleProposals,
+  standingApprovals,
+  users,
+} from "./schema.ts";
 
 /**
  * Where heel's rule suggestions come from (roadmap 2.10): what a person
@@ -118,6 +126,19 @@ function learned(
     now,
     skip,
     ...(options.limit === undefined ? {} : { limit: options.limit }),
+    standing: (agentId, ruleHash) =>
+      deps.db
+        .select({ id: standingApprovals.id })
+        .from(standingApprovals)
+        .where(
+          and(
+            eq(standingApprovals.agentId, agentId),
+            eq(standingApprovals.ruleHash, ruleHash),
+            isNull(standingApprovals.revokedAt),
+            gt(standingApprovals.expiresAt, now),
+          ),
+        )
+        .get() !== undefined,
   });
 }
 

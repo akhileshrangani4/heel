@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "acd17b8e-59b8-4e89-9299-beeaed2312fb",
+  "id": "c3ed464e-f0ef-4280-aea3-493b08c4e43e",
   "prevId": "5714c5c8-40c4-46d7-bfd0-480e314043be",
   "tables": {
     "account_approvers": {
@@ -1217,6 +1217,14 @@
           "name": "audit_log_script",
           "columns": [
             "script_id"
+          ],
+          "isUnique": false
+        },
+        "audit_log_approver_at": {
+          "name": "audit_log_approver_at",
+          "columns": [
+            "approver_id",
+            "at"
           ],
           "isUnique": false
         }

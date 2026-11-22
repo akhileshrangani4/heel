@@ -805,6 +805,8 @@ export const auditLog = sqliteTable(
     index("audit_log_agent_at").on(t.agentId, t.at),
     index("audit_log_approval").on(t.approvalId),
     index("audit_log_script").on(t.scriptId),
+    // Rule suggestions read a person's own decisions (2.10).
+    index("audit_log_approver_at").on(t.approverId, t.at),
     check("audit_log_kind", sql`"kind" IN (${sqlList(AUDIT_KINDS)})`),
     check(
       "audit_log_pause_scope",

@@ -171,6 +171,7 @@ Every key in a `match` must hold (AND). A key whose field the call doesn't have 
 | `verb` | text | CLI (`gh` and `kubectl` only): the first word of the command (`pr`, `delete`). | `verb: delete` |
 | `subcommand` | text | CLI (`gh` and `kubectl` only): the rest of the command (`merge`, `deploy-key add`). | `verb: pr, subcommand: merge` |
 | `argv` | text list | CLI: the whole command line, with the command name at index 0. | `argv: { any_of: [--force] }` |
+| `persistence` | `true` or `false` | Whether the call [outlives heel](#calls-that-outlive-heel). `false` keeps a rule to ordinary calls. | `action: email.send, persistence: false` |
 | `channel` | Slack channel id | The channel a Slack call touches. | `channel: C0123ABCD` |
 | `external` | `true` or `false` | Slack: the channel reaches another organization (Slack Connect, DMs). | `external: true` |
 | `team` | Linear team key | Values are upper-cased, so `team: eng` is `ENG`. A `matches` pattern ignores case. | `team: eng` |
@@ -237,7 +238,7 @@ Which operators each key takes:
 | `recipients` | `equals`, `one_of`, `any_of`, `matches`, `any_domain_in`, `all_domain_in`, `max`, `all_in_thread` |
 | `argv` | `equals`, `one_of`, `any_of`, `matches`, `max` |
 | `channel`, `team`, `project`, `parent`, `currency`, `customer` | `equals`, `one_of`, `any_of`, `matches` |
-| `external` | `equals` |
+| `external`, `persistence` | `equals` |
 | `amount` | `equals`, `one_of`, `max` |
 | `args.*`, `body.*`, `query.*`, `flags.*` | `equals`, `one_of`, `any_of`, `matches`, `any_domain_in`, `all_domain_in`, `max` |
 
@@ -382,6 +383,7 @@ Some calls leave something behind that keeps acting after you revoke heel: a Gma
 - **A rule must name them** by `action` or `tool`, as plain text (shorthand, `equals`, `one_of` or `any_of`). With no such rule, the call is denied (`persistence_unnamed`).
 - **A broad rule can deny them but never allow or ask.** `match: {}` with `then: allow`, or `action: { matches: "github\\..*" }`, skips them.
 - **Naming the action is enough.** A forwarding filter is `email.send`, so a rule `action: email.send` with `then: allow` admits one whose forward address passes the rule's other conditions.
+- **`persistence: false` keeps a rule off them.** Such a rule never matches one, and doesn't count as naming one either. heel's [suggested rules](rules.md#heel-suggests-rules-from-what-you-decide) always carry it, so a rule learned from your sends can't allow a forwarding filter.
 - **`gh api` is one of them**, read or write, since heel can't tell what a raw call does. A broad `gh` allow skips it; name it (`tool: gh api` or `action: github.api`) to ask for it or allow it.
 
 ```yaml title="rules/owner.yaml"
@@ -818,7 +820,7 @@ rules:
 ```text
 $ heel rules check
 heel: rules are invalid (2 problems):
-  ~/.heel/rules/owner.yaml:2:22: rules.0.match.acount: unknown match key "acount"; use account, provider, agent, action, kind, recipients, repo, calendar, checks, items, tool, method, path, command, verb, subcommand, argv, channel, external, team, project, parent, amount, currency, customer, args.<path>, body.<path>, query.<name> or flags.<name>
+  ~/.heel/rules/owner.yaml:2:22: rules.0.match.acount: unknown match key "acount"; use account, provider, agent, action, kind, recipients, repo, calendar, checks, items, tool, method, path, command, verb, subcommand, argv, persistence, channel, external, team, project, parent, amount, currency, customer, args.<path>, body.<path>, query.<name> or flags.<name>
   ~/.heel/rules/owner.yaml:4:26: rules.1.match.recipients: all_in_thread is a state check heel has only for action email.send; name that action in this rule (I-23)
 ```
 

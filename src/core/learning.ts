@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Call } from "./call.ts";
-import { domainOf, normalizeAddress } from "./rules/address.ts";
+import { normalizeAddress } from "./rules/address.ts";
 import { type CompiledRule, compileRulesFile, ruleContentHash } from "./rules/compile.ts";
 import { evaluate, NO_STANDING_APPROVALS, plainMatch, type RuleSet } from "./rules/evaluate.ts";
 import { factsOf } from "./rules/facts.ts";
@@ -18,11 +18,14 @@ import { RulesFile } from "./rules/schema.ts";
  * - It goes right before the rule that asked (`before`), with that rule's
  *   conditions as well as its own, so it only decides calls that rule would
  *   have asked about. Every rule above it still decides first.
- * - It names the agent, the account and the action, and exactly what the
- *   calls had in common that a rule can match: the repo, the calendar, and
- *   the recipients (their domains; for personal mail such as gmail.com, the
- *   addresses; or none at all). Calls with different recipients are
- *   different groups, so one approval can't widen another's.
+ * - It names the agent, the account, the action and the tool, and exactly
+ *   what the calls had in common that a rule can match: the repo, the
+ *   calendar, and the exact set of recipients (or none at all). Calls with
+ *   different recipients are different groups, so one approval can't widen
+ *   another's, and a rule for mail to a and b doesn't cover mail to a alone.
+ * - It says `persistence: false`, so it never matches a call that outlives
+ *   heel (a filter that forwards mail, a workflow push, I-70) and doesn't
+ *   count as naming one; groups with such a call aren't learned from at all.
  * - An allow needs a repo, a calendar or recipients: "allow this action with
  *   any arguments" goes past what was approved. A deny needs none.
  * - It matches no call the person decided the other way in the window.
@@ -35,32 +38,6 @@ import { RulesFile } from "./rules/schema.ts";
 export const LEARNING_WINDOW_DAYS = 30;
 /** How many suggestions are shown at once: few, so each is read. */
 export const MAX_LEARNED = 5;
-
-/** Personal mail domains: a suggestion names addresses there, never the whole domain. */
-const PERSONAL_MAIL = new Set([
-  "gmail.com",
-  "googlemail.com",
-  "outlook.com",
-  "hotmail.com",
-  "live.com",
-  "msn.com",
-  "yahoo.com",
-  "icloud.com",
-  "me.com",
-  "mac.com",
-  "aol.com",
-  "proton.me",
-  "protonmail.com",
-  "gmx.com",
-  "gmx.net",
-  "mail.com",
-  "yandex.com",
-  "zoho.com",
-  "fastmail.com",
-  "hey.com",
-  "qq.com",
-  "163.com",
-]);
 
 export interface DecidedCall {
   agentName: string;
@@ -137,7 +114,6 @@ type Recipients =
   | { kind: "absent" }
   | { kind: "unreadable" }
   | { kind: "none" }
-  | { kind: "domains"; values: string[] }
   | { kind: "addresses"; values: string[] };
 
 function recipientsOf(call: Call): Recipients {
@@ -149,11 +125,7 @@ function recipientsOf(call: Call): Recipients {
     addresses.push(address);
   }
   if (addresses.length === 0) return { kind: "none" };
-  const domains = [...new Set(addresses.map(domainOf))].sort();
-  if (domains.some((d) => PERSONAL_MAIL.has(d))) {
-    return { kind: "addresses", values: [...new Set(addresses)].sort() };
-  }
-  return { kind: "domains", values: domains };
+  return { kind: "addresses", values: [...new Set(addresses)].sort() };
 }
 
 function recipientsKey(r: Recipients): string {
@@ -165,10 +137,9 @@ function recipientsCondition(r: Recipients): unknown {
     case "none":
       // An absent field fails every check, so this matches only an empty list.
       return { max: 0 };
-    case "domains":
-      return { all_domain_in: r.values };
     case "addresses":
-      return { one_of: r.values };
+      // Exactly this set: not a subset of it, not a whole domain.
+      return { equals: r.values };
     default:
       return undefined;
   }
@@ -182,6 +153,8 @@ interface Group {
   /** The action, or the tool when the call had none. */
   subject: string;
   byAction: boolean;
+  tool: string;
+  persistent: boolean;
   repo: string | undefined;
   calendar: string | undefined;
   recipients: Recipients;
@@ -240,7 +213,9 @@ function combined(
 function draft(group: Group, asker: CompiledRule): LearnedRule["rule"] | null {
   const then = group.decision === "approved" ? "allow" : "deny";
   const ours: Record<string, unknown> = { agent: group.agentName, account: group.account };
-  ours[group.byAction ? "action" : "tool"] = group.subject;
+  if (group.byAction) ours["action"] = group.subject;
+  ours["tool"] = group.tool;
+  ours["persistence"] = false;
   if (group.repo !== undefined) ours["repo"] = group.repo;
   if (group.calendar !== undefined) ours["calendar"] = group.calendar;
   const recipients = recipientsCondition(group.recipients);
@@ -276,7 +251,12 @@ function stillAskedBy(
     counted: () => 0,
     standing: NO_STANDING_APPROVALS,
   });
-  return verdict.decision === "ask" && verdict.rule?.hash === asker.hash;
+  return (
+    verdict.decision === "ask" &&
+    verdict.rule.hash === asker.hash &&
+    verdict.rule.layer === "owner" &&
+    !verdict.rule.watch
+  );
 }
 
 /** What the decisions had in common, for the evidence line. */
@@ -286,7 +266,7 @@ function shapeOf(group: Group): string {
   if (group.calendar !== undefined) parts.push(`on calendar ${group.calendar}`);
   const r = group.recipients;
   if (r.kind === "none") parts.push("with no one invited or addressed");
-  if (r.kind === "domains" || r.kind === "addresses") parts.push(`to ${r.values.join(", ")}`);
+  if (r.kind === "addresses") parts.push(`to ${r.values.join(", ")}`);
   return parts.length === 0 ? "" : `, all ${parts.join(", ")}`;
 }
 
@@ -308,6 +288,8 @@ export function learnRules(
     now: Date;
     skip?: ReadonlySet<string>;
     limit?: number;
+    /** Whether a live standing approval lets this agent's calls past this rule. */
+    standing?: (agentId: string, ruleHash: string) => boolean;
   },
 ): LearnedRule[] {
   const from = input.now.getTime() - LEARNING_WINDOW_DAYS * DAY_MS;
@@ -323,6 +305,8 @@ export function learnRules(
       d.call.account,
       byAction ? "a" : "t",
       subject,
+      d.call.tool,
+      d.call.persistence === true ? "p" : "",
       d.call.repo ?? "",
       d.call.calendar ?? "",
       recipientsKey(recipients),
@@ -335,6 +319,8 @@ export function learnRules(
       account: d.call.account,
       subject,
       byAction,
+      tool: d.call.tool,
+      persistent: d.call.persistence === true,
       repo: d.call.repo,
       calendar: d.call.calendar,
       recipients,
@@ -350,16 +336,16 @@ export function learnRules(
     const { asker } = group;
     if (asker === null || asker.items !== null || asker.stateChecks.length > 0) continue;
     if (asker.layer !== "owner" || asker.watch) continue;
-    if (group.recipients.kind === "unreadable") continue;
+    if (group.recipients.kind === "unreadable" || group.persistent) continue;
+    // A deny would stop calls a standing approval of the owner's lets through today.
+    if (group.decision === "denied" && input.standing?.(group.agentId, asker.hash) === true) {
+      continue;
+    }
     const count = group.calls.length;
     const days = new Set(group.calls.map((c) => dayOf(c.at))).size;
     if (count < input.threshold.decisions || days < input.threshold.days) continue;
     const r = group.recipients.kind;
-    const shaped =
-      group.repo !== undefined ||
-      group.calendar !== undefined ||
-      r === "domains" ||
-      r === "addresses";
+    const shaped = group.repo !== undefined || group.calendar !== undefined || r === "addresses";
     if (group.decision === "approved" && !shaped) continue;
 
     const rule = draft(group, asker);
