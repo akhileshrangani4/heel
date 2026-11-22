@@ -15,6 +15,7 @@ export { describeProposal } from "./describe.ts";
 import { Rule } from "../core/rules/schema.ts";
 import type { HeelDb } from "../store/db.ts";
 import { newId } from "../store/ids.ts";
+import { recordProposalChange } from "../store/rule-changes.ts";
 import {
   agents,
   type ProposedHide,
@@ -532,6 +533,8 @@ export function applyProposal(
   signedSha: string,
   by: string,
   now: Date,
+  /** The file as the history names it, relative to heel's home (2.4); the path when absent. */
+  display: string = file,
 ): { ok: true } | { ok: false; problem: string } {
   if (proposal.status !== "pending" || proposal.expiresAt < now) {
     return { ok: false, problem: "This proposal is no longer waiting." };
@@ -553,6 +556,18 @@ export function applyProposal(
         problem: `heel couldn't write ${file}: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
+    // Recorded in the same synchronous step as the write, so the reload it sets off
+    // finds nothing new to count as made outside heel (2.4).
+    recordProposalChange(db, {
+      orgId: proposal.orgId,
+      userId: proposal.ownerId,
+      file: display,
+      before: preview.before,
+      after: preview.after,
+      proposalId: proposal.id,
+      decidedBy: by,
+      now,
+    });
   }
   const workRoots = preview.workRoots;
   db.transaction((tx) => {

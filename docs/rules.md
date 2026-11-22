@@ -120,7 +120,7 @@ Any list can be left out, but a proposal needs at least one rule, hide entry or 
 - **heel writes the file, never the agent.** The agent sends rule objects, not YAML, and only ever for its own owner's file. It never sees your file: a proposal is checked on its own, and only its own problems go back to the agent. heel can't add a `watch: true` rule or org rules this way.
 - **The passkey signs the exact file.** If the file changes between opening the page and touching your passkey, heel writes nothing and asks you to reload. It won't add to a file that has an error; fix that first.
 - **One proposal per agent waits at a time.** A newer one replaces the older (heel's own suggestions don't replace an agent's proposal, or each other), and a proposal expires after 7 days. A paused agent can't propose.
-- **Proposals are the history.** Each one keeps which agent proposed it, who added or rejected it, and when.
+- **Every change is in the history.** **Rule history** (linked from Activity) lists each change to your rules file, newest first: one added from a proposal says which agent proposed it (or that heel suggested it), who added it and when, with the lines it changed. A change made any other way (your editor, git, a script) is noticed when heel reloads the file and listed as made outside heel, with its lines too. Admins see every file, the org file included.
 
 ## heel suggests rules from what you decide
 

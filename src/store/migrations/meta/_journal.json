@@ -232,6 +232,13 @@
       "when": 1795325752061,
       "tag": "0032_learning",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1795327847040,
+      "tag": "0033_rule_changes",
+      "breakpoints": true
     }
   ]
 }
