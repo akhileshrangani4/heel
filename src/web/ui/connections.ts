@@ -75,25 +75,43 @@ const SERVICE_CHOICES = [
   ["mcp", "A remote MCP server (its URL; sign in after if it asks)"],
 ] as const;
 
+/** Services you sign in to after connecting: no key to paste. */
+const SIGN_IN_SERVICES = ["gmail", "google-calendar", "outlook"];
+
+/** Which fields a service needs: a key, a URL (MCP servers), or neither (it signs in after). */
+const SHOW_FIELDS = `const f=this.closest('.stack-form'),v=this.value,need=v==='mcp'?'mcp':${JSON.stringify(SIGN_IN_SERVICES).replace(/"/g, "'")}.includes(v)?'signin':'key';for(const r of f.querySelectorAll('[data-for]'))r.hidden=r.dataset.for!==need`;
+
 function connectForm(): Html {
   // A div, not a form: nothing here can ever submit, so the key can't end up in a URL.
-  return html`<div id="connect-form" class="form">
+  return html`<div id="connect-form" class="stack-form">
     <input type="hidden" name="op" value="connect" />
-    <label for="connect-service">Service</label>
-    <select id="connect-service" name="service">
-      ${SERVICE_CHOICES.map(([value, label]) => html`<option value="${value}">${label}</option>`)}
-    </select>
-    <label for="connect-alias">Name (how rules and tools call it, like github-work)</label>
-    <input id="connect-alias" name="alias" maxlength="64" autocomplete="off" />
-    <label for="connect-url">URL (MCP servers only)</label>
-    <input id="connect-url" name="url" placeholder="https://notes.example.com/mcp" autocomplete="off" />
-    <label for="connect-oauth">MCP server signs in with OAuth?</label>
-    <select id="connect-oauth" name="oauth">
-      <option value="yes">Yes (most do): sign in after</option>
-      <option value="no">No: it needs no sign-in</option>
-    </select>
-    <label for="connect-key">Key or token (services that take one)</label>
-    <input id="connect-key" name="key" type="password" autocomplete="off" />
+    <div class="row">
+      <label for="connect-service">Service</label>
+      <select id="connect-service" name="service" onchange="${SHOW_FIELDS}">
+        ${SERVICE_CHOICES.map(([value, label]) => html`<option value="${value}">${label}</option>`)}
+      </select>
+    </div>
+    <div class="row">
+      <label for="connect-alias">Name</label>
+      <input id="connect-alias" name="alias" maxlength="64" autocomplete="off" placeholder="github-work" />
+    </div>
+    <div class="row" data-for="mcp" hidden>
+      <label for="connect-url">Server URL</label>
+      <input id="connect-url" name="url" placeholder="https://notes.example.com/mcp" autocomplete="off" />
+    </div>
+    <div class="row" data-for="mcp" hidden>
+      <label for="connect-oauth">Signs in with OAuth?</label>
+      <select id="connect-oauth" name="oauth">
+        <option value="yes">Yes (most do): sign in after</option>
+        <option value="no">No: it needs no sign-in</option>
+      </select>
+    </div>
+    <div class="row" data-for="key">
+      <label for="connect-key">Key or token</label>
+      <input id="connect-key" name="key" type="password" autocomplete="off" />
+    </div>
+    <p class="muted" data-for="signin" hidden>You sign in right after, on this page.</p>
+    <p class="muted">The name is how rules and tools call it. A key goes only to heel's vault, checked with the service first.</p>
     ${ceremonyButton({
       callback: { handler: "manageAccount" },
       intent: "manage-account",
@@ -112,9 +130,11 @@ function rowControls(row: ConnectionRow, csrfToken: string, index: number): Html
     <summary>Manage ${row.alias}</summary>
     ${
       row.holdsKey === true
-        ? html`<div id="rekey-${key}" class="form">
-            <label for="rekey-${key}-key">New key</label>
-            <input id="rekey-${key}-key" name="key" type="password" autocomplete="off" />
+        ? html`<div id="rekey-${key}" class="stack-form">
+            <div class="row">
+              <label for="rekey-${key}-key">New key</label>
+              <input id="rekey-${key}-key" name="key" type="password" autocomplete="off" />
+            </div>
             ${ceremonyButton({
               callback: { handler: "manageAccount" },
               intent: "manage-account",

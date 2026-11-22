@@ -23,6 +23,8 @@ export interface RulesPreview {
   view: RulesFileView;
   /** Opened from the person's own Rules page: only then is there a Save. */
   trusted: boolean;
+  /** The change leaves the file exactly as it is. */
+  unchanged: boolean;
 }
 
 const DECISION_WORDS: Record<string, string> = {
@@ -58,6 +60,13 @@ function problemsList(problems: readonly string[]): Html {
 }
 
 function previewPanel(preview: RulesPreview, current: RulesFileView): Html {
+  if (preview.unchanged) {
+    return html`<section class="card preview" aria-labelledby="preview-heading">
+      <h2 id="preview-heading">Nothing would change</h2>
+      <p>${preview.edit.kind === "decision" ? "That rule already decides that." : "That's what your rules file already says."}</p>
+      <p><a class="btn btn-secondary" href="/rules">Back</a></p>
+    </section>`;
+  }
   return html`<section class="card preview" aria-labelledby="preview-heading">
     <h2 id="preview-heading">Before you save</h2>
     <p>${describe(preview.edit, current, preview.view)}</p>
@@ -109,10 +118,10 @@ ${preview.text}</textarea>
   </section>`;
 }
 
-function ruleRow(r: RulesFileView["rules"][number], position: number, csrf: string): Html {
+function ruleRow(r: RulesFileView["rules"][number], csrf: string): Html {
   return html`<li class="card rule-row">
     <p class="rule-words">
-      <span class="muted">${String(position)}.</span> <strong>${ruleInWords(r.rule)}</strong>
+      <strong>${ruleInWords(r.rule)}</strong>
     </p>
     <div class="rule-meta muted">
       ${r.name === null ? "" : html`<span class="mono">${r.name}</span> · `}${badge(DECISION_WORDS[r.decision] ?? r.decision, r.decision === "deny" ? "error" : r.decision === "ask" ? "warn" : "ok")}
@@ -176,7 +185,7 @@ export function rulesEditorPage(props: {
     ${
       view.rules.length === 0
         ? html`<p class="muted">No rules yet: every call is refused. Agents can propose rules, and heel suggests some from what you approve.</p>`
-        : html`<ol class="rule-list" aria-label="Your rules, in order">${view.rules.map((r, i) => ruleRow(r, i + 1, props.csrfToken))}</ol>`
+        : html`<ol class="rule-list" aria-label="Your rules, in order">${view.rules.map((r) => ruleRow(r, props.csrfToken))}</ol>`
     }
     ${
       view.hide.length === 0

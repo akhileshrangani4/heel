@@ -96,6 +96,16 @@ describe("the rules page (2.9)", () => {
     });
   });
 
+  it("says nothing would change, with no Save, when the decision is already that", async () => {
+    const { h } = setUp();
+    const owner = await h.signIn(await h.enroll());
+    const page = await (
+      await h.fetch(`/rules?op=decision&index=1&then=ask&csrf=${owner.csrf}`, { as: owner })
+    ).text();
+    expect(page).toContain("Nothing would change");
+    expect(page).not.toContain("Save with your passkey");
+  });
+
   it("won't save a change to a file that changed since, or a text it wasn't signed for", async () => {
     const { h, file } = setUp();
     const owner = await h.signIn(await h.enroll());

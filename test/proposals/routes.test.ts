@@ -49,7 +49,7 @@ describe("proposed rules on the approval page", () => {
     expect(page).toContain("so I can summarise your inbox");
     // What the rule does, in words, from the rule itself (roadmap 2.3).
     expect(page).toContain(
-      "Any of your agents may do email.read on any of your accounts without asking you.",
+      "Any of your agents may read email on any of your accounts without asking you.",
     );
     // A crafted link can't make a pending proposal look added or rejected.
     for (const crafted of ["applied", "rejected"]) {

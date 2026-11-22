@@ -34,6 +34,8 @@ export type Theme = "auto" | "light" | "dark";
 export const NAV = [
   { id: "approvals", href: "/approvals", label: "Approvals", section: "approvals" },
   { id: "activity", href: "/activity", label: "Activity", section: "activity" },
+  { id: "rules", href: "/rules", label: "Rules", section: "activity" },
+  { id: "rule-history", href: "/rules/history", label: "Rule history", section: "activity" },
   { id: "agents", href: "/agents", label: "Agents", section: "agents" },
   { id: "standing", href: "/standing", label: "Standing approvals", section: "agents" },
   { id: "grants", href: "/grants", label: "Grants", section: "agents" },
