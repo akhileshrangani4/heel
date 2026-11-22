@@ -44,6 +44,12 @@ export interface CallRequest {
    */
   reason?: string;
   /**
+   * The code-mode script a call came from, and the calls it made before
+   * this one (code mode round 2, C3). Shown to the approver as the agent's
+   * own code; never part of the arguments, the call hash or any rule.
+   */
+  script?: ApprovalScript;
+  /**
    * Aborts when the surface's request ends early (the client hung up). It
    * stops a call already executing, so a `heel run` command or a script
    * doesn't keep running, and holding a sandbox slot, for nobody.
@@ -235,6 +241,33 @@ export interface ApprovalRequest {
   reason: string | null;
   /** The agent's MCP client, self-reported (AuthenticatedAgent.clientName), or null. */
   client: string | null;
+  /** The script the call came from (CallRequest.script), or null. */
+  script: ApprovalScript | null;
+}
+
+/** A code-mode script as the approval page shows it: its code, and what it already called. */
+export interface ApprovalScript {
+  /** The script's code, cut at `MAX_SCRIPT_CHARS`. */
+  code: string;
+  /** Whether `code` was cut. */
+  truncated: boolean;
+  /** The calls it made before this one, in order. */
+  before: { account: string; tool: string; decision: string }[];
+}
+
+/** The most of a script heel keeps with an approval. */
+export const MAX_SCRIPT_CHARS = 20_000;
+
+/** Pure: a script as an approval keeps it, cut to `MAX_SCRIPT_CHARS`. */
+export function approvalScript(
+  code: string,
+  before: readonly { account: string; tool: string; decision: string }[],
+): ApprovalScript {
+  return {
+    code: code.slice(0, MAX_SCRIPT_CHARS),
+    truncated: code.length > MAX_SCRIPT_CHARS,
+    before: before.map(({ account, tool, decision }) => ({ account, tool, decision })),
+  };
 }
 
 export interface ApprovalStore {

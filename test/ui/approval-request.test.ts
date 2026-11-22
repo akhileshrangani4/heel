@@ -74,6 +74,27 @@ describe("ApprovalRequest", () => {
     expect(render({ ...PENDING_REQUEST, reason: null }).querySelector("figure.reason")).toBeNull();
   });
 
+  it("shows the script a code-mode call came from, as the agent's code, as text (C3)", () => {
+    const doc = render({
+      ...PENDING_REQUEST,
+      script: {
+        code: 'import gmail_work\nmsgs = gmail_work.search(query="invoices")\n<script>alert(1)</script>',
+        truncated: false,
+        before: [{ account: "gmail-work", tool: "search", decision: "allow" }],
+      },
+    });
+    const section = doc.querySelector("section.script");
+    if (section === null) throw new Error("no script section");
+    expect(text(section)).toContain("From a script");
+    expect(text(section)).toContain("search on gmail-work (allow)");
+    expect(text(section)).toContain("heel didn't check what it says");
+    expect(text(section)).toContain("<script>alert(1)</script>");
+    expect(section.querySelector("script")).toBeNull();
+
+    const plain = render(PENDING_REQUEST);
+    expect(plain.querySelector("section.script")).toBeNull();
+  });
+
   it("leads with heel's own sentence, built from the call, above the agent's words", () => {
     const doc = render(PENDING_REQUEST);
     expect(text(doc.querySelector("h1"))).toBe(

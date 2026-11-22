@@ -19,6 +19,7 @@ import {
 } from "../core/call.ts";
 import type { ApprovalHint } from "../core/hints.ts";
 import { MODES, type Mode } from "../core/modes.ts";
+import type { ApprovalScript } from "../gateway/pipeline/ports.ts";
 
 /**
  * heel's SQLite schema (spec: Architecture; Teams, "Data model"). Every row
@@ -262,6 +263,12 @@ export const approvals = sqliteTable(
      * shift under someone reviewing it. Never part of `call` or `callHash`.
      */
     reason: text("reason"),
+    /**
+     * The code-mode script the call came from, with the calls it made before
+     * (C3), as the agent wrote it; like `reason`, set when the request opens
+     * and never part of `call` or `callHash`. Null outside code mode.
+     */
+    script: text("script", { mode: "json" }).$type<ApprovalScript>(),
     /** The agent's MCP client when the request opened (agentTokens.clientName); null if unknown. */
     client: text("client"),
     status: text("status", { enum: APPROVAL_STATUSES }).notNull(),
@@ -1057,6 +1064,8 @@ export const parkedScripts = sqliteTable(
     reason: text("reason"),
     /** Calls the script made before it parked, the parked one last; heel's 200-call limit counts them. */
     calls: text("calls", { mode: "json" }).$type<ParkedCall[]>().notNull(),
+    /** The script's code, so an ask later in a resumed script still shows the approver its script. */
+    code: text("code").notNull().default(""),
     /** A hash of the modules the script ran against; a resume against different ones is refused. */
     modulesHash: text("modules_hash").notNull(),
     snapshot: blob("snapshot", { mode: "buffer" }).notNull(),

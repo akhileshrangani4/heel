@@ -46,6 +46,8 @@ export interface ParkInput {
   approvalId: string;
   runId: string | undefined;
   reason: string | undefined;
+  /** The script's code, kept so a later ask in the resumed script still shows it. */
+  code: string;
   calls: readonly ParkedCall[];
   modules: readonly StubModule[];
   /** The `parked` step's snapshot, base64. */
@@ -93,6 +95,7 @@ export function parkScript(db: HeelDb, sealer: Sealer, input: ParkInput, now: Da
         approvalId: input.approvalId,
         runId: input.runId ?? null,
         reason: input.reason ?? null,
+        code: input.code,
         calls: [...input.calls],
         modulesHash: modulesHash(input.modules),
         snapshot: sealer.sealBytes(
@@ -143,6 +146,7 @@ export interface ClaimedScript {
   approvalId: string;
   runId: string | undefined;
   reason: string | undefined;
+  code: string;
   calls: ParkedCall[];
   modulesHash: string;
   /** base64, as a worker's `start` takes it. */
@@ -186,6 +190,7 @@ export function openParked(
     approvalId: row.approvalId,
     runId: row.runId ?? undefined,
     reason: row.reason ?? undefined,
+    code: row.code,
     calls: row.calls,
     modulesHash: row.modulesHash,
     snapshot: snapshot.toString("base64"),

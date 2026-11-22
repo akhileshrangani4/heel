@@ -110,6 +110,7 @@ export class SqliteApprovalStore implements ApprovalStore {
         ruleHash: input.ruleHash,
         reason: input.reason,
         client: input.client,
+        script: input.script,
         status: "pending",
         createdAt: now,
         expiresAt: new Date(now.getTime() + this.ttls.pendingMs),

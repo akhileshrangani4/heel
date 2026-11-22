@@ -90,6 +90,7 @@ function requestView(
     action: row.call.action ?? null,
     rule: row.rule,
     reason: row.reason,
+    script: row.script ?? null,
     client: row.client,
     args: row.call.args,
     // Built from the stored call, never from what the agent said about it.
