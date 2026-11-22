@@ -107,6 +107,7 @@ describe("heel_accounts", () => {
     const h = await mcpHarness({ owner: READS });
     const client = await h.connect("/mcp?tools=direct");
     const agentId = h.t.db.select({ id: agents.id }).from(agents).get()?.id ?? "";
+    // biome-ignore lint/suspicious/noThenProperty: `then` is the rules file's key.
     const rule = { match: { tool: "search_notes" }, then: "allow" };
     const who = { orgId: h.t.orgId, ownerId: h.t.ownerId, agentId };
     const own = proposeRules(h.t.db, who, { rules: [{ rule }] }, new Date());

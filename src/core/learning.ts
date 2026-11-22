@@ -231,7 +231,6 @@ function ownFields(group: Group): Record<string, unknown> {
 function draft(group: Group, asker: CompiledRule): LearnedRule["rule"] | null {
   const then = group.decision === "approved" ? "allow" : "deny";
   const match = combined(asker.match, ownFields(group));
-  // biome-ignore lint/suspicious/noThenProperty: `then` is the rules file's key.
   return match === null ? null : { match, then };
 }
 

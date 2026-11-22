@@ -116,6 +116,7 @@ describe("suggested rules from what you approve (2.10)", () => {
         persistence: false,
         recipients: { equals: ["bob@vendor.com"] },
       },
+      // biome-ignore lint/suspicious/noThenProperty: `then` is the rules file's key.
       then: "allow",
     });
 

@@ -86,6 +86,7 @@ describe("learning from what you approve (2.10)", () => {
         persistence: false,
         repo: "acme/web",
       },
+      // biome-ignore lint/suspicious/noThenProperty: `then` is the rules file's key.
       then: "allow",
     });
     expect(learned?.evidence).toMatch(
@@ -220,6 +221,7 @@ describe("learning from what you approve (2.10)", () => {
         tool: "refund",
         persistence: false,
       },
+      // biome-ignore lint/suspicious/noThenProperty: `then` is the rules file's key.
       then: "deny",
     });
     expect(deny?.evidence).toMatch(/^denied 5 times/);
