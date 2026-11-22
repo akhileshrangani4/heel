@@ -155,7 +155,8 @@ export class MontyWorker implements CodeWorker {
           this.#step(() =>
             waiting.resume(
               results.map((r) => {
-                if ("value" in r) return { callId: r.callId, value: r.value };
+                // The error variant is the one with `errorType`; a missing value is None.
+                if (!("errorType" in r)) return { callId: r.callId, value: r.value ?? null };
                 const error = new Error(r.message);
                 error.name = r.errorType;
                 return { callId: r.callId, error };

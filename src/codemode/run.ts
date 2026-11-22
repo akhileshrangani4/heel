@@ -210,7 +210,8 @@ export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
       switch (result.status) {
         case "allowed":
           record("allow");
-          results.push({ callId, value: result.result });
+          // JSON drops `undefined`; null reaches the script as None either way.
+          results.push({ callId, value: result.result ?? null });
           return;
         case "denied":
           record("deny");
@@ -263,10 +264,16 @@ export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
           return;
       }
     };
+    // Once one call stops the script, no queued call starts; those already running settle.
     const lane = async (): Promise<void> => {
-      for (let id = queue.shift(); id !== undefined; id = queue.shift()) await one(id);
+      for (let id = queue.shift(); id !== undefined && stop === null; id = queue.shift()) {
+        await one(id);
+      }
     };
     await Promise.all(Array.from({ length: Math.min(MAX_PARALLEL, queue.length) }, lane));
+    // In the script's own order, so which results a cap cuts doesn't depend on network timing.
+    const order = new Map(pending.map((id, i) => [id, i]));
+    results.sort((a, b) => (order.get(a.callId) ?? 0) - (order.get(b.callId) ?? 0));
     return { results: capped(results), stop };
   };
 
@@ -307,8 +314,9 @@ export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
       return finish({ status: "error", error: "this parked script was already resumed" });
     }
   }
-  // Calls made as futures (`_async` twins, C4), by Monty's call id: only these ever run when
-  // the script awaits, so a twin the script never awaits never runs.
+  // Calls made as futures (`_async` twins, C4), by Monty's call id. They run when the script
+  // next waits: Monty then lists every unresolved one, awaited or not, as a JavaScript promise
+  // starts when it's made. One made just before the script ends, with no wait after, never runs.
   const futures = new Map<
     number,
     { account: string; tool: string; fn: string; args: Record<string, unknown> }

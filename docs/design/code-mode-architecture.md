@@ -83,10 +83,10 @@ What the two share lives in one place each:
 A built-in account's read tools also have an `_async` twin in the stubs (`get_issue_async`), declared `async def` (code mode round 2, C4). Monty can't tell a plain call from one inside `asyncio.gather`, so the twin is what says "run this as a future". A passthrough server's tools get none: their read marking is the server's own say-so.
 
 1. A call to a twin arrives as a `call` step. `run.ts` records it (account, tool, arguments) by Monty's call id and answers `future`: the script carries on.
-2. When every task is waiting, the worker sends an `await` step with the pending call ids. `run.ts` runs only ids it recorded, so a twin the script never awaits never runs, at most 8 at a time, each through the pipeline with `noAsk`: a rule that asks denies it (`approval_needed`) instead of opening a request, so a gather can't open one per call. An approval already given still lets it run.
+2. When every task is waiting, the worker sends an `await` step with the pending call ids. `run.ts` runs only ids it recorded, at most 8 at a time, each through the pipeline with `noAsk`: a rule that asks denies it (`approval_needed`) instead of opening a request, so a gather can't open one per call. An approval already given still lets it run.
 3. Every call settles and is recorded. Values and errors go back in one `resolve`: a denial or `approval_needed` is a `PermissionError` at the `await`, an upstream error a `RuntimeError`. A pause, a withheld result or an unknown outcome stops the script once the others have settled.
 
-Futures count toward the 200-call limit. An ask made the plain way while futures are still waiting ends the script rather than parking it (`notParked` says so): the futures' calls live only in `run.ts`.
+Monty lists every unresolved future at a wait, awaited or not, so a twin call runs at the script's next wait, as a JavaScript promise starts when it's made; one made just before the script ends, with no wait after, never runs. Once a call stops the script, no queued call starts. Futures count toward the 200-call limit. An ask made the plain way while futures are still waiting ends the script rather than parking it (`notParked` says so): the futures' calls live only in `run.ts`.
 
 ### An ask: the script is parked
 

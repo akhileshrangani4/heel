@@ -99,9 +99,12 @@ describe("code-mode lanes", () => {
       step = await step.future();
     }
     if (step.kind !== "await") throw new Error(`expected await, got ${step.kind}`);
-    const done = await step.resolve(ids.map((callId) => ({ callId, value: callId })));
+    // An undefined value doesn't survive JSON on the way to the helper; it arrives as None.
+    const done = await step.resolve(
+      ids.map((callId, i) => ({ callId, value: i === 0 ? undefined : callId })),
+    );
     await worker.stop();
-    expect(done).toEqual({ kind: "done", output: ids });
+    expect(done).toEqual({ kind: "done", output: [null, ...ids.slice(1)] });
   }, 60_000);
 
   it("parks a script and resumes it through an agent's lane (C2)", async () => {

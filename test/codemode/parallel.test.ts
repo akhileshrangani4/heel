@@ -107,7 +107,16 @@ describe("parallel reads in code mode (C4)", () => {
     expect(gh.mostAtOnce()).toBeGreaterThan(1);
   });
 
-  it("never runs a twin the script doesn't await", async () => {
+  it("runs a twin made before the script's next wait, awaited or not, like a promise", async () => {
+    const { gh, run } = await setUp(READS);
+    const answer = await run(
+      "import github\nc = github.get_issue_async(repo='acme/web', number=1)\nx = await github.get_issue_async(repo='acme/web', number=2)\nx['number']",
+    );
+    expect(answer).toMatchObject({ status: "completed", output: 2 });
+    expect([...gh.seen].sort()).toEqual(["/repos/acme/web/issues/1", "/repos/acme/web/issues/2"]);
+  });
+
+  it("never runs a twin made just before the script ends, with no wait after", async () => {
     const { gh, run } = await setUp(READS);
     const answer = await run(
       "import github\nc = github.get_issue_async(repo='acme/web', number=1)\n'end'",
