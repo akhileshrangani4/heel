@@ -130,9 +130,14 @@ describe("the approval page in a browser", () => {
     await page.goto(link.url);
     await shot("enroll");
     await page.getByRole("button", { name: "Create a passkey" }).click();
-    await page.waitForURL(/\/sign-in\?enrolled/);
+    // Making the passkey signs you in, on the page that turns on notifications (2.7).
+    await page.waitForURL(/\/welcome$/);
+    await page.getByRole("heading", { name: "Your passkey is ready" }).waitFor();
+    await shot("welcome");
 
-    // Sign in with that passkey.
+    // Sign out, then sign in with that passkey.
+    await page.getByRole("button", { name: "Sign out" }).click();
+    await page.waitForURL(/\/sign-in/);
     await page.getByRole("button", { name: "Sign in with a passkey" }).click();
     await page.waitForURL(/\/approvals$/);
 
