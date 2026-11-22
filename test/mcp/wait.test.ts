@@ -103,6 +103,41 @@ describe("a call that needs approval waits for the decision (2.12)", () => {
     expect(h.t.db.select().from(approvals).get()?.status).toBe("approved");
   });
 
+  it("a cancel that two sessions' calls could both mean stops neither", async () => {
+    const h = await mcpHarness({ owner: RULES, approvalWait: wait(5_000) });
+    const one = await h.connect("/mcp/notes");
+    const two = await h.connect("/mcp/notes");
+    const controller = new AbortController();
+    const first = one.callTool(
+      { name: "delete_note", arguments: { id: "one" } },
+      { signal: controller.signal },
+    );
+    const second = two.callTool({ name: "delete_note", arguments: { id: "two" } });
+    while (h.t.db.select().from(approvals).all().length < 2) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    controller.abort();
+    await expect(first).rejects.toThrow();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    // The other session's call is still waiting: approving it runs it and answers it.
+    const row = h.t.db
+      .select()
+      .from(approvals)
+      .all()
+      .find((r) => JSON.stringify(r.call).includes('"two"'));
+    if (row === undefined) throw new Error("no approval for the second call");
+    decideApproval(h.t.db, new SqliteApprovalStore(), new SqlitePauseStore(), {
+      approver: { orgId: h.t.orgId, userId: h.t.ownerId, role: "admin" },
+      approvalId: row.id,
+      callHash: row.callHash,
+      intent: "approve",
+      standing: null,
+      now: new Date(),
+    });
+    expect((await second).isError).toBeFalsy();
+    expect(h.upstream.calls).toEqual([{ name: "delete_note", arguments: { id: "two" } }]);
+  });
+
   it("tells a client that asked for progress that it's still waiting", async () => {
     const h = await mcpHarness({ owner: RULES, approvalWait: wait(5_000) });
     const client = await h.connect("/mcp/notes");

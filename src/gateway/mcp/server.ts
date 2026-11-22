@@ -201,13 +201,15 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
   /** Calls held right now, per agent. */
   const heldCalls = new Map<string, number>();
   /**
-   * Each tools/call in flight, by agent and JSON-RPC id, so a client's
+   * Each tools/call in flight, by agent token and JSON-RPC id, so a client's
    * `notifications/cancelled` (which arrives as its own request, to another
    * server) stops a held call: approved later, it then doesn't run unseen.
+   * Two sessions on one token can use the same id; a cancel then can't tell
+   * which call it meant, so it stops neither.
    */
-  const inFlight = new Map<string, AbortController>();
-  const flightKey = (agentId: string, requestId: string | number) =>
-    `${agentId}\0${typeof requestId}:${requestId}`;
+  const inFlight = new Map<string, Set<AbortController>>();
+  const flightKey = (tokenId: string, requestId: string | number) =>
+    `${tokenId}\0${typeof requestId}:${requestId}`;
 
   /**
    * Holds the request until `decided()` or the call's window ends (2.12);
@@ -936,15 +938,19 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     // A cancel for one of this agent's calls in flight stops it (see inFlight).
     server.setNotificationHandler("notifications/cancelled", (notification) => {
       const { requestId } = notification.params;
-      if (requestId !== undefined) inFlight.get(flightKey(agent.agentId, requestId))?.abort();
+      if (requestId === undefined) return;
+      const calls = inFlight.get(flightKey(agent.tokenId, requestId));
+      if (calls?.size === 1) for (const call of calls) call.abort();
     });
     server.setRequestHandler("tools/call", async (request, ctx) => {
       // The SDK hands the request's `_meta` (and its progress token) on the context.
       const progressToken = ctx.mcpReq._meta?.progressToken;
       const started = Date.now();
       const cancel = new AbortController();
-      const key = flightKey(agent.agentId, ctx.mcpReq.id);
-      inFlight.set(key, cancel);
+      const key = flightKey(agent.tokenId, ctx.mcpReq.id);
+      const sharing = inFlight.get(key) ?? new Set<AbortController>();
+      sharing.add(cancel);
+      inFlight.set(key, sharing);
       const held: Held = {
         agentId: agent.agentId,
         signal: AbortSignal.any([ctx.mcpReq.signal, cancel.signal]),
@@ -975,7 +981,8 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
           deps.now?.() ?? new Date(),
         );
       } finally {
-        if (inFlight.get(key) === cancel) inFlight.delete(key);
+        sharing.delete(cancel);
+        if (sharing.size === 0 && inFlight.get(key) === sharing) inFlight.delete(key);
       }
     });
     return server;
