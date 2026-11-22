@@ -14,20 +14,33 @@ export interface ConnectionRow {
   setup: SignInSetup | null;
   /** It holds an API key (not a sign-in), which can be replaced here (2.9). */
   holdsKey?: boolean;
+  /** Who else may use it, and who decides its asks (D13b), by name. */
+  sharing?: {
+    sharedWith: readonly { user?: string; group?: string }[];
+    approvers: readonly { user?: string; group?: string; repo?: string }[];
+  };
 }
 
 export type ConnectionsOutcome =
   | { kind: "none" }
   | { kind: "connected"; alias: string }
   | { kind: "failed"; alias: string; message: string }
-  | { kind: "added" | "rekeyed" | "removed"; alias: string; unchecked: boolean };
+  | { kind: "added" | "rekeyed" | "removed" | "sharing"; alias: string; unchecked: boolean };
 
 export interface ConnectionsProps {
   rows: readonly ConnectionRow[];
   outcome: ConnectionsOutcome;
   signInForm: FormTarget;
   /** Connecting, replacing a key and removing from here (2.9). */
-  manage?: { csrfToken: string };
+  manage?: {
+    csrfToken: string;
+    /** Everyone else on this heel, by name: who an account can be shared with. */
+    people?: readonly string[];
+    /** People sign in with an IdP, so its groups can be named. */
+    groups?: boolean;
+    /** Admins name approvers (spec: Teams); owners see who they are. */
+    admin?: boolean;
+  };
 }
 
 function outcomeNotice(outcome: ConnectionsOutcome): Html | "" {
@@ -55,6 +68,11 @@ function outcomeNotice(outcome: ConnectionsOutcome): Html | "" {
         html`<p>${said}${outcome.unchecked ? " heel couldn't check the key with the service, so it was stored unchecked." : ""}</p>`,
       );
     }
+    case "sharing":
+      return notice(
+        "ok",
+        html`<p>Changed who can use <strong>${outcome.alias}</strong> and who approves its requests.</p>`,
+      );
     case "removed":
       return notice(
         "info",
@@ -123,7 +141,163 @@ function connectForm(): Html {
   </div>`;
 }
 
-function rowControls(row: ConnectionRow, csrfToken: string, index: number): Html {
+type Manage = NonNullable<ConnectionsProps["manage"]>;
+
+function principalName(p: { user?: string; group?: string }): string {
+  return p.user ?? `the ${p.group ?? "?"} group`;
+}
+
+/** Who else may use an account, and who decides its asks (D13b). */
+function sharingControls(row: ConnectionRow, manage: Manage, key: string): Html {
+  const people = manage.people ?? [];
+  const sharing = row.sharing ?? { sharedWith: [], approvers: [] };
+  if (people.length === 0 && manage.groups !== true && sharing.sharedWith.length === 0) {
+    return html`<p class="muted">Only you can use it. Once other people use this heel, you can share it here.</p>`;
+  }
+  const general = sharing.approvers.filter((a) => a.repo === undefined);
+  const byRepo = sharing.approvers.filter((a) => a.repo !== undefined);
+  const isGitHub = row.provider === "github" || row.provider === "cli:gh";
+  const repos = [...new Set(byRepo.flatMap((a) => (a.repo === undefined ? [] : [a.repo])))];
+  return html`<h3>Who can use it</h3>
+    <ul class="plain-list">
+      <li>You (it's yours)</li>
+      ${sharing.sharedWith.map(
+        (p) => html`<li>${principalName(p)}
+          ${postForm(
+            {
+              action: `/connections/${encodeURIComponent(row.alias)}/unshare`,
+              csrfToken: manage.csrfToken,
+            },
+            { kind: p.group === undefined ? "user" : "group", name: p.user ?? p.group ?? "" },
+            html`<button type="submit" class="btn btn-secondary btn-small">Stop sharing</button>`,
+          )}
+        </li>`,
+      )}
+    </ul>
+    <div id="share-${key}" class="stack-form">
+      <input type="hidden" name="op" value="share" />
+      ${
+        manage.groups === true
+          ? html`<div class="row">
+              <label for="share-${key}-kind">Share with</label>
+              <select id="share-${key}-kind" name="kind">
+                <option value="user">a person</option>
+                <option value="group">a group</option>
+              </select>
+            </div>
+            <div class="row">
+              <label for="share-${key}-group">Group (if a group)</label>
+              <input id="share-${key}-group" name="group" maxlength="256" autocomplete="off" />
+            </div>`
+          : html`<input type="hidden" name="kind" value="user" />`
+      }
+      <div class="row">
+        <label for="share-${key}-person">Person</label>
+        <select id="share-${key}-person" name="person">
+          ${people.map((name) => html`<option value="${name}">${name}</option>`)}
+        </select>
+      </div>
+      ${ceremonyButton({
+        callback: { handler: "manageAccount" },
+        intent: "manage-account",
+        label: "Share with your passkey",
+        tone: "secondary",
+        binding: { alias: row.alias },
+        optionsFrom: `share-${key}`,
+      })}
+    </div>
+    <h3>Who approves its requests</h3>
+    <p class="muted">${
+      general.length === 0 ? "You do." : `${general.map(principalName).join(", ")}, instead of you.`
+    }${repos
+      .map(
+        (repo) =>
+          ` For ${repo}: ${byRepo
+            .filter((a) => a.repo === repo)
+            .map(principalName)
+            .join(", ")}.`,
+      )
+      .join("")}</p>
+    ${
+      manage.admin === true
+        ? html`${approversForm(row, manage, `${key}-all`, null, general)}
+          ${repos.map((repo, i) =>
+            approversForm(
+              row,
+              manage,
+              `${key}-r${String(i)}`,
+              repo,
+              byRepo.filter((a) => a.repo === repo),
+            ),
+          )}
+          ${isGitHub ? approversForm(row, manage, `${key}-new`, "", []) : ""}`
+        : html`<p class="muted">An admin sets who approves an account's requests.</p>`
+    }`;
+}
+
+/**
+ * Approvers for one scope: every call (`repo` null), one repo already named,
+ * or a new repo (`""`). Each form starts from that scope's own approvers,
+ * since saving replaces exactly that scope.
+ */
+function approversForm(
+  row: ConnectionRow,
+  manage: Manage,
+  id: string,
+  repo: string | null,
+  current: readonly { user?: string; group?: string }[],
+): Html {
+  const people = manage.people ?? [];
+  const groups = current.flatMap((a) => (a.group === undefined ? [] : [a.group]));
+  const title =
+    repo === null ? "For every call" : repo === "" ? "For one repo" : `For ${repo} only`;
+  return html`<div id="approvers-${id}" class="stack-form approvers-form">
+    <p class="muted"><strong>${title}</strong></p>
+    <input type="hidden" name="op" value="approvers" />
+    ${
+      repo === ""
+        ? html`<input type="hidden" name="scope" value="repo" />
+          <div class="row">
+            <label for="approvers-${id}-repo">Repo</label>
+            <input id="approvers-${id}-repo" name="repo" placeholder="owner/name" autocomplete="off" />
+          </div>`
+        : html`<input type="hidden" name="repo" value="${repo ?? ""}" />`
+    }
+    ${people.map(
+      (name, i) => html`<div class="row">
+        <label for="approvers-${id}-${String(i)}">${name}</label>
+        <input id="approvers-${id}-${String(i)}" type="checkbox" name="user:${name}"${current.some((a) => a.user === name) ? " checked" : ""} />
+      </div>`,
+    )}
+    ${
+      manage.groups === true
+        ? html`<div class="row">
+            <label for="approvers-${id}-groups">Groups (one per line)</label>
+            <textarea id="approvers-${id}-groups" name="groups" rows="2" spellcheck="false">
+${groups.join("\n")}</textarea>
+          </div>`
+        : ""
+    }
+    <p class="muted">${
+      repo === null
+        ? "Nobody named means the owner decides again."
+        : repo === ""
+          ? "Calls on that repo go to them instead, replacing any approvers it already has."
+          : "Nobody named means calls on this repo go back to the approvers for every call."
+    }</p>
+    ${ceremonyButton({
+      callback: { handler: "manageAccount" },
+      intent: "manage-account",
+      label: "Save with your passkey",
+      tone: "secondary",
+      binding: { alias: row.alias },
+      optionsFrom: `approvers-${id}`,
+    })}
+  </div>`;
+}
+
+function rowControls(row: ConnectionRow, manage: Manage, index: number): Html {
+  const { csrfToken } = manage;
   // By row, not by name: no two names can make the same id.
   const key = `row${String(index)}`;
   return html`<details class="conn-manage">
@@ -146,6 +320,8 @@ function rowControls(row: ConnectionRow, csrfToken: string, index: number): Html
           </div>`
         : ""
     }
+    ${sharingControls(row, manage, key)}
+    <h3>Remove it</h3>
     ${postForm(
       { action: `/connections/${encodeURIComponent(row.alias)}/remove`, csrfToken },
       {},
@@ -239,7 +415,7 @@ export function connectionsPage(props: ConnectionsProps): Html {
                     ${row.status === "active" ? badge("Ready", "ok") : badge("Needs sign-in", "warn")}
                   </div>
                   ${step === "" ? "" : html`<div class="conn-step">${step}</div>`}
-                  ${props.manage === undefined ? "" : rowControls(row, props.manage.csrfToken, index)}
+                  ${props.manage === undefined ? "" : rowControls(row, props.manage, index)}
                 </li>`;
               })}
             </ul>`

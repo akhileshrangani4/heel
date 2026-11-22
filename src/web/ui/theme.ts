@@ -243,6 +243,12 @@ textarea{width:100%;min-height:5rem}
 .stack-form label{color:var(--muted);font-size:.9rem}
 .stack-form .btn{grid-column:2;justify-self:start;margin-top:.25rem}
 .stack-form .muted{grid-column:1/-1;margin:0}
+.stack-form input[type="checkbox"]{justify-self:start}
+.plain-list{list-style:none;padding:0;margin:.25rem 0 .75rem}
+.plain-list li{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;padding:.2rem 0}
+.plain-list form{display:inline;margin:0}
+.btn-small{padding:.2rem .6rem;font-size:.85rem}
+.conn-manage h3{font-size:1rem;margin:1rem 0 .4rem}
 @media (max-width:36rem){.stack-form{grid-template-columns:1fr}.stack-form .btn{grid-column:1}}
 .grant-form h2{grid-column:1/-1;font-size:1rem;margin:0 0 .25rem}
 .grant-form label{color:var(--muted);font-size:.9rem}
