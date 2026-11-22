@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Call } from "./call.ts";
-import { normalizeAddress } from "./rules/address.ts";
+import { domainOf, normalizeAddress } from "./rules/address.ts";
 import { type CompiledRule, compileRulesFile, ruleContentHash } from "./rules/compile.ts";
 import { evaluate, NO_STANDING_APPROVALS, plainMatch, type RuleSet } from "./rules/evaluate.ts";
 import { factsOf } from "./rules/facts.ts";

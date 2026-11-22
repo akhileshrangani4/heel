@@ -83,7 +83,7 @@ describe("heel_history (2.10)", () => {
       {
         suggestion: expect.any(String),
         rule: {
-          match: { agent: "inbox-bot", account: "notes", tool: "delete_note" },
+          match: { agent: "inbox-bot", account: "notes", tool: "delete_note", persistence: false },
           then: "deny",
         },
         evidence: expect.stringMatching(/^denied 5 times on \d days since/),
