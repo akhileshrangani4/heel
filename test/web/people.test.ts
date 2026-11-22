@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { createAdminHandler } from "../../src/admin/handlers.ts";
-import { enrollments, users } from "../../src/store/schema.ts";
+import { enrollments, passkeys, users } from "../../src/store/schema.ts";
 import {
   type Browser,
   type HumanPlaneHarness,
@@ -81,6 +81,39 @@ describe("people in the web app (2.9)", () => {
     expect(await (await h.fetch(next, { as: owner })).text()).toContain("A recovery link");
     // Never for yourself: your own devices are added from Approvals, at once.
     expect((await people(h, owner, { op: "link", name: "owner" })).status).toBe(400);
+  });
+
+  it("a passkey for heel's old address still makes it a recovery link, as the page says", async () => {
+    const { h, owner } = await setUp();
+    h.addUser("pat", "member");
+    await h.enroll("pat");
+    const pat = h.t.db.select().from(users).where(eq(users.name, "pat")).get();
+    h.t.db
+      .update(passkeys)
+      .set({ rpId: "old.example.com" })
+      .where(eq(passkeys.userId, pat?.id ?? ""))
+      .run();
+    expect(await (await h.fetch("/people", { as: owner })).text()).toContain(
+      "Make a recovery link",
+    );
+    const done = await people(h, owner, { op: "link", name: "pat" });
+    const { next } = (await done.json()) as { next: string };
+    expect(await (await h.fetch(next, { as: owner })).text()).toContain("A recovery link");
+    const row = h.t.db
+      .select()
+      .from(enrollments)
+      .all()
+      .find((e) => e.userId === pat?.id);
+    expect(row?.notBefore).not.toBeNull();
+  });
+
+  it("a member can't find out who else is here from the email form", async () => {
+    const { h } = await setUp();
+    h.addUser("pat", "member");
+    const pat = await h.signIn(await h.enroll("pat"));
+    const real = await people(h, pat, { op: "email", name: "owner", email: "a@example.com" });
+    const made_up = await people(h, pat, { op: "email", name: "nobody", email: "a@example.com" });
+    expect(await real.text()).toBe(await made_up.text());
   });
 
   it("only the admin who made a link sees it", async () => {

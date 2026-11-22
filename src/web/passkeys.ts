@@ -86,7 +86,19 @@ export class EnrollmentError extends Error {
  */
 export function createEnrollment(
   db: HeelDb,
-  input: { orgId: string; userName: string; publicUrl: URL; now: Date; afterPasskey?: boolean },
+  input: {
+    orgId: string;
+    userName: string;
+    publicUrl: URL;
+    now: Date;
+    afterPasskey?: boolean;
+    /**
+     * A passkey for an old address counts too (links made in the web app):
+     * after `public_url` changes, nobody else may skip the day's wait by
+     * making a link for someone who hasn't enrolled at the new address yet.
+     */
+    anyPasskeyIsRecovery?: boolean;
+  },
 ): Enrollment {
   const user = db
     .select({ id: users.id, disabledAt: users.disabledAt })
@@ -108,7 +120,9 @@ export function createEnrollment(
       .where(
         and(
           eq(passkeys.userId, user.id),
-          or(isNull(passkeys.rpId), eq(passkeys.rpId, relyingPartyFor(input.publicUrl).id)),
+          input.anyPasskeyIsRecovery === true
+            ? undefined
+            : or(isNull(passkeys.rpId), eq(passkeys.rpId, relyingPartyFor(input.publicUrl).id)),
         ),
       )
       .get() !== undefined;

@@ -78,6 +78,8 @@ export function peopleRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       userName: name,
       publicUrl: deps.publicUrl,
       now: deps.now(),
+      // Matches what the page says: anyone with any passkey gets a recovery link.
+      anyPasskeyIsRecovery: true,
     });
     const now = deps.now().getTime();
     for (const [id, pending] of links) if (pending.until < now) links.delete(id);
@@ -119,11 +121,14 @@ export function peopleRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       return { binding: { op, user: person.id } };
     }
     if (op === "email") {
-      const person = personNamed(stringField(body, "name") ?? "");
-      if (person === null || person.disabledAt !== null) return { problem: "No such person." };
-      if (!admin && person.id !== session.userId) {
+      // Members can name only themselves, so they can't probe who else is here.
+      const person = admin
+        ? personNamed(stringField(body, "name") ?? "")
+        : personById(session.userId);
+      if (!admin && stringField(body, "name") !== person?.name) {
         return { problem: "You can only change where your own notifications go." };
       }
+      if (person === null || person.disabledAt !== null) return { problem: "No such person." };
       const raw = (stringField(body, "email") ?? "").trim();
       if (raw !== "" && !Email.safeParse(raw).success)
         return { problem: "That isn't an email address." };
@@ -222,11 +227,12 @@ export function peopleRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     // The link is in this page: no browser or proxy may keep a copy.
     c.header("Cache-Control", "no-store");
     const pending = links.get(id);
-    links.delete(id);
     const fresh =
       pending !== undefined &&
       pending.userId === session.userId &&
       pending.until >= deps.now().getTime();
+    // Once, to whoever made it: someone else opening it doesn't use it up.
+    if (pending?.userId === session.userId) links.delete(id);
     return renderPage(c, {
       title: "Passkey link",
       viewer: viewerOf(session),
