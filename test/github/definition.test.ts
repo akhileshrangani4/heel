@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { isWorkflowPath } from "../../src/definitions/github/definition.ts";
+import { accountModule } from "../../src/codemode/stubs.ts";
+import { GITHUB_TOOLS, isWorkflowPath } from "../../src/definitions/github/definition.ts";
 import { UpstreamPool } from "../../src/definitions/mcp/upstream.ts";
 import { definitionRegistry } from "../../src/definitions/registry.ts";
 import { addAgent } from "../../src/gateway/agents.ts";
@@ -48,6 +49,23 @@ function fakeGitHub(
         user: { login: "dev" },
         labels: [],
       });
+    }
+    if (method === "GET" && p === "/repos/acme/web/issues") {
+      const issue = (number: number, extra: Record<string, unknown> = {}) => ({
+        number,
+        title: `Issue ${number}`,
+        state: "open",
+        body: null,
+        user: { login: "dev" },
+        labels: [{ name: "bug" }],
+        html_url: `https://github.com/acme/web/issues/${number}`,
+        created_at: "2026-11-20T10:00:00Z",
+        updated_at: "2026-11-21T09:00:00Z",
+        closed_at: null,
+        comments: 3,
+        ...extra,
+      });
+      return Response.json([issue(7), issue(8, { pull_request: { url: "x" } })]);
     }
     if (method === "GET" && p.endsWith("/check-runs")) {
       const conclusion = options.checks === "fail" ? "failure" : "success";
@@ -146,6 +164,29 @@ const BROAD = `rules:
 `;
 
 describe("the GitHub definition", () => {
+  it("lists issues with when they were opened and updated, in the shape its stub names (T14, T15)", async () => {
+    const h = setUp(MERGE_GREEN);
+    const result = await h.call("list_issues", { repo: "acme/web" });
+    expect(result.status).toBe("allowed");
+    const { issues } = (result as { result: { issues: Record<string, unknown>[] } }).result;
+    // The pull request GitHub mixes in is left out.
+    expect(issues.map((i) => i["number"])).toEqual([7]);
+    expect(issues[0]).toMatchObject({
+      created_at: "2026-11-20T10:00:00Z",
+      updated_at: "2026-11-21T09:00:00Z",
+      closed_at: null,
+      comments: 3,
+    });
+
+    const listed = GITHUB_TOOLS.find((tool) => tool.name === "list_issues");
+    const named = /\[(\{[^}]*\})/.exec(listed?.description ?? "")?.[1] ?? "";
+    const keys = [...named.matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
+    expect(Object.keys(issues[0] ?? {}).sort()).toEqual([...keys].sort());
+
+    const stubs = accountModule("github", GITHUB_TOOLS)?.stubs ?? "";
+    expect(stubs).toContain('Returns {"issues": [{"number", "title"');
+  });
+
   it("merges at the head heel read, after checks pass on it", async () => {
     const h = setUp(MERGE_GREEN);
     const result = await h.call("merge_pull_request", {

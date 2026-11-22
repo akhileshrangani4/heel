@@ -81,6 +81,8 @@ const shownPayment = (p: Record<string, unknown>) => ({
 
 const TOOLS: Record<string, StripeTool> = {
   list_payments: tool({
+    returns:
+      '{"payments": [{"id", "amount", "amount_received", "currency", "status", "customer", "description"}, ...], "has_more"}',
     description: "List a customer's payments (payment intents), newest first.",
     args: z.strictObject({
       customer: Customer,
@@ -109,6 +111,7 @@ const TOOLS: Record<string, StripeTool> = {
   }),
 
   get_customer: tool({
+    returns: '{"id", "email", "name", "description", "deleted"}',
     description: "Read a customer.",
     args: z.strictObject({ customer: Customer }),
     readOnly: true,
@@ -129,6 +132,7 @@ const TOOLS: Record<string, StripeTool> = {
   }),
 
   refund: tool({
+    returns: '{"id", "amount", "currency", "status"}',
     description:
       "Refund a payment, in part or in full. Without an amount, heel refunds exactly what is left to refund.",
     args: z.strictObject({
@@ -184,6 +188,7 @@ const TOOLS: Record<string, StripeTool> = {
   }),
 
   create_payment: tool({
+    returns: '{"id", "amount", "amount_received", "currency", "status", "customer", "description"}',
     description:
       "Create a payment for a customer. With confirm and a saved payment method, Stripe charges it now, without the customer present.",
     args: z.strictObject({
@@ -231,6 +236,7 @@ const TOOLS: Record<string, StripeTool> = {
   }),
 
   update_customer: tool({
+    returns: '{"id", "email", "name"}',
     description: "Change a customer's email, name or description.",
     args: z.strictObject({
       customer: Customer,
@@ -260,6 +266,7 @@ const TOOLS: Record<string, StripeTool> = {
   }),
 
   set_subscription_cancellation: tool({
+    returns: '{"id", "status", "cancel_at_period_end"}',
     description:
       "Cancel a subscription at the end of its current period, or undo that. Nothing is cancelled at once.",
     args: z.strictObject({ subscription: Subscription, cancel_at_period_end: z.boolean() }),

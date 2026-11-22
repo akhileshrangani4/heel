@@ -32,6 +32,8 @@ export interface ThreadResult {
 }
 
 const search = gmailTool({
+  returns:
+    '{"messages": [{"id", "thread_id", "from", "to", "cc", "subject", "date", "labels", "snippet"}, ...], "next_page_token", "hidden": {"count"}} (next_page_token only when there is a next page)',
   description:
     "Search this mailbox with Gmail search syntax (from:, to:, subject:, label:, newer_than:, …). " +
     "Returns message summaries, newest first. Messages hidden from agents are left out and counted.",
@@ -68,6 +70,8 @@ const search = gmailTool({
 });
 
 const getMessage = gmailTool({
+  returns:
+    '{"id", "thread_id", "from", "to", "cc", "subject", "date", "labels", "bcc", "body", "body_format", "attachments": [{"filename", "mime_type", "size"}]}, or {"hidden": {"count"}} when the message is hidden',
   description: "Read one message in full: headers, labels, body and attachment names.",
   args: z.strictObject({ message_id: GmailId }),
   readOnly: true,
@@ -86,6 +90,8 @@ const getMessage = gmailTool({
 });
 
 const getThread = gmailTool({
+  returns:
+    '{"id", "messages": [{"id", "thread_id", "from", "to", "cc", "subject", "date", "labels", "bcc", "body", "body_format", "attachments": [{"filename", "mime_type", "size"}]}, ...], "hidden": {"count"}}',
   description:
     "Read every message in a thread, in order. Messages hidden from agents are left out and counted.",
   args: z.strictObject({ thread_id: GmailId }),
@@ -117,6 +123,7 @@ const getThread = gmailTool({
 });
 
 const listLabels = gmailTool({
+  returns: '{"labels": [{"id", "name", "type"}, ...]}',
   description: "List this mailbox's labels: system labels (INBOX, SENT, …) and your own.",
   args: z.strictObject({}),
   readOnly: true,
@@ -128,6 +135,7 @@ const listLabels = gmailTool({
 });
 
 const listSendAs = gmailTool({
+  returns: '{"addresses": [str, ...]}',
   description:
     "List the addresses this mailbox can send as. Every send names one of them as `from`.",
   args: z.strictObject({}),

@@ -51,6 +51,14 @@ export type Preparation<P> = Prepared<P> | { deny: HardDenyReason };
 
 export interface MailTool<M, S extends z.ZodType = z.ZodType, P = unknown, R = unknown> {
   description: string;
+  /**
+   * The shape of what `show` gives the agent, keys only:
+   * `{"issues": [{"number", "title", ...}]}`. It's listed after the
+   * description, so code mode's stubs and MCP clients know a result's shape
+   * before the first call (roadmap T14: an agent guessed a list and lost two
+   * scripts finding out it's a dict).
+   */
+  returns: string;
   args: S;
   readOnly: boolean;
   prepare(
@@ -67,7 +75,7 @@ export interface MailTool<M, S extends z.ZodType = z.ZodType, P = unknown, R = u
 export function listedTools<M>(tools: Record<string, MailTool<M>>): Tool[] {
   return Object.entries(tools).map(([name, tool]) => ({
     name,
-    description: tool.description,
+    description: `${tool.description} Returns ${tool.returns}.`,
     inputSchema: z.toJSONSchema(tool.args, { io: "input" }) as Tool["inputSchema"],
     annotations: tool.readOnly
       ? { readOnlyHint: true }

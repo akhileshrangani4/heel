@@ -100,6 +100,10 @@ function shownIssue(raw: unknown) {
       ? (i["labels"] as { name?: unknown }[]).map((l) => l.name)
       : [],
     url: i["html_url"] ?? null,
+    created_at: i["created_at"] ?? null,
+    updated_at: i["updated_at"] ?? null,
+    closed_at: i["closed_at"] ?? null,
+    comments: typeof i["comments"] === "number" ? i["comments"] : null,
     ...(i["head"] === undefined
       ? {}
       : {
@@ -111,11 +115,17 @@ function shownIssue(raw: unknown) {
         }),
   };
 }
+/** What `shownIssue` returns, for the tools' `returns`. */
+const ISSUE =
+  '{"number", "title", "state", "body", "author", "labels", "url", "created_at", "updated_at", "closed_at", "comments"}';
+const PULL =
+  '{"number", "title", "state", "body", "author", "labels", "url", "created_at", "updated_at", "closed_at", "comments", "head", "head_sha", "base", "draft", "merged"}';
 const shownList = (raw: unknown) => (Array.isArray(raw) ? raw.map(shownIssue) : []);
 const passThrough = async (_box: Box, result: unknown) => result;
 
 const TOOLS: Record<string, GitHubTool> = {
   list_pull_requests: tool({
+    returns: `{"pull_requests": [${PULL}, ...]}`,
     description: "List pull requests in a repository.",
     args: z.strictObject({ repo: Repo, state: State, page: Page, per_page: PerPage }),
     readOnly: true,
@@ -130,6 +140,7 @@ const TOOLS: Record<string, GitHubTool> = {
   }),
 
   get_pull_request: tool({
+    returns: PULL,
     description: "Read one pull request, with its head commit.",
     args: z.strictObject({ repo: Repo, number: Number_ }),
     readOnly: true,
@@ -139,6 +150,7 @@ const TOOLS: Record<string, GitHubTool> = {
   }),
 
   list_pull_request_files: tool({
+    returns: '{"files": [{"filename", "status", "additions", "deletions", "patch"}, ...]}',
     description: "List the files a pull request changes, with their patches.",
     args: z.strictObject({ repo: Repo, number: Number_, page: Page, per_page: PerPage }),
     readOnly: true,
@@ -162,6 +174,7 @@ const TOOLS: Record<string, GitHubTool> = {
   }),
 
   list_issues: tool({
+    returns: `{"issues": [${ISSUE}, ...]} (pull requests left out)`,
     description: "List issues in a repository (pull requests are left out).",
     args: z.strictObject({ repo: Repo, state: State, page: Page, per_page: PerPage }),
     readOnly: true,
@@ -182,6 +195,7 @@ const TOOLS: Record<string, GitHubTool> = {
   }),
 
   get_issue: tool({
+    returns: ISSUE,
     description: "Read one issue.",
     args: z.strictObject({ repo: Repo, number: Number_ }),
     readOnly: true,
@@ -191,6 +205,7 @@ const TOOLS: Record<string, GitHubTool> = {
   }),
 
   get_file_contents: tool({
+    returns: '{"content"} (the file as text, or None when it isn\'t text)',
     description: "Read a file from a repository, as text.",
     args: z.strictObject({ repo: Repo, path: FilePath, ref: Ref.optional() }),
     readOnly: true,
@@ -206,6 +221,7 @@ const TOOLS: Record<string, GitHubTool> = {
   }),
 
   list_check_runs: tool({
+    returns: '{"check_runs": [{"name", "status", "conclusion"}, ...]}',
     description: "List the check runs on a commit, branch or tag.",
     args: z.strictObject({ repo: Repo, ref: Ref, page: Page, per_page: PerPage }),
     readOnly: true,
@@ -228,6 +244,7 @@ const TOOLS: Record<string, GitHubTool> = {
   }),
 
   create_issue: tool({
+    returns: ISSUE,
     description: "Open an issue.",
     args: z.strictObject({
       repo: Repo,
@@ -245,6 +262,7 @@ const TOOLS: Record<string, GitHubTool> = {
   }),
 
   update_issue: tool({
+    returns: ISSUE,
     description: "Change an issue's title, body, state or labels.",
     args: z.strictObject({
       repo: Repo,
@@ -267,6 +285,7 @@ const TOOLS: Record<string, GitHubTool> = {
   }),
 
   add_comment: tool({
+    returns: '{"id", "url"}',
     description: "Comment on an issue or a pull request.",
     args: z.strictObject({ repo: Repo, number: Number_, body: Text.min(1) }),
     readOnly: false,
@@ -287,6 +306,7 @@ const TOOLS: Record<string, GitHubTool> = {
   }),
 
   create_pull_request: tool({
+    returns: PULL,
     description: "Open a pull request from a branch.",
     args: z.strictObject({
       repo: Repo,
@@ -304,6 +324,7 @@ const TOOLS: Record<string, GitHubTool> = {
   }),
 
   update_pull_request: tool({
+    returns: PULL,
     description: "Change a pull request's title, body, state or base branch.",
     args: z.strictObject({
       repo: Repo,
@@ -326,6 +347,7 @@ const TOOLS: Record<string, GitHubTool> = {
   }),
 
   merge_pull_request: tool({
+    returns: 'GitHub\'s answer: {"sha", "merged", "message"}',
     description:
       "Merge a pull request at the head commit heel checked. If the head moves first, GitHub refuses the merge.",
     args: z.strictObject({
@@ -372,6 +394,7 @@ const TOOLS: Record<string, GitHubTool> = {
   }),
 
   put_file: tool({
+    returns: '{"commit"} (the new commit\'s sha)',
     description:
       "Create or replace a file on a branch, as one commit. `content` is the file's text; `sha` is the blob being replaced, when there is one.",
     args: z.strictObject({
@@ -440,6 +463,7 @@ export function isMergeAction(action: string | undefined): boolean {
  */
 const github_api = tool({
   description: "A raw GitHub REST call.",
+  returns: "GitHub's answer as it came",
   args: z.strictObject({
     method: z.enum(["GET", "POST", "PATCH", "PUT", "DELETE"]),
     path: z.string().regex(/^\/[A-Za-z0-9._~!$&'()*+,;=:@%/-]{0,2000}$/, "expected an API path"),

@@ -96,6 +96,7 @@ function shown(event: CalendarEvent) {
 }
 
 const listCalendars = calendarTool({
+  returns: '{"calendars": [{"id", "name", "primary", "access"}, ...]}',
   description: "List the calendars this account can see, with their ids.",
   args: z.strictObject({}),
   readOnly: true,
@@ -112,6 +113,8 @@ const listCalendars = calendarTool({
 });
 
 const listEvents = calendarTool({
+  returns:
+    '{"events": [{"id", "status", "summary", "description", "location", "start", "end", "organizer", "attendees": [{"email", "response"}], "link"}, ...], "next_page_token"} (next_page_token only when there is a next page)',
   description:
     "List events on a calendar, as single occurrences in start order. Times are RFC 3339.",
   args: z.strictObject({
@@ -147,6 +150,8 @@ const listEvents = calendarTool({
 });
 
 const getEvent = calendarTool({
+  returns:
+    '{"id", "status", "summary", "description", "location", "start", "end", "organizer", "attendees": [{"email", "response"}], "link"}',
   description: "Read one event.",
   args: z.strictObject({ calendar_id: CalendarId, event_id: EventId }),
   readOnly: true,
@@ -178,6 +183,8 @@ interface CreateArgs {
 }
 
 const createEvent = calendarTool({
+  returns:
+    '{"id", "status", "summary", "description", "location", "start", "end", "organizer", "attendees": [{"email", "response"}], "link"}',
   description:
     "Create an event. Attendees get an invitation by email. Recipients are plain addresses.",
   args: z.strictObject({
@@ -224,6 +231,8 @@ interface UpdateArgs {
 }
 
 const updateEvent = calendarTool({
+  returns:
+    '{"id", "status", "summary", "description", "location", "start", "end", "organizer", "attendees": [{"email", "response"}], "link"}',
   description:
     "Change an event. `attendees`, when given, replaces the whole list. Everyone on the event before " +
     "or after the change may get an update by email.",
@@ -272,6 +281,7 @@ const updateEvent = calendarTool({
 });
 
 const deleteEvent = calendarTool({
+  returns: '{"deleted"} (the event id)',
   description: "Delete an event. Its attendees may get a cancellation by email.",
   args: z.strictObject({ calendar_id: CalendarId, event_id: EventId, notify: Notify }),
   readOnly: false,

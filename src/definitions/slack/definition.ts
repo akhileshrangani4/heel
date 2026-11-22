@@ -101,6 +101,7 @@ const page = (body: Record<string, unknown>) => ({
 
 const TOOLS: Record<string, SlackTool> = {
   list_channels: tool({
+    returns: '{"channels": [{"id", "name", "private", "external"}, ...], "next_cursor"}',
     description: "List the channels this account can see, with their ids.",
     args: z.strictObject({
       cursor: Cursor,
@@ -135,6 +136,7 @@ const TOOLS: Record<string, SlackTool> = {
   }),
 
   read_channel: tool({
+    returns: '{"messages": [{"ts", "user", "text", "thread_ts", "replies"}, ...], "next_cursor"}',
     description: "Read a channel's recent messages, newest first.",
     args: z.strictObject({
       channel: Channel,
@@ -165,6 +167,7 @@ const TOOLS: Record<string, SlackTool> = {
   }),
 
   read_thread: tool({
+    returns: '{"messages": [{"ts", "user", "text", "thread_ts", "replies"}, ...], "next_cursor"}',
     description: "Read a thread: the parent message and its replies.",
     args: z.strictObject({ channel: Channel, ts: Ts, cursor: Cursor, limit: Limit }),
     readOnly: true,
@@ -184,6 +187,7 @@ const TOOLS: Record<string, SlackTool> = {
   }),
 
   post_message: tool({
+    returns: '{"channel", "ts"}',
     description: "Post a plain-text message to a channel, or as a reply in a thread.",
     args: z.strictObject({ channel: Channel, text: Text, thread_ts: Ts.optional() }),
     readOnly: false,
@@ -212,6 +216,7 @@ const TOOLS: Record<string, SlackTool> = {
   }),
 
   update_message: tool({
+    returns: '{"channel", "ts"}',
     description: "Replace the text of a message this account posted.",
     args: z.strictObject({ channel: Channel, ts: Ts, text: Text }),
     readOnly: false,
@@ -235,6 +240,7 @@ const TOOLS: Record<string, SlackTool> = {
   }),
 
   delete_message: tool({
+    returns: '{"channel", "ts"}',
     description:
       "Delete a message. Slack lets a token delete what its user could delete in the app.",
     args: z.strictObject({ channel: Channel, ts: Ts }),
@@ -254,6 +260,7 @@ const TOOLS: Record<string, SlackTool> = {
   }),
 
   schedule_message: tool({
+    returns: '{"channel", "scheduled_message_id", "post_at"}',
     description:
       "Schedule a plain-text message to post later (up to 120 days ahead). It posts even if heel is revoked first.",
     args: z.strictObject({

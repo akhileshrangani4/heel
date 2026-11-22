@@ -144,6 +144,7 @@ const paragraph = (content: string) => ({
 
 const TOOLS: Record<string, NotionTool> = {
   search: tool({
+    returns: '{"pages": [{"id", "title", "url", "in_trash"}, ...], "next_cursor"}',
     description: "Search the pages this integration can see, by title.",
     args: z.strictObject({
       query: z.string().max(500).default(""),
@@ -168,6 +169,7 @@ const TOOLS: Record<string, NotionTool> = {
   }),
 
   get_page: tool({
+    returns: '{"id", "title", "url", "in_trash"}',
     description: "Read a page's title and where it is.",
     args: z.strictObject({ page_id: Id }),
     readOnly: true,
@@ -180,6 +182,7 @@ const TOOLS: Record<string, NotionTool> = {
   }),
 
   read_page: tool({
+    returns: '{"blocks": [{"id", "type", "text"}, ...], "next_cursor"}',
     description: "Read a page's content, as plain text, one entry per block.",
     args: z.strictObject({ page_id: Id, start_cursor: Cursor, page_size: PageSize }),
     readOnly: true,
@@ -205,6 +208,7 @@ const TOOLS: Record<string, NotionTool> = {
   }),
 
   create_page: tool({
+    returns: '{"id", "title", "url", "in_trash"}',
     description: "Create a page under another page, with a title and plain paragraphs.",
     args: z.strictObject({ parent_page_id: Id, title: Title, paragraphs: Paragraphs.optional() }),
     readOnly: false,
@@ -223,6 +227,7 @@ const TOOLS: Record<string, NotionTool> = {
   }),
 
   append_paragraphs: tool({
+    returns: '{"appended"}',
     description: "Add plain paragraphs to the end of a page.",
     args: z.strictObject({ page_id: Id, paragraphs: Paragraphs }),
     readOnly: false,
@@ -245,6 +250,7 @@ const TOOLS: Record<string, NotionTool> = {
   }),
 
   trash_page: tool({
+    returns: '{"id", "title", "url", "in_trash"}',
     description: "Move a page to Notion's trash, where it can be restored for 30 days.",
     args: z.strictObject({ page_id: Id }),
     readOnly: false,

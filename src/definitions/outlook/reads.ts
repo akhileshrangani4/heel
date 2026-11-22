@@ -54,6 +54,8 @@ export interface SearchResult {
 }
 
 const search = outlookTool({
+  returns:
+    '{"messages": [{"id", "conversation_id", "from", "to", "cc", "subject", "date", "labels", "preview", "is_draft"}, ...], "next_page_token", "hidden": {"count"}} (next_page_token only when there is a next page)',
   description:
     "Search this mailbox (KQL: from:, to:, subject:, received:, hasAttachments:, …). Returns message " +
     "summaries, newest first. Messages hidden from agents are left out and counted.",
@@ -93,6 +95,8 @@ const search = outlookTool({
 });
 
 const getMessage = outlookTool({
+  returns:
+    '{"id", "conversation_id", "from", "to", "cc", "subject", "date", "labels", "is_draft", "bcc", "reply_to", "body", "body_format", "has_attachments"}, or {"hidden": {"count"}} when the message is hidden',
   description: "Read one message in full: addresses, folder, categories and body.",
   args: z.strictObject({ message_id: OutlookId }),
   readOnly: true,
@@ -115,6 +119,8 @@ export interface ThreadResult {
 }
 
 const getThread = outlookTool({
+  returns:
+    '{"conversation_id", "messages": [{"id", "conversation_id", "from", "to", "cc", "subject", "date", "labels", "is_draft", "bcc", "reply_to", "body", "body_format", "has_attachments"}, ...], "hidden": {"count"}}',
   description:
     "Read every message in a conversation, oldest first. Messages hidden from agents are left out and counted.",
   args: z.strictObject({ conversation_id: OutlookId }),
@@ -141,6 +147,7 @@ const getThread = outlookTool({
 });
 
 const listFolders = outlookTool({
+  returns: '{"folders": [{"id", "name"}, ...]}',
   description: "List this mailbox's folders, nested ones included, with their ids.",
   args: z.strictObject({}),
   readOnly: true,
@@ -152,6 +159,7 @@ const listFolders = outlookTool({
 });
 
 const listRules = outlookTool({
+  returns: '{"rules": [{"id", "name", "conditions", "actions"}, ...]}',
   description: "List this mailbox's inbox rules: what each matches and what it does.",
   args: z.strictObject({}),
   readOnly: true,
@@ -168,6 +176,7 @@ const listRules = outlookTool({
 });
 
 const listSendAs = outlookTool({
+  returns: '{"addresses": [str, ...]}',
   description: "The address this mailbox sends as. Every send names it as `from`.",
   args: z.strictObject({}),
   readOnly: true,

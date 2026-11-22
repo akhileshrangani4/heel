@@ -120,6 +120,7 @@ async function sendComposed(
 const sent = async (_mailbox: Mailbox, result: unknown) => result;
 
 const send = gmailTool({
+  returns: '{"id", "thread_id"}',
   description:
     "Send a new message. `from` must be one of the addresses list_send_as returns. " +
     "Recipients are plain addresses.",
@@ -147,6 +148,7 @@ function derived(message: GmailMessage, name: string): string[] | null {
 
 function replyTool(all: boolean) {
   return gmailTool({
+    returns: '{"id", "thread_id"}',
     description: all
       ? "Reply to everyone on a message: its sender (or Reply-To) and its To and Cc, minus your own addresses."
       : "Reply to a message's sender, or its Reply-To when set. Replying to your own sent message goes to its To.",
@@ -209,6 +211,7 @@ interface ForwardArgs extends ThreadedArgs {
 }
 
 const forward = gmailTool({
+  returns: '{"id", "thread_id"}',
   description:
     "Forward a message, attached whole (without its Bcc), to the addresses you name, with your own note above it.",
   args: z.strictObject({
@@ -275,6 +278,7 @@ async function pinnedContent(
 }
 
 const createDraft = gmailTool({
+  returns: '{"draft_id", "message_id"}',
   description: "Save a draft. Drafts never send anything; send one later with send_draft.",
   args: z.strictObject(Composed),
   readOnly: false,
@@ -311,6 +315,7 @@ async function targetDraft(
 }
 
 const updateDraft = gmailTool({
+  returns: '{"draft_id", "message_id"}',
   description: "Replace a draft's whole content.",
   args: z.strictObject({ draft_id: GmailId, ...Composed }),
   readOnly: false,
@@ -340,6 +345,7 @@ const updateDraft = gmailTool({
 });
 
 const deleteDraft = gmailTool({
+  returns: '{"deleted"} (the draft id)',
   description: "Delete a draft. Only ever a draft: sent and received mail can't be deleted here.",
   args: z.strictObject({ draft_id: GmailId }),
   readOnly: false,
@@ -374,6 +380,7 @@ interface SendDraftArgs {
 }
 
 const sendDraft = gmailTool({
+  returns: '{"id", "thread_id"}',
   description:
     "Send a saved draft exactly as it is now. If the draft changes after heel checks it, nothing is sent.",
   args: z.strictObject({ draft_id: GmailId }),

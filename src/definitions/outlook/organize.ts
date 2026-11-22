@@ -96,6 +96,7 @@ async function runMove(mailbox: OutlookMailbox, args: MoveArgs, signal: AbortSig
 }
 
 const trash = outlookTool({
+  returns: '{"moved"} (how many messages)',
   description: "Move messages to Deleted Items. Up to 100 ids.",
   args: z.strictObject({ message_ids: MessageIds }),
   readOnly: false,
@@ -111,6 +112,7 @@ const trash = outlookTool({
 });
 
 const archive = outlookTool({
+  returns: '{"moved"} (how many messages)',
   description: "Move messages to the Archive folder. Up to 100 ids.",
   args: z.strictObject({ message_ids: MessageIds }),
   readOnly: false,
@@ -121,6 +123,7 @@ const archive = outlookTool({
 });
 
 const move = outlookTool({
+  returns: '{"moved"} (how many messages)',
   description:
     "Move messages to a folder: a well-known name (inbox, archive, deleteditems, junkemail, …) or an id " +
     "from list_folders. Moving into Deleted Items, Junk or Archive removes. Up to 100 ids.",
@@ -138,6 +141,7 @@ const move = outlookTool({
 });
 
 const deleteMessages = outlookTool({
+  returns: '{"deleted"} (how many messages)',
   description: "Delete messages into Deleted Items. Up to 100 ids.",
   args: z.strictObject({ message_ids: MessageIds }),
   readOnly: false,
@@ -165,6 +169,7 @@ interface CategoryArgs {
 }
 
 const setCategories = outlookTool({
+  returns: '{"changed"} (how many messages)',
   description: "Add and remove categories on messages. Up to 100 ids.",
   args: z.strictObject({ message_ids: MessageIds, add: Categories, remove: Categories }),
   readOnly: false,
@@ -207,6 +212,7 @@ interface RuleArgs {
 }
 
 const createRule = outlookTool({
+  returns: '{"rule_id"}',
   description:
     "Create an inbox rule for future mail. A rule that forwards or redirects keeps sending mail out after " +
     "heel is revoked, so it needs a rule that names create_rule.",
