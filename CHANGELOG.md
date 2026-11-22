@@ -1,5 +1,45 @@
 # Changelog
 
+## [0.2.9](https://github.com/akhileshrangani4/heel/compare/v0.2.8...v0.2.9) (2026-11-22)
+
+
+### Features
+
+* **activity:** a code-mode script's calls are grouped on Activity ([#198](https://github.com/akhileshrangani4/heel/issues/198)) ([77663e8](https://github.com/akhileshrangani4/heel/commit/77663e86c649c3cd841103f6b34ff951a7dd3066))
+* agents propose workdirs for their own heel run, and the owner adds them with a passkey ([#189](https://github.com/akhileshrangani4/heel/issues/189)) ([1ea1957](https://github.com/akhileshrangani4/heel/commit/1ea195755b92f3d2aa890098e5aa5737e05a3963))
+* **approvals:** a call from a code-mode script shows its script on the approval page ([#196](https://github.com/akhileshrangani4/heel/issues/196)) ([d608a71](https://github.com/akhileshrangani4/heel/commit/d608a71ec7aa356a415d170285f416a859d096ad))
+* **approvals:** the owner can stop a parked script from its approval page ([#197](https://github.com/akhileshrangani4/heel/issues/197)) ([7600e9b](https://github.com/akhileshrangani4/heel/commit/7600e9b576df39cd82e409e6980462cebfbb3232))
+* **codemode:** a call that asks parks the script, and run_code({ resume }) carries on from there ([#195](https://github.com/akhileshrangani4/heel/issues/195)) ([6043cd9](https://github.com/akhileshrangani4/heel/commit/6043cd9341d8ef25b01c9780f14f5b2021e7d08d))
+* **codemode:** a script's last expression comes back as output, like a REPL ([#194](https://github.com/akhileshrangani4/heel/issues/194)) ([e3ff662](https://github.com/akhileshrangani4/heel/commit/e3ff662a321e592ec11e1dbe6860b11c0d313bb6))
+* **codemode:** background scripts that carry on by themselves after approval ([#202](https://github.com/akhileshrangani4/heel/issues/202)) ([b8f6701](https://github.com/akhileshrangani4/heel/commit/b8f670107579729a751f434b0f514502b3c15949))
+* **codemode:** built-in reads have _async twins that run at once under asyncio.gather ([#200](https://github.com/akhileshrangani4/heel/issues/200)) ([1779657](https://github.com/akhileshrangani4/heel/commit/17796576e801e3f83567c1030ce6b0495cd340d8))
+* each proposed rule reads as a plain sentence on the approval page ([#190](https://github.com/akhileshrangani4/heel/issues/190)) ([0e8cef1](https://github.com/akhileshrangani4/heel/commit/0e8cef1667616163535593498c67a64daedf5236))
+* heel checks a pasted key with its service before it stores it ([#192](https://github.com/akhileshrangani4/heel/issues/192)) ([1f91f94](https://github.com/akhileshrangani4/heel/commit/1f91f94c60a964680f3c9f9356a0f8c0300325ab))
+* **learning:** heel suggests a rule after you approve the same kind of request 5 times on 2 days (2.10) ([#203](https://github.com/akhileshrangani4/heel/issues/203)) ([a928aa8](https://github.com/akhileshrangani4/heel/commit/a928aa817bbc1ec325d6e0b2a6f18f9534390e80))
+* **learning:** heel_history tells an agent how its owner decided its requests (2.10) ([#204](https://github.com/akhileshrangani4/heel/issues/204)) ([8f14800](https://github.com/akhileshrangani4/heel/commit/8f14800957e8609ec64490e6c443453af0ad8082))
+* **mcp:** built-in tools list an outputSchema, for clients' own code modes ([#199](https://github.com/akhileshrangani4/heel/issues/199)) ([6ba3340](https://github.com/akhileshrangani4/heel/commit/6ba33404b4504825e6d57f7438824d11657c12f7))
+* **proposals:** every proposed rule, hide entry and workdir needs a why (2.2) ([#205](https://github.com/akhileshrangani4/heel/issues/205)) ([2315582](https://github.com/akhileshrangani4/heel/commit/2315582c83c006d4bbb5b3c52ffd2f3799e3a816))
+* **rules:** a history of every change to the rules files, from proposals and from outside heel (2.4) ([#206](https://github.com/akhileshrangani4/heel/issues/206)) ([2a1ffb9](https://github.com/akhileshrangani4/heel/commit/2a1ffb9f3b61817a7dce0ce3b53871e46c3a0e7d))
+* **setup:** heel init --approve-from cloudflare, and heel runs the named tunnel (2.7) ([#208](https://github.com/akhileshrangani4/heel/issues/208)) ([3483bc8](https://github.com/akhileshrangani4/heel/commit/3483bc8a31e53f3e03b4fbf2d451a57542a9e398))
+* **setup:** heel init --approve-from tailscale, and notifications right after the passkey (2.7) ([#207](https://github.com/akhileshrangani4/heel/issues/207)) ([4ecc716](https://github.com/akhileshrangani4/heel/commit/4ecc7167effd4e990db5bf68656fed83debb0df4))
+* **setup:** remote first, agents sign in to a heel on a server (2.8) ([#216](https://github.com/akhileshrangani4/heel/issues/216)) ([be96c8e](https://github.com/akhileshrangani4/heel/commit/be96c8e79a401c4547f1132cc7b2fb75a5bb337f))
+* **web:** a People page, and heel user add (2.9) ([#214](https://github.com/akhileshrangani4/heel/issues/214)) ([0b0916b](https://github.com/akhileshrangani4/heel/commit/0b0916b5de17f775f6149868636f60c2ee8f167c))
+* **web:** download the audit log from Activity (2.9) ([#215](https://github.com/akhileshrangani4/heel/issues/215)) ([87f0352](https://github.com/akhileshrangani4/heel/commit/87f0352194ea4813464404910233fb7d8e3d6111))
+* **web:** manage accounts from the web app (2.9, part 2 of 4) ([#210](https://github.com/akhileshrangani4/heel/issues/210)) ([4404ac0](https://github.com/akhileshrangani4/heel/commit/4404ac0023471f7ebdf5be63fc14ff6199694358))
+* **web:** manage agents from the web app (2.9, part 1 of 4) ([#209](https://github.com/akhileshrangani4/heel/issues/209)) ([8c189c9](https://github.com/akhileshrangani4/heel/commit/8c189c9e1242a7242fd0e6c21bb9317a7438714b))
+* **web:** share accounts and name their approvers (2.9) ([#213](https://github.com/akhileshrangani4/heel/issues/213)) ([161acbe](https://github.com/akhileshrangani4/heel/commit/161acbe5a68a26b9ff5fb49b1179a5f38f2929f2))
+* **web:** your rules in words, changed from the web app (2.9, part 3 of 4) ([#211](https://github.com/akhileshrangani4/heel/issues/211)) ([7336abe](https://github.com/akhileshrangani4/heel/commit/7336abe71b18d42e308ed3f2f16cd1b6a08c1f94))
+
+
+### Bug Fixes
+
+* a key the service rejects says so, instead of "upstream outcome unknown" ([#187](https://github.com/akhileshrangani4/heel/issues/187)) ([5327800](https://github.com/akhileshrangani4/heel/commit/53278005df3a9cc7b32badcd5cc502c2b06b71d3))
+* **cli:** an unknown command says so in two lines, with the command you probably meant ([#191](https://github.com/akhileshrangani4/heel/issues/191)) ([0c949d0](https://github.com/akhileshrangani4/heel/commit/0c949d08375ad8815704fc748b255725e29c74cb))
+* every built-in tool says what it returns, and GitHub issues say when they were opened ([#193](https://github.com/akhileshrangani4/heel/issues/193)) ([44a9523](https://github.com/akhileshrangani4/heel/commit/44a9523fa91abdd0692884023bb27db4f0e08a99))
+* heel adds itself to Claude Code for every project, and agents read the setup prompt whole ([#186](https://github.com/akhileshrangani4/heel/issues/186)) ([d04d478](https://github.com/akhileshrangani4/heel/commit/d04d4788650ef17cdafab558d558212c0c797a8d))
+* **rules:** changes made while a rules watcher is starting are picked up (T16) ([#201](https://github.com/akhileshrangani4/heel/issues/201)) ([7f4c0e0](https://github.com/akhileshrangani4/heel/commit/7f4c0e007389ee73ea6a9af889916de4e7d3426c))
+* **web:** clearer rules, agents and connections pages (2.9) ([#212](https://github.com/akhileshrangani4/heel/issues/212)) ([c1cfaa5](https://github.com/akhileshrangani4/heel/commit/c1cfaa5b68d9d8c51ec458ca5be633b3575381ea))
+
 ## [0.2.8](https://github.com/akhileshrangani4/heel/compare/v0.2.7...v0.2.8) (2026-11-21)
 
 
