@@ -9,7 +9,7 @@ import * as schema from "../../src/store/schema.ts";
 import { tempDir } from "../helpers/store.ts";
 
 /**
- * Migration 0032 rebuilds rule_proposals to add `origin` (roadmap 2.10). A
+ * Migration 0032 adds `origin` to rule_proposals (roadmap 2.10). A
  * proposal made before it was an agent's, and must stay one.
  */
 
@@ -50,6 +50,13 @@ describe("migration 0032: rule proposal origin", () => {
          VALUES ('rp', 'org', 'usr', 'agt', '[]', 'why', 'pending', 0, 1)`,
       )
       .run();
+    // A notification about it points at the proposal: rebuilding the table would break this.
+    old
+      .prepare(
+        `INSERT INTO notification_deliveries (id, org_id, proposal_id, user_id, channel, target, status, next_attempt_at, created_at)
+         VALUES ('nd', 'org', 'rp', 'usr', 'email', 'me@example.com', 'sent', 0, 0)`,
+      )
+      .run();
     old.close();
 
     const store = openStore(path);
@@ -57,6 +64,13 @@ describe("migration 0032: rule proposal origin", () => {
       expect(
         store.sqlite.prepare("SELECT id, reason, status, origin FROM rule_proposals").all(),
       ).toEqual([{ id: "rp", reason: "why", status: "pending", origin: "agent" }]);
+      expect(store.sqlite.prepare("SELECT proposal_id FROM notification_deliveries").all()).toEqual(
+        [{ proposal_id: "rp" }],
+      );
+      // The new column holds only what heel writes.
+      expect(() =>
+        store.sqlite.prepare("UPDATE rule_proposals SET origin = 'someone'").run(),
+      ).toThrow(/CHECK/);
     } finally {
       store.close();
     }

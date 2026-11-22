@@ -132,12 +132,16 @@ export function proposeRules(
   who: { orgId: string; ownerId: string; agentId: string },
   input: ProposeRulesInput,
   now: Date,
-  /** `heel` for a rule heel drafted from the owner's decisions (2.10). */
-  origin: RuleProposalOrigin = "agent",
+  /**
+   * `heel` for a rule heel drafted from the owner's decisions (2.10), with
+   * the hash of the rule it goes before. Agents' rules always go first.
+   */
+  origin: { by: "agent" } | { by: "heel"; before: string } = { by: "agent" },
 ): ProposeOutcome {
   const rules: ProposedRule[] = (input.rules ?? []).map((r) => ({
     rule: JSON.parse(JSON.stringify(r.rule)) as Record<string, unknown>,
     why: oneLine(r.why, MAX_WHY_CHARS),
+    ...(origin.by === "heel" ? { before: origin.before } : {}),
   }));
   const hide: ProposedHide[] = (input.hide ?? []).map((h) => ({
     entry: JSON.parse(JSON.stringify(h.entry)) as Record<string, unknown>,
@@ -178,7 +182,7 @@ export function proposeRules(
   db.transaction((tx) => {
     // An agent's new proposal replaces its pending one. heel's suggestions stand on their own:
     // they neither replace an agent's proposal nor each other.
-    if (origin === "agent") {
+    if (origin.by === "agent") {
       tx.update(ruleProposals)
         .set({ status: "superseded", decidedAt: now })
         .where(
@@ -200,7 +204,7 @@ export function proposeRules(
         hide,
         workdirs,
         reason: oneLine(input.reason, MAX_REASON_CHARS),
-        origin,
+        origin: origin.by,
         status: "pending",
         createdAt: now,
         expiresAt,
@@ -401,6 +405,21 @@ export function previewProposal(
       : list.commentBefore;
     list.commentBefore = null;
   }
+  // Where each `before` rule sits, found before anything moves.
+  const anchors = new Map<string, unknown>();
+  for (const r of proposal.rules) {
+    if (r.before === undefined) continue;
+    const target = current?.rules.find((rule) => rule.hash === r.before);
+    const node = target === undefined ? undefined : list.items[target.index - 1];
+    if (node === undefined) {
+      return {
+        ok: false,
+        problem:
+          "The rule this suggestion goes before has changed or gone since heel suggested it. Reject it; heel suggests it again if it still fits.",
+      };
+    }
+    anchors.set(r.before, node);
+  }
   proposal.rules
     .slice()
     .reverse()
@@ -412,7 +431,9 @@ export function previewProposal(
           ? `Suggested by heel for ${agentName}`
           : `Proposed by ${agentName}`;
       node.commentBefore = ` ${by}${r.why === null ? "" : `: ${r.why}`}`;
-      list.items.unshift(node);
+      const anchor = r.before === undefined ? undefined : anchors.get(r.before);
+      if (anchor === undefined) list.items.unshift(node);
+      else list.items.splice(list.items.indexOf(anchor as never), 0, node);
     });
   if (proposal.hide.length > 0) {
     let hideSeq = doc.get("hide", true);
@@ -440,8 +461,16 @@ export function previewProposal(
   // heel rewrites the whole file, so check every rule already there still
   // says exactly what it said, in the same order, and that the hide list is
   // the one that was there with exactly the proposed entries after it.
-  const kept = merged.rules.slice(proposal.rules.length).map((rule) => rule.hash);
+  // Where the new rules land: first, or right before their `before` rule.
   const had = current?.rules.map((rule) => rule.hash) ?? [];
+  const layout: (string | null)[] = [...had];
+  for (const r of proposal.rules.slice().reverse()) {
+    if (r.before === undefined) layout.unshift(null);
+    else layout.splice(layout.indexOf(r.before), 0, null);
+  }
+  const placedRight =
+    merged.rules.length === layout.length &&
+    layout.every((hash, i) => hash === null || merged.rules[i]?.hash === hash);
   const hideOf = (text: string | null): string[] => {
     const parsed = text === null ? null : (parse(text) as { hide?: unknown } | null);
     const list = Array.isArray(parsed?.hide) ? parsed.hide : [];
@@ -452,7 +481,7 @@ export function previewProposal(
   const wantHide = [...hideBefore, ...proposal.hide.map((h) => canonicalHash(h.entry))];
   const sameHide =
     hideAfter.length === wantHide.length && hideAfter.every((hash, i) => hash === wantHide[i]);
-  if (kept.length !== had.length || kept.some((hash, i) => hash !== had[i]) || !sameHide) {
+  if (!placedRight || !sameHide) {
     return {
       ok: false,
       problem: `heel couldn't add these without changing what ${display} already says. Add them by hand.`,

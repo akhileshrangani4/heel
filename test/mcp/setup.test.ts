@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { addAgent } from "../../src/gateway/agents.ts";
 import { fullSetupPrompt, installPrompt, setupPrompt } from "../../src/gateway/mcp/setup-prompt.ts";
+import { proposeRules } from "../../src/proposals/rules.ts";
+import { agents } from "../../src/store/schema.ts";
 import { mcpHarness } from "../helpers/mcp.ts";
 
 /**
@@ -99,5 +101,20 @@ describe("heel_accounts", () => {
     expect(answer.waiting.ruleProposals).toEqual([]);
     // Names and services only.
     expect(JSON.stringify(answer)).not.toMatch(/token|secret|credential/i);
+  });
+
+  it("lists only the agent's own proposals, not heel's suggestions about it (2.10)", async () => {
+    const h = await mcpHarness({ owner: READS });
+    const client = await h.connect("/mcp?tools=direct");
+    const agentId = h.t.db.select({ id: agents.id }).from(agents).get()?.id ?? "";
+    const rule = { match: { tool: "search_notes" }, then: "allow" };
+    const who = { orgId: h.t.orgId, ownerId: h.t.ownerId, agentId };
+    const own = proposeRules(h.t.db, who, { rules: [{ rule }] }, new Date());
+    proposeRules(h.t.db, who, { rules: [{ rule }] }, new Date(), { by: "heel", before: "x" });
+    const answer = (await client.callTool({ name: "heel_accounts", arguments: {} }))
+      .structuredContent as Answer;
+    expect(answer.waiting.ruleProposals.map((p) => p.proposalId)).toEqual([
+      own.ok ? own.proposalId : "",
+    ]);
   });
 });

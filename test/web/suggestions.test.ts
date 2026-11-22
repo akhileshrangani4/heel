@@ -1,7 +1,8 @@
-import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { rulesPaths } from "../../src/config/rules.ts";
 import { learningDismissals, ruleProposals } from "../../src/store/schema.ts";
 import { pendingId, SEND } from "../helpers/approvals.ts";
 import type { SoftAuthenticator } from "../helpers/authenticator.ts";
@@ -11,7 +12,6 @@ import {
   type HumanPlaneHarness,
   humanPlaneHarness,
 } from "../helpers/human-plane.ts";
-import { oneRule } from "../helpers/pipeline.ts";
 
 /**
  * Roadmap 2.10 end to end: approving the same kind of request 5 times on 2
@@ -20,7 +20,15 @@ import { oneRule } from "../helpers/pipeline.ts";
  * stops it coming back.
  */
 
-const ASK_SENDS = oneRule("{ action: email.send }", "ask");
+/** A deny above the rule that asks: a suggestion must not get past it. */
+const RULES = `rules:
+  - name: no-ceo
+    match: { action: email.send, recipients: { any_of: [ceo@vendor.com] } }
+    then: deny
+  - name: sends-ask
+    match: { action: email.send }
+    then: ask
+`;
 const HOUR = 3600_000;
 
 /** Approves `n` sends, 13 hours apart so they fall on different days; returns a signed-in browser. */
@@ -52,7 +60,10 @@ async function setUp(
   learning: { decisions: number; days: number } | null = { decisions: 5, days: 2 },
 ) {
   const home = mkdtempSync(join(tmpdir(), "heel-learn-"));
-  const h = humanPlaneHarness({ owner: ASK_SENDS, rulesHome: home, learning });
+  const dir = rulesPaths(home).ownersDir;
+  mkdirSync(dir);
+  writeFileSync(join(dir, "owner.yaml"), RULES);
+  const h = humanPlaneHarness({ owner: RULES, rulesHome: home, learning });
   const passkey = await h.enroll();
   return { h, passkey, home };
 }
@@ -121,9 +132,12 @@ describe("suggested rules from what you approve (2.10)", () => {
       "/proposals/confirm",
     );
     expect(applied.status).toBe(200);
-    const [file] = readdirSync(join(home, "rules"));
-    const written = readFileSync(join(home, "rules", file ?? ""), "utf8");
+    const written = readFileSync(join(rulesPaths(home).ownersDir, "owner.yaml"), "utf8");
     expect(written).toContain("all_domain_in");
+    // It went right before the rule that asked: the deny above still decides first.
+    const at = (text: string) => written.indexOf(text);
+    expect(at("no-ceo")).toBeLessThan(at("Suggested by heel"));
+    expect(at("Suggested by heel")).toBeLessThan(at("sends-ask"));
     // The file says heel suggested it; the agent didn't propose it.
     expect(written).toMatch(/# Suggested by heel for \S+: You approved 5 times/);
     expect(written).not.toContain("Proposed by");
@@ -157,6 +171,49 @@ describe("suggested rules from what you approve (2.10)", () => {
   it("suggests nothing when heel.yaml turns learning off", async () => {
     const { h, passkey } = await setUp(null);
     const owner = await approveSends(h, passkey, 6);
+    expect(await (await h.fetch("/approvals", { as: owner })).text()).not.toContain(
+      "Suggested rules",
+    );
+  });
+
+  it("checks a suggestion again when it's added, and a rejected one doesn't come straight back", async () => {
+    const { h, passkey } = await setUp();
+    let owner = await approveSends(h, passkey, 5);
+    const form = (as: Browser) => ({
+      as,
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ csrf: as.csrf }).toString(),
+    });
+    const key = keyOn(await (await h.fetch("/approvals", { as: owner })).text());
+    const location =
+      (await h.fetch(`/suggestions/${key}/propose`, form(owner))).headers.get("location") ?? "";
+    const id = location.slice("/proposals/".length);
+    const sha = attribute(await (await h.fetch(location, { as: owner })).text(), "data-sha");
+
+    // The owner then denies a send it would allow: heel no longer suggests it.
+    const approvalId = pendingId(await h.call({ args: { ...SEND, subject: "late" } }));
+    const callHash = h.audit().find((row) => row.approvalId === approvalId)?.callHash ?? "";
+    const denied = await h.ceremony(
+      owner,
+      { url: `/approvals/${approvalId}/challenge`, body: { callHash, intent: "deny" } },
+      `/approvals/${approvalId}/decide`,
+    );
+    expect(denied.status).toBe(200);
+    const challenge = await h.fetch("/proposals/challenge", {
+      as: owner,
+      method: "POST",
+      headers: { "content-type": "application/json", "x-csrf-token": owner.csrf },
+      body: JSON.stringify({ proposalId: id, sha }),
+    });
+    expect(challenge.status).toBe(409);
+    expect(await challenge.text()).toMatch(/wouldn't suggest this now/);
+
+    // Rejected, it isn't offered again, even once the denial ages out of the window.
+    const rejected = await h.fetch(`/proposals/${id}/reject`, form(owner));
+    expect(rejected.status).toBe(303);
+    h.clock.advance(31 * 24 * HOUR);
+    owner = await approveSends(h, passkey, 5);
     expect(await (await h.fetch("/approvals", { as: owner })).text()).not.toContain(
       "Suggested rules",
     );

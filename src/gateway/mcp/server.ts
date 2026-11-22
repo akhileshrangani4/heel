@@ -570,7 +570,8 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
             expiresAt: r.expiresAt.toISOString(),
           })),
         ruleProposals: pendingProposals(deps.db, agent.ownerId, at)
-          .filter((p) => p.agentId === agent.agentId)
+          // Only its own: heel's suggestions about it (2.10) aren't the agent's to see.
+          .filter((p) => p.agentId === agent.agentId && p.origin === "agent")
           .map((p) => ({ proposalId: p.id, expiresAt: p.expiresAt.toISOString() })),
       },
       ...(deps.approvalsUrl === undefined ? {} : { approveAt: deps.approvalsUrl }),

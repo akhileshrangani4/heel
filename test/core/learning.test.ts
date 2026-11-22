@@ -274,7 +274,7 @@ describe("learning from what you approve (2.10)", () => {
         rules: set,
         threshold: THRESHOLD,
         now: NOW,
-        skip: new Set([learned?.key ?? ""]),
+        skip: new Set([learned?.kindKey ?? ""]),
       }),
     ).toEqual([]);
 
@@ -284,5 +284,111 @@ describe("learning from what you approve (2.10)", () => {
     expect(
       learnRules(many, { owner: OWNER, rules: set, threshold: THRESHOLD, now: NOW }),
     ).toHaveLength(MAX_LEARNED);
+  });
+
+  it("keeps the rule that asked's conditions and goes right before it", () => {
+    const set = ruleSet({
+      owner: `rules:
+  - match: { action: github.issue.create, args.labels: { one_of: [bug] } }
+    then: ask
+  - match: {}
+    then: ask
+`,
+    });
+    const asker = set.owners.get(OWNER)?.rules[0];
+    if (asker === undefined) throw new Error("no rule");
+    const calls = decided(set, 5, { call: { args: { labels: ["bug"] } } }).map((d) => ({
+      ...d,
+      askedBy: asker,
+    }));
+    const [learned] = learnRules(calls, {
+      owner: OWNER,
+      rules: set,
+      threshold: THRESHOLD,
+      now: NOW,
+    });
+    expect(learned?.before).toBe(asker.hash);
+    expect(learned?.rule.match).toEqual({
+      "args.labels": { one_of: ["bug"] },
+      action: "github.issue.create",
+      agent: "claude-code",
+      account: "github",
+      repo: "acme/web",
+    });
+  });
+
+  it("allows events with no one invited only as events with no one invited", () => {
+    const set = ruleSet({ owner: RULES });
+    const event = {
+      account: "gcal",
+      provider: "gcal",
+      tool: "create_event",
+      action: "calendar.event.create",
+      repo: undefined,
+      calendar: "me@x.com",
+      recipients: [],
+    } satisfies CallOverrides;
+    const [learned] = learnRules(decided(set, 5, { call: event }), {
+      owner: OWNER,
+      rules: set,
+      threshold: THRESHOLD,
+      now: NOW,
+    });
+    expect(learned?.rule.match["recipients"]).toEqual({ max: 0 });
+    expect(learned?.evidence).toMatch(/with no one invited or addressed$/);
+    // Events that did invite someone are another group: 4 plain and 1 with a guest earn nothing.
+    const mixed = [
+      ...decided(set, 4, { call: event }),
+      ...decided(set, 1, { call: { ...event, recipients: ["x@evil.com"] } }),
+    ];
+    expect(learnRules(mixed, { owner: OWNER, rules: set, threshold: THRESHOLD, now: NOW })).toEqual(
+      [],
+    );
+  });
+
+  it("doesn't let one approval to another domain widen the rest, and names personal addresses", () => {
+    const set = ruleSet({ owner: RULES });
+    const send = {
+      account: "gmail",
+      provider: "gmail",
+      tool: "send_email",
+      action: "email.send",
+      repo: undefined,
+      recipients: ["boss@work.com"],
+    } satisfies CallOverrides;
+    const mixed = [
+      ...decided(set, 4, { call: send }),
+      ...decided(set, 1, { call: { ...send, recipients: ["friend@gmail.com"] } }),
+    ];
+    expect(learnRules(mixed, { owner: OWNER, rules: set, threshold: THRESHOLD, now: NOW })).toEqual(
+      [],
+    );
+    const [personal] = learnRules(
+      decided(set, 5, { call: { ...send, recipients: ["friend@gmail.com"] } }),
+      { owner: OWNER, rules: set, threshold: THRESHOLD, now: NOW },
+    );
+    expect(personal?.rule.match["recipients"]).toEqual({ one_of: ["friend@gmail.com"] });
+  });
+
+  it("gives the same kind key whatever the recipients, so a dismissal holds", () => {
+    const set = ruleSet({ owner: RULES });
+    const send = {
+      account: "gmail",
+      provider: "gmail",
+      tool: "send_email",
+      action: "email.send",
+      repo: undefined,
+    } satisfies CallOverrides;
+    const learn = (to: string) =>
+      learnRules(decided(set, 5, { call: { ...send, recipients: [to] } }), {
+        owner: OWNER,
+        rules: set,
+        threshold: THRESHOLD,
+        now: NOW,
+      })[0];
+    const a = learn("x@work.com");
+    const b = learn("y@corp.io");
+    expect(a?.key).not.toBe(b?.key);
+    expect(a?.kindKey).toBe(b?.kindKey);
   });
 });

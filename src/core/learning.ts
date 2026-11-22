@@ -13,25 +13,54 @@ import { RulesFile } from "./rules/schema.ts";
  * a draft: it becomes a proposal the person reads and adds with a passkey.
  * No model decides anything here. Pure.
  *
- * A suggested rule is never wider than its evidence:
+ * A suggested rule changes nothing but the requests it rests on:
  *
- * - It names the agent the requests came from, and the account and action.
- * - An allow names what the calls had in common that a rule can match: the
- *   repo, the calendar, or the recipients' domains. Calls with none of those
- *   aren't suggested as allows: "allow this action with any arguments" goes
- *   past what was approved. (A deny only takes away, so it needs none.)
+ * - It goes right before the rule that asked (`before`), with that rule's
+ *   conditions as well as its own, so it only decides calls that rule would
+ *   have asked about. Every rule above it still decides first.
+ * - It names the agent, the account and the action, and exactly what the
+ *   calls had in common that a rule can match: the repo, the calendar, and
+ *   the recipients (their domains; for personal mail such as gmail.com, the
+ *   addresses; or none at all). Calls with different recipients are
+ *   different groups, so one approval can't widen another's.
+ * - An allow needs a repo, a calendar or recipients: "allow this action with
+ *   any arguments" goes past what was approved. A deny needs none.
  * - It matches no call the person decided the other way in the window.
- * - It isn't suggested when the rule that asked has a count or a state check
- *   (proposed rules go first in the file, so an allow there would skip that
- *   guard), when that rule has changed or gone, or for org asks.
- * - It needs `approvals` decisions on at least `days` different days (UTC),
+ * - It isn't suggested when the rule that asked has a count or a state check,
+ *   has changed or gone, or no longer asks about these calls; nor for org asks.
+ * - It needs `decisions` decisions on at least `days` different days (UTC),
  *   so a burst of asks in one sitting doesn't earn a rule.
- * - Requests your rules no longer ask about aren't suggested.
  */
 
 export const LEARNING_WINDOW_DAYS = 30;
 /** How many suggestions are shown at once: few, so each is read. */
 export const MAX_LEARNED = 5;
+
+/** Personal mail domains: a suggestion names addresses there, never the whole domain. */
+const PERSONAL_MAIL = new Set([
+  "gmail.com",
+  "googlemail.com",
+  "outlook.com",
+  "hotmail.com",
+  "live.com",
+  "msn.com",
+  "yahoo.com",
+  "icloud.com",
+  "me.com",
+  "mac.com",
+  "aol.com",
+  "proton.me",
+  "protonmail.com",
+  "gmx.com",
+  "gmx.net",
+  "mail.com",
+  "yandex.com",
+  "zoho.com",
+  "fastmail.com",
+  "hey.com",
+  "qq.com",
+  "163.com",
+]);
 
 export interface DecidedCall {
   agentName: string;
@@ -51,13 +80,21 @@ export interface LearningThreshold {
 }
 
 export interface LearnedRule {
-  /** Stable for the same agent and rule: what dismissing and proposing name. */
+  /** Names this exact suggestion: what reviewing it takes. */
   key: string;
+  /**
+   * Names the kind of request (agent, decision, account, action, repo,
+   * calendar), whatever the recipients: what dismissing hides, so a
+   * dismissed suggestion doesn't come back as a near copy.
+   */
+  kindKey: string;
   agentId: string;
   agentName: string;
   decision: "allow" | "deny";
   /** The rule as heel would propose it. */
   rule: { match: Record<string, unknown>; then: "allow" | "deny" };
+  /** The hash of the owner rule it goes right before: the one that asked. */
+  before: string;
   /** How many decisions it rests on, and on how many days. */
   count: number;
   days: number;
@@ -68,21 +105,73 @@ export interface LearnedRule {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** A suggestion's key: the same agent and rule always give the same key. */
-export function learnedKey(agentId: string, rule: Record<string, unknown>): string {
-  return createHash("sha256")
-    .update(`${agentId}\u0000${ruleContentHash(rule as Parameters<typeof ruleContentHash>[0])}`)
-    .digest("hex")
-    .slice(0, 24);
+function hash(parts: readonly string[]): string {
+  return createHash("sha256").update(parts.join("\u0000")).digest("hex").slice(0, 24);
 }
 
-function recipientDomains(call: Call): string[] {
-  const domains = new Set<string>();
-  for (const recipient of call.recipients ?? []) {
+/** A suggestion's key: the same agent and rule always give the same key. */
+export function learnedKey(agentId: string, rule: Record<string, unknown>): string {
+  return hash([agentId, ruleContentHash(rule as Parameters<typeof ruleContentHash>[0])]);
+}
+
+/** A suggested rule's kind key (see LearnedRule.kindKey), read back from the rule itself. */
+export function kindKeyOf(
+  agentId: string,
+  rule: { match: Record<string, unknown>; then: string },
+): string {
+  const text = (key: string) => {
+    const value = rule.match[key];
+    return typeof value === "string" ? value : "";
+  };
+  return hash([
+    agentId,
+    rule.then,
+    text("account"),
+    text("action") === "" ? `tool:${text("tool")}` : text("action"),
+    text("repo"),
+    text("calendar"),
+  ]);
+}
+
+type Recipients =
+  | { kind: "absent" }
+  | { kind: "unreadable" }
+  | { kind: "none" }
+  | { kind: "domains"; values: string[] }
+  | { kind: "addresses"; values: string[] };
+
+function recipientsOf(call: Call): Recipients {
+  if (call.recipients === undefined) return { kind: "absent" };
+  const addresses: string[] = [];
+  for (const recipient of call.recipients) {
     const address = normalizeAddress(recipient);
-    if (address !== null) domains.add(domainOf(address));
+    if (address === null) return { kind: "unreadable" };
+    addresses.push(address);
   }
-  return [...domains].sort();
+  if (addresses.length === 0) return { kind: "none" };
+  const domains = [...new Set(addresses.map(domainOf))].sort();
+  if (domains.some((d) => PERSONAL_MAIL.has(d))) {
+    return { kind: "addresses", values: [...new Set(addresses)].sort() };
+  }
+  return { kind: "domains", values: domains };
+}
+
+function recipientsKey(r: Recipients): string {
+  return "values" in r ? `${r.kind}:${r.values.join(",")}` : r.kind;
+}
+
+function recipientsCondition(r: Recipients): unknown {
+  switch (r.kind) {
+    case "none":
+      // An absent field fails every check, so this matches only an empty list.
+      return { max: 0 };
+    case "domains":
+      return { all_domain_in: r.values };
+    case "addresses":
+      return { one_of: r.values };
+    default:
+      return undefined;
+  }
 }
 
 interface Group {
@@ -95,10 +184,9 @@ interface Group {
   byAction: boolean;
   repo: string | undefined;
   calendar: string | undefined;
-  domains: Set<string>;
+  recipients: Recipients;
+  asker: CompiledRule | null;
   calls: DecidedCall[];
-  /** Some call couldn't be learned from (see the module comment). */
-  blocked: boolean;
 }
 
 function dayOf(at: Date): string {
@@ -109,16 +197,57 @@ function shortDate(at: Date): string {
   return at.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }
 
-function draft(group: Group): LearnedRule["rule"] {
+function sameValue(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * The asker's match with ours added: a call must pass both. Where both name
+ * a key, ours is a literal value those calls had, which the asker's condition
+ * on that key already accepted, so ours is the narrower one. Recipients
+ * conditions combine when their operators don't overlap. Null when they
+ * can't be combined.
+ */
+function combined(
+  asker: Readonly<Record<string, unknown>>,
+  ours: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const match: Record<string, unknown> = { ...asker };
+  for (const [key, value] of Object.entries(ours)) {
+    const theirs = match[key];
+    if (theirs === undefined || sameValue(theirs, value)) {
+      match[key] = value;
+    } else if (key !== "recipients" && typeof value === "string") {
+      match[key] = value;
+    } else if (
+      key === "recipients" &&
+      isObject(theirs) &&
+      isObject(value) &&
+      Object.keys(value).every((op) => !(op in theirs))
+    ) {
+      match[key] = { ...theirs, ...value };
+    } else {
+      return null;
+    }
+  }
+  return match;
+}
+
+function draft(group: Group, asker: CompiledRule): LearnedRule["rule"] | null {
   const then = group.decision === "approved" ? "allow" : "deny";
-  const match: Record<string, unknown> = { agent: group.agentName, account: group.account };
-  match[group.byAction ? "action" : "tool"] = group.subject;
-  if (group.repo !== undefined) match["repo"] = group.repo;
-  if (group.calendar !== undefined) match["calendar"] = group.calendar;
-  // A deny keeps to what was denied, too, but needs no shape to be safe.
-  if (group.domains.size > 0) match["recipients"] = { all_domain_in: [...group.domains].sort() };
+  const ours: Record<string, unknown> = { agent: group.agentName, account: group.account };
+  ours[group.byAction ? "action" : "tool"] = group.subject;
+  if (group.repo !== undefined) ours["repo"] = group.repo;
+  if (group.calendar !== undefined) ours["calendar"] = group.calendar;
+  const recipients = recipientsCondition(group.recipients);
+  if (recipients !== undefined) ours["recipients"] = recipients;
+  const match = combined(asker.match, ours);
   // biome-ignore lint/suspicious/noThenProperty: `then` is the rules file's key.
-  return { match, then };
+  return match === null ? null : { match, then };
 }
 
 function compiled(rule: LearnedRule["rule"]): CompiledRule | null {
@@ -132,24 +261,33 @@ function compiled(rule: LearnedRule["rule"]): CompiledRule | null {
   return result.ok ? (result.file.rules[0] ?? null) : null;
 }
 
-/** What the person's rules decide about this call today, with no lookups or counts. */
-function decidesToday(rules: RuleSet | null, owner: string, decided: DecidedCall): string {
-  return evaluate(rules, {
+/** Whether the person's rules still ask about this call, by this rule (no lookups or counts). */
+function stillAskedBy(
+  rules: RuleSet | null,
+  owner: string,
+  decided: DecidedCall,
+  asker: CompiledRule,
+): boolean {
+  const { verdict } = evaluate(rules, {
     owner,
     facts: factsOf(decided.call, decided.agentName),
     mode: "enforce",
     state: () => "unavailable",
     counted: () => 0,
     standing: NO_STANDING_APPROVALS,
-  }).verdict.decision;
+  });
+  return verdict.decision === "ask" && verdict.rule?.hash === asker.hash;
 }
 
 /** What the decisions had in common, for the evidence line. */
 function shapeOf(group: Group): string {
-  if (group.domains.size > 0) return `, all to ${[...group.domains].sort().join(", ")}`;
-  if (group.repo !== undefined) return `, all in ${group.repo}`;
-  if (group.calendar !== undefined) return `, all on calendar ${group.calendar}`;
-  return "";
+  const parts: string[] = [];
+  if (group.repo !== undefined) parts.push(`in ${group.repo}`);
+  if (group.calendar !== undefined) parts.push(`on calendar ${group.calendar}`);
+  const r = group.recipients;
+  if (r.kind === "none") parts.push("with no one invited or addressed");
+  if (r.kind === "domains" || r.kind === "addresses") parts.push(`to ${r.values.join(", ")}`);
+  return parts.length === 0 ? "" : `, all ${parts.join(", ")}`;
 }
 
 function evidence(group: Group, count: number, days: number, since: Date): string {
@@ -158,8 +296,8 @@ function evidence(group: Group, count: number, days: number, since: Date): strin
 
 /**
  * The rules worth suggesting to `owner` (a user name) from what they decided,
- * most decisions first, at most MAX_LEARNED. `skip` holds keys not to offer
- * again: dismissed, or already waiting as a proposal.
+ * most decisions first, at most `limit`. `skip` holds kind keys not to offer:
+ * dismissed, or already waiting as a proposal.
  */
 export function learnRules(
   decided: readonly DecidedCall[],
@@ -169,6 +307,7 @@ export function learnRules(
     threshold: LearningThreshold;
     now: Date;
     skip?: ReadonlySet<string>;
+    limit?: number;
   },
 ): LearnedRule[] {
   const from = input.now.getTime() - LEARNING_WINDOW_DAYS * DAY_MS;
@@ -177,6 +316,7 @@ export function learnRules(
   for (const d of recent) {
     const byAction = d.call.action !== undefined;
     const subject = d.call.action ?? d.call.tool;
+    const recipients = recipientsOf(d.call);
     const key = [
       d.call.agentId,
       d.decision,
@@ -185,6 +325,8 @@ export function learnRules(
       subject,
       d.call.repo ?? "",
       d.call.calendar ?? "",
+      recipientsKey(recipients),
+      d.askedBy?.hash ?? "",
     ].join("\u0000");
     const group = groups.get(key) ?? {
       agentId: d.call.agentId,
@@ -195,38 +337,42 @@ export function learnRules(
       byAction,
       repo: d.call.repo,
       calendar: d.call.calendar,
-      domains: new Set<string>(),
+      recipients,
+      asker: d.askedBy,
       calls: [],
-      blocked: false,
     };
     group.calls.push(d);
-    for (const domain of recipientDomains(d.call)) group.domains.add(domain);
-    // Recipients heel couldn't read leave the shape unknown.
-    if ((d.call.recipients ?? []).some((r) => normalizeAddress(r) === null)) group.blocked = true;
-    const asker = d.askedBy;
-    if (asker === null || asker.items !== null || asker.stateChecks.length > 0) {
-      group.blocked = true;
-    }
     groups.set(key, group);
   }
 
   const learned: LearnedRule[] = [];
   for (const group of groups.values()) {
-    if (group.blocked) continue;
+    const { asker } = group;
+    if (asker === null || asker.items !== null || asker.stateChecks.length > 0) continue;
+    if (asker.layer !== "owner" || asker.watch) continue;
+    if (group.recipients.kind === "unreadable") continue;
     const count = group.calls.length;
     const days = new Set(group.calls.map((c) => dayOf(c.at))).size;
     if (count < input.threshold.decisions || days < input.threshold.days) continue;
+    const r = group.recipients.kind;
     const shaped =
-      group.repo !== undefined || group.calendar !== undefined || group.domains.size > 0;
+      group.repo !== undefined ||
+      group.calendar !== undefined ||
+      r === "domains" ||
+      r === "addresses";
     if (group.decision === "approved" && !shaped) continue;
 
-    const rule = draft(group);
-    const key = learnedKey(group.agentId, rule);
-    if (input.skip?.has(key) === true) continue;
+    const rule = draft(group, asker);
+    if (rule === null) continue;
+    const kindKey = kindKeyOf(group.agentId, rule);
+    if (input.skip?.has(kindKey) === true) continue;
     const candidate = compiled(rule);
     if (candidate === null) continue;
 
-    // Never wider than the evidence: no call decided the other way may match it.
+    // It matches every call it rests on, and none decided the other way.
+    if (group.calls.some((d) => plainMatch(candidate, factsOf(d.call, d.agentName)) !== true)) {
+      continue;
+    }
     const opposite = group.decision === "approved" ? "denied" : "approved";
     const contradicted = recent.some(
       (d) =>
@@ -234,17 +380,19 @@ export function learnRules(
     );
     if (contradicted) continue;
 
-    // Only what the rules still ask about: a rule added since already decides it.
+    // Only what that rule still asks about: a rule added or changed since decides it.
     const latest = group.calls.reduce((a, b) => (b.at > a.at ? b : a));
-    if (decidesToday(input.rules, input.owner, latest) !== "ask") continue;
+    if (!stillAskedBy(input.rules, input.owner, latest, asker)) continue;
 
     const since = group.calls.reduce((a, b) => (b.at < a.at ? b : a)).at;
     learned.push({
-      key,
+      key: learnedKey(group.agentId, rule),
+      kindKey,
       agentId: group.agentId,
       agentName: group.agentName,
       decision: rule.then,
       rule,
+      before: asker.hash,
       count,
       days,
       since,
@@ -253,7 +401,17 @@ export function learnRules(
   }
   return learned
     .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key))
-    .slice(0, MAX_LEARNED);
+    .slice(0, input.limit ?? MAX_LEARNED);
+}
+
+/** Every recipient domain a call had, sorted. */
+function recipientDomains(call: Call): string[] {
+  const domains = new Set<string>();
+  for (const recipient of call.recipients ?? []) {
+    const address = normalizeAddress(recipient);
+    if (address !== null) domains.add(domainOf(address));
+  }
+  return [...domains].sort();
 }
 
 /** One kind of request an agent made, and how its owner decided it (2.10's `heel_history`). */
