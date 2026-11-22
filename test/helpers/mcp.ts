@@ -99,6 +99,8 @@ export async function mcpHarness(options: {
   parking?: boolean;
   /** How many scripts may run at once; unlimited without it. */
   slots?: SandboxSlots;
+  /** Adds a built-in GitHub account, `github`, answered by this fetch. */
+  github?: { fetch: (input: string | URL | Request, init?: RequestInit) => Promise<Response> };
 }): Promise<McpHarness> {
   const t = testStore();
   const { logger } = captureLogger();
@@ -127,9 +129,27 @@ export async function mcpHarness(options: {
       new Date(),
     );
   }
+  if (options.github !== undefined) {
+    connectAccount(
+      t.db,
+      vault,
+      {
+        orgId: t.orgId,
+        ownerId: t.ownerId,
+        provider: "github",
+        alias: "github",
+        credential: { type: "static", value: "github-test-token" },
+      },
+      new Date(),
+    );
+  }
   const pool = new UpstreamPool({ vault, log: logger, fetch: upstream.fetch });
   const notified: string[] = [];
-  const definitions = definitionRegistry({ upstream: pool, gmail: null });
+  const definitions = definitionRegistry({
+    upstream: pool,
+    gmail: null,
+    ...(options.github === undefined ? {} : { github: { vault, fetch: options.github.fetch } }),
+  });
   const pipeline = createPipeline({
     db: t.db,
     rules: { set: compileRules({ owner: options.owner }) },

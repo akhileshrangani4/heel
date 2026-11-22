@@ -239,13 +239,20 @@ export function splitDirectName(name: string): { alias: string; tool: string } |
 }
 
 /**
- * An upstream tool as heel lists it. `outputSchema` is dropped: a denied or
- * pending result isn't shaped like the tool's output, and a client that
- * validated against the schema would reject it (spec: MCP §1.3).
+ * A tool as heel lists it. An upstream (passthrough) tool's `outputSchema` is
+ * dropped: heel doesn't know its results fit it, and a denied or pending
+ * answer isn't shaped like its output (spec: MCP §1.3). A built-in tool's is
+ * kept (C5): heel writes it, loose enough that every result fits, and heel's
+ * own answers are error results, which clients don't check against it.
  */
-export function listedTool(tool: Tool, name: string): Tool {
-  const { outputSchema: _dropped, ...rest } = tool;
-  return { ...rest, name, inputSchema: withReason(tool.inputSchema) };
+export function listedTool(tool: Tool, name: string, keepOutputSchema = false): Tool {
+  const { outputSchema, ...rest } = tool;
+  return {
+    ...rest,
+    name,
+    inputSchema: withReason(tool.inputSchema),
+    ...(keepOutputSchema && outputSchema !== undefined ? { outputSchema } : {}),
+  };
 }
 
 /**
