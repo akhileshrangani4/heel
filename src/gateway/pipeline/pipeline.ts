@@ -303,6 +303,8 @@ interface DecideInput {
   client: string | null;
   /** The script the call came from, stored on a new request only (CallRequest.script). */
   script: ApprovalScript | null;
+  /** An ask opens no request; without an approval already given, it's denied (CallRequest.noAsk). */
+  noAsk: boolean;
 }
 
 type Decided =
@@ -431,6 +433,7 @@ class DecisionPipeline implements Pipeline {
       adapters: new Map(),
       reason: request.reason ?? null,
       script: request.script ?? null,
+      noAsk: request.noAsk === true,
       client: clientFor(request.surface, agent.clientName ?? null),
     });
     if (decided.kind === "final") {
@@ -890,6 +893,7 @@ class DecisionPipeline implements Pipeline {
           if (governing.ruleHash !== rule.hash) break;
           return this.#runApproved(tx, input, rule, approvalId, at);
         case "pending":
+          if (input.noAsk) break;
           // A repeat joins the pending request and notifies no one again (I-51).
           appendAudit(tx, { kind: "ask", call, callHash: hash, rule: rule.ref, approvalId }, at);
           return final({ status: "pending", approvalId, rule: rule.ref });
@@ -899,6 +903,14 @@ class DecisionPipeline implements Pipeline {
           // Its audit row was written when the store settled it (see #decide).
           return final({ status: "expired", approvalId });
       }
+    }
+    if (input.noAsk) {
+      appendAudit(
+        tx,
+        { kind: "deny", call, callHash: hash, rule: rule.ref, reason: "approval_needed" },
+        at,
+      );
+      return final({ status: "denied", reason: "approval_needed", rule: rule.ref });
     }
     const approvalId = this.#deps.approvals.request(
       tx,

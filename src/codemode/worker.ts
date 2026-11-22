@@ -32,14 +32,32 @@ export type Step =
       kwargs: Record<string, unknown>;
       /** Positional arguments given; heel's stubs are keyword-only. */
       positional: number;
+      /** Monty's id for this call, which a later `await` step names when it's pending. */
+      callId: number;
       resume(value: unknown): Promise<Step>;
       raise(type: "PermissionError" | "RuntimeError", message: string): Promise<Step>;
       /** Saves the script, suspended at this call: `parked`, or `failed` when it can't be saved. */
       park(): Promise<Step>;
+      /**
+       * Makes this call a future (an `_async` twin, C4): the script carries on,
+       * and the call is answered later through an `await` step.
+       */
+      future(): Promise<Step>;
+    }
+  | {
+      /** Every task is waiting on futures; `pending` are their calls' ids (C4). */
+      kind: "await";
+      pending: number[];
+      resolve(results: readonly FutureResult[]): Promise<Step>;
     }
   | { kind: "done"; output: unknown }
   | { kind: "failed"; error: string }
   | { kind: "parked"; snapshot: string };
+
+/** heel's answer to one pending future: its value, or an error raised where it's awaited. */
+export type FutureResult =
+  | { callId: number; value: unknown }
+  | { callId: number; errorType: "PermissionError" | "RuntimeError"; message: string };
 
 /** The largest saved script heel keeps, before base64 (code mode round 2, C2). */
 export const MAX_SNAPSHOT_BYTES = 4 * 1024 * 1024;

@@ -76,6 +76,37 @@ function run(l: CodemodeLanes, agentId: string, code: string, delayMs = 0) {
 const PID = `import acct\nacct.ok()\n`;
 
 describe("code-mode lanes", () => {
+  it("runs futures through an agent's lane and resolves them when awaited (C4)", async () => {
+    if (MODULE === null) throw new Error("no module");
+    const l = makeLanes({ maxLanes: 2 });
+    const limits = {
+      maxCalls: 200,
+      maxSeconds: 30,
+      maxMemory: 256 * 1024 * 1024,
+      maxStdout: 1_000_000,
+    };
+    const worker = l.worker("agt_b");
+    const fn = [...MODULE.functions.keys()][0] ?? "";
+    let step = await worker.start(
+      `import asyncio\nimport acct\nr = await asyncio.gather(acct.${fn}(), acct.${fn}())\nr`,
+      [MODULE],
+      limits,
+      () => {},
+    );
+    const ids: number[] = [];
+    while (step.kind === "call") {
+      ids.push(step.callId);
+      step = await step.future();
+    }
+    if (step.kind !== "await") throw new Error(`expected await, got ${step.kind}`);
+    // An undefined value doesn't survive JSON on the way to the helper; it arrives as None.
+    const done = await step.resolve(
+      ids.map((callId, i) => ({ callId, value: i === 0 ? undefined : callId })),
+    );
+    await worker.stop();
+    expect(done).toEqual({ kind: "done", output: [null, ...ids.slice(1)] });
+  }, 60_000);
+
   it("parks a script and resumes it through an agent's lane (C2)", async () => {
     if (MODULE === null) throw new Error("no module");
     const l = makeLanes({ maxLanes: 2 });

@@ -54,6 +54,8 @@ export interface StubTool {
   name: string;
   description?: string | undefined;
   inputSchema: Record<string, unknown>;
+  /** MCP's tool annotations; `readOnlyHint` decides whether a read gets an `_async` twin. */
+  annotations?: { readOnlyHint?: boolean | undefined } | undefined;
 }
 
 export interface StubModule {
@@ -71,6 +73,12 @@ export interface StubModule {
   renamed: ReadonlyMap<string, ReadonlyMap<string, string>>;
   /** Tools left out, with why: a name that can't be a Python identifier, or a clash. */
   skipped: readonly { tool: string; reason: string }[];
+  /**
+   * The `_async` twins of read tools (code mode round 2, C4): Python names
+   * whose calls heel runs as futures, several at once under asyncio.gather.
+   * Each is also in `functions`, pointing at the same tool.
+   */
+  asyncFunctions?: ReadonlySet<string>;
 }
 
 /** The module name for an account alias; null when it can't be one (aliases are designed to fit). */
@@ -131,7 +139,12 @@ function docstring(text: string | undefined): string {
  * the usual Python spelling), recorded in `renamed` so heel passes the
  * tool's own name on.
  */
-function functionStub(name: string, tool: StubTool, renamed: Map<string, string>): string | null {
+function functionStub(
+  name: string,
+  tool: StubTool,
+  renamed: Map<string, string>,
+  twin?: string,
+): string | null {
   const properties = (tool.inputSchema["properties"] ?? {}) as Record<string, unknown>;
   const required = new Set(
     Array.isArray(tool.inputSchema["required"]) ? (tool.inputSchema["required"] as string[]) : [],
@@ -151,17 +164,25 @@ function functionStub(name: string, tool: StubTool, renamed: Map<string, string>
   }
   params.sort((a, b) => Number(a.includes(" = ...")) - Number(b.includes(" = ...")));
   const signature = params.length === 0 ? "" : `*, ${params.join(", ")}`;
+  if (twin !== undefined) {
+    return `async def ${twin}(${signature}) -> Any:\n    ` + `${docstring(`Awaitable ${name}.`)}\n`;
+  }
   return `def ${name}(${signature}) -> Any:\n    ${docstring(tool.description)}\n`;
 }
 
 /** The module for one account. */
-export function accountModule(alias: string, tools: readonly StubTool[]): StubModule | null {
+export function accountModule(
+  alias: string,
+  tools: readonly StubTool[],
+  options: { asyncReads?: boolean } = {},
+): StubModule | null {
   const module = moduleName(alias);
   if (module === null) return null;
   const functions = new Map<string, string>();
   const renamedBy = new Map<string, ReadonlyMap<string, string>>();
   const skipped: { tool: string; reason: string }[] = [];
   const bodies: string[] = [];
+  const asyncFunctions = new Set<string>();
   for (const tool of tools) {
     const name = functionName(tool.name);
     if (name === null) {
@@ -184,7 +205,33 @@ export function accountModule(alias: string, tools: readonly StubTool[]): StubMo
     functions.set(name, tool.name);
     if (renamed.size > 0) renamedBy.set(name, renamed);
     bodies.push(stub);
+    // Only heel's own read marking earns a twin: a passthrough server's hint is its say-so.
+    const twin = `${name}_async`;
+    if (
+      options.asyncReads === true &&
+      tool.annotations?.readOnlyHint === true &&
+      !functions.has(twin)
+    ) {
+      const twinStub = functionStub(name, tool, new Map(), twin);
+      if (twinStub !== null) {
+        functions.set(twin, tool.name);
+        if (renamed.size > 0) renamedBy.set(twin, renamed);
+        asyncFunctions.add(twin);
+        bodies.push(twinStub);
+      }
+    }
   }
-  const header = `"""heel: tools of the account ${alias}. Each call is checked by heel's rules."""\nfrom typing import Any, Literal\n\n`;
-  return { module, stubs: header + bodies.join("\n"), functions, renamed: renamedBy, skipped };
+  const twins =
+    asyncFunctions.size === 0
+      ? ""
+      : " Each read has an _async twin: await several at once with asyncio.gather. A twin that needs approval raises PermissionError; call the plain function to ask.";
+  const header = `"""heel: tools of the account ${alias}. Each call is checked by heel's rules.${twins}"""\nfrom typing import Any, Literal\n\n`;
+  return {
+    module,
+    stubs: header + bodies.join("\n"),
+    functions,
+    renamed: renamedBy,
+    skipped,
+    ...(asyncFunctions.size > 0 ? { asyncFunctions } : {}),
+  };
 }

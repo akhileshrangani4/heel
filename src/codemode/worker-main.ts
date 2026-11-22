@@ -2,6 +2,7 @@ import {
   applyAnswer,
   type FromWorker,
   fromWireModules,
+  isFinal,
   lineReader,
   stdoutUpTo,
   type ToWorker,
@@ -24,7 +25,7 @@ export async function codemodeWorkerMain(): Promise<void> {
   const report = (step: Step) => {
     current = step;
     send({ type: "step", step: toWire(step) });
-    if (step.kind !== "call") void worker.stop().then(() => process.exit(0));
+    if (isFinal(step)) void worker.stop().then(() => process.exit(0));
   };
   const fail = (error: string) => report({ kind: "failed", error });
 

@@ -184,6 +184,7 @@ export const RUN_CODE_TOOL: Tool = {
   description:
     "Run a Python script (Monty's subset) that calls your accounts as modules: `import gmail_work` then " +
     "`gmail_work.send(...)`. The script's last expression comes back as `output`, beside what it printed. " +
+    "Reads of heel's built-in accounts have `_async` twins: `await asyncio.gather(...)` runs several at once. " +
     "Every call is checked by heel on its own. A denial raises PermissionError " +
     "at the call. If a call needs approval, the script waits there: the result is `pending` with the " +
     "approval id and a `resume` id; once heel_status says the approval is decided, call run_code with " +
