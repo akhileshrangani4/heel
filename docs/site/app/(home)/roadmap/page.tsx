@@ -122,8 +122,8 @@ const PHASES: Phase[] = [
       ],
       [
         'remote first',
-        'run heel on a server or an always-on mac, reach it from every agent over tailscale, and manage it from your laptop.',
-        'started',
+        'run heel on a server or an always-on mac, and the agent on every computer signs in to it with your passkey: no token to copy between machines. the setup prompt can put heel on your server over ssh, and the web app manages it from anywhere.',
+        'shipped',
       ],
       [
         'agents ask for connections',

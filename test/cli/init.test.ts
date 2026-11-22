@@ -50,6 +50,19 @@ describe("heel init", () => {
     );
   });
 
+  it("on a server, says how an agent on any computer signs in, with no token to copy (2.8)", () => {
+    const summary = initSummary("/srv/heel", [], true, {
+      approvals: "https://box.tail.ts.net",
+      agents: "https://box.tail.ts.net:8443",
+    });
+    expect(summary).toContain(
+      "claude mcp add --transport http --scope user heel https://box.tail.ts.net:8443/mcp",
+    );
+    expect(summary).toContain("codex mcp add heel --url https://box.tail.ts.net:8443/mcp");
+    expect(summary).not.toContain("copy its token");
+    expect(initSummary("/srv/heel", [], true)).toContain("copy its token");
+  });
+
   it("puts heel in --home, then HEEL_HOME, then ~/.heel", () => {
     expect(chooseHome("/srv/heel", { HEEL_HOME: "/x" })).toBe("/srv/heel");
     expect(chooseHome(undefined, { HEEL_HOME: "/x" })).toBe("/x");

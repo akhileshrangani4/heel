@@ -56,7 +56,17 @@ codex mcp add heel --url "http://127.0.0.1:7300/mcp" --bearer-token-env-var HEEL
 }
 ```
 
-**Claude, ChatGPT or Grok connectors** sign in with OAuth instead of a token. Give heel's agent plane an HTTPS address, set it as `agent_public_url` in `heel.yaml`, and add `<agent_public_url>/mcp` as a custom connector. See [Running heel](running.md#one-heel-for-every-machine).
+**heel on another machine: sign in instead of a token.** When heel's agent plane has an HTTPS address (`agent_public_url`, which `heel init --approve-from tailscale` or `cloudflare` sets), an agent signs in to heel with OAuth: you confirm it on heel's page with your passkey, and no token is copied anywhere. heel names the agent after the app; each new sign-in is a new agent, so revoke an old one you no longer use on the **Agents** page. Only approve a sign-in you just started.
+
+```sh
+claude mcp add --transport http --scope user heel https://heel-box.your-tailnet.ts.net:8443/mcp
+# then /mcp in Claude Code, pick heel, Authenticate
+
+codex mcp add heel --url https://heel-box.your-tailnet.ts.net:8443/mcp
+# usually opens heel's sign-in page itself; if it doesn't: codex mcp login heel
+```
+
+**Claude, ChatGPT or Grok connectors** sign in the same way: add `<agent_public_url>/mcp` as a custom connector. See [One heel for every machine](running.md#one-heel-for-every-machine).
 
 Then remove the agent's own access to those accounts (its GitHub MCP server, `gh` login, API keys), or it can go around heel.
 

@@ -4,6 +4,8 @@ Get heel running, connect GitHub, point your agent at heel and approve its first
 
 You need Node 26.13 or later and a GitHub token (`gh auth token` prints yours).
 
+This runs heel on your own computer, the quickest way to try it. For daily use, run it on a server (a VPS or a Mac mini) that every computer you use can share, where your agents can't reach heel's files: see [One heel for every machine](running.md#one-heel-for-every-machine), or let your agent [set it up there with one prompt](setup.md).
+
 ## 1. Install and set up heel
 
 ```sh
