@@ -296,6 +296,23 @@ describe("the approval page", () => {
     const page = await (await h.fetch(`/approvals/${approvalId}`, { as: owner })).text();
     expect(page).toContain("The script is paused at this call");
     expect(page).toContain("Stop the script");
+    // A crafted link can't make a parked script look stopped.
+    const crafted = await (
+      await h.fetch(`/approvals/${approvalId}?script-stopped`, { as: owner })
+    ).text();
+    expect(crafted).toContain("Stop the script");
+    expect(crafted).not.toContain("Stopped. The script won");
+    // Someone who may not decide the request can't stop its script.
+    h.addUser("sam", "member");
+    const sam = await h.signIn(await h.enroll("sam"));
+    const refused = await h.fetch(`/approvals/${approvalId}/stop-script`, {
+      as: sam,
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ csrf: sam.csrf }).toString(),
+    });
+    expect(refused.status).toBe(404);
+    expect(h.t.db.select().from(parkedScripts).all()).toHaveLength(1);
 
     const stopped = await h.fetch(`/approvals/${approvalId}/stop-script`, {
       as: owner,

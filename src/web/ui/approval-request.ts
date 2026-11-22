@@ -402,13 +402,16 @@ function scriptView(
 ): Html | "" {
   const script = request.script;
   if (script === null) return "";
-  const waiting = stopped
+  // A crafted link can't claim a stop: the notice shows only once nothing is parked.
+  const stoppedNotice = stopped
     ? notice(
         "info",
         html`<p>Stopped. The script won't carry on; ${request.agent} would have to start again.</p>`,
       )
-    : parked === null
-      ? ""
+    : "";
+  const waiting =
+    parked === null
+      ? stoppedNotice
       : html`<div class="script-stop">
           <p>
             The script is paused at this call, waiting for you. Stopping it means it never
