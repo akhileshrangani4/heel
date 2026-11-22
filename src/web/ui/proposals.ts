@@ -11,6 +11,7 @@ export interface ProposalCard {
   agent: string;
   rules: number;
   hide: number;
+  workdirs: number;
   reason: string | null;
   createdAt: Date;
   expiresAt: Date;
@@ -42,7 +43,9 @@ export function proposalCards(cards: readonly ProposalCard[], now: Date): Html |
           </div>
           <h2 class="req-title">
             <a href="/proposals/${encodeURIComponent(card.id)}"
-              >${card.agent} proposes <mark>${describeProposal(card.rules, card.hide)}</mark> for your rules file</a
+              >${card.agent} proposes <mark>${describeProposal(card.rules, card.hide, card.workdirs)}</mark>${
+                card.rules + card.hide > 0 ? " for your rules file" : " for its heel run"
+              }</a
             >
           </h2>
           ${
@@ -69,6 +72,8 @@ export interface ProposalPageProps {
   rules: readonly { yaml: string; why: string | null }[];
   /** Hide entries, added to the end of the file's `hide:` list. */
   hide: readonly { yaml: string; why: string | null }[];
+  /** Directories the agent asks its own `heel run` to work in. */
+  workdirs: readonly { path: string; why: string | null }[];
   createdAt: Date;
   expiresAt: Date;
   decision: { by: string; at: Date } | null;
@@ -106,7 +111,7 @@ function effectView(props: ProposalPageProps): Html {
   if (!effect.ok) {
     return notice(
       "error",
-      html`<p><strong>These rules can't be added as they are.</strong></p>
+      html`<p><strong>This can't be added as it is.</strong></p>
       <p>${effect.problem}</p>`,
     );
   }
@@ -130,19 +135,47 @@ function effectView(props: ProposalPageProps): Html {
           }. The first rule that matches decides, so a call these match is decided by them, even
           one your own rules would have asked about or denied.
         </p>`;
-  return html`${before}${hiding}
-    <details>
-      <summary>The file after the change</summary>
-      ${diffLines(effect.diff)}
-    </details>`;
+  const workdirs =
+    props.workdirs.length === 0
+      ? ""
+      : html`<p>
+          Commands ${props.agent} runs with heel run may then start in, and change files in,
+          ${props.workdirs.length === 1 ? "this folder" : "these folders"}, using only the accounts
+          your rules allow. Its other workdirs stay as they are.
+        </p>`;
+  const changesFile = props.rules.length + props.hide.length > 0;
+  return html`${before}${hiding}${workdirs}
+    ${
+      changesFile
+        ? html`<details>
+            <summary>The file after the change</summary>
+            ${diffLines(effect.diff)}
+          </details>`
+        : ""
+    }`;
+}
+
+/** Pure: the add button's words, for what this proposal holds. */
+function addLabel(props: ProposalPageProps): string {
+  const kinds = [props.rules.length, props.hide.length, props.workdirs.length].filter((n) => n > 0);
+  if (kinds.length > 1) return "Add these changes";
+  if (props.rules.length > 0) return "Add these rules";
+  if (props.hide.length > 0) return "Add to the hide list";
+  return props.workdirs.length === 1 ? "Add this workdir" : "Add these workdirs";
 }
 
 /** One proposal: what the agent asks for, what it would change, and the controls. */
 export function proposalPage(props: ProposalPageProps): Html {
   const status = STATUS[props.status];
+  const changesFile = props.rules.length + props.hide.length > 0;
   const outcome =
     props.outcome === "applied"
-      ? notice("ok", html`<p>Added to ${props.file}. heel is using them now.</p>`)
+      ? notice(
+          "ok",
+          changesFile
+            ? html`<p>Added to ${props.file}. heel is using them now.</p>`
+            : html`<p>Added. ${props.agent}'s heel run can work there now.</p>`,
+        )
       : props.outcome === "rejected"
         ? notice("info", html`<p>Rejected. Nothing ${props.agent} proposed was added.</p>`)
         : "";
@@ -155,8 +188,9 @@ export function proposalPage(props: ProposalPageProps): Html {
         ${badge(status.label, status.tone)}
       </div>
       <h1 class="ap-title">
-        ${props.agent} proposes ${describeProposal(props.rules.length, props.hide.length)} for
-        ${props.file}
+        ${props.agent} proposes
+        ${describeProposal(props.rules.length, props.hide.length, props.workdirs.length)}
+        ${changesFile ? html`for ${props.file}` : "for its heel run"}
       </h1>
       ${
         props.reason === null
@@ -200,6 +234,23 @@ export function proposalPage(props: ProposalPageProps): Html {
             )}
           </ul>`
     }
+    ${
+      props.workdirs.length === 0
+        ? ""
+        : html`<h2 class="section-title">Workdirs for heel run</h2>
+          <ul class="req-list" aria-label="Proposed workdirs">
+            ${props.workdirs.map(
+              (dir) => html`<li class="card">
+                <p>${props.agent} may run commands with heel run in <code>${dir.path}</code></p>
+                ${
+                  dir.why === null
+                    ? ""
+                    : html`<p><span class="muted">${props.agent}: </span>${dir.why}</p>`
+                }
+              </li>`,
+            )}
+          </ul>`
+    }
     ${pending ? effectView(props) : ""}
     ${
       props.decision === null
@@ -216,7 +267,7 @@ export function proposalPage(props: ProposalPageProps): Html {
                 ? ceremonyButton({
                     callback: { handler: "applyRules" },
                     intent: "apply-rules",
-                    label: props.rules.length === 0 ? "Add to the hide list" : "Add these rules",
+                    label: addLabel(props),
                     tone: "primary",
                     binding: { proposalId: props.id, sha: props.effect.sha },
                     describedBy: "proposal-passkey",

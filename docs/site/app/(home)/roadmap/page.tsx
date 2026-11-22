@@ -97,8 +97,8 @@ const PHASES: Phase[] = [
     items: [
       [
         'proposals, not edits',
-        'agents propose rules and hide entries, and ask for connections; you’re notified and approve each with a passkey. new agents come next.',
-        'started',
+        'agents propose rules, hide entries and the folders their heel run works in, and ask for connections; you’re notified and approve each with a passkey. adding a new agent stays a step you run.',
+        'shipped',
       ],
       [
         'a reason on every rule',

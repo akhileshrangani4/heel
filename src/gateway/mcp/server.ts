@@ -309,8 +309,8 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
       proposalId: outcome.proposalId,
       expiresAt: outcome.expiresAt.toISOString(),
       message:
-        "Your owner will see these rules on heel's approval page and can add them with a passkey. " +
-        "Nothing changes until then; calls they would allow are still decided by the current rules.",
+        "Your owner will see this on heel's approval page and can add it with a passkey. " +
+        "Nothing changes until then; calls it would allow are still decided as they are now.",
     };
     return { content: [{ type: "text", text: JSON.stringify(answer) }], structuredContent: answer };
   }

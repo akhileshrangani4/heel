@@ -928,6 +928,8 @@ export const ruleProposals = sqliteTable(
     rules: text("rules", { mode: "json" }).$type<ProposedRule[]>().notNull(),
     /** Hide entries to add to the file's `hide:` list; each only hides more from agents. */
     hide: text("hide", { mode: "json" }).$type<ProposedHide[]>().notNull().default([]),
+    /** Directories the agent asks `heel run` to work in, added to its own; never another agent's. */
+    workdirs: text("workdirs", { mode: "json" }).$type<ProposedWorkdir[]>().notNull().default([]),
     /** The agent's own words on why, shown as its claim. */
     reason: text("reason"),
     status: text("status", { enum: RULE_PROPOSAL_STATUSES }).notNull(),
@@ -951,6 +953,12 @@ export interface ProposedRule {
 /** One hide entry an agent proposed, with its one-line why. */
 export interface ProposedHide {
   entry: Record<string, unknown>;
+  why: string | null;
+}
+
+/** One directory an agent proposed for its own `heel run`, with its why. */
+export interface ProposedWorkdir {
+  path: string;
   why: string | null;
 }
 

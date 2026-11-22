@@ -1,0 +1,1 @@
+ALTER TABLE `rule_proposals` ADD `workdirs` text DEFAULT '[]' NOT NULL;

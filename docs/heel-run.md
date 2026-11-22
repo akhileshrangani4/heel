@@ -58,6 +58,7 @@ heel agent workdir my-agent /home/me/code
 | Remove them all | `heel agent workdir my-agent --clear` |
 
 - **Setting replaces the list.** To add a directory, name the ones you already have too.
+- **Or let the agent ask.** When `heel run` refuses a directory, the agent can propose it with `heel_propose_rules` (`workdirs: [{ "path": "/home/me/code", "why": "…" }]`). It shows on your approval page as "may run commands with heel run in /home/me/code", with its why. Adding it with your passkey adds it to that agent's workdirs; the ones it has stay. heel checks the path when you open the page, not when the agent asks, so the agent never learns what exists on heel's host.
 - **Each one must be an absolute path to a directory on heel's host.** heel stores it with symlinks resolved.
 - **System directories can't be workdirs** (`/`, `/home`, `/tmp`, anything in `/usr`, `/etc` and the like), nor anything overlapping heel's own home or another person's agent's workdir. heel says which rule a refused directory broke, and changes nothing.
 
@@ -221,7 +222,7 @@ The `heel:` lines you're most likely to see while setting up:
 | --- | --- | --- |
 | `heel: HEEL_URL isn't an http:// or https:// URL` (exit 64) | `HEEL_URL` unset, or missing its `http://`. | Set it, with the scheme: `http://127.0.0.1:7300`. |
 | `heel: HEEL_TOKEN isn't set` (exit 64) | `HEEL_TOKEN` unset. | Set it to the agent's token. |
-| `{"status":"denied","reason":"workdir_not_allowed",…}` | The directory isn't inside a workdir, or heel can't find that path on its side. | `heel agent workdir my-agent` to check; [same directory on both sides](#the-directory-has-to-be-the-same-on-both-sides). |
+| `{"status":"denied","reason":"workdir_not_allowed",…}` | The directory isn't inside a workdir, or heel can't find that path on its side. | `heel agent workdir my-agent` to check, or have the agent propose it; [same directory on both sides](#the-directory-has-to-be-the-same-on-both-sides). |
 | `{"status":"denied","reason":"unknown_endpoint",…}` | No CLI account for that command (`heel connect cli …`), or `HEEL_URL` ends in a path such as `/mcp`. | Connect it, or drop the path from `HEEL_URL`. |
 | `{"status":"denied","reason":"unknown_host",…}` | `HEEL_URL` uses a name heel doesn't serve. | [Listen on that name](#point-the-agent-at-heel), or use `127.0.0.1`. |
 | `{"status":"denied","reason":"no_rule_matched",…}` | No rule matches the command. | Add a rule. |

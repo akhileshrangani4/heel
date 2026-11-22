@@ -33,6 +33,8 @@ export interface ProposalNotice {
   rules: number;
   /** Hide entries proposed beside the rules. */
   hide: number;
+  /** `heel run` directories the agent asks for. */
+  workdirs: number;
   /** The proposal's page. */
   url: string;
 }
@@ -65,7 +67,7 @@ export function noticeText(notice: Notice): NoticeText {
   }
   if (notice.kind === "proposal") {
     return {
-      title: `${notice.agent} proposes ${describeProposal(notice.rules, notice.hide)}`,
+      title: `${notice.agent} proposes ${describeProposal(notice.rules, notice.hide, notice.workdirs)}`,
       body: "Nothing changes until you add them. Open heel to read them and decide.",
     };
   }

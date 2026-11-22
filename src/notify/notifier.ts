@@ -243,6 +243,7 @@ export class Notifier {
         agent: agent?.name ?? "An agent",
         rules: proposal.rules.length,
         hide: proposal.hide.length,
+        workdirs: proposal.workdirs.length,
         url: proposalUrl(publicUrl, proposal.id),
       };
     }
