@@ -26,7 +26,7 @@ interface History {
   decisions: Record<string, unknown>[];
   suggestions: {
     suggestion: string;
-    then: string;
+    decision: string;
     match: Record<string, unknown>;
     evidence: string;
   }[];
@@ -83,7 +83,7 @@ describe("heel_history (2.10)", () => {
     expect(answer.suggestions).toEqual([
       {
         suggestion: expect.any(String),
-        then: "deny",
+        decision: "deny",
         match: { agent: "inbox-bot", account: "notes", tool: "delete_note", persistence: false },
         evidence: expect.stringMatching(/^denied 5 times on \d days since/),
       },
@@ -122,6 +122,7 @@ describe("heel_history (2.10)", () => {
       (
         await propose({
           suggestion: suggested?.suggestion,
+          // biome-ignore lint/suspicious/noThenProperty: `then` is the rules file's key.
           rules: [{ rule: { match: {}, then: "allow" } }],
         })
       ).status,
@@ -135,6 +136,7 @@ describe("heel_history (2.10)", () => {
       .where(eq(ruleProposals.id, done.proposalId ?? ""))
       .get();
     expect(row?.origin).toBe("heel");
+    // biome-ignore lint/suspicious/noThenProperty: `then` is the rules file's key.
     expect(row?.rules[0]?.rule).toEqual({ match: suggested?.match, then: "deny" });
     // Placed right before the rule that asked, like the owner's own Review.
     expect(row?.rules[0]?.before).toEqual(expect.any(String));

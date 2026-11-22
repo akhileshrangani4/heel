@@ -457,7 +457,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
         suggestion: s.key,
         // Only what heel drew from this agent's own calls: the conditions heel adds from the
         // owner's rule that asked stay with heel, as the owner's file always does.
-        then: s.decision,
+        decision: s.decision,
         match: s.own,
         evidence: s.evidence,
       })),
