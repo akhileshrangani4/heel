@@ -269,33 +269,45 @@ describe("watchRules", () => {
    * starts, so when `rules/` exists this first touches a hidden file there
    * (which loads nothing) until a reload shows the watcher is live.
    */
+  /** The reloads the latest watcher's waiters are waiting for. */
+  let currentPending: ((outcome: ReloadOutcome) => void)[] = [];
+
   async function watching(holder: RulesHolder): Promise<() => Promise<ReloadOutcome>> {
     const pending: ((outcome: ReloadOutcome) => void)[] = [];
     const errors: unknown[] = [];
+    currentPending = pending;
     watcher = watchRules(holder, {
       debounceMs: 20,
       onReload: (outcome) => pending.shift()?.(outcome),
       onError: (error) => errors.push(error),
     });
-    if (existsSync(paths.ownersDir)) {
-      let live = false;
-      pending.push(() => {
-        live = true;
-      });
-      for (let i = 0; !live && i < 50; i++) {
-        writeFileSync(join(paths.ownersDir, ".warm-up"), String(i));
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      }
-      rmSync(join(paths.ownersDir, ".warm-up"), { force: true });
-      // Let the removal's reload pass before a test waits for its own.
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      pending.length = 0;
-    }
+    if (existsSync(paths.ownersDir)) await untilLive(pending);
     return () =>
       new Promise((resolve, reject) => {
         if (errors.length > 0) reject(errors[0]);
         else pending.push(resolve);
       });
+  }
+
+  /**
+   * Waits until the watcher on rules/ reports changes: a new watcher can miss
+   * its first moments (FSEvents), and under load those last longer than the
+   * watcher's own settle reload. Writes a scratch file until a reload comes.
+   */
+  async function untilLive(pending: ((outcome: ReloadOutcome) => void)[]): Promise<void> {
+    let live = false;
+    pending.length = 0;
+    pending.push(() => {
+      live = true;
+    });
+    for (let i = 0; !live && i < 50; i++) {
+      writeFileSync(join(paths.ownersDir, ".warm-up"), String(i));
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    rmSync(join(paths.ownersDir, ".warm-up"), { force: true });
+    // Let the removal's reload, and any settle reload, pass before a test waits for its own.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    pending.length = 0;
   }
 
   it("reloads when an owner file changes", async () => {
@@ -359,6 +371,8 @@ describe("watchRules", () => {
     let reloaded = next();
     mkdirSync(paths.ownersDir);
     await reloaded;
+    // The watcher heel attached to the new directory, live before the test writes into it.
+    await untilLive(currentPending);
 
     reloaded = next();
     writeOwner("alice", allowSends);
