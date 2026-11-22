@@ -75,6 +75,8 @@ export type FieldRef =
   | { kind: "provider"; name: ProviderField }
   | { kind: "recipients" }
   | { kind: "argv" }
+  /** Whether the call outlives heel (I-70): false when the definition didn't say so. */
+  | { kind: "persistence" }
   | { kind: "path"; root: "args" | "body"; path: readonly string[] }
   | { kind: "named"; root: "query" | "flags"; key: string };
 
@@ -107,6 +109,8 @@ export function resolveField(facts: RuleFacts, field: FieldRef): FieldValue {
       return facts.recipients === undefined ? ABSENT : { kind: "list", values: facts.recipients };
     case "argv":
       return facts.cli === undefined ? ABSENT : { kind: "list", values: facts.cli.argv };
+    case "persistence":
+      return { kind: "single", value: facts.persistence === true };
     case "path": {
       if (field.root !== "args" && facts.http?.bodyUnreadable === true) return UNREADABLE;
       const root = field.root === "args" ? facts.args : facts.http?.body;

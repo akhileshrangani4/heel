@@ -82,6 +82,8 @@ describe("learning from what you approve (2.10)", () => {
         agent: "claude-code",
         account: "github",
         action: "github.issue.create",
+        tool: "create_issue",
+        persistence: false,
         repo: "acme/web",
       },
       then: "allow",
@@ -160,8 +162,8 @@ describe("learning from what you approve (2.10)", () => {
       threshold: THRESHOLD,
       now: NOW,
     });
-    expect(learned?.rule.match["recipients"]).toEqual({ all_domain_in: ["work.com"] });
-    expect(learned?.evidence).toMatch(/all to work\.com$/);
+    expect(learned?.rule.match["recipients"]).toEqual({ equals: ["ann@work.com"] });
+    expect(learned?.evidence).toMatch(/all to ann@work\.com$/);
 
     // A denied send to gmail.com is outside it; one to work.com isn't.
     const elsewhere = decided(set, 1, {
@@ -211,7 +213,13 @@ describe("learning from what you approve (2.10)", () => {
       now: NOW,
     });
     expect(deny?.rule).toEqual({
-      match: { agent: "claude-code", account: "stripe", action: "stripe.refund" },
+      match: {
+        agent: "claude-code",
+        account: "stripe",
+        action: "stripe.refund",
+        tool: "refund",
+        persistence: false,
+      },
       then: "deny",
     });
     expect(deny?.evidence).toMatch(/^denied 5 times/);
@@ -313,6 +321,8 @@ describe("learning from what you approve (2.10)", () => {
       action: "github.issue.create",
       agent: "claude-code",
       account: "github",
+      tool: "create_issue",
+      persistence: false,
       repo: "acme/web",
     });
   });
@@ -367,7 +377,7 @@ describe("learning from what you approve (2.10)", () => {
       decided(set, 5, { call: { ...send, recipients: ["friend@gmail.com"] } }),
       { owner: OWNER, rules: set, threshold: THRESHOLD, now: NOW },
     );
-    expect(personal?.rule.match["recipients"]).toEqual({ one_of: ["friend@gmail.com"] });
+    expect(personal?.rule.match["recipients"]).toEqual({ equals: ["friend@gmail.com"] });
   });
 
   it("gives the same kind key whatever the recipients, so a dismissal holds", () => {
@@ -390,5 +400,40 @@ describe("learning from what you approve (2.10)", () => {
     const b = learn("y@corp.io");
     expect(a?.key).not.toBe(b?.key);
     expect(a?.kindKey).toBe(b?.kindKey);
+  });
+
+  it("never learns from calls that outlive heel, and a suggestion for sends doesn't cover a forward", () => {
+    const set = ruleSet({ owner: RULES });
+    const filter = {
+      account: "gmail",
+      provider: "gmail",
+      tool: "create_filter",
+      action: "email.send",
+      repo: undefined,
+      recipients: ["bob@work.com"],
+      persistence: true,
+    } satisfies CallOverrides;
+    expect(
+      learnRules(decided(set, 5, { call: filter }), {
+        owner: OWNER,
+        rules: set,
+        threshold: THRESHOLD,
+        now: NOW,
+      }),
+    ).toEqual([]);
+
+    const [send] = learnRules(
+      decided(set, 5, { call: { ...filter, tool: "send_email", persistence: undefined } }),
+      { owner: OWNER, rules: set, threshold: THRESHOLD, now: NOW },
+    );
+    expect(send?.rule.match["persistence"]).toBe(false);
+  });
+
+  it("doesn't suggest a deny while a standing approval lets those calls through", () => {
+    const set = ruleSet({ owner: RULES });
+    const calls = decided(set, 5, { decision: "denied" });
+    const input = { owner: OWNER, rules: set, threshold: THRESHOLD, now: NOW };
+    expect(learnRules(calls, input)).toHaveLength(1);
+    expect(learnRules(calls, { ...input, standing: () => true })).toEqual([]);
   });
 });

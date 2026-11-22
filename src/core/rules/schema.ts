@@ -233,6 +233,7 @@ const fixedMatchKeys = {
   verb: TextCondition.optional(),
   subcommand: TextCondition.optional(),
   argv: TextListCondition.optional(),
+  persistence: BooleanCondition.optional(),
   // Provider fields (D12b): set by built-in definitions only.
   channel: ChannelCondition.optional(),
   external: BooleanCondition.optional(),

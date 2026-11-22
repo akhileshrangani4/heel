@@ -112,7 +112,9 @@ describe("suggested rules from what you approve (2.10)", () => {
         agent: h.agent.agentName,
         account: expect.any(String),
         action: "email.send",
-        recipients: { all_domain_in: ["vendor.com"] },
+        tool: expect.any(String),
+        persistence: false,
+        recipients: { equals: ["bob@vendor.com"] },
       },
       then: "allow",
     });
@@ -133,7 +135,7 @@ describe("suggested rules from what you approve (2.10)", () => {
     );
     expect(applied.status).toBe(200);
     const written = readFileSync(join(rulesPaths(home).ownersDir, "owner.yaml"), "utf8");
-    expect(written).toContain("all_domain_in");
+    expect(written).toContain("bob@vendor.com");
     // It went right before the rule that asked: the deny above still decides first.
     const at = (text: string) => written.indexOf(text);
     expect(at("no-ceo")).toBeLessThan(at("Suggested by heel"));

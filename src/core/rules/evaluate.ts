@@ -234,6 +234,7 @@ function relaxable(verdict: Verdict): boolean {
 }
 
 function names(rule: CompiledRule, facts: RuleFacts): boolean {
+  if (rule.excludesPersistence) return false;
   return (
     (facts.action !== undefined && rule.names.actions.has(facts.action)) ||
     (facts.tool !== undefined && rule.names.tools.has(facts.tool))

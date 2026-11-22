@@ -7,3 +7,5 @@ CREATE TABLE `learning_dismissals` (
 );
 --> statement-breakpoint
 ALTER TABLE `rule_proposals` ADD `origin` text DEFAULT 'agent' NOT NULL CONSTRAINT "rule_proposals_origin" CHECK("origin" IN ('agent', 'heel'));
+--> statement-breakpoint
+CREATE INDEX `audit_log_approver_at` ON `audit_log` (`approver_id`,`at`);
