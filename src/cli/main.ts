@@ -1262,21 +1262,24 @@ async function initCommand(args: string[], io: CliIo): Promise<number> {
         "approve-from": { type: "string" },
         hostname: { type: "string" },
         "agent-hostname": { type: "string" },
+        "new-address": { type: "boolean" },
       },
       allowPositionals: true,
       strict: true,
     }),
   );
   if (positionals.length > 0) throw new UsageError(`unexpected argument "${positionals[0]}"`);
-  const { chooseHome, confirm, initHome, initSummary, chooseApproveFrom } = await import(
+  const { chooseHome, confirm, initHome, initSteps, initSummary, chooseApproveFrom } = await import(
     "./init.ts"
   );
   const {
+    addressProblem,
     agentHostnameFor,
     APPROVE_FROM,
     isApproveFrom,
     isHostname,
     listenPorts,
+    passkeyProblem,
     setUpCloudflare,
     setUpTailscale,
     writeAddresses,
@@ -1325,6 +1328,16 @@ async function initCommand(args: string[], io: CliIo): Promise<number> {
         "heel init --approve-from cloudflare runs cloudflared, which this heel can't",
       );
     }
+    // Checked before cloudflared creates anything: heel.yaml's addresses, and a passkey it would orphan.
+    const want = { approvals: `https://${hostname}`, agents: `https://${agentHostname}` };
+    const blocked =
+      addressProblem(configPath, want) ??
+      (values["new-address"] === true ? null : passkeyProblem(join(home, "heel.db"), want));
+    if (blocked !== null) {
+      io.stdout.write(initSteps(steps));
+      io.stderr.write(`heel: ${blocked}\n`);
+      return EXIT.failed;
+    }
     const set = await setUpCloudflare(io.exec, {
       home,
       hostname,
@@ -1336,7 +1349,7 @@ async function initCommand(args: string[], io: CliIo): Promise<number> {
       suffix: randomBytes(3).toString("hex"),
     });
     if (!set.ok || set.addresses === null || set.config === undefined) {
-      io.stdout.write(initSummary(home, steps, true, null));
+      io.stdout.write(initSteps(steps));
       io.stderr.write(`heel: ${set.ok ? "cloudflared gave no tunnel" : set.problem}\n`);
       return EXIT.failed;
     }
@@ -1360,9 +1373,18 @@ async function initCommand(args: string[], io: CliIo): Promise<number> {
           `  tailscale serve --bg --https=8443 http://127.0.0.1:${ports.agent}\n`,
       );
     } else {
-      const set = await setUpTailscale(io.exec, ports);
+      // Checked before Tailscale changes anything: heel.yaml's addresses, and a passkey it would orphan.
+      const databasePath = join(home, "heel.db");
+      const set = await setUpTailscale(
+        io.exec,
+        ports,
+        (want) =>
+          addressProblem(configPath, want) ??
+          (values["new-address"] === true ? null : passkeyProblem(databasePath, want)),
+      );
       if (!set.ok) {
-        io.stdout.write(initSummary(home, steps, true, null));
+        // What was done, and the problem: no next steps, so nobody enrolls on the wrong address.
+        io.stdout.write(initSteps(steps));
         io.stderr.write(`heel: ${set.problem}\n`);
         return EXIT.failed;
       }

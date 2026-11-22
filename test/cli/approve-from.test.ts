@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { listenPorts, setUpTailscale, writeAddresses } from "../../src/cli/approve-from.ts";
 import { type CliIo, EXIT, main } from "../../src/cli/main.ts";
+import { openStore } from "../../src/store/db.ts";
+import { ensureInstall, ensureLocalOwner } from "../../src/store/install.ts";
 import { tempDir } from "../helpers/store.ts";
 
 /**
@@ -16,11 +18,15 @@ const RUNNING = JSON.stringify({
   CertDomains: ["heel-box.tail1234.ts.net"],
 });
 
-function fakeTailscale(status: { code: number; output: string } = { code: 0, output: RUNNING }) {
+function fakeTailscale(
+  status: { code: number; output: string } = { code: 0, output: RUNNING },
+  served = "{}",
+) {
   const calls: string[][] = [];
   const exec: NonNullable<CliIo["exec"]> = async (command, args) => {
     calls.push([command, ...args]);
     if (args[0] === "status") return status;
+    if (args[1] === "status") return { code: 0, output: served };
     return { code: 0, output: "" };
   };
   return { exec, calls };
@@ -38,6 +44,7 @@ describe("approving over Tailscale (2.7)", () => {
       },
     });
     expect(calls.slice(1)).toEqual([
+      ["tailscale", "serve", "status", "--json"],
       ["tailscale", "serve", "--bg", "--https=443", "http://127.0.0.1:7301"],
       ["tailscale", "serve", "--bg", "--https=8443", "http://127.0.0.1:7300"],
     ]);
@@ -112,5 +119,81 @@ describe("approving over Tailscale (2.7)", () => {
     ).toBe(EXIT.failed);
     expect(stderr).toMatch(/Tailscale isn't installed/);
     expect(await main(["init", "--yes", "--approve-from", "pigeon"], io)).toBe(EXIT.usage);
+  });
+
+  it("changes nothing in Tailscale when heel.yaml or another service is in the way", async () => {
+    const other = JSON.stringify({
+      Web: {
+        "heel-box.tail1234.ts.net:443": { Handlers: { "/": { Proxy: "http://127.0.0.1:8123" } } },
+      },
+    });
+    const busy = fakeTailscale(undefined, other);
+    const set = await setUpTailscale(busy.exec, { agent: 7300, human: 7301 });
+    expect(set.ok ? "" : set.problem).toMatch(/already serves something else on port 443/);
+    expect(busy.calls.some((c) => c.includes("--bg"))).toBe(false);
+    // heel's own handlers from an earlier run are fine.
+    const ours = JSON.stringify({
+      Web: {
+        "heel-box.tail1234.ts.net:443": { Handlers: { "/": { Proxy: "http://127.0.0.1:7301" } } },
+        "heel-box.tail1234.ts.net:8443": { Handlers: { "/": { Proxy: "http://127.0.0.1:7300" } } },
+      },
+    });
+    expect(
+      (await setUpTailscale(fakeTailscale(undefined, ours).exec, { agent: 7300, human: 7301 })).ok,
+    ).toBe(true);
+
+    const blocked = fakeTailscale();
+    const refused = await setUpTailscale(blocked.exec, { agent: 7300, human: 7301 }, () => "no");
+    expect(refused).toEqual({ ok: false, problem: "no" });
+    expect(blocked.calls.some((c) => c[1] === "serve")).toBe(false);
+  });
+
+  it("treats the same address with a trailing slash as the same, and keeps a user's comment", () => {
+    const path = join(tempDir("heel-approve-"), "heel.yaml");
+    writeFileSync(path, "# my address\npublic_url: https://a.ts.net/\n");
+    const addresses = { approvals: "https://a.ts.net", agents: "https://a.ts.net:8443" };
+    expect(writeAddresses(path, addresses)).toEqual({ ok: true, changed: true });
+    const text = readFileSync(path, "utf8");
+    expect(text).toContain("# my address");
+    expect(text).toContain("agent_public_url: https://a.ts.net:8443");
+    expect(listenPorts("listen:\n  human: 127.0.0.1:99999\n")).toEqual({
+      agent: 7300,
+      human: 7301,
+    });
+  });
+
+  it("won't move a heel that has a passkey unless told to, and prints no next steps when it stops", async () => {
+    const home = join(tempDir("heel-init-pk-"), "home");
+    let stdout = "";
+    let stderr = "";
+    const io: CliIo = {
+      env: { HEEL_HOME: home },
+      stdin: (async function* () {})(),
+      stdout: { write: (t) => (stdout += t) },
+      stderr: { write: (t) => (stderr += t) },
+      exec: fakeTailscale().exec,
+    };
+    // A heel set up on this computer, with a passkey made there.
+    expect(await main(["init", "--yes"], io)).toBe(EXIT.ok);
+    const store = openStore(join(home, "heel.db"));
+    const { orgId } = ensureInstall(store.db, new Date());
+    const userId = ensureLocalOwner(store.db, orgId, new Date());
+    store.sqlite
+      .prepare(
+        "INSERT INTO passkeys (id, org_id, user_id, public_key, counter, transports, rp_id, created_at) VALUES ('pk', ?, ?, x'00', 0, '[]', 'localhost', 0)",
+      )
+      .run(orgId, userId);
+    store.close();
+    stdout = "";
+    const tailscale = fakeTailscale();
+    expect(
+      await main(["init", "--yes", "--approve-from", "tailscale"], { ...io, exec: tailscale.exec }),
+    ).toBe(EXIT.failed);
+    expect(stderr).toMatch(/already has a passkey made for localhost.*--new-address/);
+    expect(stdout).not.toContain("Next:");
+    expect(tailscale.calls.some((c) => c[1] === "serve")).toBe(false);
+    expect(await main(["init", "--yes", "--approve-from", "tailscale", "--new-address"], io)).toBe(
+      EXIT.ok,
+    );
   });
 });

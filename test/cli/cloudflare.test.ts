@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { agentHostnameFor, isHostname, setUpCloudflare } from "../../src/cli/approve-from.ts";
@@ -120,5 +120,28 @@ describe("approving through a Cloudflare tunnel (2.7)", () => {
     const config = loadConfig({ file: join(home, "heel.yaml"), home, explicit: true });
     expect(String(config.publicUrl)).toBe("https://heel.example.com/");
     expect(config.tunnel.cloudflare?.config).toBe(join(home, "cloudflared.yml"));
+  });
+
+  it("creates no tunnel when heel.yaml already has another address", async () => {
+    const home = join(tempDir("heel-init-cf-"), "home");
+    let stderr = "";
+    const cloudflared = fakeCloudflared();
+    const io: CliIo = {
+      env: { HEEL_HOME: home, TUNNEL_ORIGIN_CERT: "/somewhere/cert.pem" },
+      stdin: (async function* () {})(),
+      stdout: { write: () => {} },
+      stderr: { write: (t) => (stderr += t) },
+      exec: cloudflared.exec,
+    };
+    expect(await main(["init", "--yes"], io)).toBe(EXIT.ok);
+    writeFileSync(join(home, "heel.yaml"), "public_url: https://elsewhere.example.com\n");
+    expect(
+      await main(
+        ["init", "--yes", "--approve-from", "cloudflare", "--hostname", "heel.example.com"],
+        io,
+      ),
+    ).toBe(EXIT.failed);
+    expect(stderr).toMatch(/already has public_url/);
+    expect(cloudflared.calls.some((c) => c[1] === "create")).toBe(false);
   });
 });

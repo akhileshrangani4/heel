@@ -1,5 +1,6 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import Database from "better-sqlite3";
 import { isMap, isScalar, parseDocument } from "yaml";
 import type { ExecFn } from "./common.ts";
 
@@ -10,7 +11,7 @@ import type { ExecFn } from "./common.ts";
  *
  * - `this-computer`: the approval page stays on 127.0.0.1; nothing to do.
  * - `tailscale`: `tailscale serve` gives both planes an HTTPS address on the
- *   tailnet (only the owner's devices reach it), and keeps them up itself.
+ *   tailnet (the devices its access rules let in), and keeps them up itself.
  * - `cloudflare`: a named tunnel on the owner's own domain, whose address
  *   never changes. heel creates it, routes DNS, writes the cloudflared
  *   config, and runs the tunnel alongside itself (src/gateway/tunnel.ts).
@@ -42,9 +43,43 @@ export function listenPorts(configText: string | null): { agent: number; human: 
   const port = (key: "agent" | "human") => {
     const value = doc.getIn(["listen", key]);
     const match = typeof value === "string" ? /:(\d+)$/.exec(value) : null;
-    return match?.[1] === undefined ? null : Number(match[1]);
+    const n = match?.[1] === undefined ? null : Number(match[1]);
+    return n !== null && n >= 1 && n <= 65_535 ? n : null;
   };
   return { agent: port("agent") ?? ports.agent, human: port("human") ?? ports.human };
+}
+
+/**
+ * The tailnet ports (443, 8443) `tailscale serve status --json` shows serving
+ * anything but heel's own planes there.
+ */
+export function servedElsewhere(
+  statusJson: string,
+  name: string,
+  ports: { agent: number; human: number },
+): number[] {
+  let parsed: { Web?: Record<string, { Handlers?: Record<string, { Proxy?: string }> }> };
+  try {
+    parsed = JSON.parse(statusJson) as typeof parsed;
+  } catch {
+    return [];
+  }
+  const taken: number[] = [];
+  for (const [port, target] of [
+    [443, ports.human],
+    [8443, ports.agent],
+  ] as const) {
+    const handlers = parsed.Web?.[`${name}:${port}`]?.Handlers ?? {};
+    const ours = `http://127.0.0.1:${target}`;
+    if (
+      Object.entries(handlers).some(
+        ([path, h]) => path !== "/" || h.Proxy?.replace(/\/$/, "") !== ours,
+      )
+    ) {
+      taken.push(port);
+    }
+  }
+  return taken;
 }
 
 interface TailscaleStatus {
@@ -60,6 +95,8 @@ interface TailscaleStatus {
 export async function setUpTailscale(
   exec: ExecFn,
   ports: { agent: number; human: number },
+  /** Runs once the addresses are known and before anything changes; a problem stops it there. */
+  precheck: (addresses: PublicAddresses) => string | null = () => null,
 ): Promise<SetupOutcome> {
   const status = await exec("tailscale", ["status", "--json"]);
   if (status.code === 127) {
@@ -99,6 +136,18 @@ export async function setUpTailscale(
         "Your tailnet doesn't have HTTPS certificates turned on, and a passkey needs HTTPS. Turn them on at https://login.tailscale.com/admin/dns (HTTPS Certificates), then run this again.",
     };
   }
+  const addresses = { approvals: `https://${name}`, agents: `https://${name}:8443` };
+  const blocked = precheck(addresses);
+  if (blocked !== null) return { ok: false, problem: blocked };
+  // Don't take over a port something else is already served on.
+  const current = await exec("tailscale", ["serve", "status", "--json"]);
+  const taken = current.code === 0 ? servedElsewhere(current.output, name, ports) : [];
+  if (taken.length > 0) {
+    return {
+      ok: false,
+      problem: `Tailscale already serves something else on ${taken.map((p) => `port ${p}`).join(" and ")} of this machine, and heel won't replace it. See \`tailscale serve status\`; free the port (\`tailscale serve --https=<port> off\`) or set heel's addresses by hand.`,
+    };
+  }
   for (const [port, target] of [
     [443, ports.human],
     [8443, ports.agent],
@@ -116,7 +165,7 @@ export async function setUpTailscale(
       };
     }
   }
-  return { ok: true, addresses: { approvals: `https://${name}`, agents: `https://${name}:8443` } };
+  return { ok: true, addresses };
 }
 
 /**
@@ -124,14 +173,41 @@ export async function setUpTailscale(
  * Refuses to change an address already set: a passkey made on the old one
  * would stop working.
  */
+function origin(text: string): string | null {
+  try {
+    return new URL(text).origin;
+  } catch {
+    return null;
+  }
+}
+
+/** Why heel.yaml can't take these addresses, or null when it can. Changes nothing. */
+export function addressProblem(configPath: string, addresses: PublicAddresses): string | null {
+  const doc = parseDocument(readFileSync(configPath, "utf8"));
+  if (!isMap(doc.contents)) return `${configPath} isn't a mapping`;
+  for (const [key, value] of [
+    ["public_url", addresses.approvals],
+    ["agent_public_url", addresses.agents],
+  ] as const) {
+    const current = doc.get(key);
+    if (current === undefined || current === null) continue;
+    if (origin(String(current)) !== origin(value)) {
+      return `${configPath} already has ${key}: ${String(current)}. Changing it means making your passkey again, since a passkey only works on the address it was made on. If that's what you want, edit ${key} yourself.`;
+    }
+  }
+  return null;
+}
+
 export function writeAddresses(
   configPath: string,
   addresses: PublicAddresses,
 ): { ok: true; changed: boolean } | { ok: false; problem: string } {
-  const text = readFileSync(configPath, "utf8");
-  const doc = parseDocument(text);
+  const problem = addressProblem(configPath, addresses);
+  if (problem !== null) return { ok: false, problem };
+  const doc = parseDocument(readFileSync(configPath, "utf8"));
   if (!isMap(doc.contents)) return { ok: false, problem: `${configPath} isn't a mapping` };
   let changed = false;
+  const addingPublicUrl = doc.get("public_url") == null;
   for (const [key, value] of [
     ["public_url", addresses.approvals],
     ["agent_public_url", addresses.agents],
@@ -140,14 +216,9 @@ export function writeAddresses(
     if (current === undefined || current === null) {
       doc.set(doc.createNode(key), value);
       changed = true;
-    } else if (current !== value) {
-      return {
-        ok: false,
-        problem: `${configPath} already has ${key}: ${String(current)}. Changing it means making your passkey again, since a passkey only works on the address it was made on. If that's what you want, edit ${key} yourself.`,
-      };
     }
   }
-  if (changed) {
+  if (addingPublicUrl) {
     const key = doc.contents.items.find(
       (pair) => isScalar(pair.key) && pair.key.value === "public_url",
     )?.key;
@@ -155,8 +226,8 @@ export function writeAddresses(
       key.commentBefore =
         " Where you approve, and where agents connect, set by heel init.\n A passkey only works on the address it was made on: don't change these lightly.";
     }
-    writeFileSync(configPath, doc.toString());
   }
+  if (changed) writeFileSync(configPath, doc.toString());
   return { ok: true, changed };
 }
 
@@ -276,4 +347,31 @@ export function writeTunnelConfig(configPath: string, file: string): void {
   const doc = parseDocument(readFileSync(configPath, "utf8"));
   doc.setIn(["tunnel", "cloudflare", "config"], file);
   writeFileSync(configPath, doc.toString());
+}
+
+/**
+ * Why moving heel to these addresses would orphan a passkey, or null: a
+ * passkey made for another address stops working once heel moves, so heel
+ * moves only when told to (`--new-address`).
+ */
+export function passkeyProblem(databasePath: string, addresses: PublicAddresses): string | null {
+  if (!existsSync(databasePath)) return null;
+  const target = new URL(addresses.approvals).hostname;
+  let rpIds: (string | null)[] = [];
+  try {
+    const db = new Database(databasePath, { readonly: true, fileMustExist: true });
+    try {
+      rpIds = (
+        db.prepare("SELECT rp_id AS rpId FROM passkeys").all() as { rpId: string | null }[]
+      ).map((row) => row.rpId);
+    } finally {
+      db.close();
+    }
+  } catch {
+    return null;
+  }
+  const elsewhere = rpIds.filter((rp) => rp !== target);
+  if (elsewhere.length === 0) return null;
+  const where = [...new Set(elsewhere.map((rp) => rp ?? "an earlier address"))].join(", ");
+  return `heel already has a passkey made for ${where}. Moving heel to ${addresses.approvals} means making your passkey again there, since a passkey only works on the address it was made on. If that's what you want, run this again with --new-address.`;
 }

@@ -20,7 +20,8 @@ import type { PipelineResult } from "./pipeline/ports.ts";
  *   path is decoded once and must then be canonical: no encoded slash or
  *   backslash, no `%` left (a double-encoded `..` would decode again
  *   upstream), no `.` or `..` segment, no empty segment or trailing slash, no
- *   control character. A forwarded-host header is refused too. Each is a 400
+ *   control character. A forwarded-host header naming another host is
+ *   refused too (one a proxy adds for the same host is fine). Each is a 400
  *   before anything else. The definition re-encodes each segment itself.
  * - Request bodies are capped at 25 MB while they are read.
  * - TRACE is refused.
@@ -30,6 +31,28 @@ import type { PipelineResult } from "./pipeline/ports.ts";
  */
 
 const MAX_BODY_BYTES = 25 * 1024 * 1024;
+
+/**
+ * Whether a forwarded-host header names another host than the request came
+ * to. A proxy in front of heel (tailscale serve, a tunnel, nginx) adds one
+ * naming the same host, which changes nothing; one naming another host is
+ * refused, though heel never uses it to pick a target.
+ */
+export function overridesHost(
+  host: string | undefined,
+  forwardedHost: string | undefined,
+  forwarded: string | undefined,
+): boolean {
+  const same = (value: string) =>
+    host !== undefined && value.trim().toLowerCase() === host.trim().toLowerCase();
+  if (forwardedHost !== undefined && !forwardedHost.split(",").every(same)) return true;
+  if (forwarded !== undefined) {
+    for (const match of forwarded.matchAll(/host="?([^";,\s]+)"?/gi)) {
+      if (!same(match[1] ?? "")) return true;
+    }
+  }
+  return false;
+}
 const PREFIX = /^\/http\/([^/]+)(\/.*)?$/;
 
 export interface HttpProxyDeps {
@@ -176,7 +199,9 @@ export async function handleHttpProxy(
   const url = new URL(c.req.url);
   const target = proxiedPath(url.pathname);
   if ("status" in target) return c.json(target.body, target.status);
-  if (c.req.header("x-forwarded-host") !== undefined || c.req.header("forwarded") !== undefined) {
+  if (
+    overridesHost(c.req.header("host"), c.req.header("x-forwarded-host"), c.req.header("forwarded"))
+  ) {
     return c.json(refuse(400, "host_override").body, 400);
   }
   const account = findAccount(deps.db, agent.orgId, target.account);
