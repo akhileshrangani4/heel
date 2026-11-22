@@ -338,6 +338,7 @@ function exposureFacts(config: HeelConfig): ExposureFacts {
     homeOwnerUid,
     userHome: homedir(),
     container: process.env["HEEL_CONTAINER"] === "1",
+    publicTunnel: config.tunnel.cloudflare !== null,
   };
 }
 
@@ -379,11 +380,6 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
       );
     }
 
-    // The Cloudflare tunnel heel init set up (2.7): run alongside heel, restarted if it stops.
-    if (config.tunnel.cloudflare !== null) {
-      const tunnel = superviseTunnel({ config: config.tunnel.cloudflare.config, log });
-      closers.push(() => tunnel.stop());
-    }
     const rules = startRules(options, closers, () => {
       try {
         noticeRuleFiles(store.db, orgId, rulesPaths(config.home), now());
@@ -700,6 +696,14 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
       siem.start();
       closers.push(() => siem.close());
       log.info({ sink: config.audit.siem.url.href }, "SIEM sink started");
+    }
+
+    // The Cloudflare tunnel heel init set up (2.7), last: only once this heel owns the admin
+    // socket and both planes listen, so a second heel never starts a second tunnel. Being
+    // last, it's also the first thing stopped on shutdown.
+    if (config.tunnel.cloudflare !== null) {
+      const tunnel = superviseTunnel({ config: config.tunnel.cloudflare.config, log });
+      closers.push(() => tunnel.stop());
     }
 
     let closing: Promise<void> | null = null;

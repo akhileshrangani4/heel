@@ -29,6 +29,8 @@ export interface ExposureFacts {
    * the ports is decided by `docker run -p`, which heel can't see.
    */
   container: boolean;
+  /** heel runs a Cloudflare tunnel (2.7): both planes are on the public internet. */
+  publicTunnel?: boolean;
 }
 
 export interface ExposureWarning {
@@ -38,7 +40,8 @@ export interface ExposureWarning {
     | "same_user_as_agents"
     | "credential_in_sandbox"
     | "credential_delivery_refused"
-    | "container_ports";
+    | "container_ports"
+    | "public_tunnel";
   /** "info" for a reminder about a setup that is fine when done as the docs say. */
   level?: "info";
   message: string;
@@ -116,6 +119,13 @@ function inside(path: string, dir: string): boolean {
 
 export function exposureWarnings(facts: ExposureFacts): ExposureWarning[] {
   const warnings: ExposureWarning[] = [];
+  if (facts.publicTunnel === true) {
+    warnings.push({
+      code: "public_tunnel",
+      message:
+        "heel's approval page and agent plane are on the public internet through its Cloudflare tunnel. Every agent call still needs a token and every decision a passkey, but anyone can reach them: consider Cloudflare Access in front of the approval page's hostname, and a rate-limit rule.",
+    });
+  }
   const { agent, human } = facts.listen;
   // In the image, 0.0.0.0 is required and the -p flag decides exposure, so a
   // warning would fire on every correct setup. Say what matters once instead.

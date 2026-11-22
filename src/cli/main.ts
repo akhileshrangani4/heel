@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "no
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
+import { parseDocument } from "yaml";
 import { z } from "zod";
 import { AdminClientError, adminCall } from "../admin/client.ts";
 import { type AdminRequest, AUDIT_EXPORT_MAX_PAGE } from "../admin/protocol.ts";
@@ -1275,6 +1276,7 @@ async function initCommand(args: string[], io: CliIo): Promise<number> {
   const {
     addressProblem,
     agentHostnameFor,
+    sameParent,
     APPROVE_FROM,
     isApproveFrom,
     isHostname,
@@ -1305,6 +1307,13 @@ async function initCommand(args: string[], io: CliIo): Promise<number> {
       return EXIT.ok;
     }
   }
+  if (
+    (values.hostname !== undefined || values["agent-hostname"] !== undefined) &&
+    flag !== "cloudflare" &&
+    flag !== undefined
+  ) {
+    throw new UsageError("--hostname and --agent-hostname go with --approve-from cloudflare");
+  }
   // Where the owner approves from (2.7): asked in a terminal, this computer under --yes.
   const approveFrom =
     flag ?? (values.yes === true ? "this-computer" : await chooseApproveFrom(io.stderr));
@@ -1317,9 +1326,20 @@ async function initCommand(args: string[], io: CliIo): Promise<number> {
         "--approve-from cloudflare needs --hostname, the address on your Cloudflare domain to approve at, like heel.example.com",
       );
     }
-    const agentHostname = (values["agent-hostname"] ?? agentHostnameFor(hostname)).toLowerCase();
-    if (!isHostname(agentHostname) || agentHostname === hostname) {
-      throw new UsageError("--agent-hostname must be another hostname on your domain");
+    const agentHostname = (
+      values["agent-hostname"] ??
+      agentHostnameFor(hostname) ??
+      ""
+    ).toLowerCase();
+    if (agentHostname === "") {
+      throw new UsageError(
+        `--hostname ${hostname} is a bare domain: use a name under it, like heel.${hostname}, so the agent plane can sit beside it`,
+      );
+    }
+    if (!isHostname(agentHostname) || !sameParent(hostname, agentHostname)) {
+      throw new UsageError(
+        "--agent-hostname must sit beside --hostname under the same parent domain, like heel.example.com and heel-agents.example.com",
+      );
     }
     const configPath = join(home, "heel.yaml");
     const ports = listenPorts(readFileSync(configPath, "utf8"));
@@ -1338,14 +1358,39 @@ async function initCommand(args: string[], io: CliIo): Promise<number> {
       io.stderr.write(`heel: ${blocked}\n`);
       return EXIT.failed;
     }
+    // Already set up for these hostnames: nothing to make again.
+    const existing = parseDocument(readFileSync(configPath, "utf8"));
+    if (
+      existing.getIn(["tunnel", "cloudflare", "config"]) !== undefined &&
+      String(existing.get("public_url") ?? "").replace(/\/$/, "") === want.approvals &&
+      String(existing.get("agent_public_url") ?? "").replace(/\/$/, "") === want.agents
+    ) {
+      io.stdout.write(
+        initSummary(
+          home,
+          steps,
+          fromEnv || home === io.env["HEEL_HOME"] || home === defaultHeelHome(),
+          want,
+        ),
+      );
+      io.stderr.write(
+        "heel: the Cloudflare tunnel for these hostnames is already set up; nothing changed.\n",
+      );
+      return EXIT.ok;
+    }
+    // cloudflared won't make the folder its credentials go in.
+    mkdirSync(join(home, "cloudflared"), { recursive: true, mode: 0o700 });
     const set = await setUpCloudflare(io.exec, {
       home,
       hostname,
       agentHostname,
       ports,
-      loggedIn:
-        io.env["TUNNEL_ORIGIN_CERT"] !== undefined ||
-        existsSync(join(homedir(), ".cloudflared", "cert.pem")),
+      loggedIn: [
+        io.env["TUNNEL_ORIGIN_CERT"],
+        join(homedir(), ".cloudflared", "cert.pem"),
+        join(homedir(), ".cloudflare-warp", "cert.pem"),
+        "/etc/cloudflared/cert.pem",
+      ].some((path) => path !== undefined && existsSync(path)),
       suffix: randomBytes(3).toString("hex"),
     });
     if (!set.ok || set.addresses === null || set.config === undefined) {
@@ -1358,7 +1403,6 @@ async function initCommand(args: string[], io: CliIo): Promise<number> {
       io.stderr.write(`heel: ${written.problem}\n`);
       return EXIT.failed;
     }
-    mkdirSync(join(home, "cloudflared"), { recursive: true, mode: 0o700 });
     writeFileSync(join(home, "cloudflared.yml"), set.config, { mode: 0o600 });
     writeTunnelConfig(configPath, "cloudflared.yml");
     addresses = set.addresses;

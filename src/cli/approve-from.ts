@@ -231,10 +231,21 @@ export function writeAddresses(
   return { ok: true, changed };
 }
 
-/** Where the agent plane goes for a Cloudflare approval hostname: a sibling, so the free certificate covers it. */
-export function agentHostnameFor(hostname: string): string {
+/**
+ * Where the agent plane goes for a Cloudflare approval hostname: a sibling on
+ * the same domain, so the free certificate covers it. Null for a bare domain
+ * (`example.com`), whose sibling would be another domain (`example-agents.com`).
+ */
+export function agentHostnameFor(hostname: string): string | null {
   const [first, ...rest] = hostname.split(".");
+  if (rest.length < 2) return null;
   return `${first}-agents.${rest.join(".")}`;
+}
+
+/** Whether two hostnames sit side by side under the same parent (`a.example.com`, `b.example.com`). */
+export function sameParent(a: string, b: string): boolean {
+  const parent = (h: string) => h.split(".").slice(1).join(".");
+  return a !== b && parent(a) !== "" && parent(a) === parent(b) && parent(a).includes(".");
 }
 
 /** A hostname heel can route: lower case labels, at least a name and a domain. */
@@ -321,10 +332,17 @@ export async function setUpCloudflare(
   }
   for (const hostname of [input.hostname, input.agentHostname]) {
     const routed = await exec("cloudflared", ["tunnel", "route", "dns", tunnelId, hostname]);
-    if (routed.code !== 0) {
+    // cloudflared names the record it added; a name outside the zone comes back with the zone added.
+    const added = /Added CNAME (\S+)/.exec(routed.output)?.[1];
+    const wrong = added !== undefined && added.toLowerCase().replace(/\.$/, "") !== hostname;
+    if (routed.code !== 0 || wrong) {
+      // Leave nothing half made: the tunnel goes, and with it any route it got.
+      await exec("cloudflared", ["tunnel", "delete", "--force", tunnelId]);
       return {
         ok: false,
-        problem: `\`cloudflared tunnel route dns\` for ${hostname} failed: ${routed.output.trim().slice(0, 300)}. If a DNS record for it already exists, remove it in Cloudflare's dashboard, then run this again.`,
+        problem: wrong
+          ? `Cloudflare routed ${added} rather than ${hostname}: ${hostname} isn't on the domain cloudflared is signed in to. Use hostnames on that domain.`
+          : `\`cloudflared tunnel route dns\` for ${hostname} failed: ${routed.output.trim().slice(0, 300)}. heel removed the tunnel it had just made. If a DNS record with that name already exists for something else, pick another hostname.`,
       };
     }
   }

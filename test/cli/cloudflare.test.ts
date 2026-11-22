@@ -1,7 +1,12 @@
-import { readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { agentHostnameFor, isHostname, setUpCloudflare } from "../../src/cli/approve-from.ts";
+import {
+  agentHostnameFor,
+  isHostname,
+  sameParent,
+  setUpCloudflare,
+} from "../../src/cli/approve-from.ts";
 import { type CliIo, EXIT, main } from "../../src/cli/main.ts";
 import { loadConfig } from "../../src/config/load.ts";
 import { tempDir } from "../helpers/store.ts";
@@ -35,6 +40,13 @@ function fakeCloudflared(
 }
 
 const PORTS = { agent: 7300, human: 7301 };
+
+/** A cloudflared login certificate's stand-in: heel only checks the file is there. */
+function fakeCert(): string {
+  const path = join(tempDir("heel-cf-cert-"), "cert.pem");
+  writeFileSync(path, "not a real certificate\n");
+  return path;
+}
 
 describe("approving through a Cloudflare tunnel (2.7)", () => {
   it("names the agent plane as a sibling hostname the free certificate covers", () => {
@@ -98,7 +110,7 @@ describe("approving through a Cloudflare tunnel (2.7)", () => {
     let stdout = "";
     let stderr = "";
     const io: CliIo = {
-      env: { HEEL_HOME: home, TUNNEL_ORIGIN_CERT: "/somewhere/cert.pem" },
+      env: { HEEL_HOME: home, TUNNEL_ORIGIN_CERT: fakeCert() },
       stdin: (async function* () {})(),
       stdout: { write: (t) => (stdout += t) },
       stderr: { write: (t) => (stderr += t) },
@@ -127,7 +139,7 @@ describe("approving through a Cloudflare tunnel (2.7)", () => {
     let stderr = "";
     const cloudflared = fakeCloudflared();
     const io: CliIo = {
-      env: { HEEL_HOME: home, TUNNEL_ORIGIN_CERT: "/somewhere/cert.pem" },
+      env: { HEEL_HOME: home, TUNNEL_ORIGIN_CERT: fakeCert() },
       stdin: (async function* () {})(),
       stdout: { write: () => {} },
       stderr: { write: (t) => (stderr += t) },
@@ -143,5 +155,106 @@ describe("approving through a Cloudflare tunnel (2.7)", () => {
     ).toBe(EXIT.failed);
     expect(stderr).toMatch(/already has public_url/);
     expect(cloudflared.calls.some((c) => c[1] === "create")).toBe(false);
+  });
+
+  it("won't put the agent plane on another domain, and checks Cloudflare routed the name asked for", async () => {
+    expect(agentHostnameFor("example.com")).toBeNull();
+    expect(sameParent("heel.example.com", "heel-agents.example.com")).toBe(true);
+    expect(sameParent("heel.example.com", "agents.other.com")).toBe(false);
+    const io: CliIo = {
+      env: { HEEL_HOME: join(tempDir("heel-init-cf-"), "home"), TUNNEL_ORIGIN_CERT: fakeCert() },
+      stdin: (async function* () {})(),
+      stdout: { write: () => {} },
+      stderr: { write: () => {} },
+      exec: fakeCloudflared().exec,
+    };
+    expect(
+      await main(
+        ["init", "--yes", "--approve-from", "cloudflare", "--hostname", "example.com"],
+        io,
+      ),
+    ).toBe(EXIT.usage);
+    expect(
+      await main(
+        [
+          "init",
+          "--yes",
+          "--approve-from",
+          "cloudflare",
+          "--hostname",
+          "heel.example.com",
+          "--agent-hostname",
+          "agents.evil.com",
+        ],
+        io,
+      ),
+    ).toBe(EXIT.usage);
+    expect(
+      await main(
+        ["init", "--yes", "--approve-from", "tailscale", "--hostname", "heel.example.com"],
+        io,
+      ),
+    ).toBe(EXIT.usage);
+  });
+
+  it("removes the tunnel it made when routing fails, and makes the credentials folder first", async () => {
+    const calls: string[][] = [];
+    let folderThere = false;
+    const exec: NonNullable<CliIo["exec"]> = async (command, args) => {
+      calls.push([command, ...args]);
+      if (args[1] === "create") {
+        folderThere = existsSync(dirname(args[args.indexOf("--credentials-file") + 1] ?? ""));
+        return { code: 0, output: JSON.stringify({ id: TUNNEL_ID }) };
+      }
+      if (args[1] === "route" && args[4] === "heel-agents.example.com") {
+        return {
+          code: 0,
+          output: "Added CNAME heel-agents.example.com.other.org which will route to this tunnel",
+        };
+      }
+      return { code: 0, output: "Added CNAME heel.example.com which will route to this tunnel" };
+    };
+    let stderr = "";
+    const io: CliIo = {
+      env: { HEEL_HOME: join(tempDir("heel-init-cf-"), "home"), TUNNEL_ORIGIN_CERT: fakeCert() },
+      stdin: (async function* () {})(),
+      stdout: { write: () => {} },
+      stderr: { write: (t) => (stderr += t) },
+      exec,
+    };
+    expect(
+      await main(
+        ["init", "--yes", "--approve-from", "cloudflare", "--hostname", "heel.example.com"],
+        io,
+      ),
+    ).toBe(EXIT.failed);
+    expect(folderThere).toBe(true);
+    expect(stderr).toMatch(/routed heel-agents\.example\.com\.other\.org rather than/);
+    expect(calls.at(-1)).toEqual(["cloudflared", "tunnel", "delete", "--force", TUNNEL_ID]);
+  });
+
+  it("does nothing on a second run for the same hostnames", async () => {
+    const home = join(tempDir("heel-init-cf-"), "home");
+    const cloudflared = fakeCloudflared();
+    const io: CliIo = {
+      env: { HEEL_HOME: home, TUNNEL_ORIGIN_CERT: fakeCert() },
+      stdin: (async function* () {})(),
+      stdout: { write: () => {} },
+      stderr: { write: () => {} },
+      exec: cloudflared.exec,
+    };
+    const args = [
+      "init",
+      "--yes",
+      "--approve-from",
+      "cloudflare",
+      "--hostname",
+      "heel.example.com",
+    ];
+    expect(await main(args, io)).toBe(EXIT.ok);
+    const creates = () => cloudflared.calls.filter((c) => c[2] === "create").length;
+    expect(creates()).toBe(1);
+    expect(await main(args, io)).toBe(EXIT.ok);
+    expect(creates()).toBe(1);
   });
 });
