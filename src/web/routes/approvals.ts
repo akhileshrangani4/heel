@@ -207,8 +207,8 @@ export function approvalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       viewer: viewerOf(session),
       current: "approvals",
       body: html`${recoveriesFor(session, now)}
-      ${pendingList({ now, load: { ok: true, rows }, ruleChangesWaiting: changes.count + asks.count })}
       ${suggested}
+      ${pendingList({ now, load: { ok: true, rows }, ruleChangesWaiting: changes.count + asks.count })}
       ${asks.cards}
       ${changes.cards}
       ${pushControl({
