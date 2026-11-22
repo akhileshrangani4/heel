@@ -1,5 +1,7 @@
 import type { AuthenticatedAgent } from "../gateway/agent-tokens.ts";
 import type { Pipeline } from "../gateway/pipeline/pipeline.ts";
+import type { HeelDb } from "../store/db.ts";
+import { type ClaimedScript, parkScript, type Sealer } from "./parking.ts";
 import type { StubModule } from "./stubs.ts";
 import { type CodeWorker, DEFAULT_LIMITS, type ScriptLimits, type Step } from "./worker.ts";
 
@@ -14,10 +16,14 @@ import { type CodeWorker, DEFAULT_LIMITS, type ScriptLimits, type Step } from ".
  *   item never enters the sandbox (I-45);
  * - denied: the script resumes with a `PermissionError` at the call, which
  *   it may catch;
- * - pending (an ask) or paused: the script is stopped for good and never
- *   resumed, so no later statement runs, whatever `try/except` surrounds the
- *   call (I-59, I-62). The result carries the approval id and what already
- *   ran; the agent sends the rest as a new script;
+ * - pending (an ask): the script stops at the call, whatever `try/except`
+ *   surrounds it, and nothing after it runs until the approval is decided
+ *   (I-59). With `parking`, the suspended script is saved and the result
+ *   carries a `resume` id: `run_code({ resume })` restores it at that call,
+ *   which then runs through the pipeline again, so the approval decides it.
+ *   Without parking, or when it can't be saved, the script ends there and
+ *   the agent sends the rest as a new script (code mode round 2, C2);
+ * - paused: the script is stopped for good and never resumed (I-62);
  * - an upstream error: a `RuntimeError` at the call;
  * - an unknown outcome, or a call that ran but whose result heel withheld:
  *   the script is stopped, so it can't catch the error and retry a write
@@ -36,6 +42,10 @@ export type ScriptStatus = "completed" | "pending" | "paused" | "error";
 export interface ScriptResult {
   status: ScriptStatus;
   approvalId?: string;
+  /** A parked script's id, for `run_code({ resume })` once the approval is decided. */
+  resume?: string;
+  /** Why an asking script couldn't be parked, so the agent knows to resend the rest. */
+  notParked?: string;
   stdout: string;
   output?: unknown;
   calls: CallRecord[];
@@ -54,6 +64,10 @@ export interface RunScriptInput {
   pipeline: Pipeline;
   worker: CodeWorker;
   limits?: Partial<ScriptLimits>;
+  /** Where an asking script is saved; without it, an ask ends the script as before. */
+  parking?: { db: HeelDb; sealer: Sealer; now: () => Date };
+  /** A parked script to resume instead of running `code`. */
+  resume?: ClaimedScript;
 }
 
 export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
@@ -75,7 +89,46 @@ export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
     return { ...result, stdout, calls };
   };
 
-  let step: Step = await input.worker.start(input.code, input.modules, limits, capture);
+  // A resumed script's earlier calls count toward its limit; the parked one runs again here.
+  const before = input.resume === undefined ? 0 : Math.max(0, input.resume.calls.length - 1);
+  /** Saves the script suspended at an asking call: `{ resume }`, or `{ notParked }` saying why not. */
+  const park = async (
+    at: Extract<Step, { kind: "call" }>,
+    approvalId: string,
+  ): Promise<{ resume: string } | { notParked: string } | Record<string, never>> => {
+    const parking = input.parking;
+    if (parking === undefined) return {};
+    const saved = await at.park();
+    if (saved.kind !== "parked") {
+      return { notParked: saved.kind === "failed" ? saved.error : "the script couldn't be saved" };
+    }
+    const row = parkScript(
+      parking.db,
+      parking.sealer,
+      {
+        orgId: input.agent.orgId,
+        agentId: input.agent.agentId,
+        approvalId,
+        runId: input.runId,
+        reason: input.reason,
+        calls: [...(input.resume?.calls.slice(0, -1) ?? []), ...calls],
+        modules: input.modules,
+        snapshot: saved.snapshot,
+      },
+      parking.now(),
+    );
+    return row === null
+      ? { notParked: "this agent already has the most parked scripts heel keeps" }
+      : { resume: row.id };
+  };
+
+  let step: Step = await input.worker.start(
+    input.code,
+    input.modules,
+    limits,
+    capture,
+    input.resume?.snapshot,
+  );
   while (step.kind === "call") {
     const module = byModule.get(step.module);
     const tool = module?.functions.get(step.fn);
@@ -108,7 +161,7 @@ export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
       );
       continue;
     }
-    if (calls.length >= limits.maxCalls) {
+    if (before + calls.length >= limits.maxCalls) {
       return finish({
         status: "error",
         error: `the script made more than ${limits.maxCalls} calls`,
@@ -161,9 +214,11 @@ export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
             `${module.account} answered ${tool} with an error (${result.upstreamStatus})`,
         );
         break;
-      case "pending":
+      case "pending": {
         record("ask");
-        return finish({ status: "pending", approvalId: result.approvalId, error: null });
+        const parked = await park(step, result.approvalId);
+        return finish({ status: "pending", approvalId: result.approvalId, error: null, ...parked });
+      }
       case "paused":
         record("paused");
         return finish({ status: "paused", error: null });
@@ -176,5 +231,6 @@ export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
     }
   }
   if (step.kind === "failed") return finish({ status: "error", error: step.error });
+  if (step.kind === "parked") return finish({ status: "error", error: "the script parked itself" });
   return finish({ status: "completed", output: step.output, error: null });
 }

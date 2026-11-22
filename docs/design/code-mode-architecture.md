@@ -78,9 +78,21 @@ What the two share lives in one place each:
    - the account answered with an error: `RuntimeError` at the call;
    - anything else: the script is stopped. See the next section.
 
-### An ask, a pause, or a stop
+### An ask: the script is parked
 
-The script is never resumed. `run.ts` calls `worker.stop()` and returns what ran so far, with the approval id for an ask. No `try/except` in the script can run, because the script never gets control back.
+`run.ts` asks the worker to save the script where it waits (a `park` answer). Monty dumps the suspended script, the worker sends it back as a `parked` step and its script ends. `parking.ts` stores the dump in `parked_scripts`, sealed with the vault's key and bound to the row and the agent, with the calls so far and a hash of the modules. The answer is `pending`, with the approval id and a `resume` id. No `try/except` in the script runs, because the script doesn't get control back.
+
+To carry on, the agent sends `run_code({ resume })`:
+
+1. While the approval is still pending, heel answers `pending` again, without taking a slot or loading anything.
+2. Once it's decided, heel claims the row (deleting it in the same step, so a script resumes once), opens the dump, and refuses if the agent's modules changed since.
+3. A fresh worker starts with the dump (`start` with `snapshot`), and Monty restores the script at the call it parked at. The run loop sends that call through the pipeline again: the approval admits it once, a denial raises `PermissionError` there, and the script carries on as usual. Monty's own budget restarts on load, so `run.ts` counts the earlier calls toward the 200.
+
+A dump larger than 4 MB, an agent with 5 scripts already parked, or heel without a vault means no parking: the script ends as below, and `notParked` says why.
+
+### A pause, or a stop
+
+The script is never resumed. `run.ts` calls `worker.stop()` and returns what ran so far. No `try/except` in the script can run, because the script never gets control back.
 
 The same happens when heel can't tell whether a write took effect, when a call ran but its result was withheld, when the script passes its call limit, and when the client hangs up.
 

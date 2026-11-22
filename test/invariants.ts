@@ -47,7 +47,7 @@ export const REQUIRED_INVARIANTS: Readonly<Record<string, string>> = {
   "I-27":
     "Each call in a code-mode script is checked and counted on its own, so a loop meets the same limits as a batch.",
   "I-59":
-    "An ask stops a code-mode script for good; try/except can't swallow it and nothing after it runs.",
+    "An ask stops a code-mode script at that call; try/except can't swallow it, and nothing after it runs until the approval is decided and the agent resumes the parked script, whose call then goes through the pipeline again.",
   "I-62": "A pause stops a code-mode script at its next heel call.",
   // D10b: hide path
   "I-43":

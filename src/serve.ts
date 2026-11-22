@@ -616,6 +616,8 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         onRuleProposal: (proposalId) => notifier.ruleProposed(proposalId),
         onAgentRequest: (requestId) => notifier.agentRequested(requestId),
         codeWorker,
+        // An asking script is saved, sealed with the vault, so the agent can resume it (C2).
+        ...(vault === null ? {} : { parking: { sealer: vault } }),
       });
       closers.push(() => mcp.close());
       const app = createAgentApp({

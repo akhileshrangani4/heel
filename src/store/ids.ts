@@ -18,6 +18,7 @@ export const ID_PREFIXES = {
   approver: "apv",
   ruleProposal: "rpr",
   agentRequest: "req",
+  parkedScript: "pks",
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;

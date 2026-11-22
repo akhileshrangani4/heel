@@ -95,6 +95,8 @@ export async function mcpHarness(options: {
   moreAccounts?: readonly string[];
   /** Turns on code mode on bare /mcp with this worker (D6b). */
   codeWorker?: () => CodeWorker;
+  /** Saves asking scripts so they can be resumed (C2), sealed with the harness's vault. */
+  parking?: boolean;
   /** How many scripts may run at once; unlimited without it. */
   slots?: SandboxSlots;
 }): Promise<McpHarness> {
@@ -146,6 +148,7 @@ export async function mcpHarness(options: {
     log: logger,
     ...(options.codeWorker === undefined ? {} : { codeWorker: options.codeWorker }),
     ...(options.slots === undefined ? {} : { slots: options.slots }),
+    ...(options.parking === true ? { parking: { sealer: vault } } : {}),
     version: "test",
   });
   const app = createAgentApp({ db: t.db, log: logger, mcp });

@@ -232,6 +232,20 @@ export class Vault {
    * Stores (or replaces) an account's credential and marks the account
    * active: storing a fresh credential is what reconnecting means.
    */
+  /**
+   * Seals bytes that aren't a credential (a parked code-mode script, C2) with
+   * the master key. `context` binds them to where they're stored, so sealed
+   * bytes moved to another row don't open.
+   */
+  sealBytes(context: string, plaintext: Buffer): Buffer {
+    return seal(this.#key, plaintext, `heel:blob:${context}`);
+  }
+
+  /** Opens bytes from `sealBytes` with the same `context`; throws if they were changed or moved. */
+  openBytes(context: string, sealed: Buffer): Buffer {
+    return open(this.#key, sealed, `heel:blob:${context}`);
+  }
+
   put(accountId: string, payload: CredentialPayload): void {
     const parsed = parsePayload(payload);
     if (!parsed.ok) throw new TypeError(`invalid credential fields: ${parsed.fields}`);

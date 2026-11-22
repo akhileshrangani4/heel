@@ -1,6 +1,6 @@
 import { StringDecoder } from "node:string_decoder";
 import type { StubModule } from "./stubs.ts";
-import type { ScriptLimits, Step } from "./worker.ts";
+import { MAX_SNAPSHOT_BYTES, type ScriptLimits, type Step } from "./worker.ts";
 
 /**
  * The line protocols between heel and the process that runs Monty: one JSON
@@ -48,10 +48,18 @@ export function fromWireModules(modules: readonly WireModule[]): StubModule[] {
 /** heel's answer to a `call`: the result, or an error raised at the call site. */
 export type Answer =
   | { type: "resume"; value: unknown }
-  | { type: "raise"; errorType: "PermissionError" | "RuntimeError"; message: string };
+  | { type: "raise"; errorType: "PermissionError" | "RuntimeError"; message: string }
+  | { type: "park" };
 
 export type ToWorker =
-  | { type: "start"; code: string; modules: WireModule[]; limits: ScriptLimits }
+  | {
+      type: "start";
+      code: string;
+      modules: WireModule[];
+      limits: ScriptLimits;
+      /** A parked script to resume instead of running `code` (C2). */
+      snapshot?: string;
+    }
   | Answer;
 
 /** A step without its continuations, which stay on the worker's side. */
@@ -64,7 +72,8 @@ export type WireStep =
       positional: number;
     }
   | { kind: "done"; output: unknown }
-  | { kind: "failed"; error: string };
+  | { kind: "failed"; error: string }
+  | { kind: "parked"; snapshot: string };
 
 export type FromWorker = { type: "stdout"; text: string } | { type: "step"; step: WireStep };
 
@@ -89,6 +98,7 @@ export function fromWire(step: WireStep, answer: (answer: Answer) => Promise<Ste
     ...step,
     resume: (value) => answer({ type: "resume", value }),
     raise: (errorType, message) => answer({ type: "raise", errorType, message }),
+    park: () => answer({ type: "park" }),
   };
 }
 
@@ -97,9 +107,14 @@ export function applyAnswer(waiting: Step | null, answer: Answer): Promise<Step>
   if (waiting?.kind !== "call") {
     return Promise.resolve({ kind: "failed", error: "heel answered a call that wasn't waiting" });
   }
-  return answer.type === "resume"
-    ? waiting.resume(answer.value)
-    : waiting.raise(answer.errorType, answer.message);
+  switch (answer.type) {
+    case "resume":
+      return waiting.resume(answer.value);
+    case "raise":
+      return waiting.raise(answer.errorType, answer.message);
+    case "park":
+      return waiting.park();
+  }
 }
 
 /**
@@ -139,6 +154,15 @@ export function parseFromWorker(raw: unknown): FromWorker | null {
       return typeof step["error"] === "string"
         ? { type: "step", step: { kind: "failed", error: step["error"] } }
         : null;
+    case "parked": {
+      // base64 of at most MAX_SNAPSHOT_BYTES; anything else isn't a snapshot heel will keep.
+      const snapshot = step["snapshot"];
+      return typeof snapshot === "string" &&
+        snapshot.length <= Math.ceil(MAX_SNAPSHOT_BYTES / 3) * 4 &&
+        /^[A-Za-z0-9+/]*={0,2}$/.test(snapshot)
+        ? { type: "step", step: { kind: "parked", snapshot } }
+        : null;
+    }
     case "call": {
       const { module, fn, kwargs, positional } = step;
       if (typeof module !== "string" || typeof fn !== "string") return null;

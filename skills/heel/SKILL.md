@@ -30,7 +30,7 @@ If you can't fetch it, the outline is: Node 26.13 or later (if older, tell the u
 | Paused | 423 / exit 69 | Tell the user nothing ran. Stop and wait for them to resume it in heel. Don't move the call to another account to get past the pause, even if they suggest it: the pause is the user's own stop. |
 | Key rejected (the service turned down heel's key for that account) | 502 with `upstreamStatus` 401 and a `message` saying so | Tell the user nothing ran and that the account's key needs replacing on heel's Connections page. Don't retry, and don't reach for a raw key. |
 
-In code mode (`run_code`), an ask stops the whole script and returns the approval id with what already ran. After approval, send the rest as a new script.
+In code mode (`run_code`), an ask parks the script at that call and returns the approval id and a `resume` id, with what already ran. Once `heel_status` says it's decided, call `run_code` with `resume` (no code) and the script carries on from there; a denial raises `PermissionError` at that call. If there's no `resume` id, the script ended there: send the rest as a new script.
 
 ## Find what you have
 

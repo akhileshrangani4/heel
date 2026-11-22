@@ -10,7 +10,7 @@ import {
 } from "@pydantic/monty/wasm";
 import type { StubModule } from "./stubs.ts";
 import { plainValue } from "./values.ts";
-import type { CodeWorker, ScriptLimits, Step } from "./worker.ts";
+import { type CodeWorker, MAX_SNAPSHOT_BYTES, type ScriptLimits, type Step } from "./worker.ts";
 
 /**
  * A `CodeWorker` on `@pydantic/monty` 1.6.0 (pinned; behavior confirmed in
@@ -75,6 +75,7 @@ export class MontyWorker implements CodeWorker {
     modules: readonly StubModule[],
     limits: ScriptLimits,
     stdout: (text: string) => void,
+    snapshot?: string,
   ): Promise<Step> {
     const source = this.#source;
     if (typeof source === "string") this.#ownPool = await createPool(source);
@@ -105,6 +106,15 @@ export class MontyWorker implements CodeWorker {
       osPolicy: { datetime: new Date(), randomStart: { seed: 0 } },
     });
     const session = this.#session;
+    if (snapshot !== undefined) {
+      // A parked script: Monty restores it suspended at the call it was parked at. Its
+      // budget starts again on load, so heel counts the script's calls itself (run.ts).
+      return this.#step(() =>
+        session.loadSnapshot(Buffer.from(snapshot, "base64"), {
+          printCallback: (_stream, text) => stdout(text),
+        }),
+      );
+    }
     return this.#step(() =>
       session.feedStart(code, { printCallback: (_stream, text) => stdout(text) }),
     );
@@ -154,6 +164,17 @@ export class MontyWorker implements CodeWorker {
         const error = new Error(message);
         error.name = type;
         return this.#step(() => call.resumeError(error));
+      },
+      park: async (): Promise<Step> => {
+        try {
+          const bytes = await call.dump();
+          if (bytes.length > MAX_SNAPSHOT_BYTES) {
+            return { kind: "failed", error: "the script holds too much to be saved" };
+          }
+          return { kind: "parked", snapshot: Buffer.from(bytes).toString("base64") };
+        } catch (error) {
+          return { kind: "failed", error: error instanceof Error ? error.message : String(error) };
+        }
       },
     };
   }

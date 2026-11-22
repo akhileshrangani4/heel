@@ -8,6 +8,13 @@ import {
   type Tool,
 } from "@modelcontextprotocol/server";
 import { eq } from "drizzle-orm";
+import {
+  type ClaimedScript,
+  claimParked,
+  findParked,
+  modulesHash,
+  type Sealer,
+} from "../../codemode/parking.ts";
 import { type CallRecord, runScript, type ScriptStatus } from "../../codemode/run.ts";
 import { accountModule } from "../../codemode/stubs.ts";
 import type { CodeWorker } from "../../codemode/worker.ts";
@@ -88,6 +95,12 @@ export interface McpSurfaceDeps {
   slots?: SandboxSlots;
   /** Pauses that stop an agent's proposals too; heel's own store when absent. */
   pauses?: PauseStore;
+  /**
+   * Saves a script whose call asks for approval, so the agent can resume it
+   * (code mode round 2, C2); the vault, which seals it. Without it an ask ends
+   * the script, as before.
+   */
+  parking?: { sealer: Sealer };
   /** Called after an agent proposes rules, to tell its owner. */
   onRuleProposal?: (proposalId: string) => void;
   /** Called after an agent asks for a connection, to tell its owner. */
@@ -215,6 +228,33 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     }
     const { args: scriptArgs, reason } = takeReason(args);
     const code = typeof scriptArgs["code"] === "string" ? scriptArgs["code"] : "";
+    const resumeId = typeof scriptArgs["resume"] === "string" ? scriptArgs["resume"] : undefined;
+    const answer = (error: string): CallToolResult =>
+      runCodeResult({ status: "error", stdout: "", calls: [], error });
+    if (resumeId !== undefined && code !== "")
+      return answer("send either code or resume, not both");
+    if (resumeId === undefined && code === "") return answer("send the script as code");
+    // A parked script still waiting on its approval: say so without taking a slot or loading it.
+    if (resumeId !== undefined) {
+      const parked =
+        deps.parking === undefined ? null : findParked(deps.db, agent, resumeId, now());
+      if (parked === null) {
+        return answer(
+          "there's no parked script with that resume id: it already ran, expired, or isn't yours",
+        );
+      }
+      const status = approvalStatusForAgent(deps.db, agent, parked.approvalId, now());
+      if (status === "pending") {
+        return runCodeResult({
+          status: "pending",
+          approvalId: parked.approvalId,
+          resume: parked.id,
+          stdout: "",
+          calls: [],
+          error: null,
+        });
+      }
+    }
     const runId =
       typeof scriptArgs["run_id"] === "string"
         ? scriptArgs["run_id"]
@@ -232,18 +272,42 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     // before this point gets its script stopped now, before it starts.
     if (signal.aborted) stop();
     try {
+      const modules = await modulesFor(agent);
+      let resume: ClaimedScript | undefined;
+      if (resumeId !== undefined && deps.parking !== undefined) {
+        const claimed = claimParked(deps.db, deps.parking.sealer, agent, resumeId, now());
+        if (claimed === null) {
+          return answer("that parked script can't be resumed: it already ran, or expired");
+        }
+        // The script was checked against these modules when it started; different ones now
+        // (an account added, removed or changed) could leave it calling what isn't there.
+        if (claimed.modulesHash !== modulesHash(modules)) {
+          return answer(
+            "your accounts changed since this script parked, so it can't carry on; send the rest as a new script",
+          );
+        }
+        resume = claimed;
+      }
+      // A resumed script keeps the run id and reason it started with.
+      const scriptReason = resume?.reason ?? reason;
       const result = await runScript({
         code,
         agent,
-        runId,
-        ...(reason === undefined ? {} : { reason }),
-        modules: await modulesFor(agent),
+        runId: resume?.runId ?? runId,
+        ...(scriptReason === undefined ? {} : { reason: scriptReason }),
+        modules,
         pipeline: deps.pipeline,
         worker,
+        ...(resume === undefined ? {} : { resume }),
+        ...(deps.parking === undefined
+          ? {}
+          : { parking: { db: deps.db, sealer: deps.parking.sealer, now } }),
       });
       return runCodeResult({
         status: result.status,
         ...(result.approvalId === undefined ? {} : { approvalId: result.approvalId }),
+        ...(result.resume === undefined ? {} : { resume: result.resume }),
+        ...(result.notParked === undefined ? {} : { notParked: result.notParked }),
         stdout: result.stdout,
         calls: result.calls,
         error: result.error,
@@ -259,6 +323,8 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
   function runCodeResult(body: {
     status: ScriptStatus | "busy";
     approvalId?: string;
+    resume?: string;
+    notParked?: string;
     stdout: string;
     calls: CallRecord[];
     error: string | null;

@@ -169,6 +169,7 @@ describe("parameters named after Python reserved words", () => {
           kwargs,
           positional: 0,
           resume: async () => ({ kind: "done", output: null }),
+          park: async () => ({ kind: "failed", error: "not parked" }),
           raise: async (_type, message) => {
             raised.push(message);
             return { kind: "done", output: null };
@@ -204,6 +205,7 @@ describe("parameters named after Python reserved words", () => {
         kwargs,
         positional: 0,
         resume: async () => ({ kind: "done", output: null }),
+        park: async () => ({ kind: "failed", error: "not parked" }),
         raise: async () => ({ kind: "done", output: null }),
       }),
       stop: async () => {},
