@@ -489,6 +489,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
           list: (ownerIds) => backgroundRunner?.list(ownerIds) ?? [],
           stop: (id) => backgroundRunner?.stop(id, orgId) ?? false,
           waitsOn: (approvalId) => backgroundRunner?.waitsOn(approvalId) ?? false,
+          stopWaitingOn: (approvalId) => backgroundRunner?.stopWaitingOn(approvalId),
         },
         watchFallback: watch,
         providerClients,

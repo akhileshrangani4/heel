@@ -22,7 +22,8 @@ import type { CodeWorker } from "./worker.ts";
  *
  * - `run_code({ background: true })` starts a script and answers at once
  *   with its id; heel runs it with no request held open, up to 10 minutes
- *   of compute (time waiting in heel doesn't count) and 30 minutes in all.
+ *   of compute (time waiting in heel doesn't count) and 30 minutes in all,
+ *   per segment (from a start or a resume to the next park or the end).
  * - An agent has one running or parked at a time (a unique index).
  * - A call that asks parks it (C2). When the owner approves, heel resumes it
  *   by itself: the parked call goes through the pipeline again, so the
@@ -42,6 +43,8 @@ export const BACKGROUND_MAX_SECONDS = 10 * 60;
 export const BACKGROUND_WALL_MS = 30 * 60 * 1000;
 /** How long a finished script's result is kept for its agent. */
 export const BACKGROUND_RESULT_MS = 24 * 60 * 60 * 1000;
+/** How soon an approved script that found no free sandbox is tried again. */
+const RESUME_RETRY_MS = 5_000;
 
 export interface BackgroundDeps {
   db: HeelDb;
@@ -92,7 +95,9 @@ const context = (id: string, agentId: string) => `background-script:${id}:${agen
 export class BackgroundRunner {
   readonly #deps: BackgroundDeps;
   /** Scripts running in this process, by id, with what stops them. */
-  readonly #running = new Map<string, { worker: CodeWorker; stopped: boolean }>();
+  readonly #running = new Map<string, { worker: CodeWorker; stopped: string | null }>();
+  /** Approvals whose resume is waiting for a free sandbox, retried on a timer. */
+  readonly #retrying = new Set<string>();
   #closed = false;
 
   constructor(deps: BackgroundDeps) {
@@ -124,12 +129,27 @@ export class BackgroundRunner {
     for (const { approvalId } of parked) if (approvalId !== null) this.approvalDecided(approvalId);
   }
 
+  /**
+   * Acts on parked scripts whose approval was decided, or ran out, without the
+   * decision reaching the runner: approvals expire lazily, and a resume may have
+   * found no free sandbox. Called whenever scripts are started, read or listed.
+   */
+  #sweep(): void {
+    const parked = this.#deps.db
+      .select({ approvalId: backgroundScripts.approvalId })
+      .from(backgroundScripts)
+      .where(eq(backgroundScripts.status, "parked"))
+      .all();
+    for (const { approvalId } of parked) if (approvalId !== null) this.approvalDecided(approvalId);
+  }
+
   /** Starts a script in the background, or says why not (the agent has one going, no slot). */
   start(
     agent: AuthenticatedAgent,
     script: { code: string; runId?: string | undefined; reason?: string | undefined },
   ): StartOutcome {
     if (this.#closed) return { ok: false, message: "heel is shutting down" };
+    this.#sweep();
     const active = this.#activeOf(agent.agentId);
     if (active !== null) {
       return {
@@ -187,18 +207,24 @@ export class BackgroundRunner {
       .get();
     if (row === undefined || row.parkedId === null) return;
     const approval = this.#deps.db
-      .select({ status: approvals.status })
+      .select({ status: approvals.status, expiresAt: approvals.expiresAt })
       .from(approvals)
       .where(eq(approvals.id, approvalId))
       .get();
-    if (approval === undefined || approval.status === "pending") return;
-    if (approval.status !== "approved") {
+    if (approval === undefined) return;
+    // Approvals expire lazily: a pending one past its time is expired.
+    const status =
+      approval.status === "pending" && approval.expiresAt.getTime() <= this.#deps.now().getTime()
+        ? "expired"
+        : approval.status;
+    if (status === "pending") return;
+    if (status !== "approved") {
       stopParked(this.#deps.db, row.orgId, approvalId);
       this.#finish(row.id, row.agentId, "stopped", {
         stdout: "",
         calls: [],
         error:
-          approval.status === "denied"
+          status === "denied"
             ? "the owner denied the call the script was waiting on"
             : "the approval the script was waiting on expired",
       });
@@ -216,11 +242,19 @@ export class BackgroundRunner {
     }
     const slot = this.#deps.slots?.tryAcquire(agent.agentId) ?? UNLIMITED_SLOT;
     if (!slot.ok) {
-      // No room right now: it stays parked, and the agent's next heel_status says so.
+      // No room right now: it stays parked and is tried again shortly, and on every sweep.
       this.#deps.log.warn(
         { script: row.id },
         "background script approved, but no sandbox is free to resume it",
       );
+      if (!this.#retrying.has(approvalId)) {
+        this.#retrying.add(approvalId);
+        const retry = setTimeout(() => {
+          this.#retrying.delete(approvalId);
+          this.approvalDecided(approvalId);
+        }, RESUME_RETRY_MS);
+        retry.unref?.();
+      }
       return;
     }
     const parkedId = row.parkedId;
@@ -256,8 +290,20 @@ export class BackgroundRunner {
     );
   }
 
+  /** Ends the background script parked on this approval (the approval page's Stop the script). */
+  stopWaitingOn(approvalId: string): void {
+    const row = this.#deps.db
+      .select({ id: backgroundScripts.id, orgId: backgroundScripts.orgId })
+      .from(backgroundScripts)
+      .where(
+        and(eq(backgroundScripts.approvalId, approvalId), eq(backgroundScripts.status, "parked")),
+      )
+      .get();
+    if (row !== undefined) this.stop(row.id, row.orgId);
+  }
+
   /** Stops a script, running or parked (the owner's Stop, a revoke). False when it wasn't going. */
-  stop(id: string, orgId: string): boolean {
+  stop(id: string, orgId: string, reason = "stopped by its owner"): boolean {
     const row = this.#deps.db
       .select()
       .from(backgroundScripts)
@@ -266,7 +312,7 @@ export class BackgroundRunner {
     if (row === undefined) return false;
     const running = this.#running.get(id);
     if (running !== undefined) {
-      running.stopped = true;
+      running.stopped = reason;
       void running.worker.stop();
       return true;
     }
@@ -275,7 +321,7 @@ export class BackgroundRunner {
       this.#finish(row.id, row.agentId, "stopped", {
         stdout: "",
         calls: [],
-        error: "stopped by its owner",
+        error: reason,
       });
       return true;
     }
@@ -284,11 +330,14 @@ export class BackgroundRunner {
 
   /** Stops every script of an agent (it was revoked or its token rotated). */
   stopAgent(orgId: string, agentId: string): void {
-    for (const s of this.list([agentId], "agent")) this.stop(s.id, orgId);
+    for (const s of this.list([agentId], "agent")) {
+      this.stop(s.id, orgId, "its agent was revoked, or its token replaced");
+    }
   }
 
   /** What the agent that started a script may read about it; null for anyone else's. */
   view(agent: AuthenticatedAgent, id: string): BackgroundView | null {
+    this.#sweep();
     const row = this.#deps.db
       .select()
       .from(backgroundScripts)
@@ -313,6 +362,7 @@ export class BackgroundRunner {
 
   /** Running and parked scripts of these agents or owners, for the Agents page and heel status. */
   list(ids: readonly string[] | null, by: "owner" | "agent" = "owner"): ActiveScript[] {
+    if (by === "owner") this.#sweep();
     const active = inArray(backgroundScripts.status, ["running", "parked"]);
     const where =
       ids === null
@@ -343,7 +393,7 @@ export class BackgroundRunner {
   async close(): Promise<void> {
     this.#closed = true;
     const running = [...this.#running.values()];
-    for (const r of running) r.stopped = true;
+    for (const r of running) r.stopped = "heel shut down";
     await Promise.all(running.map((r) => r.worker.stop().catch(() => {})));
   }
 
@@ -357,7 +407,7 @@ export class BackgroundRunner {
       | { parkedId: string },
   ): Promise<void> {
     const worker = this.#deps.codeWorker(agent.agentId);
-    const entry = { worker, stopped: false };
+    const entry: { worker: CodeWorker; stopped: string | null } = { worker, stopped: null };
     this.#running.set(id, entry);
     const wall = setTimeout(() => void worker.stop(), BACKGROUND_WALL_MS);
     let result: ScriptResult;
@@ -369,7 +419,7 @@ export class BackgroundRunner {
         modules,
         pipeline: this.#deps.pipeline,
         worker,
-        limits: { maxSeconds: BACKGROUND_MAX_SECONDS },
+        limits: { maxSeconds: BACKGROUND_MAX_SECONDS, maxWallMs: BACKGROUND_WALL_MS },
         parking,
         scriptId: id,
         stillLive: () => agentStillLive(this.#deps.db, agent, this.#deps.now()),
@@ -422,12 +472,12 @@ export class BackgroundRunner {
       this.#running.delete(id);
       release();
     }
-    if (entry.stopped) {
+    if (entry.stopped !== null) {
       if (result.resume !== undefined)
         stopParked(this.#deps.db, agent.orgId, result.approvalId ?? "");
       this.#finish(id, agent.agentId, "stopped", {
         ...stored(result),
-        error: "stopped by its owner, or heel shut down",
+        error: entry.stopped,
       });
       return;
     }
@@ -436,14 +486,15 @@ export class BackgroundRunner {
       result.resume !== undefined &&
       result.approvalId !== undefined
     ) {
+      const sofar = this.#merged(id, agent.agentId, stored(result));
       this.#deps.db
         .update(backgroundScripts)
         .set({
           status: "parked",
           approvalId: result.approvalId,
           parkedId: result.resume,
-          calls: result.calls.length,
-          result: this.#seal(id, agent.agentId, stored(result)),
+          calls: sofar.calls.length,
+          result: this.#seal(id, agent.agentId, sofar),
           updatedAt: this.#deps.now(),
         })
         .where(eq(backgroundScripts.id, id))
@@ -461,8 +512,41 @@ export class BackgroundRunner {
     this.#finish(id, agent.agentId, status, { ...stored(result), error });
   }
 
-  #finish(id: string, agentId: string, status: BackgroundScriptStatus, result: StoredResult): void {
+  /**
+   * What the script has produced so far: what earlier segments stored, then
+   * this one's, so a script that parked keeps its earlier output and calls. A
+   * resumed segment makes the parked call again, so the earlier record of that
+   * call (the last one, still waiting then) gives way to the new one.
+   */
+  #merged(id: string, agentId: string, latest: StoredResult): StoredResult {
+    const row = this.#deps.db
+      .select({ result: backgroundScripts.result })
+      .from(backgroundScripts)
+      .where(eq(backgroundScripts.id, id))
+      .get();
+    if (row?.result == null) return latest;
+    let earlier: StoredResult;
+    try {
+      earlier = JSON.parse(
+        this.#deps.sealer.openBytes(context(id, agentId), row.result).toString("utf8"),
+      ) as StoredResult;
+    } catch {
+      return latest;
+    }
+    return {
+      stdout: earlier.stdout + latest.stdout,
+      ...(latest.output === undefined ? {} : { output: latest.output }),
+      calls: [
+        ...(latest.calls.length > 0 ? earlier.calls.slice(0, -1) : earlier.calls),
+        ...latest.calls,
+      ],
+      error: latest.error,
+    };
+  }
+
+  #finish(id: string, agentId: string, status: BackgroundScriptStatus, latest: StoredResult): void {
     const now = this.#deps.now();
+    const result = this.#merged(id, agentId, latest);
     this.#deps.db
       .update(backgroundScripts)
       .set({

@@ -81,6 +81,8 @@ export interface HumanPlaneDeps {
     stop(id: string): boolean;
     /** Whether a background script is parked on this approval: Approve then starts it again. */
     waitsOn(approvalId: string): boolean;
+    /** Ends the background script parked on this approval (the approval page's Stop the script). */
+    stopWaitingOn(approvalId: string): void;
   };
   /**
    * The operator's own OAuth clients, for signing in built-in mail accounts:

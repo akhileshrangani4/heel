@@ -287,6 +287,8 @@ export function approvalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       return c.text(REFUSED.not_found, 404);
     }
     const stopped = stopParked(deps.db, deps.orgId, record.row.id);
+    // A background script waiting on it ends too, so its agent's one slot frees up (C6).
+    deps.background?.stopWaitingOn(record.row.id);
     if (stopped > 0) {
       deps.log.info({ approval: record.row.id, by: session.userId }, "parked script stopped");
     }

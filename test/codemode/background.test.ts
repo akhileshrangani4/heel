@@ -108,8 +108,46 @@ describe("background scripts (C6)", () => {
     decide("approve");
     const done = await settled(started.script ?? "");
     expect(done).toMatchObject({ status: "completed", output: "done" });
-    expect(done.stdout).toContain("after");
+    // What it printed and called before it parked is kept, and the parked call shows once.
+    expect(done.stdout).toBe("before\nafter\n");
+    expect(done.calls?.map((c) => [c.tool, c.decision])).toEqual([
+      ["search_notes", "allow"],
+      ["delete_note", "allow"],
+    ]);
     expect(h.upstream.calls.map((c) => c.name)).toEqual(["search_notes", "delete_note"]);
+  });
+
+  it("ends when the approval it waits on runs out, though nobody decided it", async () => {
+    const { h, call, status, settled } = await setUp();
+    const started = await call("run_code", { code: ASKS, background: true });
+    await settled(started.script ?? "", "parked");
+    // Approvals expire lazily: nothing marks the row; the agent's next read notices.
+    h.t.db
+      .update(approvals)
+      .set({ expiresAt: new Date(Date.now() - 1000) })
+      .run();
+    const done = await status(started.script ?? "");
+    expect(done).toMatchObject({ status: "stopped" });
+    expect(done.error).toMatch(/expired/);
+    expect(done.stdout).toBe("before\n");
+    expect(h.t.db.select().from(parkedScripts).all()).toEqual([]);
+  });
+
+  it("the approval page's Stop the script ends its record, and each stop says why", async () => {
+    const { h, call, settled } = await setUp();
+    const started = await call("run_code", { code: ASKS, background: true });
+    await settled(started.script ?? "", "parked");
+    h.mcp.background?.stopWaitingOn(h.t.db.select().from(approvals).get()?.id ?? "");
+    const stopped = await settled(started.script ?? "", "stopped");
+    expect(stopped.error).toBe("stopped by its owner");
+
+    const again = await call("run_code", { code: ASKS, background: true });
+    await settled(again.script ?? "", "parked");
+    h.mcp.background?.stopAgent(
+      h.t.orgId,
+      h.t.db.select().from(backgroundScripts).all()[1]?.agentId ?? "",
+    );
+    expect((await settled(again.script ?? "", "stopped")).error).toMatch(/revoked/);
   });
 
   it("ends when the call it waits on is denied: no code runs because someone pressed Deny", async () => {

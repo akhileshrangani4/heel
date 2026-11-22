@@ -354,6 +354,7 @@ describe("the approval page", () => {
           return true;
         },
         waitsOn: () => true,
+        stopWaitingOn: () => {},
       },
     });
     const owner = await h.signIn(await h.enroll());

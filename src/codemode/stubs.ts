@@ -207,9 +207,12 @@ export function accountModule(
     bodies.push(stub);
     // Only heel's own read marking earns a twin: a passthrough server's hint is its say-so.
     const twin = `${name}_async`;
+    // A real tool by that name keeps it; the twin steps aside.
+    const taken = tools.some((t) => functionName(t.name) === twin);
     if (
       options.asyncReads === true &&
       tool.annotations?.readOnlyHint === true &&
+      !taken &&
       !functions.has(twin)
     ) {
       const twinStub = functionStub(name, tool, new Map(), twin);
