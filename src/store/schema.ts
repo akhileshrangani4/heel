@@ -1079,3 +1079,60 @@ export const parkedScripts = sqliteTable(
   },
   (t) => [index("parked_scripts_agent").on(t.agentId)],
 );
+
+export const BACKGROUND_SCRIPT_STATUSES = [
+  "running",
+  "parked",
+  "completed",
+  "error",
+  "paused",
+  "stopped",
+  "ended",
+] as const;
+export type BackgroundScriptStatus = (typeof BACKGROUND_SCRIPT_STATUSES)[number];
+
+/**
+ * A code-mode script run in the background (code mode round 2, C6): started
+ * by `run_code({ background: true })`, run by heel without a request held
+ * open, followed with `heel_status({ script_id })`. The id is the script's
+ * own (`scr_`). An agent has at most one running or parked at a time. What
+ * it printed and returned holds what it read, so `result` is sealed with
+ * the vault's key and readable only by the agent that started it.
+ */
+export const backgroundScripts = sqliteTable(
+  "background_scripts",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    agentId: text("agent_id")
+      .notNull()
+      .references(() => agents.id),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => users.id),
+    /** The token that started it: heel checks it's still good before each call, and resumes as it. */
+    tokenId: text("token_id").notNull(),
+    status: text("status", { enum: BACKGROUND_SCRIPT_STATUSES }).notNull(),
+    /** While parked: the approval it waits on, and its parked script. */
+    approvalId: text("approval_id"),
+    parkedId: text("parked_id"),
+    /** How many calls it has made, for the owner's list. */
+    calls: integer("calls").notNull().default(0),
+    /** Once it ends: `{ stdout, output, calls, error }`, sealed. */
+    result: blob("result", { mode: "buffer" }),
+    startedAt: integer("started_at", { mode: "timestamp_ms" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+    /** Its result is kept until then. */
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [
+    index("background_scripts_owner").on(t.ownerId),
+    // One running or parked script per agent, held by the database, not by memory.
+    uniqueIndex("background_scripts_one_active")
+      .on(t.agentId)
+      .where(sql`"status" IN ('running', 'parked')`),
+    check("background_scripts_status", sql`"status" IN (${sqlList(BACKGROUND_SCRIPT_STATUSES)})`),
+  ],
+);

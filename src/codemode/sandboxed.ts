@@ -88,7 +88,11 @@ export class SandboxedCodeWorker implements CodeWorker {
         network: { kind: "none" },
         stdin: "pipe",
         limits: {
-          wallTimeMs: Math.max(WALL_BACKSTOP_MS, limits.maxSeconds * 1000 + WALL_SLACK_MS),
+          wallTimeMs: Math.max(
+            WALL_BACKSTOP_MS,
+            limits.maxSeconds * 1000 + WALL_SLACK_MS,
+            (limits.maxWallMs ?? 0) + WALL_SLACK_MS,
+          ),
           memoryBytes: MEMORY_CEILING,
           maxOutputBytes: OUTPUT_CEILING,
         },

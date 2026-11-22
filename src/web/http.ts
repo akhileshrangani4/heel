@@ -31,6 +31,17 @@ import { type PageProps, page, type Viewer } from "./ui/layout.ts";
  * because the rules about cookies, origins and CSRF live only here.
  */
 
+/** A running or parked background script, as the Agents page lists it. */
+export interface BackgroundListing {
+  id: string;
+  agentId: string;
+  agentName: string;
+  status: string;
+  approvalId: string | null;
+  calls: number;
+  startedAt: Date;
+}
+
 export interface HumanPlaneDeps {
   db: HeelDb;
   orgId: string;
@@ -59,6 +70,20 @@ export interface HumanPlaneDeps {
    * unchecked, so tests never reach a real API.
    */
   checkKey?: (provider: string, key: string) => Promise<KeyCheck>;
+  /**
+   * Background code-mode scripts (C6): told when an approval's decision has
+   * committed, so a script parked on it resumes or ends; and the running and
+   * parked scripts the owner may see and stop. Absent without code mode.
+   */
+  background?: {
+    approvalDecided(approvalId: string): void;
+    list(ownerIds: readonly string[] | null): readonly BackgroundListing[];
+    stop(id: string): boolean;
+    /** Whether a background script is parked on this approval: Approve then starts it again. */
+    waitsOn(approvalId: string): boolean;
+    /** Ends the background script parked on this approval (the approval page's Stop the script). */
+    stopWaitingOn(approvalId: string): void;
+  };
   /**
    * The operator's own OAuth clients, for signing in built-in mail accounts:
    * Google for Gmail (D9a-1), Microsoft for Outlook (D9b). Each is null when

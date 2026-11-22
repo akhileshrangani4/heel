@@ -2,7 +2,7 @@ import type { Suggestion } from "../../core/suggestions.ts";
 import { TOKEN_WARNING_DAYS } from "../../gateway/agents.ts";
 import type { ActivityRow, AgentActivity } from "../../store/activity.ts";
 import { type Html, html } from "./html.ts";
-import { badge, notice, scrollRegion, time } from "./layout.ts";
+import { badge, type FormTarget, notice, postForm, scrollRegion, time } from "./layout.ts";
 
 /**
  * The observability pages (A5): what agents did, as heel decided it. Every
@@ -142,6 +142,18 @@ export function agentsPage(props: {
   /** Each agent's static token expiry: a date, "never", or null without one. */
   tokens?: ReadonlyMap<string, Date | "never" | null>;
   now?: Date;
+  /** Background scripts running or parked (C6), each with the form that stops it. */
+  scripts?: readonly {
+    id: string;
+    agentName: string;
+    status: string;
+    approvalId: string | null;
+    calls: number;
+    startedAt: Date;
+    stop: FormTarget;
+  }[];
+  /** True right after the viewer stopped one. */
+  stopped?: boolean;
 }): Html {
   const now = props.now ?? new Date();
   const expiring = props.agents.filter((a) => {
@@ -152,8 +164,35 @@ export function agentsPage(props: {
       t.getTime() - now.getTime() <= TOKEN_WARNING_DAYS * 86_400_000
     );
   });
+  const scripts = props.scripts ?? [];
+  const running =
+    scripts.length === 0
+      ? ""
+      : html`<section class="card" aria-label="Background scripts">
+          <h2 class="section-title">Running scripts</h2>
+          <p class="muted">
+            Code-mode scripts your agents run in the background. Every call in them is still checked
+            by your rules. Stopping one needs no passkey.
+          </p>
+          <ul class="req-list">
+            ${scripts.map(
+              (s) => html`<li class="card">
+                <p>
+                  <span class="ap-agent">${s.agentName}</span>
+                  ${badge(s.status === "parked" ? "waiting for approval" : "running", s.status === "parked" ? "warn" : "info")}
+                  <span class="muted">started ${time(s.startedAt)}, ${String(s.calls)} ${s.calls === 1 ? "call" : "calls"} so far</span>
+                  <a class="muted" href="/activity?script=${encodeURIComponent(s.id)}">its calls</a>
+                  ${s.approvalId === null ? "" : html`<a href="/approvals/${encodeURIComponent(s.approvalId)}">the approval it waits on</a>`}
+                </p>
+                ${postForm(s.stop, {}, html`<button type="submit" class="btn btn-secondary">Stop</button>`)}
+              </li>`,
+            )}
+          </ul>
+        </section>`;
   return html`<h1>Agents</h1>
     <p class="muted">Every agent you may see, and what it did in the last ${String(props.sinceHours)} hours.</p>
+    ${props.stopped === true ? notice("info", html`<p>Stopped. The script won't carry on.</p>`) : ""}
+    ${running}
     ${
       expiring.length === 0
         ? ""

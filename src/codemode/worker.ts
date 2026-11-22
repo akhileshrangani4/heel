@@ -71,6 +71,12 @@ export interface ScriptLimits {
   maxMemory: number;
   /** Bytes of stdout kept (spec: 1 MB); the rest is dropped. */
   maxStdout: number;
+  /**
+   * Everything one segment may take, waiting in heel included; a sandbox's
+   * own wall limit follows it. Background scripts set it (C6); unset, the
+   * sandbox uses its own backstop.
+   */
+  maxWallMs?: number;
 }
 
 export const DEFAULT_LIMITS: ScriptLimits = {

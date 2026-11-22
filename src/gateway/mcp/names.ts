@@ -15,14 +15,20 @@ export const HEEL_STATUS = "heel_status";
 export const HEEL_STATUS_TOOL: Tool = {
   name: HEEL_STATUS,
   description:
-    "Where an approval request stands: pending, approved, denied, expired or executed. " +
-    "Read-only: it never runs the call. Once approved, send the identical call again to run it.",
+    "Where an approval request stands (approval_id: pending, approved, denied, expired or executed), " +
+    "or where a background script stands (script_id: running, parked waiting for approval, completed, " +
+    "error, paused or stopped, with what it printed and returned once it ends). " +
+    "Read-only: it never runs anything. Once approved, send the identical call again to run it; " +
+    "a background script carries on by itself.",
   inputSchema: {
     type: "object",
     properties: {
       approval_id: { type: "string", description: "The approvalId a pending result gave." },
+      script_id: {
+        type: "string",
+        description: "The script id run_code gave a background script.",
+      },
     },
-    required: ["approval_id"],
     additionalProperties: false,
   },
 };
@@ -198,6 +204,13 @@ export const RUN_CODE_TOOL: Tool = {
     type: "object",
     properties: {
       code: { type: "string", description: "The script. Leave it out with `resume`." },
+      background: {
+        type: "boolean",
+        description:
+          "Run it in the background: the answer is a script id at once, and heel runs the script with up to " +
+          "10 minutes of compute, carrying on by itself after any approval. Follow it with heel_status({ script_id }). " +
+          "One at a time.",
+      },
       resume: {
         type: "string",
         description:

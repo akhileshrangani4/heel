@@ -14,7 +14,7 @@ Open one to see everything that will run: for an email, every recipient, the sub
 
 ![An email waiting for approval: To bob@vendor.com, subject Q3 invoice](images/approval-email.png)
 
-When the call comes from a code-mode script, the page also shows the script under **From a script**: the calls it already made, and its code, as the agent wrote it. It's there so you can see what else the script means to do; heel still checks every later call in it on its own. If you approve, the agent resumes the script and it carries on from that call. **Stop the script** (no passkey needed) discards it instead, so it never carries on, whatever you decide about the call.
+When the call comes from a code-mode script, the page also shows the script under **From a script**: the calls it already made, and its code, as the agent wrote it. It's there so you can see what else the script means to do; heel still checks every later call in it on its own. If you approve, the agent resumes the script and it carries on from that call. **Stop the script** (no passkey needed) discards it instead, so it never carries on, whatever you decide about the call. If it's a background script, the page says so: approving starts it again at once, without the agent asking, and denying ends it. Running background scripts are listed on **Agents**, where you can stop them, and in `heel status`.
 
 ## Decide
 

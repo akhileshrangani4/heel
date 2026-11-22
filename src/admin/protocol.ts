@@ -207,6 +207,8 @@ export const AdminRequestSchema = z.discriminatedUnion("method", [
   z.strictObject({ method: z.literal("approvals.list") }),
   /** `heel tui` and `heel status`: rule proposals and connection requests waiting for their owners, newest first. */
   z.strictObject({ method: z.literal("proposals.list") }),
+  /** `heel status`: background code-mode scripts running or waiting for approval (C6). */
+  z.strictObject({ method: z.literal("scripts.list") }),
   z.strictObject({
     /** `heel tui`: the newest audit rows, or the ones after `afterId` for a live tail. */
     method: z.literal("activity.list"),

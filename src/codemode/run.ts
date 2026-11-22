@@ -13,6 +13,10 @@ import {
   type Step,
 } from "./worker.ts";
 
+/** Why a script stopped when its agent was revoked, its owner disabled, or its token ran out mid-script. */
+const AGENT_GONE =
+  "the agent's access was revoked or expired while the script ran; the script was stopped";
+
 /** How many of a script's parallel calls heel runs at once (C4). */
 export const MAX_PARALLEL = 8;
 /**
@@ -86,6 +90,13 @@ export interface RunScriptInput {
   parking?: { db: HeelDb; sealer: Sealer; now: () => Date };
   /** A parked script to resume instead of running `code`. */
   resume?: ClaimedScript;
+  /** The script's id, when the caller already gave it one (a background script's, C6). */
+  scriptId?: string;
+  /**
+   * Whether the agent may still act, asked before each call: a script can
+   * outlive the request that started it (C6). False stops the script there.
+   */
+  stillLive?: () => boolean;
   /**
    * Called once a resumed script is back at its parked call, to take its row
    * so it resumes once; false (another resume took it) stops it there.
@@ -113,7 +124,7 @@ export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
   };
 
   // heel's id for the script, kept across a park, so Activity can group its calls.
-  const scriptId = input.resume?.scriptId ?? newId("script");
+  const scriptId = input.resume?.scriptId ?? input.scriptId ?? newId("script");
   // A resumed script runs no new code: its code is the one it parked with.
   const code = input.resume?.code ?? input.code;
   // A resumed script's earlier calls count toward its limit; the parked one runs again here.
@@ -323,6 +334,7 @@ export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
   >();
   while (step.kind === "call" || step.kind === "await") {
     if (step.kind === "await") {
+      if (input.stillLive?.() === false) return finish({ status: "error", error: AGENT_GONE });
       const settled = await settleFutures(step.pending);
       if (settled.stop !== null) return finish(settled.stop);
       step = await step.resolve(settled.results);
@@ -364,6 +376,9 @@ export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
         status: "error",
         error: `the script made more than ${limits.maxCalls} calls`,
       });
+    }
+    if (input.stillLive?.() === false) {
+      return finish({ status: "error", error: AGENT_GONE });
     }
     if (module.asyncFunctions?.has(step.fn) === true) {
       futures.set(step.callId, { account: module.account, tool, fn: step.fn, args });
