@@ -255,3 +255,78 @@ export function learnRules(
     .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key))
     .slice(0, MAX_LEARNED);
 }
+
+/** One kind of request an agent made, and how its owner decided it (2.10's `heel_history`). */
+export interface HistoryGroup {
+  account: string;
+  action?: string;
+  /** The tool, for a call no built-in definition names an action for. */
+  tool?: string;
+  repo?: string;
+  calendar?: string;
+  recipient_domains?: string[];
+  approved: number;
+  denied: number;
+  /** Different days (UTC) the decisions fell on. */
+  days: number;
+  /** When the latest was decided, ISO 8601. */
+  last_decided: string;
+}
+
+/** How many kinds of request `heel_history` lists, most decided first. */
+export const MAX_HISTORY_GROUPS = 50;
+
+/**
+ * An agent's decided requests, grouped by account, action and what a rule can
+ * match on: counts and shapes, never arguments, subjects or bodies. Pure.
+ */
+export function summarizeDecisions(decided: readonly DecidedCall[], now: Date): HistoryGroup[] {
+  const from = now.getTime() - LEARNING_WINDOW_DAYS * DAY_MS;
+  const groups = new Map<
+    string,
+    { group: HistoryGroup; domains: Set<string>; days: Set<string>; last: Date }
+  >();
+  for (const d of decided) {
+    if (d.at.getTime() < from || d.at > now) continue;
+    const { call } = d;
+    const key = [
+      call.account,
+      call.action ?? `tool:${call.tool}`,
+      call.repo ?? "",
+      call.calendar ?? "",
+    ].join("\u0000");
+    let entry = groups.get(key);
+    if (entry === undefined) {
+      const group: HistoryGroup = {
+        account: call.account,
+        ...(call.action === undefined ? { tool: call.tool } : { action: call.action }),
+        ...(call.repo === undefined ? {} : { repo: call.repo }),
+        ...(call.calendar === undefined ? {} : { calendar: call.calendar }),
+        approved: 0,
+        denied: 0,
+        days: 0,
+        last_decided: "",
+      };
+      entry = { group, domains: new Set(), days: new Set(), last: d.at };
+      groups.set(key, entry);
+    }
+    if (d.decision === "approved") entry.group.approved += 1;
+    else entry.group.denied += 1;
+    entry.days.add(dayOf(d.at));
+    if (d.at > entry.last) entry.last = d.at;
+    for (const domain of recipientDomains(call)) entry.domains.add(domain);
+  }
+  return [...groups.values()]
+    .map(({ group, domains, days, last }) => ({
+      ...group,
+      ...(domains.size === 0 ? {} : { recipient_domains: [...domains].sort() }),
+      days: days.size,
+      last_decided: last.toISOString(),
+    }))
+    .sort(
+      (a, b) =>
+        b.approved + b.denied - (a.approved + a.denied) ||
+        b.last_decided.localeCompare(a.last_decided),
+    )
+    .slice(0, MAX_HISTORY_GROUPS);
+}

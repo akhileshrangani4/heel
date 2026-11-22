@@ -633,6 +633,8 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         slots,
         // Tell the owner a proposal is waiting, the same way as a request (roadmap 2.1).
         onRuleProposal: (proposalId) => notifier.ruleProposed(proposalId),
+        // heel_history (2.10) suggests the same rules the owner's pages do.
+        learning: { rules, threshold: config.learning },
         onAgentRequest: (requestId) => notifier.agentRequested(requestId),
         codeWorker,
         // An asking script is saved, sealed with the vault, so the agent can resume it (C2).

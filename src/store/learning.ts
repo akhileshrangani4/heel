@@ -2,11 +2,13 @@ import { and, eq, gte, inArray } from "drizzle-orm";
 import type { Call } from "../core/call.ts";
 import {
   type DecidedCall,
+  type HistoryGroup,
   LEARNING_WINDOW_DAYS,
   type LearnedRule,
   type LearningThreshold,
   learnedKey,
   learnRules,
+  summarizeDecisions,
 } from "../core/learning.ts";
 import type { RuleSet } from "../core/rules/evaluate.ts";
 import { type ProposeOutcome, proposeRules } from "../proposals/rules.ts";
@@ -29,8 +31,15 @@ export interface LearningDeps {
   threshold: LearningThreshold | null;
 }
 
-/** The requests `userId` decided on their own agents' behalf since `since`. */
-function decidedBy(db: HeelDb, userId: string, since: Date, rules: RuleSet | null, owner: string) {
+/** The requests `userId` decided on their own agents' behalf since `since`; one agent's with `agentId`. */
+function decidedBy(
+  db: HeelDb,
+  userId: string,
+  since: Date,
+  rules: RuleSet | null,
+  owner: string,
+  agentId?: string,
+) {
   const ownRules = rules?.owners.get(owner)?.rules ?? [];
   return db
     .select({
@@ -50,6 +59,7 @@ function decidedBy(db: HeelDb, userId: string, since: Date, rules: RuleSet | nul
         gte(auditLog.at, since),
         eq(approvals.ownerId, userId),
         eq(approvals.origin, "owner"),
+        agentId === undefined ? undefined : eq(approvals.agentId, agentId),
       ),
     )
     .all()
@@ -145,4 +155,31 @@ export function dismissSuggestion(
     .onConflictDoNothing()
     .run();
   return true;
+}
+
+/**
+ * What `heel_history` tells an agent (2.10): its own requests its owner
+ * decided, grouped, and the rules heel would suggest for it. Only this agent's
+ * calls, and nothing about the owner's rules file, their approvals of other
+ * agents, or what a call carried.
+ */
+export function historyFor(
+  deps: LearningDeps,
+  agent: { agentId: string; ownerId: string },
+  now: Date,
+): { decisions: HistoryGroup[]; suggestions: LearnedRule[] } {
+  const user = deps.db
+    .select({ name: users.name })
+    .from(users)
+    .where(eq(users.id, agent.ownerId))
+    .get();
+  if (user === undefined) return { decisions: [], suggestions: [] };
+  const since = new Date(now.getTime() - LEARNING_WINDOW_DAYS * DAY_MS);
+  const own = decidedBy(deps.db, agent.ownerId, since, deps.rules, user.name, agent.agentId);
+  return {
+    decisions: summarizeDecisions(own, now),
+    suggestions: suggestionsFor(deps, agent.ownerId, now).filter(
+      (s) => s.agentId === agent.agentId,
+    ),
+  };
 }

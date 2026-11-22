@@ -47,6 +47,7 @@ describe("listing tools", () => {
       "echo_auth",
       "heel_status",
       "heel_accounts",
+      "heel_history",
       "heel_propose_rules",
       "heel_request_connection",
     ]);
@@ -69,6 +70,7 @@ describe("listing tools", () => {
       "notes__echo_auth",
       "heel_status",
       "heel_accounts",
+      "heel_history",
       "heel_propose_rules",
       "heel_request_connection",
     ]);
