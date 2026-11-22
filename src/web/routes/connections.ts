@@ -16,8 +16,10 @@ import {
   startSignIn,
 } from "../../definitions/sign-in.ts";
 import { missingSignInSetup } from "../../definitions/sign-in-setup.ts";
+import { needsKey } from "../../requests/connection.ts";
 import { accountsOwnedBy } from "../../store/directory.ts";
 import { errorShape } from "../../util/error-shape.ts";
+import { type AccountNote, accountNotes } from "../account-notes.ts";
 import {
   formField,
   type HumanPlaneDeps,
@@ -87,9 +89,17 @@ function outcomeFrom(
   query: Record<string, string>,
   failures: FailureNotes,
   aliases: ReadonlySet<string>,
+  /** Every account this person has, signed in or not. */
+  all: ReadonlySet<string> = aliases,
+  note: AccountNote | null = null,
 ): ConnectionsOutcome {
   const alias = query["account"] ?? "";
   if (query["connected"] !== undefined && aliases.has(alias)) return { kind: "connected", alias };
+  // The web app's own changes (2.9) come as a note heel wrote, never from the link itself.
+  if (note !== null) {
+    const agrees = note.kind === "removed" ? !all.has(note.alias) : all.has(note.alias);
+    if (agrees) return note;
+  }
   const failure = query["failed"] === undefined ? null : failures.get(query["failed"]);
   if (failure !== null) return { kind: "failed", alias: failure.alias, message: failure.message };
   return { kind: "none" };
@@ -145,6 +155,7 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       signsIn:
         providers.has(account.provider) || (oauth !== null && isOAuthUpstream(account.settings)),
       // From the config, not `providers`: that's also empty when the vault is closed.
+      holdsKey: needsKey(account.provider),
       setup: missingSignInSetup(account.provider, {
         google: deps.providerClients.google !== null || builtIn != null,
         microsoft: deps.providerClients.microsoft !== null,
@@ -161,8 +172,11 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
           c.req.query(),
           failures,
           new Set(rows.filter((row) => row.status === "active").map((row) => row.alias)),
+          new Set(rows.map((row) => row.alias)),
+          accountNotes(deps).take(session.userId, c.req.query("note") ?? ""),
         ),
         signInForm: { action: "/connections/sign-in", csrfToken: session.csrfToken },
+        manage: { csrfToken: session.csrfToken },
       }),
     });
   });

@@ -302,7 +302,8 @@ export type AssertionSubject =
         | "add_device"
         | "rules"
         | "connection"
-        | "manage";
+        | "manage"
+        | "account";
       userId: string;
     };
 

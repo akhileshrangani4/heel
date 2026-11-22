@@ -30,7 +30,8 @@ export type CeremonyIntent =
   | "grant"
   | "add-device"
   | "apply-rules"
-  | "manage-agent";
+  | "manage-agent"
+  | "manage-account";
 
 export interface CeremonyButtonProps {
   callback: CeremonyCallback;
