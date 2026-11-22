@@ -49,11 +49,15 @@ export function agentControls(props: {
   name: string;
   workRoots: readonly string[];
   csrfToken: string;
+  /** The viewer's own agent: only then a new token or a new workdir (admins can only take away). */
+  own: boolean;
 }): Html {
   const key = props.name.replace(/[^A-Za-z0-9_-]/g, "-");
   return html`<details class="agent-manage">
     <summary>Manage ${props.name}</summary>
-    <form id="rotate-${key}" onsubmit="return false">
+    ${
+      props.own
+        ? html`<form id="rotate-${key}" onsubmit="return false">
       <label for="rotate-${key}-days">New token lasts</label>
       ${daysSelect(`rotate-${key}-days`)}
       ${ceremonyButton({
@@ -64,8 +68,10 @@ export function agentControls(props: {
         binding: { op: "rotate", name: props.name },
         optionsFrom: `rotate-${key}`,
       })}
-      <p class="muted">The old token stops working at once.</p>
-    </form>
+      <p class="muted">The old token stops working at once, and its running scripts stop.</p>
+    </form>`
+        : ""
+    }
     <h3>Folders its heel run may work in</h3>
     ${
       props.workRoots.length === 0
@@ -84,7 +90,9 @@ export function agentControls(props: {
             )}
           </ul>`
     }
-    <form id="workdir-${key}" onsubmit="return false">
+    ${
+      props.own
+        ? html`<form id="workdir-${key}" onsubmit="return false">
       <label for="workdir-${key}-path">Add a folder (an absolute path on heel's machine)</label>
       <input id="workdir-${key}-path" name="path" placeholder="/home/you/project" autocomplete="off" />
       ${ceremonyButton({
@@ -95,7 +103,9 @@ export function agentControls(props: {
         binding: { op: "workdir", name: props.name },
         optionsFrom: `workdir-${key}`,
       })}
-    </form>
+    </form>`
+        : ""
+    }
     ${postForm(
       { action: `/agents/${encodeURIComponent(props.name)}/revoke`, csrfToken: props.csrfToken },
       {},
