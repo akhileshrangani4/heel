@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { z } from "zod";
 import { AdminClientError, adminCall } from "../admin/client.ts";
@@ -1254,13 +1254,33 @@ async function initCommand(args: string[], io: CliIo): Promise<number> {
   const { values, positionals } = parseOrUsage(() =>
     parseArgs({
       args,
-      options: { home: { type: "string" }, yes: { type: "boolean", short: "y" } },
+      options: {
+        home: { type: "string" },
+        yes: { type: "boolean", short: "y" },
+        "approve-from": { type: "string" },
+        "new-address": { type: "boolean" },
+      },
       allowPositionals: true,
       strict: true,
     }),
   );
   if (positionals.length > 0) throw new UsageError(`unexpected argument "${positionals[0]}"`);
-  const { chooseHome, confirm, initHome, initSummary } = await import("./init.ts");
+  const { chooseHome, confirm, initHome, initSteps, initSummary, chooseApproveFrom } = await import(
+    "./init.ts"
+  );
+  const {
+    addressProblem,
+    APPROVE_FROM,
+    isApproveFrom,
+    listenPorts,
+    passkeyProblem,
+    setUpTailscale,
+    writeAddresses,
+  } = await import("./approve-from.ts");
+  const flag = values["approve-from"];
+  if (flag !== undefined && !isApproveFrom(flag)) {
+    throw new UsageError(`--approve-from is one of ${APPROVE_FROM.join(", ")}`);
+  }
   const home = chooseHome(values.home, io.env);
   const fromEnv = values.home === undefined && io.env["HEEL_HOME"] !== undefined;
   if (values.yes !== true) {
@@ -1277,10 +1297,49 @@ async function initCommand(args: string[], io: CliIo): Promise<number> {
       return EXIT.ok;
     }
   }
+  // Where the owner approves from (2.7): asked in a terminal, this computer under --yes.
+  const approveFrom =
+    flag ?? (values.yes === true ? "this-computer" : await chooseApproveFrom(io.stderr));
   const steps = initHome(home);
+  let addresses: { approvals: string; agents: string } | null = null;
+  if (approveFrom === "tailscale") {
+    const configPath = join(home, "heel.yaml");
+    const ports = listenPorts(readFileSync(configPath, "utf8"));
+    if (io.exec === undefined) {
+      io.stderr.write(
+        `Run these, then set public_url and agent_public_url in ${configPath}:\n` +
+          `  tailscale serve --bg --https=443 http://127.0.0.1:${ports.human}\n` +
+          `  tailscale serve --bg --https=8443 http://127.0.0.1:${ports.agent}\n`,
+      );
+    } else {
+      // Checked before Tailscale changes anything: heel.yaml's addresses, and a passkey it would orphan.
+      const databasePath = join(home, "heel.db");
+      const set = await setUpTailscale(
+        io.exec,
+        ports,
+        (want) =>
+          addressProblem(configPath, want) ??
+          (values["new-address"] === true ? null : passkeyProblem(databasePath, want)),
+      );
+      if (!set.ok) {
+        // What was done, and the problem: no next steps, so nobody enrolls on the wrong address.
+        io.stdout.write(initSteps(steps));
+        io.stderr.write(`heel: ${set.problem}\n`);
+        return EXIT.failed;
+      }
+      addresses = set.addresses;
+      if (addresses !== null) {
+        const written = writeAddresses(configPath, addresses);
+        if (!written.ok) {
+          io.stderr.write(`heel: ${written.problem}\n`);
+          return EXIT.failed;
+        }
+      }
+    }
+  }
   // Every command finds the default home on its own; only another folder needs HEEL_HOME.
   const found = fromEnv || home === io.env["HEEL_HOME"] || home === defaultHeelHome();
-  io.stdout.write(initSummary(home, steps, found));
+  io.stdout.write(initSummary(home, steps, found, addresses));
   return EXIT.ok;
 }
 
@@ -1367,6 +1426,7 @@ async function statusCommand(args: string[], io: CliIo): Promise<number> {
     version?: string;
     vault?: string;
     passkeys?: number;
+    notifiedDevices?: number;
   };
   const approvals = (await admin(config, { method: "approvals.list" })) as {
     status: string;
@@ -1392,6 +1452,13 @@ async function statusCommand(args: string[], io: CliIo): Promise<number> {
   const lines = [
     `heel ${ping.version ?? ""} is running${ping.vault === "unavailable" ? ", but the vault is closed (no master key)" : ""}.`,
     `  Passkeys:  ${ping.passkeys === 0 ? "none yet: run heel user enroll owner and open its link" : (ping.passkeys ?? "?")}`,
+    `  Notified:  ${
+      ping.notifiedDevices === undefined
+        ? "?"
+        : ping.notifiedDevices === 0
+          ? "no device yet: turn on notifications on the Approvals page"
+          : `${ping.notifiedDevices} device${ping.notifiedDevices === 1 ? "" : "s"}`
+    }`,
     `  Agents:    ${agents.filter((a) => a.revokedAt === null).length}`,
     `  Accounts:  ${accounts.length}${
       accounts.some((a) => a.status !== "active")

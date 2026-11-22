@@ -117,7 +117,7 @@ const PHASES: Phase[] = [
       ],
       [
         'guided setup',
-        'pick how you’ll approve. heel starts the tunnel and turns on phone notifications.',
+        'pick how you’ll approve: this computer, your phone over tailscale, or a cloudflare tunnel on your domain. heel sets the address before your passkey exists, and the passkey page turns on notifications. tailscale is in; cloudflare is next.',
         'started',
       ],
       [

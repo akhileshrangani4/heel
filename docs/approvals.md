@@ -30,7 +30,11 @@ Approvals for longer are listed under **Agents → Standing approvals**, where y
 
 ## Approve from your phone
 
-Your phone has to reach heel's approval page over HTTPS, and heel has to know that address before you create your passkey, because a passkey is tied to the address it was made on. Only the approval page (port 7301) needs to be reachable; keep the agent port (7300) private.
+Your phone has to reach heel's approval page over HTTPS, and heel has to know that address before you create your passkey, because a passkey only works on the address it was made on (that's how passkeys work in every browser: it's what stops a look-alike site from using yours).
+
+**With Tailscale, heel does it for you.** With Tailscale signed in on heel's machine and HTTPS certificates on in your tailnet, run `heel init --approve-from tailscale` (or pick it when `heel init` asks). heel serves the approval page at `https://<machine>.<tailnet>.ts.net` and the agent plane on port 8443, to the devices your tailnet lets in (on a shared tailnet, check its access rules; an agent call still needs that agent's token), and writes both addresses into heel.yaml. It won't take a port Tailscale already serves something else on, won't change an address that's already set, and won't move a heel that already has a passkey unless you add `--new-address`, since a passkey made for the old address stops working. Then `heel start`, `heel user enroll owner`, and open the link on your phone: after you create the passkey, the page that follows turns on notifications for that device.
+
+**Or by hand:**
 
 1. **Give the approval page an HTTPS address.**
    - **Tailscale** (private to your devices): `tailscale serve --bg 7301` gives it `https://<machine>.<tailnet>.ts.net`.

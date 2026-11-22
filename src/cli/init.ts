@@ -74,12 +74,19 @@ export function initHome(home: string): InitStep[] {
   return steps;
 }
 
+/** Pure: just the steps heel init did, for when it stops partway. */
+export function initSteps(steps: readonly InitStep[]): string {
+  return `\n${steps.map((s) => `  ${s.done === "created" ? "created" : "kept   "}  ${s.what}`).join("\n")}\n\n`;
+}
+
 /** Pure: what `heel init` prints after the steps. */
 export function initSummary(
   home: string,
   steps: readonly InitStep[],
   /** Every command finds this home without an export: it's HEEL_HOME already, or the default. */
   homeFromEnv: boolean,
+  /** The HTTPS addresses guided setup gave heel (2.7); null when it stays on this computer. */
+  addresses: { approvals: string; agents: string } | null = null,
 ): string {
   const lines = [
     "",
@@ -89,6 +96,13 @@ export function initSummary(
   if (steps.some((s) => s.what.endsWith("master.key") && s.done === "created")) {
     lines.push(
       "Back up master.key somewhere safe, off this machine. Without it, the credentials heel stores can't be read.",
+      "",
+    );
+  }
+  if (addresses !== null) {
+    lines.push(
+      `Approve from anywhere on your tailnet: ${addresses.approvals}`,
+      `Agents on your other machines connect at ${addresses.agents}/mcp`,
       "",
     );
   }
@@ -103,7 +117,9 @@ export function initSummary(
   lines.push(
     `  ${n++}. Start heel in the background:      heel start   (heel logs -f to watch it)`,
     `  ${n++}. Enroll your passkey:               heel user enroll owner`,
-    "       and open the link it prints.",
+    addresses === null
+      ? "       and open the link it prints."
+      : "       and open the link it prints on your phone. Then turn on notifications on the page that follows.",
     `  ${n++}. Add an agent and copy its token:   heel agent add my-agent`,
     `  ${n++}. Connect an account, for example:   heel connect github --as github --credential-stdin < token.txt`,
     "",
@@ -132,6 +148,32 @@ export async function confirm(question: string): Promise<boolean> {
   try {
     const answer = (await rl.question(`${question} [Y/n] `)).trim().toLowerCase();
     return answer === "" || answer === "y" || answer === "yes";
+  } finally {
+    rl.close();
+  }
+}
+
+/**
+ * Asks where the owner will approve from (2.7), in a terminal. A passkey
+ * only works on the address it was made on, so this is settled before one
+ * exists.
+ */
+export async function chooseApproveFrom(out: {
+  write(text: string): unknown;
+}): Promise<"this-computer" | "tailscale"> {
+  if (!process.stdin.isTTY) return "this-computer";
+  out.write(
+    [
+      "Where will you approve from?",
+      "  1. This computer only (the approval page stays on 127.0.0.1)",
+      "  2. Your phone and other devices, over Tailscale (needs Tailscale signed in here)",
+      "",
+    ].join("\n"),
+  );
+  const rl = createInterface({ input: process.stdin, output: process.stderr });
+  try {
+    const answer = (await rl.question("Choose 1 or 2 [1] ")).trim();
+    return answer === "2" ? "tailscale" : "this-computer";
   } finally {
     rl.close();
   }
