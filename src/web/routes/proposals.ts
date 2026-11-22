@@ -27,6 +27,7 @@ import type { SessionView } from "../sessions.ts";
 import { clientScript } from "../ui/client.ts";
 import { html } from "../ui/html.ts";
 import { type ProposalCard, proposalCards, proposalPage } from "../ui/proposals.ts";
+import { hideInWords, ruleInWords } from "../ui/rule-words.ts";
 
 /**
  * Rules an agent proposed (roadmap 2.1), on the human plane.
@@ -153,8 +154,16 @@ export function proposalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
         status: row.status,
         reason: row.reason,
         file: where?.display ?? "your rules file",
-        rules: row.rules.map((r) => ({ yaml: ruleYaml(r.rule), why: r.why })),
-        hide: row.hide.map((h) => ({ yaml: ruleYaml(h.entry), why: h.why })),
+        rules: row.rules.map((r) => ({
+          yaml: ruleYaml(r.rule),
+          words: ruleInWords(r.rule),
+          why: r.why,
+        })),
+        hide: row.hide.map((h) => ({
+          yaml: ruleYaml(h.entry),
+          words: hideInWords(h.entry),
+          why: h.why,
+        })),
         workdirs: row.workdirs.map((w, i) => ({
           ...w,
           stored: effect.ok ? (effect.added[i] ?? null) : null,

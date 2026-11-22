@@ -107,8 +107,8 @@ const PHASES: Phase[] = [
       ],
       [
         'changes as a readable diff',
-        '“may also email bob@company.com” instead of yaml. the file stays behind the scenes.',
-        'started',
+        'each proposed rule reads as a sentence heel writes from the rule itself: “claude-code may open a github issue on github without asking you.” the yaml is one click away.',
+        'shipped',
       ],
       ['change history', 'which agent proposed each change, who approved it and when.', 'started'],
       [

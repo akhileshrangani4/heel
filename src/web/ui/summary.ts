@@ -154,7 +154,7 @@ export function mergePreviewFrom(action: string | null, args: unknown): MergePre
 }
 
 /** What an action does, as a verb phrase: `send an email`, `merge a pull request`. */
-const ACTION_PHRASES: Readonly<Record<string, string>> = {
+export const ACTION_PHRASES: Readonly<Record<string, string>> = {
   "email.send": "send an email",
   "email.draft": "save an email draft",
   "email.remove": "delete email",
