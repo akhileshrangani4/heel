@@ -12,6 +12,7 @@ import {
   ruleYaml,
 } from "../../proposals/rules.ts";
 import { rememberRejected, stillSuggested } from "../../store/learning.ts";
+import { listRuleChanges } from "../../store/rule-changes.ts";
 import { agents, users } from "../../store/schema.ts";
 import {
   type HumanPlaneDeps,
@@ -28,6 +29,7 @@ import type { SessionView } from "../sessions.ts";
 import { clientScript } from "../ui/client.ts";
 import { html } from "../ui/html.ts";
 import { type ProposalCard, proposalCards, proposalPage } from "../ui/proposals.ts";
+import { ruleHistoryPage } from "../ui/rule-history.ts";
 import { hideInWords, ruleInWords } from "../ui/rule-words.ts";
 
 /**
@@ -229,6 +231,22 @@ export function proposalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     });
   });
 
+  // Every change to the rules files (2.4): your own; admins see everyone's and the org file.
+  app.get("/rules/history", signedIn, (c) => {
+    const session = c.get("session");
+    const everyone = session.role === "admin";
+    return renderPage(c, {
+      title: "Rule history",
+      viewer: viewerOf(session),
+      current: "activity",
+      body: ruleHistoryPage({
+        changes: listRuleChanges(deps.db, deps.orgId, everyone ? null : [session.userId]),
+        now: deps.now(),
+        everyone,
+      }),
+    });
+  });
+
   app.post("/proposals/:id/reject", signedIn, requireCsrfField(), (c) => {
     const session = c.get("session");
     const row = ownProposal(deps, session, c.req.param("id"));
@@ -307,6 +325,7 @@ export function proposalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       sha,
       session.userId,
       deps.now(),
+      where.display,
     );
     if (!applied.ok) return c.json({ ok: false, message: applied.problem }, 409);
     deps.log.warn(

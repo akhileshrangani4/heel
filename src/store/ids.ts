@@ -17,6 +17,7 @@ export const ID_PREFIXES = {
   share: "shr",
   approver: "apv",
   ruleProposal: "rpr",
+  ruleChange: "rch",
   agentRequest: "req",
   parkedScript: "pks",
   script: "scr",

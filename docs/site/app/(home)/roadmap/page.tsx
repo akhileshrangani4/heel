@@ -110,7 +110,11 @@ const PHASES: Phase[] = [
         'each proposed rule reads as a sentence heel writes from the rule itself: “claude-code may open a github issue on github without asking you.” the yaml is one click away.',
         'shipped',
       ],
-      ['change history', 'which agent proposed each change, who approved it and when.', 'started'],
+      [
+        'change history',
+        'every change to your rules: which agent proposed it, who approved it and when, and edits made outside heel too, each with the lines it changed.',
+        'shipped',
+      ],
       [
         'guided setup',
         'pick how you’ll approve. heel starts the tunnel and turns on phone notifications.',

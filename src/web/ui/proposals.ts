@@ -110,9 +110,9 @@ export interface ProposalPageProps {
 }
 
 /** `lineDiff`'s output ("+ line", "- line", "  line") in the rules page's diff style. */
-function diffLines(diff: string): Html {
+export function diffLines(diff: string, label = "The file after the change"): Html {
   const lines = diff.replace(/\n$/, "").split("\n");
-  return html`<ul class="diff" aria-label="The file after the change">
+  return html`<ul class="diff" aria-label="${label}">
     ${lines.map((line) => {
       const sign = line.slice(0, 1);
       const op = sign === "+" ? "add" : sign === "-" ? "remove" : "same";
@@ -199,7 +199,7 @@ export function proposalPage(props: ProposalPageProps): Html {
       ? notice(
           "ok",
           changesFile
-            ? html`<p>Added to ${props.file}. heel is using them now.</p>`
+            ? html`<p>Added to ${props.file}. heel is using them now. It's in the <a href="/rules/history">rule history</a>.</p>`
             : html`<p>Added. ${props.agent}'s heel run can work there now.</p>`,
         )
       : props.outcome === "rejected"

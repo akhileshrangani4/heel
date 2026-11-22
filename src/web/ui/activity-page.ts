@@ -68,7 +68,7 @@ export function activityPage(props: {
   return html`<h1>Activity</h1>
     ${
       props.filter.script === undefined
-        ? html`<p class="muted">Every decision heel made, newest first. New rows appear as they happen.</p>`
+        ? html`<p class="muted">Every decision heel made, newest first. New rows appear as they happen. Changes to the rules themselves are in the <a href="/rules/history">rule history</a>.</p>`
         : html`<p>
             One script's calls, newest first, including those made after it was parked and
             resumed. <a href="/activity">All activity</a>

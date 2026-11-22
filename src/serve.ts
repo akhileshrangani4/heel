@@ -57,6 +57,7 @@ import { SqliteApprovalStore } from "./store/approvals.ts";
 import { type HeelDb, openStore } from "./store/db.ts";
 import { ensureInstall, ensureLocalOwner } from "./store/install.ts";
 import { SqlitePauseStore } from "./store/pauses.ts";
+import { noticeRuleFiles } from "./store/rule-changes.ts";
 import { OidcClient, oidcSettings } from "./teams/oidc.ts";
 import { isCliProvider, listAccounts } from "./vault/connect.ts";
 import { loadMasterKey, MasterKeyError } from "./vault/key.ts";
@@ -251,13 +252,19 @@ function logRulesOutcome(log: Logger, outcome: ReloadOutcome): void {
 function startRules(
   options: Pick<StartOptions, "config" | "log" | "rulesDebounceMs">,
   closers: Closer[],
+  /** After every load: records rules-file changes made outside heel (2.4). */
+  notice: () => void,
 ): RulesHolder {
   const { config, log } = options;
   const rules = new RulesHolder(rulesPaths(config.home));
   logRulesOutcome(log, rules.reload());
+  notice();
   try {
     const watcher = watchRules(rules, {
-      onReload: (outcome) => logRulesOutcome(log, outcome),
+      onReload: (outcome) => {
+        logRulesOutcome(log, outcome);
+        notice();
+      },
       onError: (err) =>
         log.error({ err }, "rules watcher failed; edits may not load until heel restarts"),
       ...(options.rulesDebounceMs === undefined ? {} : { debounceMs: options.rulesDebounceMs }),
@@ -371,7 +378,13 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
       );
     }
 
-    const rules = startRules(options, closers);
+    const rules = startRules(options, closers, () => {
+      try {
+        noticeRuleFiles(store.db, orgId, rulesPaths(config.home), now());
+      } catch (err) {
+        log.warn({ err }, "couldn't record a rules file change in the history");
+      }
+    });
     const watch = options.watch ?? false;
     if (watch) log.warn("watch mode: owner-rule and default-deny outcomes are logged, then run");
 

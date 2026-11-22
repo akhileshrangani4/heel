@@ -966,6 +966,46 @@ export const ruleProposals = sqliteTable(
   ],
 );
 
+export const RULE_CHANGE_SOURCES = ["proposal", "outside"] as const;
+export type RuleChangeSource = (typeof RULE_CHANGE_SOURCES)[number];
+
+/**
+ * Every change to a rules file (roadmap 2.4): one added from a proposal, with
+ * who proposed it and who added it, or one made outside heel (an editor, git,
+ * a script), noticed when heel reloads. Never edited; the history of the file.
+ */
+export const ruleChanges = sqliteTable(
+  "rule_changes",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    /** Whose rules file; null for the org file. */
+    userId: text("user_id").references(() => users.id),
+    /** The file, relative to heel's home: `rules/alice.yaml`. */
+    file: text("file").notNull(),
+    at: integer("at", { mode: "timestamp_ms" }).notNull(),
+    source: text("source", { enum: RULE_CHANGE_SOURCES }).notNull(),
+    proposalId: text("proposal_id").references(() => ruleProposals.id),
+    /** Who added the proposal; null for a change made outside heel. */
+    decidedBy: text("decided_by").references(() => users.id),
+    /** The change as a line diff, capped. */
+    diff: text("diff").notNull(),
+  },
+  (t) => [
+    index("rule_changes_user_at").on(t.userId, t.at),
+    check("rule_changes_source", sql`"source" IN (${sqlList(RULE_CHANGE_SOURCES)})`),
+  ],
+);
+
+/** What heel last saw in each rules file, to tell when it changed outside heel (2.4). */
+export const ruleFileSnapshots = sqliteTable("rule_file_snapshots", {
+  file: text("file").primaryKey(),
+  text: text("text").notNull(),
+  seenAt: integer("seen_at", { mode: "timestamp_ms" }).notNull(),
+});
+
 /** Suggested rules a person dismissed (2.10), by suggestion key, so heel doesn't offer them again. */
 export const learningDismissals = sqliteTable(
   "learning_dismissals",
