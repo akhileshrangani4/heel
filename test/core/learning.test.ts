@@ -436,4 +436,27 @@ describe("learning from what you approve (2.10)", () => {
     expect(learnRules(calls, input)).toHaveLength(1);
     expect(learnRules(calls, { ...input, standing: () => true })).toEqual([]);
   });
+
+  it("keeps one agent's suggestions from crowding out another's, when asked for one agent", () => {
+    const set = ruleSet({ owner: RULES });
+    const busy = Array.from({ length: MAX_LEARNED }, (_, i) =>
+      decided(set, 6, { call: { repo: `acme/r${i}` } }),
+    ).flat();
+    const other = decided(set, 5, { call: { agentId: "agt_other", repo: "acme/other" } }).map(
+      (d) => ({
+        ...d,
+        agentName: "other-bot",
+      }),
+    );
+    const input = { owner: OWNER, rules: set, threshold: THRESHOLD, now: NOW };
+    expect(learnRules([...busy, ...other], input).some((l) => l.agentId === "agt_other")).toBe(
+      false,
+    );
+    const [mine] = learnRules([...busy, ...other], { ...input, agentId: "agt_other" });
+    expect(mine?.agentName).toBe("other-bot");
+    // An agent may see only what heel drew from its own calls, never the asking rule's conditions.
+    expect(Object.keys(mine?.own ?? {}).sort()).toEqual(
+      ["account", "action", "agent", "persistence", "repo", "tool"].sort(),
+    );
+  });
 });

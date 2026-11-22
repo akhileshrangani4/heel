@@ -68,8 +68,14 @@ export interface LearnedRule {
   agentId: string;
   agentName: string;
   decision: "allow" | "deny";
-  /** The rule as heel would propose it. */
+  /** The rule as heel would propose it, the asking rule's conditions included. */
   rule: { match: Record<string, unknown>; then: "allow" | "deny" };
+  /**
+   * Only what heel drew from the agent's own calls (agent, account, action,
+   * tool, repo, calendar, recipients, persistence): what an agent may see.
+   * The asking rule's conditions are the owner's, never shown to an agent.
+   */
+  own: Record<string, unknown>;
   /** The hash of the owner rule it goes right before: the one that asked. */
   before: string;
   /** How many decisions it rests on, and on how many days. */
@@ -210,8 +216,7 @@ function combined(
   return match;
 }
 
-function draft(group: Group, asker: CompiledRule): LearnedRule["rule"] | null {
-  const then = group.decision === "approved" ? "allow" : "deny";
+function ownFields(group: Group): Record<string, unknown> {
   const ours: Record<string, unknown> = { agent: group.agentName, account: group.account };
   if (group.byAction) ours["action"] = group.subject;
   ours["tool"] = group.tool;
@@ -220,7 +225,12 @@ function draft(group: Group, asker: CompiledRule): LearnedRule["rule"] | null {
   if (group.calendar !== undefined) ours["calendar"] = group.calendar;
   const recipients = recipientsCondition(group.recipients);
   if (recipients !== undefined) ours["recipients"] = recipients;
-  const match = combined(asker.match, ours);
+  return ours;
+}
+
+function draft(group: Group, asker: CompiledRule): LearnedRule["rule"] | null {
+  const then = group.decision === "approved" ? "allow" : "deny";
+  const match = combined(asker.match, ownFields(group));
   // biome-ignore lint/suspicious/noThenProperty: `then` is the rules file's key.
   return match === null ? null : { match, then };
 }
@@ -288,6 +298,8 @@ export function learnRules(
     now: Date;
     skip?: ReadonlySet<string>;
     limit?: number;
+    /** Only this agent's suggestions, so other agents' can't crowd them out of `limit`. */
+    agentId?: string;
     /** Whether a live standing approval lets this agent's calls past this rule. */
     standing?: (agentId: string, ruleHash: string) => boolean;
   },
@@ -333,6 +345,7 @@ export function learnRules(
 
   const learned: LearnedRule[] = [];
   for (const group of groups.values()) {
+    if (input.agentId !== undefined && group.agentId !== input.agentId) continue;
     const { asker } = group;
     if (asker === null || asker.items !== null || asker.stateChecks.length > 0) continue;
     if (asker.layer !== "owner" || asker.watch) continue;
@@ -378,6 +391,7 @@ export function learnRules(
       agentName: group.agentName,
       decision: rule.then,
       rule,
+      own: ownFields(group),
       before: asker.hash,
       count,
       days,
