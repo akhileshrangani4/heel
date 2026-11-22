@@ -2,6 +2,7 @@ import { and, eq, gte, inArray } from "drizzle-orm";
 import type { Call } from "../core/call.ts";
 import {
   type DecidedCall,
+  kindKeyOf,
   LEARNING_WINDOW_DAYS,
   type LearnedRule,
   type LearningThreshold,
@@ -64,9 +65,9 @@ function decidedBy(db: HeelDb, userId: string, since: Date, rules: RuleSet | nul
     );
 }
 
-/** Keys not to offer again: dismissed, or waiting as one of heel's proposals. */
-function skipped(db: HeelDb, userId: string): Set<string> {
-  const keys = new Set(
+/** Kind keys this person dismissed, or rejected as one of heel's proposals. */
+function dismissed(db: HeelDb, userId: string): Set<string> {
+  return new Set(
     db
       .select({ key: learningDismissals.key })
       .from(learningDismissals)
@@ -74,6 +75,11 @@ function skipped(db: HeelDb, userId: string): Set<string> {
       .all()
       .map((row) => row.key),
   );
+}
+
+/** Kind keys waiting as one of heel's proposals. */
+function pendingKinds(db: HeelDb, userId: string): Set<string> {
+  const keys = new Set<string>();
   const pending = db
     .select({ agentId: ruleProposals.agentId, rules: ruleProposals.rules })
     .from(ruleProposals)
@@ -86,24 +92,55 @@ function skipped(db: HeelDb, userId: string): Set<string> {
     )
     .all();
   for (const proposal of pending) {
-    for (const { rule } of proposal.rules) keys.add(learnedKey(proposal.agentId, rule));
+    for (const { rule } of proposal.rules) {
+      keys.add(kindKeyOf(proposal.agentId, rule as LearnedRule["rule"]));
+    }
   }
   return keys;
 }
 
-/** The rules heel suggests to this person now; none when learning is off. */
-export function suggestionsFor(deps: LearningDeps, userId: string, now: Date): LearnedRule[] {
+function learned(
+  deps: LearningDeps,
+  userId: string,
+  now: Date,
+  options: { skipPending: boolean; limit?: number },
+): LearnedRule[] {
   if (deps.threshold === null) return [];
   const user = deps.db.select({ name: users.name }).from(users).where(eq(users.id, userId)).get();
   if (user === undefined) return [];
   const since = new Date(now.getTime() - LEARNING_WINDOW_DAYS * DAY_MS);
+  const skip = dismissed(deps.db, userId);
+  if (options.skipPending) for (const key of pendingKinds(deps.db, userId)) skip.add(key);
   return learnRules(decidedBy(deps.db, userId, since, deps.rules, user.name), {
     owner: user.name,
     rules: deps.rules,
     threshold: deps.threshold,
     now,
-    skip: skipped(deps.db, userId),
+    skip,
+    ...(options.limit === undefined ? {} : { limit: options.limit }),
   });
+}
+
+/** The rules heel suggests to this person now; none when learning is off. */
+export function suggestionsFor(deps: LearningDeps, userId: string, now: Date): LearnedRule[] {
+  return learned(deps, userId, now, { skipPending: true });
+}
+
+/**
+ * Whether heel would still suggest this proposed rule, checked again when the
+ * person adds it: a decision since, or a changed rule, can make it wrong.
+ */
+export function stillSuggested(
+  deps: LearningDeps,
+  userId: string,
+  agentId: string,
+  rule: Record<string, unknown>,
+  now: Date,
+): boolean {
+  const key = learnedKey(agentId, rule);
+  return learned(deps, userId, now, { skipPending: false, limit: Number.POSITIVE_INFINITY }).some(
+    (s) => s.key === key,
+  );
 }
 
 /**
@@ -117,32 +154,50 @@ export function proposeSuggestion(
   key: string,
   now: Date,
 ): ProposeOutcome | null {
-  const learned = suggestionsFor(deps, who.userId, now).find((s) => s.key === key);
-  if (learned === undefined) return null;
+  const found = suggestionsFor(deps, who.userId, now).find((s) => s.key === key);
+  if (found === undefined) return null;
   return proposeRules(
     deps.db,
-    { orgId: who.orgId, ownerId: who.userId, agentId: learned.agentId },
+    { orgId: who.orgId, ownerId: who.userId, agentId: found.agentId },
     {
-      rules: [{ rule: learned.rule, why: `You ${learned.evidence}.` }],
-      reason: `heel suggested this from your decisions: ${learned.evidence}.`,
+      rules: [{ rule: found.rule, why: `You ${found.evidence}.` }],
+      reason: `heel suggested this from your decisions: ${found.evidence}.`,
     },
     now,
-    "heel",
+    { by: "heel", before: found.before },
   );
 }
 
-/** Stops offering a suggestion. True when it was on offer. */
+function remember(db: HeelDb, userId: string, key: string, now: Date): void {
+  db.insert(learningDismissals).values({ userId, key, createdAt: now }).onConflictDoNothing().run();
+}
+
+/** Stops offering a suggestion, and others of its kind. True when it was on offer. */
 export function dismissSuggestion(
   deps: LearningDeps,
   userId: string,
   key: string,
   now: Date,
 ): boolean {
-  if (!suggestionsFor(deps, userId, now).some((s) => s.key === key)) return false;
-  deps.db
-    .insert(learningDismissals)
-    .values({ userId, key, createdAt: now })
-    .onConflictDoNothing()
-    .run();
+  const found = suggestionsFor(deps, userId, now).find((s) => s.key === key);
+  if (found === undefined) return false;
+  remember(deps.db, userId, found.kindKey, now);
   return true;
+}
+
+/** A rejected heel proposal counts as dismissed, so the same suggestion doesn't come straight back. */
+export function rememberRejected(
+  db: HeelDb,
+  proposal: {
+    ownerId: string;
+    agentId: string;
+    origin: string;
+    rules: readonly { rule: Record<string, unknown> }[];
+  },
+  now: Date,
+): void {
+  if (proposal.origin !== "heel") return;
+  for (const { rule } of proposal.rules) {
+    remember(db, proposal.ownerId, kindKeyOf(proposal.agentId, rule as LearnedRule["rule"]), now);
+  }
 }

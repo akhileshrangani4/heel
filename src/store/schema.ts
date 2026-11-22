@@ -981,6 +981,11 @@ export const learningDismissals = sqliteTable(
 export interface ProposedRule {
   rule: Record<string, unknown>;
   why: string | null;
+  /**
+   * The hash of the owner rule it goes right before, for heel's suggestions
+   * (2.10): the rule that asked. Absent: first in the file, as agents' go.
+   */
+  before?: string;
 }
 
 /** One hide entry an agent proposed, with its one-line why. */

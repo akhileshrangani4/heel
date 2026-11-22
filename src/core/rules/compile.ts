@@ -56,6 +56,8 @@ export interface CompiledRule {
   /** The rule's `then`, renamed so a compiled rule is never mistaken for a thenable. */
   decision: Decision;
   watch: boolean;
+  /** The rule's `match` as written: heel's suggestions (2.10) carry the asking rule's conditions. */
+  match: Readonly<Record<string, unknown>>;
   /** The plain conditions, ANDed. */
   conditions: readonly Condition<FieldRef>[];
   items: ItemsCheck | null;
@@ -219,6 +221,7 @@ function compileRule(
     hash: ruleContentHash(rule),
     decision: rule.then,
     watch: rule.watch ?? false,
+    match: rule.match,
     conditions,
     items:
       match.items === undefined ? null : { over: match.items.over, per: match.items.per ?? null },

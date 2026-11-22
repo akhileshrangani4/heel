@@ -11,6 +11,7 @@ import {
   rejectProposal,
   ruleYaml,
 } from "../../proposals/rules.ts";
+import { rememberRejected, stillSuggested } from "../../store/learning.ts";
 import { agents, users } from "../../store/schema.ts";
 import {
   type HumanPlaneDeps,
@@ -78,6 +79,21 @@ export function proposalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
   const app = new Hono<SignedInEnv>();
   const signedIn = requireSession(deps);
 
+  /**
+   * heel's own suggestion (2.10) is checked again when it's added: a decision
+   * made since, or a changed rule, can make it one heel wouldn't suggest now.
+   */
+  function staleSuggestion(row: ProposalRow): string | null {
+    if (row.origin !== "heel") return null;
+    const learning = { db: deps.db, rules: deps.rules.set, threshold: deps.learning ?? null };
+    const fits = row.rules.every((r) =>
+      stillSuggested(learning, row.ownerId, row.agentId, r.rule, deps.now()),
+    );
+    return fits
+      ? null
+      : "heel wouldn't suggest this now: you decided a request it covers differently since, or your rules changed. Reject it.";
+  }
+
   function target(row: ProposalRow) {
     const files = deps.ruleFiles;
     if (files === undefined) return null;
@@ -138,12 +154,22 @@ export function proposalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     const row = ownProposal(deps, session, c.req.param("id"));
     if (row === null) return notFound(c, session);
     const { where, effect } = preview(row);
-    const existingNames =
+    const ownRules =
       effect.ok && deps.rules.set !== null
         ? (deps.rules.set.owners.get(nameOf(deps, "user", row.ownerId))?.rules ?? [])
-            .map((rule) => rule.ref.name)
-            .filter((name): name is string => name !== null)
         : [];
+    const existingNames = ownRules
+      .map((rule) => rule.ref.name)
+      .filter((name): name is string => name !== null);
+    // heel's suggestions (2.10) go right before the rule that asked.
+    const anchor = ownRules.find((rule) => rule.hash === row.rules[0]?.before);
+    const placedBefore =
+      anchor === undefined
+        ? null
+        : {
+            rule: anchor.ref.name ?? `the rule on line ${anchor.ref.line}`,
+            above: anchor.index - 1,
+          };
     const query = c.req.query();
     return renderPage(c, {
       title: "Proposed rules",
@@ -183,6 +209,7 @@ export function proposalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
               sha: effect.sha,
               existing: effect.existing,
               existingNames,
+              placedBefore,
               diff: lineDiff(effect.before, effect.after),
             }
           : effect,
@@ -207,6 +234,7 @@ export function proposalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     const row = ownProposal(deps, session, c.req.param("id"));
     if (row === null) return notFound(c, session);
     rejectProposal(deps.db, row, session.userId, deps.now());
+    rememberRejected(deps.db, row, deps.now());
     deps.log.info({ proposal: row.id, by: session.userId }, "rule proposal rejected");
     return c.redirect(`/proposals/${encodeURIComponent(row.id)}?rejected`, 303);
   });
@@ -220,6 +248,8 @@ export function proposalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     }
     const { effect } = preview(row);
     if (!effect.ok) return c.json({ ok: false, message: effect.problem }, 409);
+    const stale = staleSuggestion(row);
+    if (stale !== null) return c.json({ ok: false, message: stale }, 409);
     // The page showed the file as it was when it loaded; sign only that file.
     if (stringField(body, "sha") !== effect.sha) {
       return c.json(
@@ -260,6 +290,8 @@ export function proposalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     if (row === null || typeof sha !== "string") {
       return c.json({ ok: false, message: "That proposal isn't waiting for you." }, 409);
     }
+    const stale = staleSuggestion(row);
+    if (stale !== null) return c.json({ ok: false, message: stale }, 409);
     const { where, effect } = preview(row);
     if (where === null || !effect.ok) {
       return c.json(

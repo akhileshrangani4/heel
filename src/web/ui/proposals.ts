@@ -99,6 +99,8 @@ export interface ProposalPageProps {
         sha: string;
         existing: number;
         existingNames: readonly string[];
+        /** For heel's suggestions: the rule it goes right before, and how many rules stay above it. */
+        placedBefore?: { rule: string; above: number } | null;
         diff: string;
       }
     | { ok: false; problem: string };
@@ -137,12 +139,23 @@ function effectView(props: ProposalPageProps): Html {
           messages drop out of what they read, and fetching, replying to or deleting one is
           denied.
         </p>`;
+  const placed = effect.placedBefore ?? null;
   const before =
     props.rules.length === 0
       ? ""
-      : effect.existing === 0
-        ? html`<p>${props.file} has no rules yet, so these become its first.</p>`
-        : html`<p>
+      : placed !== null
+        ? html`<p>
+          It goes right before <strong>${placed.rule}</strong>, the rule that asked about these
+          requests, and keeps that rule's conditions, so it only decides requests that rule would
+          have asked you about. ${
+            placed.above === 0
+              ? "No rule comes before it."
+              : `Your ${count(placed.above)} above it still decide first.`
+          }
+        </p>`
+        : effect.existing === 0
+          ? html`<p>${props.file} has no rules yet, so these become its first.</p>`
+          : html`<p>
           They go <strong>first</strong> in ${props.file}, before your ${count(effect.existing)}${
             effect.existingNames.length > 0 ? html` (${effect.existingNames.join(", ")})` : ""
           }. The first rule that matches decides, so a call these match is decided by them, even
