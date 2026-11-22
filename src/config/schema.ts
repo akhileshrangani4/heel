@@ -253,6 +253,17 @@ export const HeelConfigFileSchema = z.strictObject({
     })
     .prefault({}),
   /**
+   * A tunnel heel runs alongside itself (roadmap 2.7): `cloudflare.config` is
+   * a cloudflared config file, relative to heel's home, that `heel init
+   * --approve-from cloudflare` writes. heel runs `cloudflared tunnel run`
+   * with it and restarts it if it stops.
+   */
+  tunnel: z
+    .strictObject({
+      cloudflare: z.strictObject({ config: z.string().min(1) }).optional(),
+    })
+    .prefault({}),
+  /**
    * Suggested rules from what you approve and deny (roadmap 2.10): after
    * `decisions` of the same kind on at least `days` different days, in the
    * last 30. `enabled: false` turns suggestions off.
@@ -390,6 +401,8 @@ export interface HeelConfig {
   notify: NotifyConfig;
   /** Sandboxes at once; a null `total` means the host-memory default (gateway/sandbox-slots.ts). */
   sandboxes: { perAgent: number; total: number | null };
+  /** A cloudflared config heel runs a tunnel with (2.7), as an absolute path; null for none. */
+  tunnel: { cloudflare: { config: string } | null };
   /** Rule suggestions from what people decide (2.10); null when turned off. */
   learning: { decisions: number; days: number } | null;
   /** Null when the operator configured no Google client. */
@@ -445,6 +458,12 @@ export function resolveConfig(
     audit: { siem: file.audit.siem ? resolveSiem(file.audit.siem, fromHome) : null },
     notify: resolveNotify(file.notify, new URL(publicUrl), fromHome),
     sandboxes: { perAgent: file.sandboxes.per_agent, total: file.sandboxes.total ?? null },
+    tunnel: {
+      cloudflare:
+        file.tunnel.cloudflare === undefined
+          ? null
+          : { config: fromHome(file.tunnel.cloudflare.config) },
+    },
     learning: file.learning.enabled
       ? { decisions: file.learning.decisions, days: file.learning.days }
       : null,

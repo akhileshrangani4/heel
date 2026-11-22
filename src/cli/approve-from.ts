@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { isMap, isScalar, parseDocument } from "yaml";
 import type { ExecFn } from "./common.ts";
 
@@ -10,9 +11,12 @@ import type { ExecFn } from "./common.ts";
  * - `this-computer`: the approval page stays on 127.0.0.1; nothing to do.
  * - `tailscale`: `tailscale serve` gives both planes an HTTPS address on the
  *   tailnet (only the owner's devices reach it), and keeps them up itself.
+ * - `cloudflare`: a named tunnel on the owner's own domain, whose address
+ *   never changes. heel creates it, routes DNS, writes the cloudflared
+ *   config, and runs the tunnel alongside itself (src/gateway/tunnel.ts).
  */
 
-export const APPROVE_FROM = ["this-computer", "tailscale"] as const;
+export const APPROVE_FROM = ["this-computer", "tailscale", "cloudflare"] as const;
 export type ApproveFrom = (typeof APPROVE_FROM)[number];
 
 export function isApproveFrom(value: string): value is ApproveFrom {
@@ -154,4 +158,122 @@ export function writeAddresses(
     writeFileSync(configPath, doc.toString());
   }
   return { ok: true, changed };
+}
+
+/** Where the agent plane goes for a Cloudflare approval hostname: a sibling, so the free certificate covers it. */
+export function agentHostnameFor(hostname: string): string {
+  const [first, ...rest] = hostname.split(".");
+  return `${first}-agents.${rest.join(".")}`;
+}
+
+/** A hostname heel can route: lower case labels, at least a name and a domain. */
+export function isHostname(text: string): boolean {
+  return /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(text);
+}
+
+/** The cloudflared config heel writes: both planes by hostname, and nothing else. */
+export function cloudflaredConfig(input: {
+  tunnelId: string;
+  credentialsFile: string;
+  hostname: string;
+  agentHostname: string;
+  ports: { agent: number; human: number };
+}): string {
+  return [
+    "# Written by heel init --approve-from cloudflare. heel runs this tunnel itself.",
+    `tunnel: ${input.tunnelId}`,
+    `credentials-file: ${JSON.stringify(input.credentialsFile)}`,
+    "ingress:",
+    `  - hostname: ${input.hostname}`,
+    `    service: http://127.0.0.1:${input.ports.human}`,
+    `  - hostname: ${input.agentHostname}`,
+    `    service: http://127.0.0.1:${input.ports.agent}`,
+    "  - service: http_status:404",
+    "",
+  ].join("\n");
+}
+
+/**
+ * Creates a named tunnel for both planes, with its credentials in heel's
+ * home, and routes the two hostnames to it. Needs `cloudflared tunnel login`
+ * done once, in the browser, for the domain.
+ */
+export async function setUpCloudflare(
+  exec: ExecFn,
+  input: {
+    home: string;
+    hostname: string;
+    agentHostname: string;
+    ports: { agent: number; human: number };
+    /** Whether cloudflared's login certificate is there (`~/.cloudflared/cert.pem`). */
+    loggedIn: boolean;
+    /** A short random suffix for the tunnel's name. */
+    suffix: string;
+  },
+): Promise<SetupOutcome & { config?: string; credentialsFile?: string }> {
+  const version = await exec("cloudflared", ["--version"]);
+  if (version.code === 127) {
+    return {
+      ok: false,
+      problem:
+        "cloudflared isn't installed here. Install it (https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/), run `cloudflared tunnel login` once to pick your domain, then run this again.",
+    };
+  }
+  if (!input.loggedIn) {
+    return {
+      ok: false,
+      problem:
+        "cloudflared isn't signed in to Cloudflare yet. Run `cloudflared tunnel login`, choose the domain heel's address is on, then run this again.",
+    };
+  }
+  const credentialsFile = join(input.home, "cloudflared", `heel-${input.suffix}.json`);
+  const created = await exec("cloudflared", [
+    "tunnel",
+    "create",
+    "--output",
+    "json",
+    "--credentials-file",
+    credentialsFile,
+    `heel-${input.suffix}`,
+  ]);
+  let tunnelId: string | undefined;
+  try {
+    tunnelId = (JSON.parse(created.output) as { id?: string }).id;
+  } catch {
+    tunnelId = undefined;
+  }
+  if (created.code !== 0 || tunnelId === undefined) {
+    return {
+      ok: false,
+      problem: `\`cloudflared tunnel create\` failed: ${created.output.trim().slice(0, 300)}`,
+    };
+  }
+  for (const hostname of [input.hostname, input.agentHostname]) {
+    const routed = await exec("cloudflared", ["tunnel", "route", "dns", tunnelId, hostname]);
+    if (routed.code !== 0) {
+      return {
+        ok: false,
+        problem: `\`cloudflared tunnel route dns\` for ${hostname} failed: ${routed.output.trim().slice(0, 300)}. If a DNS record for it already exists, remove it in Cloudflare's dashboard, then run this again.`,
+      };
+    }
+  }
+  return {
+    ok: true,
+    addresses: { approvals: `https://${input.hostname}`, agents: `https://${input.agentHostname}` },
+    config: cloudflaredConfig({
+      tunnelId,
+      credentialsFile,
+      hostname: input.hostname,
+      agentHostname: input.agentHostname,
+      ports: input.ports,
+    }),
+    credentialsFile,
+  };
+}
+
+/** Points heel.yaml at the cloudflared config, so heel runs the tunnel. */
+export function writeTunnelConfig(configPath: string, file: string): void {
+  const doc = parseDocument(readFileSync(configPath, "utf8"));
+  doc.setIn(["tunnel", "cloudflare", "config"], file);
+  writeFileSync(configPath, doc.toString());
 }

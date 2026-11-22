@@ -41,6 +41,7 @@ import { createMcpSurface } from "./gateway/mcp/server.ts";
 import { createPipeline } from "./gateway/pipeline/pipeline.ts";
 import type { ApprovalAdapter } from "./gateway/pipeline/ports.ts";
 import { defaultTotalSandboxes, SandboxSlots } from "./gateway/sandbox-slots.ts";
+import { superviseTunnel } from "./gateway/tunnel.ts";
 import type { Logger } from "./log.ts";
 import { defaultLooksLikeJudge, HideCounts } from "./lookslike/judge.ts";
 import { logAdminAlerts } from "./notify/admin-alerts.ts";
@@ -378,6 +379,11 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
       );
     }
 
+    // The Cloudflare tunnel heel init set up (2.7): run alongside heel, restarted if it stops.
+    if (config.tunnel.cloudflare !== null) {
+      const tunnel = superviseTunnel({ config: config.tunnel.cloudflare.config, log });
+      closers.push(() => tunnel.stop());
+    }
     const rules = startRules(options, closers, () => {
       try {
         noticeRuleFiles(store.db, orgId, rulesPaths(config.home), now());

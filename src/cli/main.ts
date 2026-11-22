@@ -1,4 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, statSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { z } from "zod";
@@ -1258,6 +1260,8 @@ async function initCommand(args: string[], io: CliIo): Promise<number> {
         home: { type: "string" },
         yes: { type: "boolean", short: "y" },
         "approve-from": { type: "string" },
+        hostname: { type: "string" },
+        "agent-hostname": { type: "string" },
       },
       allowPositionals: true,
       strict: true,
@@ -1267,9 +1271,17 @@ async function initCommand(args: string[], io: CliIo): Promise<number> {
   const { chooseHome, confirm, initHome, initSummary, chooseApproveFrom } = await import(
     "./init.ts"
   );
-  const { APPROVE_FROM, isApproveFrom, listenPorts, setUpTailscale, writeAddresses } = await import(
-    "./approve-from.ts"
-  );
+  const {
+    agentHostnameFor,
+    APPROVE_FROM,
+    isApproveFrom,
+    isHostname,
+    listenPorts,
+    setUpCloudflare,
+    setUpTailscale,
+    writeAddresses,
+    writeTunnelConfig,
+  } = await import("./approve-from.ts");
   const flag = values["approve-from"];
   if (flag !== undefined && !isApproveFrom(flag)) {
     throw new UsageError(`--approve-from is one of ${APPROVE_FROM.join(", ")}`);
@@ -1295,6 +1307,49 @@ async function initCommand(args: string[], io: CliIo): Promise<number> {
     flag ?? (values.yes === true ? "this-computer" : await chooseApproveFrom(io.stderr));
   const steps = initHome(home);
   let addresses: { approvals: string; agents: string } | null = null;
+  if (approveFrom === "cloudflare") {
+    const hostname = values.hostname?.toLowerCase();
+    if (hostname === undefined || !isHostname(hostname)) {
+      throw new UsageError(
+        "--approve-from cloudflare needs --hostname, the address on your Cloudflare domain to approve at, like heel.example.com",
+      );
+    }
+    const agentHostname = (values["agent-hostname"] ?? agentHostnameFor(hostname)).toLowerCase();
+    if (!isHostname(agentHostname) || agentHostname === hostname) {
+      throw new UsageError("--agent-hostname must be another hostname on your domain");
+    }
+    const configPath = join(home, "heel.yaml");
+    const ports = listenPorts(readFileSync(configPath, "utf8"));
+    if (io.exec === undefined) {
+      throw new UsageError(
+        "heel init --approve-from cloudflare runs cloudflared, which this heel can't",
+      );
+    }
+    const set = await setUpCloudflare(io.exec, {
+      home,
+      hostname,
+      agentHostname,
+      ports,
+      loggedIn:
+        io.env["TUNNEL_ORIGIN_CERT"] !== undefined ||
+        existsSync(join(homedir(), ".cloudflared", "cert.pem")),
+      suffix: randomBytes(3).toString("hex"),
+    });
+    if (!set.ok || set.addresses === null || set.config === undefined) {
+      io.stdout.write(initSummary(home, steps, true, null));
+      io.stderr.write(`heel: ${set.ok ? "cloudflared gave no tunnel" : set.problem}\n`);
+      return EXIT.failed;
+    }
+    const written = writeAddresses(configPath, set.addresses);
+    if (!written.ok) {
+      io.stderr.write(`heel: ${written.problem}\n`);
+      return EXIT.failed;
+    }
+    mkdirSync(join(home, "cloudflared"), { recursive: true, mode: 0o700 });
+    writeFileSync(join(home, "cloudflared.yml"), set.config, { mode: 0o600 });
+    writeTunnelConfig(configPath, "cloudflared.yml");
+    addresses = set.addresses;
+  }
   if (approveFrom === "tailscale") {
     const configPath = join(home, "heel.yaml");
     const ports = listenPorts(readFileSync(configPath, "utf8"));

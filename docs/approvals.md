@@ -34,6 +34,8 @@ Your phone has to reach heel's approval page over HTTPS, and heel has to know th
 
 **With Tailscale, heel does it for you.** With Tailscale signed in on heel's machine and HTTPS certificates on in your tailnet, run `heel init --approve-from tailscale` (or pick it when `heel init` asks). heel serves the approval page at `https://<machine>.<tailnet>.ts.net` and the agent plane on port 8443, only to your own devices, and writes both addresses into heel.yaml. Then `heel start`, `heel user enroll owner`, and open the link on your phone: after you create the passkey, the page that follows turns on notifications for that device. heel won't change an address that's already set, since that would mean a new passkey.
 
+**With a Cloudflare tunnel on your own domain, heel does it too.** With `cloudflared` installed and `cloudflared tunnel login` done once (it opens a browser to pick your domain), run `heel init --approve-from cloudflare --hostname heel.example.com`. heel creates a named tunnel, points `heel.example.com` at the approval page and `heel-agents.example.com` at the agent plane (`--agent-hostname` to choose another), writes the addresses into heel.yaml, and from then on `heel start` runs the tunnel alongside heel and restarts it if it stops. A named tunnel keeps its address, so your passkey keeps working; a quick `trycloudflare.com` tunnel gets a new address each time, so heel doesn't use one.
+
 **Or by hand:**
 
 1. **Give the approval page an HTTPS address.**
