@@ -183,6 +183,7 @@ export function oauthRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       redirectHost: new URL(request.redirectUri).host,
       agentName: planned.name,
       newAgent: !planned.existing,
+      replaces: planned.replaces === true,
       request,
       declineHref: redirectWith(request.redirectUri, {
         error: "access_denied",

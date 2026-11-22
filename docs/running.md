@@ -90,10 +90,10 @@ claude mcp add --transport http --scope user heel https://heel-box.your-tailnet.
 # then /mcp in Claude Code, pick heel, Authenticate
 
 codex mcp add heel --url https://heel-box.your-tailnet.ts.net:8443/mcp
-codex mcp login heel
+# opens heel's sign-in page itself
 ```
 
-The browser opens heel's page: sign in, check the app's name and where it returns to, and choose **Connect with a passkey**. Each app on each computer becomes its own agent, named after the app (a second one gets `-2`), so you can see which one made a call and pause or revoke one without touching the others. Signed-in agents renew on their own.
+The browser opens heel's page: sign in and choose **Connect with a passkey** (with your passkey on your phone, the browser shows a QR code to use it). Only approve a sign-in you just started; an app on your own computer returns to `localhost` or `127.0.0.1`. Each app on each computer becomes its own agent, named after the app (a second one gets `-2`), so you can see which one made a call and pause or revoke one without touching the others. An app that signs in again under the same name (Codex registers anew each time) stays the same agent, and heel's page says so. Signed-in agents renew on their own while you use them.
 
 For an app that can't sign in, add an agent with a token instead (`heel agent add laptop-cursor`, or **Agents → Add an agent**) and put `agent_public_url`/mcp and the token in its MCP settings.
 

@@ -58,7 +58,7 @@ describe("heel init", () => {
     expect(summary).toContain(
       "claude mcp add --transport http --scope user heel https://box.tail.ts.net:8443/mcp",
     );
-    expect(summary).toContain("codex mcp login heel");
+    expect(summary).toContain("codex mcp add heel --url https://box.tail.ts.net:8443/mcp");
     expect(summary).not.toContain("copy its token");
     expect(initSummary("/srv/heel", [], true)).toContain("copy its token");
   });

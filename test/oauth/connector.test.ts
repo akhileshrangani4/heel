@@ -327,6 +327,55 @@ describe("the token endpoint", () => {
     expect((await register({ redirect_uris: ["http://evil.example/cb"] })).status).toBe(400);
   });
 
+  it("an app that registers again under the same name stays the same agent (Codex signs in that way)", async () => {
+    const h = humanPlaneHarness();
+    const owner = await h.signIn(await h.enroll());
+    const fetch = planes(h);
+    const mcpUrl = new URL("/mcp?tools=direct", AGENT_URL);
+
+    async function signIn(provider: ReturnType<typeof memoryProvider>, replacing: boolean) {
+      const transport = new StreamableHTTPClientTransport(mcpUrl, {
+        fetch,
+        authProvider: provider,
+      });
+      await expect(new Client({ name: "c", version: "1" }).connect(transport)).rejects.toThrow(
+        UnauthorizedError,
+      );
+      const url = provider.authorizationUrl;
+      if (url === null) throw new Error("never sent to authorize");
+      const page = await (await h.fetch(url.pathname + url.search, { as: owner })).text();
+      expect(page.includes("signed in as claude before")).toBe(replacing);
+      await transport.finishAuth((await consent(h, owner, url)).searchParams);
+    }
+    async function listsTools(provider: ReturnType<typeof memoryProvider>) {
+      const client = new Client({ name: "c", version: "1" });
+      try {
+        await client.connect(
+          new StreamableHTTPClientTransport(mcpUrl, { fetch, authProvider: provider }),
+        );
+        await client.listTools();
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    const first = memoryProvider();
+    await signIn(first, false);
+    const second = memoryProvider();
+    await signIn(second, true);
+    const names = h.t.db
+      .select({ name: agents.name })
+      .from(agents)
+      .all()
+      .map((a) => a.name);
+    expect(names.filter((n) => n.startsWith("claude"))).toEqual(["claude"]);
+    expect(await listsTools(second)).toBe(true);
+    // The earlier sign-in stops working.
+    first.authorizationUrl = null;
+    expect(await listsTools(first)).toBe(false);
+  });
+
   it("names on the consent page the agent the passkey will really connect (red-team round 3)", async () => {
     const h = humanPlaneHarness();
     const owner = await h.signIn(await h.enroll());

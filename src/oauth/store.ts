@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { and, eq, gt, isNull, lt } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, lt } from "drizzle-orm";
 import { hashAgentToken, issueAgentToken } from "../gateway/agent-tokens.ts";
 import { isValidAgentName } from "../gateway/agents.ts";
 import type { HeelDb, HeelTx } from "../store/db.ts";
@@ -134,10 +134,39 @@ export function findClient(db: HeelDb, orgId: string, clientId: string): ClientR
  * free name from what the client calls itself. The consent page shows this,
  * so what the person approves is the agent they get.
  */
+/**
+ * The owner's live agent that an app of the same name signed in as before,
+ * if any. Some apps (Codex) register a new client at every sign-in; without
+ * this each would become a new agent, and rules, grants and history for the
+ * old name would quietly stop applying. The owner confirms with a passkey on
+ * a page that names the agent, so this is never silent.
+ */
+function sameNamedAgent(
+  tx: HeelTx | HeelDb,
+  input: { orgId: string; ownerId: string; client: ClientRow },
+): { id: string; name: string } | null {
+  return (
+    tx
+      .select({ id: agents.id, name: agents.name })
+      .from(agents)
+      .innerJoin(oauthClients, eq(oauthClients.id, agents.oauthClientId))
+      .where(
+        and(
+          eq(agents.orgId, input.orgId),
+          eq(agents.ownerId, input.ownerId),
+          isNull(agents.revokedAt),
+          eq(oauthClients.name, input.client.name),
+        ),
+      )
+      .orderBy(desc(agents.createdAt))
+      .get() ?? null
+  );
+}
+
 export function plannedAgentForClient(
   tx: HeelTx | HeelDb,
   input: { orgId: string; ownerId: string; client: ClientRow },
-): { name: string; existing: boolean } | null {
+): { name: string; existing: boolean; replaces?: boolean } | null {
   const existing = tx
     .select({ name: agents.name })
     .from(agents)
@@ -151,6 +180,8 @@ export function plannedAgentForClient(
     )
     .get();
   if (existing !== undefined) return { name: existing.name, existing: true };
+  const before = sameNamedAgent(tx, input);
+  if (before !== null) return { name: before.name, existing: true, replaces: true };
   const base = agentNameFor(input.client.name);
   for (let n = 1; n < 100; n++) {
     const name = n === 1 ? base : `${base}-${n}`;
@@ -182,6 +213,19 @@ export function agentForClient(
     )
     .get();
   if (existing !== undefined) return { agentId: existing.id, name: existing.name };
+  const before = sameNamedAgent(tx, input);
+  if (before !== null) {
+    // The agent moves to the new client; the old client's tokens stop working.
+    tx.update(agents)
+      .set({ oauthClientId: input.client.id })
+      .where(eq(agents.id, before.id))
+      .run();
+    tx.update(agentTokens)
+      .set({ revokedAt: input.now })
+      .where(and(eq(agentTokens.agentId, before.id), isNull(agentTokens.revokedAt)))
+      .run();
+    return { agentId: before.id, name: before.name };
+  }
   const base = agentNameFor(input.client.name);
   for (let n = 1; n < 100; n++) {
     const name = n === 1 ? base : `${base}-${n}`;

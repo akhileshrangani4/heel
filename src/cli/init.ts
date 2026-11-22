@@ -107,7 +107,8 @@ export function initSummary(
       "Add heel to an agent on any computer. It signs in with your passkey, so there's no token to copy:",
       `  Claude Code:  claude mcp add --transport http --scope user heel ${addresses.agents}/mcp`,
       "                then /mcp, pick heel, Authenticate",
-      `  Codex:        codex mcp add heel --url ${addresses.agents}/mcp && codex mcp login heel`,
+      `  Codex:        codex mcp add heel --url ${addresses.agents}/mcp`,
+      "                (it opens heel's sign-in page itself)",
       "",
     );
   }
