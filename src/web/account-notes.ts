@@ -8,7 +8,7 @@ import type { HumanPlaneDeps } from "./http.ts";
  * removed. A note is read once, by the person it's for, within ten minutes.
  */
 export interface AccountNote {
-  kind: "added" | "rekeyed" | "removed";
+  kind: "added" | "rekeyed" | "removed" | "sharing";
   alias: string;
   unchecked: boolean;
 }
