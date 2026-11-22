@@ -110,7 +110,7 @@ When a call your agent needs keeps asking, or is denied, it can propose rules in
 }
 ```
 
-Any list can be left out, but a proposal needs at least one rule, hide entry or workdir.
+Any list can be left out, but a proposal needs at least one rule, hide entry or workdir, and each one needs a `why`: one plain sentence you read next to it. A proposal with a line that says no why is refused, and the agent is told to add one.
 
 ![A proposed rule: vendor-mail, with the agent's why and where it goes](images/proposal.png)
 

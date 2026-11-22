@@ -73,7 +73,7 @@ export const HEEL_PROPOSE_RULES_TOOL: Tool = {
     "hide entries, for email your owner wants kept from agents (yourself included); " +
     "and workdirs, the directories your own heel run may work in. " +
     "Nothing changes until your owner reads them on heel's approval page and adds them with a passkey. " +
-    "Rules go first in the file, so they decide the calls they match. Give each rule and entry a short why. " +
+    "Rules go first in the file, so they decide the calls they match. Each rule, hide entry and workdir needs a short why, in one plain sentence. " +
     "A newer proposal replaces your earlier one that is still waiting. Rules reference: https://useheel.dev/docs/rules-reference",
   inputSchema: {
     type: "object",
@@ -95,7 +95,7 @@ export const HEEL_PROPOSE_RULES_TOOL: Tool = {
               description: "One plain sentence your owner reads: why you need this rule.",
             },
           },
-          required: ["rule"],
+          required: ["rule", "why"],
           additionalProperties: false,
         },
       },
@@ -119,7 +119,7 @@ export const HEEL_PROPOSE_RULES_TOOL: Tool = {
               description: "One plain sentence your owner reads: why this should be hidden.",
             },
           },
-          required: ["entry"],
+          required: ["entry", "why"],
           additionalProperties: false,
         },
       },
@@ -141,7 +141,7 @@ export const HEEL_PROPOSE_RULES_TOOL: Tool = {
               description: "One plain sentence your owner reads: why you need to work there.",
             },
           },
-          required: ["path"],
+          required: ["path", "why"],
           additionalProperties: false,
         },
       },

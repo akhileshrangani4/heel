@@ -102,8 +102,8 @@ const PHASES: Phase[] = [
       ],
       [
         'a reason on every rule',
-        '“read: so I can review your repos.” “merge: needs you.” each proposed rule says what it’s for.',
-        'started',
+        '“read: so I can review your repos.” “merge: needs you.” every proposed rule, hidden email and folder says what it’s for, or heel turns it away.',
+        'shipped',
       ],
       [
         'changes as a readable diff',
