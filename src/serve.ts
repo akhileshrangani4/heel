@@ -10,6 +10,7 @@ import { createAdminHandler } from "./admin/handlers.ts";
 import { startAdminServer } from "./admin/server.ts";
 import { SiemSink } from "./audit/siem.ts";
 import { CodemodeLanes } from "./codemode/lanes.ts";
+import { purgeExpiredParked } from "./codemode/parking.ts";
 import { SandboxedCodeWorker } from "./codemode/sandboxed.ts";
 import type { CodeWorker } from "./codemode/worker.ts";
 import { rulesPaths } from "./config/rules.ts";
@@ -602,6 +603,8 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         closeHelper = () => lanes.close();
         codeWorker = (agentId) => lanes.worker(agentId);
       }
+      // Parked scripts whose approvals expired while heel was down go now.
+      if (vault !== null) purgeExpiredParked(store.db, now());
       const mcp = createMcpSurface({
         db: store.db,
         // The setup prompt tells the owner where to approve.

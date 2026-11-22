@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MontyWorker } from "../../src/codemode/monty.ts";
+import type { CodeWorker, Step } from "../../src/codemode/worker.ts";
 import { decideApproval, SqliteApprovalStore } from "../../src/store/approvals.ts";
 import { SqlitePauseStore } from "../../src/store/pauses.ts";
 import { approvals, parkedScripts } from "../../src/store/schema.ts";
@@ -43,8 +44,8 @@ interface RunAnswer {
   error: string | null;
 }
 
-async function setUp() {
-  const h = await mcpHarness({ owner: RULES, codeWorker: () => new MontyWorker(), parking: true });
+async function setUp(codeWorker: () => CodeWorker = () => new MontyWorker()) {
+  const h = await mcpHarness({ owner: RULES, codeWorker, parking: true });
   const client = await h.connect("/mcp");
   const run = async (args: Record<string, unknown>) =>
     (await client.callTool({ name: "run_code", arguments: args })).structuredContent as RunAnswer;
@@ -134,5 +135,64 @@ describe("a script that asks is parked, and resumes after the decision (C2)", ()
     const answer = await run({ resume: first.resume });
     expect(answer.error).toMatch(/can't be resumed/);
     expect(h.upstream.calls.map((c) => c.name)).toEqual(["search_notes"]);
+  });
+
+  it("keeps the parked script when a resume fails before it's restored, so it can be tried again", async () => {
+    let started = 0;
+    const flaky = (): CodeWorker => {
+      started += 1;
+      // The resume's worker (the second one) fails to start.
+      if (started !== 2) return new MontyWorker();
+      return {
+        start: async (): Promise<Step> => ({ kind: "failed", error: "the sandbox didn't start" }),
+        stop: async () => {},
+      };
+    };
+    const { h, run, decide } = await setUp(flaky);
+    const first = await run({ code: SCRIPT });
+    decide("approve");
+    const failed = await run({ resume: first.resume });
+    expect(failed.status).toBe("error");
+    expect(h.t.db.select().from(parkedScripts).all()).toHaveLength(1);
+    const done = await run({ resume: first.resume });
+    expect(done).toMatchObject({ status: "completed", stdout: "deleted\nafter\n" });
+    expect(h.t.db.select().from(parkedScripts).all()).toEqual([]);
+  });
+
+  it("still answers pending with the approval id when the script can't be parked", async () => {
+    const unparkable = (): CodeWorker => {
+      const inner = new MontyWorker();
+      const wrap = (step: Step): Step =>
+        step.kind !== "call"
+          ? step
+          : {
+              ...step,
+              resume: async (value) => wrap(await step.resume(value)),
+              raise: async (type, message) => wrap(await step.raise(type, message)),
+              park: () => Promise.reject(new Error("disk full")),
+            };
+      return {
+        start: async (...args) => wrap(await inner.start(...args)),
+        stop: () => inner.stop(),
+      };
+    };
+    const { h, run } = await setUp(unparkable);
+    const answer = await run({ code: SCRIPT });
+    expect(answer.status).toBe("pending");
+    expect(answer.approvalId).toEqual(expect.any(String));
+    expect(answer.resume).toBeUndefined();
+    expect(answer.notParked).toMatch(/disk full/);
+    expect(h.t.db.select().from(parkedScripts).all()).toEqual([]);
+  });
+
+  it("purges parked scripts whose approvals expired, on the next run_code", async () => {
+    const { h, run } = await setUp();
+    await run({ code: SCRIPT });
+    h.t.db
+      .update(parkedScripts)
+      .set({ expiresAt: new Date(Date.now() - 1000) })
+      .run();
+    await run({ code: "1" });
+    expect(h.t.db.select().from(parkedScripts).all()).toEqual([]);
   });
 });

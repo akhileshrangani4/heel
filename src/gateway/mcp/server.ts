@@ -10,9 +10,11 @@ import {
 import { eq } from "drizzle-orm";
 import {
   type ClaimedScript,
-  claimParked,
   findParked,
   modulesHash,
+  openParked,
+  purgeExpiredParked,
+  releaseParked,
   type Sealer,
 } from "../../codemode/parking.ts";
 import { type CallRecord, runScript, type ScriptStatus } from "../../codemode/run.ts";
@@ -234,6 +236,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     if (resumeId !== undefined && code !== "")
       return answer("send either code or resume, not both");
     if (resumeId === undefined && code === "") return answer("send the script as code");
+    if (deps.parking !== undefined) purgeExpiredParked(deps.db, now());
     // A parked script still waiting on its approval: say so without taking a slot or loading it.
     if (resumeId !== undefined) {
       const parked =
@@ -275,7 +278,9 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
       const modules = await modulesFor(agent);
       let resume: ClaimedScript | undefined;
       if (resumeId !== undefined && deps.parking !== undefined) {
-        const claimed = claimParked(deps.db, deps.parking.sealer, agent, resumeId, now());
+        // Read, not taken: it's removed only once the script is back at its call (onRestored),
+        // so a resume that fails before that leaves it to try again.
+        const claimed = openParked(deps.db, deps.parking.sealer, agent, resumeId, now());
         if (claimed === null) {
           return answer("that parked script can't be resumed: it already ran, or expired");
         }
@@ -298,7 +303,9 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
         modules,
         pipeline: deps.pipeline,
         worker,
-        ...(resume === undefined ? {} : { resume }),
+        ...(resume === undefined || resumeId === undefined
+          ? {}
+          : { resume, onRestored: () => releaseParked(deps.db, agent, resumeId) }),
         ...(deps.parking === undefined
           ? {}
           : { parking: { db: deps.db, sealer: deps.parking.sealer, now } }),

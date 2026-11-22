@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, count, eq, lt } from "drizzle-orm";
+import { and, count, eq, lte } from "drizzle-orm";
 import type { HeelDb } from "../store/db.ts";
 import { newId } from "../store/ids.ts";
 import { approvals, type ParkedCall, parkedScripts } from "../store/schema.ts";
@@ -13,11 +13,13 @@ import type { StubModule } from "./stubs.ts";
  *
  * - The snapshot holds what the script already read, so it's sealed with
  *   the vault's key and bound to its row and agent.
- * - Only the agent that parked a script can see or resume it, once.
+ * - Only the agent that parked a script can see or resume it, once: the
+ *   row goes when the script is restored at its call, not before.
  * - Resuming runs the parked call through the pipeline again: the approval
  *   decides it, never this table.
- * - A row lives as long as its approval and no longer; an agent keeps at
- *   most `MAX_PARKED_PER_AGENT`.
+ * - A row lives as long as its approval and no longer (`purgeExpiredParked`
+ *   runs on every `run_code` and at start); an agent keeps at most
+ *   `MAX_PARKED_PER_AGENT` waiting on undecided approvals.
  */
 
 export const MAX_PARKED_PER_AGENT = 5;
@@ -50,30 +52,38 @@ export interface ParkInput {
   snapshot: string;
 }
 
-/** Saves a parked script. Null when the agent already has its limit parked, or the approval is gone. */
-export function parkScript(
-  db: HeelDb,
-  sealer: Sealer,
-  input: ParkInput,
-  now: Date,
-): { id: string; expiresAt: Date } | null {
-  return db.transaction((tx) => {
-    tx.delete(parkedScripts)
-      .where(and(eq(parkedScripts.agentId, input.agentId), lt(parkedScripts.expiresAt, now)))
-      .run();
-    const held =
+/** Deletes every parked script whose approval has expired, whatever agent parked it. */
+export function purgeExpiredParked(db: HeelDb, now: Date): void {
+  db.delete(parkedScripts).where(lte(parkedScripts.expiresAt, now)).run();
+}
+
+export type ParkOutcome =
+  | { ok: true; id: string; expiresAt: Date }
+  | { ok: false; reason: "limit" | "approval_gone" };
+
+/**
+ * Saves a parked script. Refused when the agent already has its limit of
+ * scripts waiting on undecided approvals (decided ones don't count: they
+ * wait only for the agent), or when the approval is gone.
+ */
+export function parkScript(db: HeelDb, sealer: Sealer, input: ParkInput, now: Date): ParkOutcome {
+  return db.transaction((tx): ParkOutcome => {
+    tx.delete(parkedScripts).where(lte(parkedScripts.expiresAt, now)).run();
+    const waiting =
       tx
         .select({ n: count() })
         .from(parkedScripts)
-        .where(eq(parkedScripts.agentId, input.agentId))
+        .innerJoin(approvals, eq(approvals.id, parkedScripts.approvalId))
+        .where(and(eq(parkedScripts.agentId, input.agentId), eq(approvals.status, "pending")))
         .get()?.n ?? 0;
-    if (held >= MAX_PARKED_PER_AGENT) return null;
+    if (waiting >= MAX_PARKED_PER_AGENT) return { ok: false, reason: "limit" };
     const approval = tx
       .select({ expiresAt: approvals.expiresAt })
       .from(approvals)
       .where(and(eq(approvals.id, input.approvalId), eq(approvals.agentId, input.agentId)))
       .get();
-    if (approval === undefined || approval.expiresAt <= now) return null;
+    if (approval === undefined || approval.expiresAt <= now)
+      return { ok: false, reason: "approval_gone" };
     const id = newId("parkedScript");
     tx.insert(parkedScripts)
       .values({
@@ -93,7 +103,7 @@ export function parkScript(
         expiresAt: approval.expiresAt,
       })
       .run();
-    return { id, expiresAt: approval.expiresAt };
+    return { ok: true, id, expiresAt: approval.expiresAt };
   });
 }
 
@@ -140,30 +150,30 @@ export interface ClaimedScript {
 }
 
 /**
- * Takes the agent's parked script out, once: the row is deleted in the same
- * step, so two resumes can't both run it. Null when it isn't there, has
+ * Reads and opens the agent's parked script without removing it, so a
+ * resume that fails before the script is restored (a hung-up client, a
+ * worker that doesn't start) leaves it to try again. `releaseParked` removes
+ * it once the script is back at its call. Null when it isn't there, has
  * expired, or its sealed bytes don't open.
  */
-export function claimParked(
+export function openParked(
   db: HeelDb,
   sealer: Sealer,
   agent: { orgId: string; agentId: string },
   id: string,
   now: Date,
-): ClaimedScript | null {
-  const row = db.transaction((tx) =>
-    tx
-      .delete(parkedScripts)
-      .where(
-        and(
-          eq(parkedScripts.id, id),
-          eq(parkedScripts.orgId, agent.orgId),
-          eq(parkedScripts.agentId, agent.agentId),
-        ),
-      )
-      .returning()
-      .get(),
-  );
+): (ClaimedScript & { id: string }) | null {
+  const row = db
+    .select()
+    .from(parkedScripts)
+    .where(
+      and(
+        eq(parkedScripts.id, id),
+        eq(parkedScripts.orgId, agent.orgId),
+        eq(parkedScripts.agentId, agent.agentId),
+      ),
+    )
+    .get();
   if (row === undefined || row.expiresAt <= now) return null;
   let snapshot: Buffer;
   try {
@@ -172,6 +182,7 @@ export function claimParked(
     return null;
   }
   return {
+    id: row.id,
     approvalId: row.approvalId,
     runId: row.runId ?? undefined,
     reason: row.reason ?? undefined,
@@ -179,4 +190,17 @@ export function claimParked(
     modulesHash: row.modulesHash,
     snapshot: snapshot.toString("base64"),
   };
+}
+
+/**
+ * Removes a parked script once it's been restored, so it resumes once:
+ * false when another resume already took it.
+ */
+export function releaseParked(db: HeelDb, agent: { agentId: string }, id: string): boolean {
+  const gone = db
+    .delete(parkedScripts)
+    .where(and(eq(parkedScripts.id, id), eq(parkedScripts.agentId, agent.agentId)))
+    .returning({ id: parkedScripts.id })
+    .get();
+  return gone !== undefined;
 }

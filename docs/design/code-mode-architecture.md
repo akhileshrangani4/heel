@@ -85,10 +85,12 @@ What the two share lives in one place each:
 To carry on, the agent sends `run_code({ resume })`:
 
 1. While the approval is still pending, heel answers `pending` again, without taking a slot or loading anything.
-2. Once it's decided, heel claims the row (deleting it in the same step, so a script resumes once), opens the dump, and refuses if the agent's modules changed since.
-3. A fresh worker starts with the dump (`start` with `snapshot`), and Monty restores the script at the call it parked at. The run loop sends that call through the pipeline again: the approval admits it once, a denial raises `PermissionError` there, and the script carries on as usual. Monty's own budget restarts on load, so `run.ts` counts the earlier calls toward the 200.
+2. Once it's decided, heel opens the dump and refuses if the agent's modules changed since. The row stays for now.
+3. A fresh worker starts with the dump (`start` with `snapshot`), and Monty restores the script at the call it parked at. Only then is the row deleted (`releaseParked`), so a resume that fails before this point (a hung-up client, a worker that doesn't start) can be tried again, and two resumes can't both run it. The run loop sends that call through the pipeline again: the approval admits it once, a denial raises `PermissionError` there, and the script carries on as usual.
 
-A dump larger than 4 MB, an agent with 5 scripts already parked, or heel without a vault means no parking: the script ends as below, and `notParked` says why.
+The 200-call limit covers the whole script: Monty's own budget restarts on load, so `run.ts` counts the earlier calls. The time limit (30 s) and the stdout cap apply to each segment, from a start or a resume to the next park or the end, since a parked script spends its wait outside any worker. Expired rows are purged on every `run_code` and when heel starts. Snapshots are sealed with the master key directly (no key version), so rotating the master key makes scripts parked before it unresumable; they last no longer than their approvals anyway.
+
+A dump larger than 4 MB, an agent with 5 scripts already waiting on undecided approvals, or heel without a vault means no parking: the script ends as below, and `notParked` says why.
 
 ### A pause, or a stop
 

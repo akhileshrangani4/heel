@@ -68,6 +68,11 @@ export interface RunScriptInput {
   parking?: { db: HeelDb; sealer: Sealer; now: () => Date };
   /** A parked script to resume instead of running `code`. */
   resume?: ClaimedScript;
+  /**
+   * Called once a resumed script is back at its parked call, to take its row
+   * so it resumes once; false (another resume took it) stops it there.
+   */
+  onRestored?: () => boolean;
 }
 
 export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
@@ -98,6 +103,20 @@ export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
   ): Promise<{ resume: string } | { notParked: string } | Record<string, never>> => {
     const parking = input.parking;
     if (parking === undefined) return {};
+    // Whatever goes wrong here, the agent still gets its pending answer and approval id.
+    try {
+      return await saveParked(parking, at, approvalId);
+    } catch (error) {
+      return {
+        notParked: `the script couldn't be saved: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  };
+  const saveParked = async (
+    parking: NonNullable<RunScriptInput["parking"]>,
+    at: Extract<Step, { kind: "call" }>,
+    approvalId: string,
+  ): Promise<{ resume: string } | { notParked: string }> => {
     const saved = await at.park();
     if (saved.kind !== "parked") {
       return { notParked: saved.kind === "failed" ? saved.error : "the script couldn't be saved" };
@@ -117,9 +136,13 @@ export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
       },
       parking.now(),
     );
-    return row === null
-      ? { notParked: "this agent already has the most parked scripts heel keeps" }
-      : { resume: row.id };
+    if (row.ok) return { resume: row.id };
+    return {
+      notParked:
+        row.reason === "limit"
+          ? "this agent already has the most scripts heel keeps waiting on approvals"
+          : "the approval was gone before the script could be saved",
+    };
   };
 
   let step: Step = await input.worker.start(
@@ -129,6 +152,9 @@ export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
     capture,
     input.resume?.snapshot,
   );
+  if (input.resume !== undefined && step.kind === "call" && input.onRestored?.() === false) {
+    return finish({ status: "error", error: "this parked script was already resumed" });
+  }
   while (step.kind === "call") {
     const module = byModule.get(step.module);
     const tool = module?.functions.get(step.fn);
