@@ -85,6 +85,7 @@ function shown(event: GraphEvent) {
 }
 
 const listCalendars = outlookTool({
+  returns: '{"calendars": [{"id", "name", "default"}, ...]}',
   description: "List this mailbox's calendars, with their ids.",
   args: z.strictObject({}),
   readOnly: true,
@@ -103,6 +104,8 @@ const listCalendars = outlookTool({
 });
 
 const listEvents = outlookTool({
+  returns:
+    '{"events": [{"id", "subject", "preview", "start", "end", "location", "organizer", "attendees": [{"email", "response"}], "cancelled", "link"}, ...], "next_page_token"} (next_page_token only when there is a next page)',
   description:
     "List event occurrences between two instants (ISO 8601) on a calendar, `default` for the default one.",
   args: z.strictObject({
@@ -138,6 +141,8 @@ const listEvents = outlookTool({
 });
 
 const getEvent = outlookTool({
+  returns:
+    '{"id", "subject", "preview", "start", "end", "location", "organizer", "attendees": [{"email", "response"}], "cancelled", "link"}',
   description: "Read one event.",
   args: z.strictObject({ event_id: OutlookId }),
   readOnly: true,
@@ -152,6 +157,8 @@ interface CreateArgs {
 }
 
 const createEvent = outlookTool({
+  returns:
+    '{"id", "subject", "preview", "start", "end", "location", "organizer", "attendees": [{"email", "response"}], "cancelled", "link"}',
   description:
     "Create an event. Graph emails each attendee an invitation. Recipients are plain addresses.",
   args: z.strictObject({
@@ -193,6 +200,8 @@ const createEvent = outlookTool({
 });
 
 const updateEvent = outlookTool({
+  returns:
+    '{"id", "subject", "preview", "start", "end", "location", "organizer", "attendees": [{"email", "response"}], "cancelled", "link"}',
   description:
     "Change an event. `attendees`, when given, replaces the whole list. Graph emails everyone on it an update.",
   args: z.strictObject({
@@ -235,6 +244,7 @@ const updateEvent = outlookTool({
 });
 
 const deleteEvent = outlookTool({
+  returns: '{"deleted"} (the event id)',
   description: "Delete an event. If you organize it, Graph emails its attendees a cancellation.",
   args: z.strictObject({ event_id: OutlookId }),
   readOnly: false,

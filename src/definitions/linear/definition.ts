@@ -182,6 +182,8 @@ function mutated(data: Record<string, unknown>, name: string) {
 
 const TOOLS: Record<string, LinearTool> = {
   list_issues: tool({
+    returns:
+      '{"issues": [{"id", "identifier", "title", "description", "state", "priority", "team", "project", "assignee", "url"}, ...], "next"} (next: the cursor for the next page, or None)',
     description: "List a team's issues, most recently updated first.",
     args: z.strictObject({
       team: TeamKey,
@@ -211,6 +213,8 @@ const TOOLS: Record<string, LinearTool> = {
   }),
 
   get_issue: tool({
+    returns:
+      '{"id", "identifier", "title", "description", "state", "priority", "team", "project", "assignee", "url"}',
     description: "Read one issue by its identifier (ENG-123) or id.",
     args: z.strictObject({ issue: IssueRef }),
     readOnly: true,
@@ -233,6 +237,8 @@ const TOOLS: Record<string, LinearTool> = {
   }),
 
   create_issue: tool({
+    returns:
+      '{"id", "identifier", "title", "description", "state", "priority", "team", "project", "assignee", "url"}',
     description: "Open an issue in a team.",
     args: z.strictObject({
       team: TeamKey,
@@ -272,6 +278,8 @@ const TOOLS: Record<string, LinearTool> = {
   }),
 
   update_issue: tool({
+    returns:
+      '{"id", "identifier", "title", "description", "state", "priority", "team", "project", "assignee", "url"}',
     description:
       "Change an issue's title, description, priority or state. Moving it to another team or project isn't offered.",
     args: z.strictObject({
@@ -310,6 +318,7 @@ const TOOLS: Record<string, LinearTool> = {
   }),
 
   delete_issue: tool({
+    returns: '{"deleted"}',
     description:
       "Move an issue to Linear's trash, with its sub-issues. Refused when a sub-issue is in another team or project.",
     args: z.strictObject({ issue: IssueRef }),
@@ -350,6 +359,7 @@ const TOOLS: Record<string, LinearTool> = {
   }),
 
   add_comment: tool({
+    returns: '{"id", "url"}',
     description: "Comment on an issue.",
     args: z.strictObject({ issue: IssueRef, body: Markdown.min(1) }),
     readOnly: false,

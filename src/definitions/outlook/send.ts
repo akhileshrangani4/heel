@@ -114,6 +114,7 @@ async function pinnedText(mailbox: OutlookMailbox, id: string, signal: AbortSign
 }
 
 const send = outlookTool({
+  returns: '{"sent"}',
   description: "Send a new message from this mailbox's address. Recipients are plain addresses.",
   args: z.strictObject(Composed),
   readOnly: false,
@@ -132,6 +133,7 @@ const send = outlookTool({
 
 function replyTool(all: boolean) {
   return outlookTool({
+    returns: '{"sent"}',
     description: all
       ? "Reply to everyone on a message: its sender (or Reply-To) and its To and Cc, minus this mailbox."
       : "Reply to a message's sender, or its Reply-To when set. Replying to your own sent message goes to its To.",
@@ -196,6 +198,7 @@ interface ForwardArgs extends ThreadedArgs {
 }
 
 const forward = outlookTool({
+  returns: '{"sent"}',
   description:
     "Forward a message, attached whole (without its Bcc), to the addresses you name, with your own note above it.",
   args: z.strictObject({
@@ -239,6 +242,7 @@ const forward = outlookTool({
 });
 
 const createDraft = outlookTool({
+  returns: '{"draft_id"}',
   description: "Save a draft. Drafts never send anything; send one later with send_draft.",
   args: z.strictObject(Composed),
   readOnly: false,
@@ -277,6 +281,7 @@ const recipients = (list: readonly string[]) =>
   list.map((address) => ({ emailAddress: { address } }));
 
 const updateDraft = outlookTool({
+  returns: '{"draft_id"}',
   description: "Replace a draft's addresses, subject and text.",
   args: z.strictObject({ draft_id: OutlookId, ...Composed }),
   readOnly: false,
@@ -318,6 +323,7 @@ const updateDraft = outlookTool({
 });
 
 const deleteDraft = outlookTool({
+  returns: '{"deleted"} (the draft id)',
   description: "Delete a draft. Only ever a draft: other mail is refused here.",
   args: z.strictObject({ draft_id: OutlookId }),
   readOnly: false,
@@ -346,6 +352,7 @@ interface SendDraftArgs {
 }
 
 const sendDraft = outlookTool({
+  returns: '{"sent"}',
   description:
     "Send a saved draft exactly as it is now. If the draft changes after heel checks it, nothing is sent.",
   args: z.strictObject({ draft_id: OutlookId }),

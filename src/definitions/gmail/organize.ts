@@ -100,6 +100,7 @@ async function runChange(mailbox: Mailbox, change: LabelChange, signal: AbortSig
 }
 
 const archive = gmailTool({
+  returns: '{"changed"} (how many messages)',
   description: "Archive messages: take them out of the inbox. Up to 1,000 ids.",
   args: z.strictObject({ message_ids: MessageIds }),
   readOnly: false,
@@ -115,6 +116,7 @@ const archive = gmailTool({
 });
 
 const trash = gmailTool({
+  returns: '{"trashed"} (how many messages)',
   description: "Move messages to the trash, where Gmail keeps them for 30 days. Up to 1,000 ids.",
   args: z.strictObject({ message_ids: MessageIds }),
   readOnly: false,
@@ -146,6 +148,7 @@ const trash = gmailTool({
 });
 
 const trashThread = gmailTool({
+  returns: '{"trashed_thread"} (the thread id)',
   description: "Move every message in a thread to the trash.",
   args: z.strictObject({ thread_id: GmailId }),
   readOnly: false,
@@ -174,6 +177,7 @@ const trashThread = gmailTool({
 const LabelNames = z.array(z.string().min(1).max(225)).max(100).default([]);
 
 const modifyLabels = gmailTool({
+  returns: '{"changed"} (how many messages)',
   description:
     "Add and remove labels on messages, by label name (see list_labels). Removing INBOX archives; " +
     "adding TRASH or SPAM removes. Up to 1,000 ids.",
@@ -208,6 +212,7 @@ const modifyLabels = gmailTool({
 });
 
 const listFilters = gmailTool({
+  returns: '{"filters": [{"id", "criteria", "action"}, ...]}',
   description: "List this mailbox's filters: what each matches and what it does.",
   args: z.strictObject({}),
   readOnly: true,
@@ -224,6 +229,7 @@ interface FilterArgs {
 }
 
 const createFilter = gmailTool({
+  returns: '{"filter_id"}',
   description:
     "Create a filter for future mail. Labels by name. A filter that forwards keeps sending mail out " +
     "after heel is revoked, so it needs a rule that names create_filter.",
