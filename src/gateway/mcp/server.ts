@@ -111,6 +111,19 @@ export interface McpSurfaceDeps {
   approvalsUrl?: string;
 }
 
+/**
+ * What a parked script's answer tells the agent to do. In a dry run an agent
+ * holding only a bare `resume` id rewrote the waiting call instead, which
+ * drops the rest of the script.
+ */
+export function resumeMessage(resume: string): string {
+  return (
+    "The script is parked at the call waiting for approval; nothing after it has run. " +
+    `Once heel_status says it's decided, call run_code with {"resume": "${resume}"} and no code: ` +
+    "the script carries on from that call, with everything it already read. Don't resend the call or the script yourself."
+  );
+}
+
 /** heel's own tools, listed on every MCP scope. */
 const HEEL_TOOLS = [
   HEEL_STATUS_TOOL,
@@ -252,6 +265,8 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
           status: "pending",
           approvalId: parked.approvalId,
           resume: parked.id,
+          message:
+            "Still waiting for approval. Check again with heel_status, then resume the same way.",
           stdout: "",
           calls: [],
           error: null,
@@ -313,7 +328,9 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
       return runCodeResult({
         status: result.status,
         ...(result.approvalId === undefined ? {} : { approvalId: result.approvalId }),
-        ...(result.resume === undefined ? {} : { resume: result.resume }),
+        ...(result.resume === undefined
+          ? {}
+          : { resume: result.resume, message: resumeMessage(result.resume) }),
         ...(result.notParked === undefined ? {} : { notParked: result.notParked }),
         stdout: result.stdout,
         calls: result.calls,
@@ -331,6 +348,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     status: ScriptStatus | "busy";
     approvalId?: string;
     resume?: string;
+    message?: string;
     notParked?: string;
     stdout: string;
     calls: CallRecord[];

@@ -76,6 +76,40 @@ function run(l: CodemodeLanes, agentId: string, code: string, delayMs = 0) {
 const PID = `import acct\nacct.ok()\n`;
 
 describe("code-mode lanes", () => {
+  it("parks a script and resumes it through an agent's lane (C2)", async () => {
+    if (MODULE === null) throw new Error("no module");
+    const l = makeLanes({ maxLanes: 2 });
+    const limits = {
+      maxCalls: 200,
+      maxSeconds: 30,
+      maxMemory: 256 * 1024 * 1024,
+      maxStdout: 1_000_000,
+    };
+    let printed = "";
+    const print = (text: string) => {
+      printed += text;
+    };
+    const first = l.worker("agt_a");
+    const fn = [...MODULE.functions.keys()][0] ?? "";
+    const step = await first.start(
+      `import acct\nprint("before")\nr = acct.${fn}()\nprint("after", r)`,
+      [MODULE],
+      limits,
+      print,
+    );
+    if (step.kind !== "call") throw new Error(`expected a call, got ${step.kind}`);
+    const parked = await step.park();
+    await first.stop();
+    if (parked.kind !== "parked") throw new Error(`expected parked, got ${JSON.stringify(parked)}`);
+    const second = l.worker("agt_a");
+    const resumed = await second.start("", [MODULE], limits, print, parked.snapshot);
+    if (resumed.kind !== "call") throw new Error(`expected the parked call, got ${resumed.kind}`);
+    const done = await resumed.resume("approved");
+    await second.stop();
+    expect(done.kind).toBe("done");
+    expect(printed).toBe("before\nafter approved\n");
+  }, 60_000);
+
   it("sizes the cap from memory: one lane per 2 GB, between 2 and 8", () => {
     expect(defaultLanes(2 ** 30)).toBe(2);
     expect(defaultLanes(16 * 2 ** 30)).toBe(8);

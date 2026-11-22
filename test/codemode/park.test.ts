@@ -70,6 +70,7 @@ describe("a script that asks is parked, and resumes after the decision (C2)", ()
     const first = await run({ code: SCRIPT });
     expect(first).toMatchObject({ status: "pending", stdout: "before\n" });
     expect(first.resume).toMatch(/^pks_/);
+    expect((first as { message?: string }).message).toContain(`{"resume": "${first.resume}"}`);
     expect(first.approvalId).toEqual(expect.any(String));
     expect(h.upstream.calls.map((c) => c.name)).toEqual(["search_notes"]);
     // The snapshot is stored sealed, not as Monty's raw bytes.

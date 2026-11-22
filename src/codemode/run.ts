@@ -152,8 +152,18 @@ export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
     capture,
     input.resume?.snapshot,
   );
-  if (input.resume !== undefined && step.kind === "call" && input.onRestored?.() === false) {
-    return finish({ status: "error", error: "this parked script was already resumed" });
+  if (input.resume !== undefined) {
+    // A restored script is back at its parked call. Anything else means it didn't restore
+    // (a worker that ignored the snapshot would run no code and "finish"): say so, and keep it.
+    if (step.kind !== "call") {
+      return finish({
+        status: "error",
+        error: `the parked script didn't restore${step.kind === "failed" ? `: ${step.error}` : ""}`,
+      });
+    }
+    if (input.onRestored?.() === false) {
+      return finish({ status: "error", error: "this parked script was already resumed" });
+    }
   }
   while (step.kind === "call") {
     const module = byModule.get(step.module);
