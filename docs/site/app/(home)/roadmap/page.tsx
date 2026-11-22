@@ -138,6 +138,11 @@ const PHASES: Phase[] = [
         'shipped',
       ],
       [
+        'scripts that wait for you',
+        'a script that hits a call needing approval waits at that call and carries on from there once you approve. reads run side by side, and a long script can run in the background while your agent does other work; you see it on the agents page and can stop it.',
+        'shipped',
+      ],
+      [
         'it learns from what you approve',
         'approve the same kind of call five times (you pick the number) and heel suggests a rule so it stops asking. agents can see the pattern and propose it; you approve with a passkey. only calls through heel count.',
       ],
