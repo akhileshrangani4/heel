@@ -7,6 +7,7 @@ import { definitionRegistry } from "../../src/definitions/registry.ts";
 import { addAgent } from "../../src/gateway/agents.ts";
 import { createAgentApp } from "../../src/gateway/app.ts";
 import { createMcpSurface, type McpSurface } from "../../src/gateway/mcp/server.ts";
+import type { ApprovalWait } from "../../src/gateway/mcp/wait.ts";
 import { createPipeline } from "../../src/gateway/pipeline/pipeline.ts";
 import type { SandboxSlots } from "../../src/gateway/sandbox-slots.ts";
 import { SqliteApprovalStore } from "../../src/store/approvals.ts";
@@ -108,6 +109,8 @@ export async function mcpHarness(options: {
   github?: { fetch: (input: string | URL | Request, init?: RequestInit) => Promise<Response> };
   /** When heel_history suggests rules (2.10); never without it. */
   learning?: { decisions: number; days: number };
+  /** Holds asking calls open for their decision (2.12); answers at once without it. */
+  approvalWait?: ApprovalWait;
 }): Promise<McpHarness> {
   const t = testStore();
   const { logger } = captureLogger();
@@ -178,6 +181,7 @@ export async function mcpHarness(options: {
     ...(options.slots === undefined ? {} : { slots: options.slots }),
     ...(options.parking === true ? { parking: { sealer: vault } } : {}),
     ...(options.learning === undefined ? {} : { learning: { rules, threshold: options.learning } }),
+    ...(options.approvalWait === undefined ? {} : { approvalWait: options.approvalWait }),
     version: "test",
   });
   const app = createAgentApp({ db: t.db, log: logger, mcp });

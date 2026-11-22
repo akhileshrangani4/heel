@@ -2,11 +2,11 @@
 # `pnpm mcp:conformance`. A scenario not listed here must pass, and a listed
 # one that starts passing fails the job until it's removed from this list.
 server:
-  # heel proxies tools only. Resources, upstream prompts, completions and
-  # setting a log level aren't proxied (spec: D5). heel lists one prompt of its
-  # own (setup, roadmap 2.6), so prompts-list passes; the conformance
-  # scenarios' own test prompts don't exist on heel.
-  - logging-set-level
+  # heel proxies tools only. Resources, upstream prompts and completions
+  # aren't proxied (spec: D5). heel lists one prompt of its own (setup, roadmap
+  # 2.6), so prompts-list passes; the conformance scenarios' own test prompts
+  # don't exist on heel. heel logs to the client while a call waits for
+  # approval (2.12), so logging-set-level passes.
   - completion-complete
   - resources-list
   - resources-read-text

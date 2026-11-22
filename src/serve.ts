@@ -38,6 +38,7 @@ import { expiringTokens, listAgents, workRootsOf } from "./gateway/agents.ts";
 import { createAgentApp } from "./gateway/app.ts";
 import { runApprovalHints } from "./gateway/approval-hints.ts";
 import { createMcpSurface } from "./gateway/mcp/server.ts";
+import { DEFAULT_APPROVAL_WAIT } from "./gateway/mcp/wait.ts";
 import { agentMcpUrl } from "./gateway/mcp-url.ts";
 import { createPipeline } from "./gateway/pipeline/pipeline.ts";
 import type { ApprovalAdapter } from "./gateway/pipeline/ports.ts";
@@ -662,6 +663,8 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         // heel_history (2.10) suggests the same rules the owner's pages do.
         learning: { rules, threshold: config.learning },
         onAgentRequest: (requestId) => notifier.agentRequested(requestId),
+        // A call that asks is held open until the owner decides, so the agent carries on by itself (2.12).
+        approvalWait: DEFAULT_APPROVAL_WAIT,
         codeWorker,
         // An asking script is saved, sealed with the vault, so the agent can resume it (C2).
         ...(vault === null ? {} : { parking: { sealer: vault } }),

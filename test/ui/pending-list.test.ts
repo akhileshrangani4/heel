@@ -47,7 +47,7 @@ describe("PendingList", () => {
 
   it.each([
     ["pending", PENDING_ROWS, "Pending", "Expires in"],
-    ["approved", APPROVED_ROWS, "Approved", "Runs when the agent re-sends"],
+    ["approved", APPROVED_ROWS, "Approved", "Runs when the agent sends it again"],
     ["denied", DENIED_ROWS, "Denied", "Re-sends return “denied” until"],
     ["expired", EXPIRED_ROWS, "Expired", "Expired"],
     ["paused", PAUSED_ROWS, "Pending", "Paused (agent inbox-bot): approve after resume"],

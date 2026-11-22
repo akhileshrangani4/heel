@@ -373,7 +373,7 @@ export function approvalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
         result.status === "approved"
           ? resumesScript
             ? "Approved. The background script carries on now, from this call."
-            : "Approved. It runs when the agent re-sends it."
+            : "Approved. It runs now if the agent is still waiting, or when it sends the call again."
           : resumesScript
             ? "Denied. The background script waiting on it has ended."
             : "Denied.",

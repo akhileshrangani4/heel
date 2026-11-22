@@ -637,7 +637,7 @@ function decisionControls(
       <p id="${helpId}" class="ap-note">
         Every decision asks for your passkey. ${
           request.script === null
-            ? "Nothing runs until you approve and the agent sends the same call again."
+            ? "Nothing runs until you approve. An agent still waiting on the call carries on then; otherwise it runs when the agent sends the same call again."
             : "Nothing runs until you approve."
         }
       </p>

@@ -92,7 +92,7 @@ It teaches Claude Code, Codex and other agents that support skills how to set he
 | Outcome | The agent gets | It should |
 | --- | --- | --- |
 | **Allowed** | The normal result. | Carry on. |
-| **Needs approval** | "Approval needed: reply_all on gmail-work. Check with heel_status, then re-send the same call once it's approved." | Keep working, and re-send once you approve. |
+| **Needs approval** | Over MCP, nothing yet: the call waits while you approve on your phone, then returns the normal result (or the denial). If no one decides in time (four minutes in Claude Code, 50 seconds in other apps, which stop waiting sooner): "Approval needed: reply_all on gmail-work. ... Check with heel_status, then re-send the same call once it's approved." | Tell you what's waiting, and carry on once you tap. |
 | **Denied** | "heel denied send on gmail-personal (rule)." Nothing ran. | Take another route, or tell you. |
 | **Paused** | "send on gmail-work is paused. Nothing ran." | Stop and wait for you. |
 

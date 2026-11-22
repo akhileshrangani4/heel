@@ -45,7 +45,7 @@ function stateNote(row: PendingRow, now: Date): Html {
     case "pending":
       return html`Expires ${formatRelative(row.expiresAt, now)}`;
     case "approved":
-      return html`Runs when the agent re-sends; unused it expires
+      return html`Runs when the agent sends it again; unused it expires
         ${formatRelative(row.expiresAt, now)}`;
     case "denied":
       return html`Re-sends return “denied” until ${time(row.expiresAt)}`;

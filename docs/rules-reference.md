@@ -145,7 +145,7 @@ Each rule has these keys. Any other key is an error.
 | Decision | What happens |
 | --- | --- |
 | `allow` | The call runs. |
-| `ask` | The agent is told the call needs approval, and the owner gets a request (an org `ask` goes to an admin). Once approved, the agent sends the call again and it runs once. |
+| `ask` | The owner gets a request (an org `ask` goes to an admin). Over MCP the agent's call waits for the decision and runs once on approval; if no one decides in time, the agent is told the call needs approval and sends it again once approved. |
 | `deny` | The call is refused, with the rule's name. |
 
 ## Match keys
