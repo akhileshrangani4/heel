@@ -5,8 +5,10 @@ import { join } from "node:path";
 import { getRequestListener } from "@hono/node-server";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { describe, expect, it, onTestFinished } from "vitest";
+import { decideApproval, SqliteApprovalStore } from "../../src/store/approvals.ts";
 import { openStore } from "../../src/store/db.ts";
 import { deliveriesFor, savePushSubscription } from "../../src/store/notifications.ts";
+import { SqlitePauseStore } from "../../src/store/pauses.ts";
 import { approvals, users } from "../../src/store/schema.ts";
 import { MASTER_KEY_ENV } from "../../src/vault/key.ts";
 import { fakeUpstream } from "../helpers/mcp.ts";
@@ -80,17 +82,31 @@ describe("heel serve: the MCP agent plane", () => {
     expect(allowed.isError).toBeFalsy();
     expect(upstream.calls).toEqual([{ name: "search_notes", arguments: { query: "q3" } }]);
 
-    const asked = await client.callTool({ name: "delete_note", arguments: { id: "n1" } });
-    expect(asked.structuredContent).toMatchObject({ status: "pending" });
-    const request = store.db.select().from(approvals).get();
-    expect(request?.status).toBe("pending");
-    expect(deliveriesFor(store.db, request?.id ?? "")).toMatchObject([
+    // The call that asks is held open (2.11) until the owner decides, then answers with the result.
+    const asked = client.callTool({ name: "delete_note", arguments: { id: "n1" } });
+    let request = store.db.select().from(approvals).get();
+    while (request === undefined) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      request = store.db.select().from(approvals).get();
+    }
+    expect(request.status).toBe("pending");
+    expect(deliveriesFor(store.db, request.id)).toMatchObject([
       { channel: "web_push", target: "https://push.example.com/send/phone-1" },
     ]);
+    decideApproval(store.db, new SqliteApprovalStore(), new SqlitePauseStore(), {
+      approver: { orgId: owner.orgId, userId: owner.id, role: "admin" },
+      approvalId: request.id,
+      callHash: request.callHash,
+      intent: "approve",
+      standing: null,
+      now: new Date(),
+    });
+    expect((await asked).isError).toBeFalsy();
+    expect(upstream.calls).toHaveLength(2);
 
     await client.close();
     await heel.close();
     await expect(agentClient(url, token)).rejects.toThrow();
-    expect(upstream.calls).toHaveLength(1);
+    expect(upstream.calls).toHaveLength(2);
   });
 });

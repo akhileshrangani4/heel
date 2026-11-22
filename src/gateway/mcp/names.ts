@@ -18,8 +18,9 @@ export const HEEL_STATUS_TOOL: Tool = {
     "Where an approval request stands (approval_id: pending, approved, denied, expired or executed), " +
     "or where a background script stands (script_id: running, parked waiting for approval, completed, " +
     "error, paused or stopped, with what it printed and returned once it ends). " +
-    "Read-only: it never runs anything. Once approved, send the identical call again to run it; " +
-    "a background script carries on by itself.",
+    "Read-only: it never runs anything. You rarely need it: a call that needs approval waits for the decision " +
+    "and answers with the result. Only if it answered `pending` (no one decided in time), send the identical call " +
+    "again once this says approved; a background script carries on by itself.",
   inputSchema: {
     type: "object",
     properties: {
@@ -225,9 +226,10 @@ export const RUN_CODE_TOOL: Tool = {
     "`gmail_work.send(...)`. The script's last expression comes back as `output`, beside what it printed. " +
     "Reads of heel's built-in accounts have `_async` twins: `await asyncio.gather(...)` runs several at once. " +
     "Every call is checked by heel on its own. A denial raises PermissionError " +
-    "at the call. If a call needs approval, the script waits there: the result is `pending` with the " +
-    "approval id and a `resume` id; once heel_status says the approval is decided, call run_code with " +
-    "`resume` (no code) and the script carries on from that call. If there's no `resume` id (`notParked` " +
+    "at the call. If a call needs approval, the script waits there for the decision and carries on by itself. " +
+    "Only if no one decides in time is the result `pending`, with the approval id and a `resume` id; once " +
+    "heel_status says the approval is decided, call run_code with `resume` (no code) and the script carries " +
+    "on from that call. If there's no `resume` id (`notParked` " +
     "says why), or you're paused, the script ended there; send the rest as a new script. A `busy` status means " +
     "heel already runs as many scripts as it allows at once, yours or all agents', so this one didn't " +
     "start; send it again once one has finished. See heel_stubs for " +
@@ -360,6 +362,18 @@ export const HEEL_ACCOUNTS_TOOL: Tool = {
   name: HEEL_ACCOUNTS,
   description:
     "What's behind heel for you: the accounts you can use (by alias and service), and your connection requests and rule proposals still waiting for your owner. " +
-    "Names and services only; heel never shows a key. Read-only.",
-  inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    "Names and services only; heel never shows a key. Read-only. " +
+    "With wait: true and something still waiting, it answers once your owner decides one of them (or after a few minutes), " +
+    "so you don't need your owner to tell you they've approved.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      wait: {
+        type: "boolean",
+        description:
+          "Wait until your owner decides something you asked for, then answer. Answers at once when nothing waits.",
+      },
+    },
+    additionalProperties: false,
+  },
 };

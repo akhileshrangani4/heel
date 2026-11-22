@@ -151,6 +151,11 @@ const PHASES: Phase[] = [
         'shipped',
       ],
       [
+        'the call waits for your tap',
+        'a call that needs approval stays open while you approve on your phone, then your agent gets the result and carries on. no telling it to check again. a script carries on from the call that asked, and the setup prompt waits for each connection the same way.',
+        'shipped',
+      ],
+      [
         'it learns from what you approve',
         'approve the same kind of call five times on two different days (you pick the numbers) and heel suggests a rule, kept to that agent and to what those calls had in common, so it stops asking. agents can see the pattern and propose it; you approve with a passkey. only calls through heel count.',
         'shipped',

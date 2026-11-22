@@ -68,6 +68,7 @@ import {
 } from "./names.ts";
 import { toolResult } from "./results.ts";
 import { SETUP_PROMPT_NAME, setupPrompt } from "./setup-prompt.ts";
+import { type ApprovalWait, type Beat, NO_APPROVAL_WAIT, waitFor } from "./wait.ts";
 
 /**
  * heel's MCP endpoints on the agent plane (spec: MCP and code mode).
@@ -118,6 +119,16 @@ export interface McpSurfaceDeps {
   onAgentRequest?: (requestId: string) => void;
   /** heel's approval page, named in the setup prompt; the prompt says "heel's approval page" without it. */
   approvalsUrl?: string;
+  /** How long a call that needs approval is held open for its decision (2.11); not at all when absent. */
+  approvalWait?: ApprovalWait;
+}
+
+/** What a held call needs from its request: the client going away, and a way to say it's still waiting. */
+interface Held {
+  signal: AbortSignal;
+  beat: Beat;
+  /** When the call stops waiting (epoch ms). */
+  until: number;
 }
 
 /**
@@ -171,6 +182,9 @@ export interface McpSurface {
   close(): Promise<void>;
 }
 
+/** What a held call tells the client while it waits (2.11). */
+const WAITING_NOTE = "Waiting for approval on heel's approval page.";
+
 /** `_meta` key an agent puts its run id under (spec: Run ids). */
 export const RUN_ID_META_KEY = "heel/runId";
 
@@ -179,6 +193,27 @@ type ListingAccount = { account: AccountRecord; tools: NonNullable<Definition["t
 export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
   const pauses = deps.pauses ?? new SqlitePauseStore();
   const now = deps.now ?? (() => new Date());
+  const approvalWait = deps.approvalWait ?? NO_APPROVAL_WAIT;
+
+  /**
+   * Holds the request until `decided()` or the call's window ends (2.11);
+   * true once decided. A script that asks twice shares one window.
+   */
+  function hold(held: Held, decided: () => boolean): Promise<boolean> {
+    return waitFor(decided, {
+      windowMs: Math.max(0, held.until - Date.now()),
+      pollMs: approvalWait.pollMs,
+      beatMs: approvalWait.beatMs,
+      signal: held.signal,
+      beat: held.beat,
+    });
+  }
+
+  /** Whether an approval this agent asked for has been decided (or has expired). */
+  function approvalDecided(agent: AuthenticatedAgent, approvalId: string): boolean {
+    const status = approvalStatusForAgent(deps.db, agent, approvalId, now());
+    return status !== "pending";
+  }
 
   /** Of the accounts an agent may use, those whose definition lists tools. */
   function accountsWithTools(agent: AuthenticatedAgent): ListingAccount[] {
@@ -418,6 +453,36 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     }
   }
 
+  /**
+   * `run_code`, held (2.11): a script parked at a call that asks waits for
+   * the decision and carries on from that call in the same answer.
+   */
+  async function runCodeHeld(
+    agent: AuthenticatedAgent,
+    args: Record<string, unknown>,
+    runId: unknown,
+    held: Held,
+  ): Promise<CallToolResult> {
+    let result = await runCode(agent, args, runId, held.signal);
+    for (;;) {
+      const body = (result.structuredContent ?? {}) as Record<string, unknown>;
+      const { status, approvalId, resume } = body;
+      if (status !== "pending" || typeof approvalId !== "string" || typeof resume !== "string") {
+        return result;
+      }
+      if (!(await hold(held, () => approvalDecided(agent, approvalId)))) return result;
+      const next = await runCode(agent, { resume }, runId, held.signal);
+      // A resumed script reports only what it did from the parked call on: put the two together.
+      const after = (next.structuredContent ?? {}) as Record<string, unknown>;
+      if (typeof after["stdout"] !== "string" || !Array.isArray(after["calls"])) return next;
+      result = runCodeResult({
+        ...(after as Parameters<typeof runCodeResult>[0]),
+        stdout: String(body["stdout"] ?? "") + after["stdout"],
+        calls: [...((body["calls"] as CallRecord[] | undefined) ?? []), ...after["calls"]],
+      });
+    }
+  }
+
   function runCodeResult(body: {
     status: ScriptStatus | "busy" | "running";
     script?: string;
@@ -611,6 +676,35 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     return { content: [{ type: "text", text: JSON.stringify(answer) }], structuredContent: answer };
   }
 
+  /** The ids of what this agent asked for that still waits for its owner, as one string. */
+  function waitingKey(agent: AuthenticatedAgent): string {
+    const at = now();
+    const requests = pendingRequests(deps.db, agent.ownerId, at)
+      .filter((r) => r.agentId === agent.agentId)
+      .map((r) => r.id);
+    const proposals = pendingProposals(deps.db, agent.ownerId, at)
+      .filter((p) => p.agentId === agent.agentId && p.origin === "agent")
+      .map((p) => p.id);
+    return [...requests, ...proposals].sort().join(",");
+  }
+
+  /**
+   * `heel_accounts` with `wait: true` (2.11): held until something this agent
+   * asked for is decided, so it learns of a connection or a rule without its
+   * person telling it to look again. Nothing waiting answers at once.
+   */
+  async function heelAccountsWaiting(
+    agent: AuthenticatedAgent,
+    args: Record<string, unknown>,
+    held: Held,
+  ): Promise<CallToolResult> {
+    if (args["wait"] === true) {
+      const before = waitingKey(agent);
+      if (before !== "") await hold(held, () => waitingKey(agent) !== before);
+    }
+    return heelAccounts(agent);
+  }
+
   /** The agent's accounts and what it asked for that still waits (roadmap 2.6). Names only. */
   function heelAccounts(agent: AuthenticatedAgent): CallToolResult {
     const at = now();
@@ -667,17 +761,17 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
       arguments?: Record<string, unknown> | undefined;
       _meta?: Record<string, unknown> | undefined;
     },
-    signal: AbortSignal,
+    held: Held,
   ): Promise<CallToolResult> {
     const args = params.arguments ?? {};
     if (params.name === HEEL_STATUS) return heelStatus(agent, args);
-    if (params.name === HEEL_ACCOUNTS) return heelAccounts(agent);
+    if (params.name === HEEL_ACCOUNTS) return heelAccountsWaiting(agent, args, held);
     if (params.name === HEEL_HISTORY) return heelHistory(agent);
     if (params.name === HEEL_PROPOSE_RULES) return proposeRulesTool(agent, args);
     if (params.name === HEEL_REQUEST_CONNECTION) return requestConnectionTool(agent, args);
     if (scope.kind === "code") {
       if (params.name === RUN_CODE)
-        return runCode(agent, args, params._meta?.[RUN_ID_META_KEY], signal);
+        return runCodeHeld(agent, args, params._meta?.[RUN_ID_META_KEY], held);
       if (params.name === HEEL_STUBS) return heelStubs(agent, args);
       throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Unknown tool: ${params.name}`);
     }
@@ -690,15 +784,25 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     }
     // The agent's reason travels beside the call, never inside it (spec: The approval page).
     const { args: callArgs, reason } = takeReason(args);
-    const result = await deps.pipeline.run({
-      agent,
-      surface: "mcp",
-      account: target.alias,
-      tool: target.tool,
-      args: callArgs,
-      runId: params._meta?.[RUN_ID_META_KEY],
-      ...(reason !== undefined && { reason }),
-    });
+    const run = () =>
+      deps.pipeline.run({
+        agent,
+        surface: "mcp",
+        account: target.alias,
+        tool: target.tool,
+        args: callArgs,
+        runId: params._meta?.[RUN_ID_META_KEY],
+        ...(reason !== undefined && { reason }),
+      });
+    let result = await run();
+    // Held for the decision (2.11); once made, the same call again runs on it, or gets the denial.
+    while (result.status === "pending") {
+      const { approvalId } = result;
+      if (!(await hold(held, () => approvalDecided(agent, approvalId)))) break;
+      // Revoked, disabled or expired while it waited: what runs now is only for a live agent.
+      if (!agentStillLive(deps.db, agent, now())) break;
+      result = await run();
+    }
     // The pipeline already checked the account; this only tells a native tool from a passthrough.
     const account = findAccount(deps.db, agent.orgId, target.alias);
     const native = account !== null && !isMcpProvider(account.provider);
@@ -732,7 +836,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     const { agent, scope } = context;
     const server = new Server(
       { name: "heel", version: deps.version },
-      { capabilities: { tools: {}, prompts: {} } },
+      { capabilities: { tools: {}, prompts: {}, logging: {} } },
     );
     server.setRequestHandler("tools/list", async () => ({ tools: await listTools(agent, scope) }));
     // The setup prompt (roadmap 2.6): in Claude Code, /mcp__heel__setup.
@@ -763,13 +867,36 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
         ],
       };
     });
-    server.setRequestHandler("tools/call", async (request, ctx) =>
-      withExpiryNote(
-        await callTool(agent, scope, request.params, ctx.mcpReq.signal),
+    server.setRequestHandler("tools/call", async (request, ctx) => {
+      // The SDK hands the request's `_meta` (and its progress token) on the context.
+      const progressToken = ctx.mcpReq._meta?.progressToken;
+      const held: Held = {
+        signal: ctx.mcpReq.signal,
+        until: Date.now() + approvalWait.windowMs(agent.clientName ?? null),
+        // Progress when the client asked for it, else a log line: either keeps the stream open.
+        beat: (elapsedMs) =>
+          ctx.mcpReq.notify(
+            progressToken === undefined
+              ? {
+                  method: "notifications/message",
+                  params: { level: "info", logger: "heel", data: WAITING_NOTE },
+                }
+              : {
+                  method: "notifications/progress",
+                  params: {
+                    progressToken,
+                    progress: elapsedMs,
+                    message: WAITING_NOTE,
+                  },
+                },
+          ),
+      };
+      return withExpiryNote(
+        await callTool(agent, scope, request.params, held),
         agent,
         deps.now?.() ?? new Date(),
-      ),
-    );
+      );
+    });
     return server;
   });
 
