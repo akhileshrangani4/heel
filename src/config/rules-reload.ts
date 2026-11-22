@@ -105,6 +105,8 @@ export interface WatchRulesOptions {
   onError(error: unknown): void;
   /** Editors write a file in several steps; one reload follows the last of them. */
   debounceMs?: number;
+  /** After attaching to a newly created rules/, one more reload this much later (SETTLE_MS). */
+  settleMs?: number;
 }
 
 export interface RulesWatcher {
@@ -118,9 +120,14 @@ export interface RulesWatcher {
  * renaming it over the original. A watcher that can't start throws, so the
  * caller knows hot reload is off.
  */
+/** How long after attaching to a new rules/ heel reloads once more, to catch writes in the watcher's first moments. */
+const SETTLE_MS = 300;
+
 export function watchRules(holder: RulesHolder, options: WatchRulesOptions): RulesWatcher {
   const debounceMs = options.debounceMs ?? 100;
+  const settleMs = options.settleMs ?? SETTLE_MS;
   let timer: NodeJS.Timeout | null = null;
+  let settle: NodeJS.Timeout | null = null;
   let owners: FSWatcher | null = null;
   let closed = false;
 
@@ -132,6 +139,20 @@ export function watchRules(holder: RulesHolder, options: WatchRulesOptions): Rul
     } catch (error) {
       options.onError(error);
     }
+  };
+
+  /**
+   * A new watcher can take a moment to start reporting (FSEvents on macOS), so
+   * a change in its first moments could slip past it. `then` runs once that
+   * moment has passed, to read whatever landed meanwhile (roadmap T16).
+   */
+  const settleThen = (then: () => void) => {
+    if (closed) return;
+    if (settle !== null) clearTimeout(settle);
+    settle = setTimeout(() => {
+      settle = null;
+      then();
+    }, settleMs);
   };
 
   const schedule = () => {
@@ -152,6 +173,7 @@ export function watchRules(holder: RulesHolder, options: WatchRulesOptions): Rul
         options.onError(error);
       });
       owners = watcher;
+      settleThen(schedule);
     } catch (error) {
       // No rules/ yet: the home watcher re-attaches when it appears.
       if (!hasErrnoCode(error, "ENOENT")) options.onError(error);
@@ -169,12 +191,21 @@ export function watchRules(holder: RulesHolder, options: WatchRulesOptions): Rul
   });
   home.on("error", (error) => options.onError(error));
   watchOwners();
+  // The home watcher starts the same way: a rules/ made in its first moments is attached here.
+  if (owners === null) {
+    settleThen(() => {
+      if (owners === null) watchOwners();
+      schedule();
+    });
+  }
 
   return {
     close() {
       closed = true;
       if (timer !== null) clearTimeout(timer);
       timer = null;
+      if (settle !== null) clearTimeout(settle);
+      settle = null;
       owners?.close();
       owners = null;
       home.close();
