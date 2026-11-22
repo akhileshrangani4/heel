@@ -3,6 +3,7 @@ import {
   applyAnswer,
   type FromHost,
   fromWireModules,
+  isFinal,
   lineReader,
   MAX_LINE,
   stdoutUpTo,
@@ -116,7 +117,7 @@ export async function codemodeHostMain(): Promise<void> {
     if (script === undefined) return;
     script.latest = step;
     send({ id, type: "step", step: toWire(step) });
-    if (step.kind !== "call") void discard(id);
+    if (isFinal(step)) void discard(id);
   };
 
   const start = async (message: Extract<ToHost, { type: "start" }>): Promise<void> => {

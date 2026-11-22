@@ -1,6 +1,6 @@
 import { StringDecoder } from "node:string_decoder";
 import type { StubModule } from "./stubs.ts";
-import { MAX_SNAPSHOT_BYTES, type ScriptLimits, type Step } from "./worker.ts";
+import { type FutureResult, MAX_SNAPSHOT_BYTES, type ScriptLimits, type Step } from "./worker.ts";
 
 /**
  * The line protocols between heel and the process that runs Monty: one JSON
@@ -45,11 +45,18 @@ export function fromWireModules(modules: readonly WireModule[]): StubModule[] {
   }));
 }
 
+/** Pure: whether a step is the script's last: anything but a call or an await (C4) ends it. */
+export function isFinal(step: { kind: string }): boolean {
+  return step.kind !== "call" && step.kind !== "await";
+}
+
 /** heel's answer to a `call`: the result, or an error raised at the call site. */
 export type Answer =
   | { type: "resume"; value: unknown }
   | { type: "raise"; errorType: "PermissionError" | "RuntimeError"; message: string }
-  | { type: "park" };
+  | { type: "park" }
+  | { type: "future" }
+  | { type: "resolve"; results: FutureResult[] };
 
 export type ToWorker =
   | {
@@ -70,7 +77,9 @@ export type WireStep =
       fn: string;
       kwargs: Record<string, unknown>;
       positional: number;
+      callId: number;
     }
+  | { kind: "await"; pending: number[] }
   | { kind: "done"; output: unknown }
   | { kind: "failed"; error: string }
   | { kind: "parked"; snapshot: string };
@@ -78,6 +87,7 @@ export type WireStep =
 export type FromWorker = { type: "stdout"; text: string } | { type: "step"; step: WireStep };
 
 export function toWire(step: Step): WireStep {
+  if (step.kind === "await") return { kind: "await", pending: step.pending };
   if (step.kind !== "call") return step;
   return {
     kind: "call",
@@ -85,6 +95,7 @@ export function toWire(step: Step): WireStep {
     fn: step.fn,
     kwargs: step.kwargs,
     positional: step.positional,
+    callId: step.callId,
   };
 }
 
@@ -93,17 +104,30 @@ export function toWire(step: Step): WireStep {
  * sending heel's answer and waiting for the step after it.
  */
 export function fromWire(step: WireStep, answer: (answer: Answer) => Promise<Step>): Step {
+  if (step.kind === "await") {
+    return { ...step, resolve: (results) => answer({ type: "resolve", results: [...results] }) };
+  }
   if (step.kind !== "call") return step;
   return {
     ...step,
     resume: (value) => answer({ type: "resume", value }),
     raise: (errorType, message) => answer({ type: "raise", errorType, message }),
     park: () => answer({ type: "park" }),
+    future: () => answer({ type: "future" }),
   };
 }
 
 /** The script's side: applies heel's answer to the call the script is waiting at. */
 export function applyAnswer(waiting: Step | null, answer: Answer): Promise<Step> {
+  if (answer.type === "resolve") {
+    if (waiting?.kind !== "await") {
+      return Promise.resolve({
+        kind: "failed",
+        error: "heel resolved futures nothing was waiting on",
+      });
+    }
+    return waiting.resolve(answer.results);
+  }
   if (waiting?.kind !== "call") {
     return Promise.resolve({ kind: "failed", error: "heel answered a call that wasn't waiting" });
   }
@@ -114,6 +138,8 @@ export function applyAnswer(waiting: Step | null, answer: Answer): Promise<Step>
       return waiting.raise(answer.errorType, answer.message);
     case "park":
       return waiting.park();
+    case "future":
+      return waiting.future();
   }
 }
 
@@ -163,10 +189,17 @@ export function parseFromWorker(raw: unknown): FromWorker | null {
         ? { type: "step", step: { kind: "parked", snapshot } }
         : null;
     }
+    case "await": {
+      const pending = step["pending"];
+      if (!Array.isArray(pending) || pending.length > 10_000) return null;
+      if (!pending.every((id) => Number.isSafeInteger(id) && (id as number) >= 0)) return null;
+      return { type: "step", step: { kind: "await", pending: pending as number[] } };
+    }
     case "call": {
-      const { module, fn, kwargs, positional } = step;
+      const { module, fn, kwargs, positional, callId } = step;
       if (typeof module !== "string" || typeof fn !== "string") return null;
       if (!Number.isSafeInteger(positional) || (positional as number) < 0) return null;
+      if (!Number.isSafeInteger(callId) || (callId as number) < 0) return null;
       if (typeof kwargs !== "object" || kwargs === null || Array.isArray(kwargs)) return null;
       if (Object.getPrototypeOf(kwargs) !== Object.prototype) return null;
       if (Object.hasOwn(kwargs, "__proto__")) return null;
@@ -178,6 +211,7 @@ export function parseFromWorker(raw: unknown): FromWorker | null {
           fn,
           kwargs: kwargs as Record<string, unknown>,
           positional: positional as number,
+          callId: callId as number,
         },
       };
     }

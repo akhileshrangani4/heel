@@ -52,6 +52,13 @@ export interface CallRequest {
   /** heel's id for the code-mode script the call came from (Call.scriptId). */
   scriptId?: string;
   /**
+   * An ask doesn't open a request: a call whose rule asks is denied
+   * (`approval_needed`) unless an approval for it already exists (C4). Code
+   * mode's parallel calls use it, so a gather of reads can't open a request
+   * and notify someone for each one.
+   */
+  noAsk?: boolean;
+  /**
    * Aborts when the surface's request ends early (the client hung up). It
    * stops a call already executing, so a `heel run` command or a script
    * doesn't keep running, and holding a sandbox slot, for nobody.
@@ -366,6 +373,8 @@ export type PipelineDenyReason =
   | HardDenyReason
   /** Anything that went wrong between receiving the call and executing it. */
   | "internal"
+  /** The rule asks, and the call was made where it can't wait for approval (CallRequest.noAsk). */
+  | "approval_needed"
   /** The account doesn't exist, or the agent's owner may not use it. */
   | "account_unavailable"
   /** The account's OAuth grant needs reconnecting. */

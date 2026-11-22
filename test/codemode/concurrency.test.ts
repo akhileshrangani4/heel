@@ -157,9 +157,11 @@ describe("code mode's concurrency limits", () => {
           fn: "search_notes",
           kwargs: { query: "q" },
           positional: 0,
+          callId: 1,
           resume: () => Promise.reject(new Error("the worker crashed")),
           raise: () => Promise.reject(new Error("the worker crashed")),
           park: () => Promise.reject(new Error("the worker crashed")),
+          future: () => Promise.reject(new Error("the worker crashed")),
         }),
         stop: async () => {
           stopped.push("stop");

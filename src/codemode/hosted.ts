@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { hoistedDependencies } from "./install.ts";
 import {
   fromWire,
+  isFinal,
   lineReader,
   MAX_LINE,
   parseFromHost,
@@ -232,7 +233,7 @@ export class CodemodeHost {
     if (message.type === "ended") script.workerGone?.();
     else if (message.type === "stdout") script.stdout(message.text);
     else {
-      if (message.step.kind !== "call") script.endedInHelper = true;
+      if (isFinal(message.step)) script.endedInHelper = true;
       this.#deliver(message.id, message.step);
     }
   }
@@ -262,7 +263,7 @@ export class CodemodeHost {
   #deliver(id: string, step: WireStep): void {
     const script = this.#scripts.get(id);
     if (script === undefined) return;
-    if (step.kind !== "call") script.finalStep = step;
+    if (isFinal(step)) script.finalStep = step;
     const settle = script.awaitingStep;
     script.awaitingStep = null;
     settle?.(step);

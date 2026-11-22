@@ -43,13 +43,13 @@ describe("messages from the worker", () => {
   const call = (step: Record<string, unknown>) =>
     parseFromWorker({
       type: "step",
-      step: { kind: "call", module: "m", fn: "f", kwargs: {}, positional: 0, ...step },
+      step: { kind: "call", module: "m", fn: "f", kwargs: {}, positional: 0, callId: 1, ...step },
     });
 
   it("accepts a well-formed call", () => {
     expect(call({ kwargs: { a: 1 } })).toEqual({
       type: "step",
-      step: { kind: "call", module: "m", fn: "f", kwargs: { a: 1 }, positional: 0 },
+      step: { kind: "call", module: "m", fn: "f", kwargs: { a: 1 }, positional: 0, callId: 1 },
     });
   });
 
@@ -59,6 +59,8 @@ describe("messages from the worker", () => {
     ["array kwargs", { kwargs: [1, 2] }],
     ["an own __proto__ key", { kwargs: JSON.parse('{"__proto__": {"x": 1}}') }],
     ["a string positional", { positional: "1" }],
+    ["a negative call id", { callId: -1 }],
+    ["a string call id", { callId: "1" }],
     ["a numeric module", { module: 1 }],
   ])("refuses %s", (_label, step) => {
     expect(call(step)).toBeNull();
@@ -107,7 +109,7 @@ describe("the sandboxed worker", () => {
     });
     const started = worker.start("code", [], DEFAULT_LIMITS, () => {});
     fake.stdout.write(
-      `${JSON.stringify({ type: "step", step: { kind: "call", module: "m", fn: "f", kwargs: {}, positional: 0 } })}\n`,
+      `${JSON.stringify({ type: "step", step: { kind: "call", module: "m", fn: "f", kwargs: {}, positional: 0, callId: 1 } })}\n`,
     );
     const step = await started;
     expect(step.kind).toBe("call");

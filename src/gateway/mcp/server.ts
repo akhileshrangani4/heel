@@ -220,7 +220,10 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     const modules = await Promise.all(
       accountsWithTools(agent).map(async ({ account, tools }) => {
         try {
-          const module = accountModule(account.alias, await tools(AbortSignal.timeout(10_000)));
+          // Built-in accounts' reads get `_async` twins (C4); heel marks those, not the server.
+          const module = accountModule(account.alias, await tools(AbortSignal.timeout(10_000)), {
+            asyncReads: isBuiltInProvider(account.provider),
+          });
           return module === null ? [] : [{ ...module, account: account.alias }];
         } catch (error) {
           deps.log.warn(

@@ -4,6 +4,7 @@ import type { Monty } from "@pydantic/monty";
 import {
   ExternalModule,
   FunctionSnapshot,
+  FutureSnapshot,
   MontyComplete,
   type MontySession,
   type Snapshot,
@@ -145,6 +146,24 @@ export class MontyWorker implements CodeWorker {
       return { kind: "failed", error: error instanceof Error ? error.message : String(error) };
     }
     if (snap instanceof MontyComplete) return { kind: "done", output };
+    if (snap instanceof FutureSnapshot) {
+      const waiting = snap;
+      return {
+        kind: "await",
+        pending: [...waiting.pendingCallIds],
+        resolve: (results) =>
+          this.#step(() =>
+            waiting.resume(
+              results.map((r) => {
+                if ("value" in r) return { callId: r.callId, value: r.value };
+                const error = new Error(r.message);
+                error.name = r.errorType;
+                return { callId: r.callId, error };
+              }),
+            ),
+          ),
+      };
+    }
     if (!(snap instanceof FunctionSnapshot)) {
       return {
         kind: "failed",
@@ -159,7 +178,9 @@ export class MontyWorker implements CodeWorker {
       fn: dot < 0 ? call.functionName : call.functionName.slice(dot + 1),
       kwargs,
       positional: call.args.length,
+      callId: call.callId,
       resume: (value) => this.#step(() => call.resume(value)),
+      future: () => this.#step(() => call.resumeFuture()),
       raise: (type, message) => {
         const error = new Error(message);
         error.name = type;

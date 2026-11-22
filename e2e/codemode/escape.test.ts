@@ -87,6 +87,37 @@ for (const [where, available, makeWorker] of WORKERS) {
   }
 
   describe.skipIf(!available)(`code mode ${where}`, () => {
+    it("runs calls as futures and resolves them together when the script awaits (C4)", async () => {
+      if (MODULE === null) throw new Error("no module");
+      const limits = {
+        maxCalls: 200,
+        maxSeconds: 30,
+        maxMemory: 256 * 1024 * 1024,
+        maxStdout: 1_000_000,
+      };
+      let printed = "";
+      const worker = makeWorker();
+      let step = await worker.start(
+        "import asyncio\nimport acct\nr = await asyncio.gather(acct.ok(), acct.ok())\nprint(r)",
+        [MODULE],
+        limits,
+        (text) => {
+          printed += text;
+        },
+      );
+      const ids: number[] = [];
+      while (step.kind === "call") {
+        ids.push(step.callId);
+        step = await step.future();
+      }
+      if (step.kind !== "await") throw new Error(`expected await, got ${step.kind}`);
+      expect([...step.pending].sort()).toEqual([...ids].sort());
+      const done = await step.resolve(ids.map((callId, i) => ({ callId, value: `r${i}` })));
+      await worker.stop();
+      expect(done.kind).toBe("done");
+      expect(printed).toBe("['r0', 'r1']\n");
+    }, 60_000);
+
     it("parks a script at a call and resumes it in a new worker at that call (C2)", async () => {
       if (MODULE === null) throw new Error("no module");
       const limits = {

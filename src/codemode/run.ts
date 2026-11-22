@@ -5,7 +5,16 @@ import type { HeelDb } from "../store/db.ts";
 import { newId } from "../store/ids.ts";
 import { type ClaimedScript, parkScript, type Sealer } from "./parking.ts";
 import type { StubModule } from "./stubs.ts";
-import { type CodeWorker, DEFAULT_LIMITS, type ScriptLimits, type Step } from "./worker.ts";
+import {
+  type CodeWorker,
+  DEFAULT_LIMITS,
+  type FutureResult,
+  type ScriptLimits,
+  type Step,
+} from "./worker.ts";
+
+/** How many of a script's parallel calls heel runs at once (C4). */
+export const MAX_PARALLEL = 8;
 
 /**
  * Runs one code-mode script (D6a; spec: Code mode). Each host call in the
@@ -153,6 +162,107 @@ export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
     };
   };
 
+  /**
+   * Runs the script's pending futures through the pipeline, a few at a time,
+   * as calls that can't open a request (`noAsk`). Every one settles and is
+   * recorded before the script goes on or stops: one that's paused, ran with
+   * its result withheld, or whose outcome is unknown stops the script, as the
+   * same call made the plain way would.
+   */
+  const settleFutures = async (
+    pending: readonly number[],
+  ): Promise<{ results: FutureResult[]; stop: Omit<ScriptResult, "stdout" | "calls"> | null }> => {
+    const unknown = pending.filter((id) => !futures.has(id));
+    if (unknown.length > 0) {
+      return {
+        results: [],
+        stop: { status: "error", error: "the script waited on a call heel didn't start" },
+      };
+    }
+    const results: FutureResult[] = [];
+    let stop: Omit<ScriptResult, "stdout" | "calls"> | null = null;
+    const queue = [...pending];
+    const one = async (callId: number): Promise<void> => {
+      const call = futures.get(callId);
+      if (call === undefined) return;
+      futures.delete(callId);
+      const result = await input.pipeline.run({
+        agent: input.agent,
+        surface: "code",
+        account: call.account,
+        tool: call.tool,
+        args: call.args,
+        ...(input.runId === undefined ? {} : { runId: input.runId }),
+        ...(input.reason === undefined ? {} : { reason: input.reason }),
+        scriptId,
+        noAsk: true,
+      });
+      const record = (decision: CallRecord["decision"]) =>
+        calls.push({ account: call.account, tool: call.tool, decision });
+      const plain = call.fn.replace(/_async$/, "");
+      switch (result.status) {
+        case "allowed":
+          record("allow");
+          results.push({ callId, value: result.result });
+          return;
+        case "denied":
+          record("deny");
+          if (result.executed === true) {
+            stop ??= {
+              status: "error",
+              error: `${call.tool} on ${call.account} ran, but heel withheld its result; the script was stopped`,
+            };
+            return;
+          }
+          results.push({
+            callId,
+            errorType: "PermissionError",
+            message:
+              result.reason === "approval_needed"
+                ? `${call.tool} on ${call.account} needs approval, which a parallel call can't wait for; call ${plain}() to ask`
+                : `heel denied ${call.tool} on ${call.account} (${result.reason.replaceAll("_", " ")})` +
+                  (result.detail === undefined ? "" : `: ${result.detail}`),
+          });
+          return;
+        case "expired":
+        case "pending":
+          record("deny");
+          results.push({
+            callId,
+            errorType: "PermissionError",
+            message: `${call.tool} on ${call.account} needs approval; call ${plain}() to ask`,
+          });
+          return;
+        case "upstream_error":
+          record("error");
+          results.push({
+            callId,
+            errorType: "RuntimeError",
+            message:
+              result.message ??
+              `${call.account} answered ${call.tool} with an error (${result.upstreamStatus})`,
+          });
+          return;
+        case "paused":
+          record("paused");
+          stop ??= { status: "paused", error: null };
+          return;
+        case "upstream_outcome_unknown":
+          record("unknown");
+          stop ??= {
+            status: "error",
+            error: `heel doesn't know whether ${call.tool} on ${call.account} took effect; the script was stopped`,
+          };
+          return;
+      }
+    };
+    const lane = async (): Promise<void> => {
+      for (let id = queue.shift(); id !== undefined; id = queue.shift()) await one(id);
+    };
+    await Promise.all(Array.from({ length: Math.min(MAX_PARALLEL, queue.length) }, lane));
+    return { results, stop };
+  };
+
   let step: Step = await input.worker.start(
     input.code,
     input.modules,
@@ -173,7 +283,19 @@ export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
       return finish({ status: "error", error: "this parked script was already resumed" });
     }
   }
-  while (step.kind === "call") {
+  // Calls made as futures (`_async` twins, C4), by Monty's call id: only these ever run when
+  // the script awaits, so a twin the script never awaits never runs.
+  const futures = new Map<
+    number,
+    { account: string; tool: string; fn: string; args: Record<string, unknown> }
+  >();
+  while (step.kind === "call" || step.kind === "await") {
+    if (step.kind === "await") {
+      const settled = await settleFutures(step.pending);
+      if (settled.stop !== null) return finish(settled.stop);
+      step = await step.resolve(settled.results);
+      continue;
+    }
     const module = byModule.get(step.module);
     const tool = module?.functions.get(step.fn);
     if (module === undefined || tool === undefined) {
@@ -205,11 +327,16 @@ export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
       );
       continue;
     }
-    if (before + calls.length >= limits.maxCalls) {
+    if (before + calls.length + futures.size >= limits.maxCalls) {
       return finish({
         status: "error",
         error: `the script made more than ${limits.maxCalls} calls`,
       });
+    }
+    if (module.asyncFunctions?.has(step.fn) === true) {
+      futures.set(step.callId, { account: module.account, tool, fn: step.fn, args });
+      step = await step.future();
+      continue;
     }
     const result = await input.pipeline.run({
       agent: input.agent,
@@ -263,7 +390,11 @@ export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
         break;
       case "pending": {
         record("ask");
-        const parked = await park(step, result.approvalId);
+        // A script with parallel calls still waiting isn't saved: their calls live only here.
+        const parked =
+          futures.size > 0
+            ? { notParked: "the script had parallel calls waiting, so it couldn't be saved" }
+            : await park(step, result.approvalId);
         return finish({ status: "pending", approvalId: result.approvalId, error: null, ...parked });
       }
       case "paused":
