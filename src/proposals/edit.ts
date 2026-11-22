@@ -12,7 +12,7 @@ import { formatYamlIssue, YamlValidationError } from "../config/yaml.ts";
  */
 
 export type RulesEdit =
-  | { kind: "decision"; index: number; then: "allow" | "ask" | "deny" }
+  | { kind: "decision"; index: number; decision: "allow" | "ask" | "deny" }
   | { kind: "remove-rule"; index: number }
   | { kind: "remove-hide"; index: number }
   | { kind: "replace"; text: string };
@@ -89,7 +89,7 @@ export function applyEdit(
   if (edit.kind === "decision") {
     const rule = list.items[edit.index];
     if (!isMap(rule)) return { ok: false, problem: "That rule doesn't read as a rule." };
-    rule.set("then", edit.then);
+    rule.set("then", edit.decision);
   } else {
     list.items.splice(edit.index, 1);
   }

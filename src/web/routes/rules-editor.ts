@@ -50,7 +50,7 @@ function editFromQuery(query: Record<string, string>): RulesEdit | null {
   const index = Number.parseInt(query["index"] ?? "", 10);
   if (!Number.isInteger(index) || index < 0) return null;
   if (query["op"] === "decision" && DECISIONS.has(query["then"] ?? "")) {
-    return { kind: "decision", index, then: query["then"] as "allow" | "ask" | "deny" };
+    return { kind: "decision", index, decision: query["then"] as "allow" | "ask" | "deny" };
   }
   if (query["op"] === "remove-rule") return { kind: "remove-rule", index };
   if (query["op"] === "remove-hide") return { kind: "remove-hide", index };
