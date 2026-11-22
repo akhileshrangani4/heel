@@ -159,13 +159,14 @@ describe("agents in the web app (2.9)", () => {
 
   it("lets an admin revoke a member's agent but not take a token for it, and stops scripts on a new token", async () => {
     const stopped: string[] = [];
+    let scriptAgent = "";
     const h = humanPlaneHarness({
       background: {
         approvalDecided: () => {},
         list: () => [
           {
             id: "scr_1",
-            agentId: "",
+            agentId: scriptAgent,
             agentName: "",
             status: "running",
             approvalId: null,
@@ -181,6 +182,7 @@ describe("agents in the web app (2.9)", () => {
         stopWaitingOn: () => {},
       },
     });
+    scriptAgent = h.agent.agentId;
     const owner = await h.signIn(await h.enroll());
     h.addUser("sam", "member");
     const samId =
@@ -199,6 +201,7 @@ describe("agents in the web app (2.9)", () => {
     const done = await manage(h, owner, { op: "rotate", name: h.agent.agentName, days: "90" });
     const { next } = (await done.json()) as { next: string };
     expect((await h.fetch(next, { as: owner })).headers.get("cache-control")).toBe("no-store");
+    expect(stopped).toEqual(["scr_1"]);
   });
 
   it("removes a workdir even when another one has since been deleted", async () => {
