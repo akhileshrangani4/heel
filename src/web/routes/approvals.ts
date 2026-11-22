@@ -32,9 +32,11 @@ import { addDeviceControl, recoveryNotices } from "../ui/devices.ts";
 import { html } from "../ui/html.ts";
 import { type PendingRow, pendingList } from "../ui/pending-list.ts";
 import { pushControl } from "../ui/push-control.ts";
+import { suggestionCards } from "../ui/suggestions.ts";
 import { emailPreviewFrom, headline, httpPreviewFrom, mergePreviewFrom } from "../ui/summary.ts";
 import { proposalCardsFor } from "./proposals.ts";
 import { requestCardsFor } from "./requests.ts";
+import { suggestionsOf } from "./suggestions.ts";
 
 /**
  * The approval page (spec: The approval page). A person sees every request
@@ -195,12 +197,18 @@ export function approvalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     const rows = listApprovalsFor(deps.db, session, now).map((r) => pendingRow(deps, r));
     const changes = proposalCardsFor(deps, session, now);
     const asks = requestCardsFor(deps, session, now);
+    const suggested = suggestionCards(
+      suggestionsOf(deps, session, now),
+      session.csrfToken,
+      "approvals",
+    );
     return renderPage(c, {
       title: "Approvals",
       viewer: viewerOf(session),
       current: "approvals",
       body: html`${recoveriesFor(session, now)}
       ${pendingList({ now, load: { ok: true, rows }, ruleChangesWaiting: changes.count + asks.count })}
+      ${suggested}
       ${asks.cards}
       ${changes.cards}
       ${pushControl({

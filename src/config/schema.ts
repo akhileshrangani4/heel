@@ -252,6 +252,18 @@ export const HeelConfigFileSchema = z.strictObject({
       total: z.int().min(1).max(10_000).optional(),
     })
     .prefault({}),
+  /**
+   * Suggested rules from what you approve and deny (roadmap 2.10): after
+   * `decisions` of the same kind on at least `days` different days, in the
+   * last 30. `enabled: false` turns suggestions off.
+   */
+  learning: z
+    .strictObject({
+      enabled: z.boolean().default(true),
+      decisions: z.int().min(2).max(1_000).default(5),
+      days: z.int().min(1).max(30).default(2),
+    })
+    .prefault({}),
   providers: z
     .strictObject({
       /**
@@ -378,6 +390,8 @@ export interface HeelConfig {
   notify: NotifyConfig;
   /** Sandboxes at once; a null `total` means the host-memory default (gateway/sandbox-slots.ts). */
   sandboxes: { perAgent: number; total: number | null };
+  /** Rule suggestions from what people decide (2.10); null when turned off. */
+  learning: { decisions: number; days: number } | null;
   /** Null when the operator configured no Google client. */
   providers: { google: GoogleProviderConfig | null; microsoft: MicrosoftProviderConfig | null };
 }
@@ -431,6 +445,9 @@ export function resolveConfig(
     audit: { siem: file.audit.siem ? resolveSiem(file.audit.siem, fromHome) : null },
     notify: resolveNotify(file.notify, new URL(publicUrl), fromHome),
     sandboxes: { perAgent: file.sandboxes.per_agent, total: file.sandboxes.total ?? null },
+    learning: file.learning.enabled
+      ? { decisions: file.learning.decisions, days: file.learning.days }
+      : null,
     providers: {
       google: file.providers.google
         ? {

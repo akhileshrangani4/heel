@@ -49,7 +49,7 @@ describe("the Activity and Agents pages", () => {
     const page = await (await h.fetch("/activity", { as: admin })).text();
     expect(page).toContain("would deny");
     expect(page).toContain("deny");
-    expect(page).toContain("Suggested rules");
+    expect(page).toContain("Suggested from Watch mode");
     expect(page).toContain("action: email.send");
 
     const filtered = await (await h.fetch("/activity?kind=would_deny", { as: admin })).text();

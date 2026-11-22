@@ -80,7 +80,7 @@ rules:
 - **One person, or the org default:** the **Modes** page (admins). Switching to Watch needs a passkey; switching back to Enforce doesn't.
 - **One rule:** add `watch: true` to it.
 
-Pause, org rules, hidden mail and calls heel can't check safely hold in every mode. **Activity** also suggests rules from what got asked or denied often.
+Pause, org rules, hidden mail and calls heel can't check safely hold in every mode. **Activity** also suggests rules from what Watch mode saw, as text to paste.
 
 ## Editing rules
 
@@ -119,8 +119,20 @@ Any list can be left out, but a proposal needs at least one rule, hide entry or 
 - **Hide entries go at the end of your `hide:` list,** with the same comment. A hide entry only takes email away from agents, never gives them anything, and the page says that too.
 - **heel writes the file, never the agent.** The agent sends rule objects, not YAML, and only ever for its own owner's file. It never sees your file: a proposal is checked on its own, and only its own problems go back to the agent. heel can't add a `watch: true` rule or org rules this way.
 - **The passkey signs the exact file.** If the file changes between opening the page and touching your passkey, heel writes nothing and asks you to reload. It won't add to a file that has an error; fix that first.
-- **One proposal per agent waits at a time.** A newer one replaces the older, and a proposal expires after 7 days. A paused agent can't propose.
+- **One proposal per agent waits at a time.** A newer one replaces the older (heel's own suggestions don't replace an agent's proposal, or each other), and a proposal expires after 7 days. A paused agent can't propose.
 - **Proposals are the history.** Each one keeps which agent proposed it, who added or rejected it, and when.
+
+## heel suggests rules from what you decide
+
+When you keep approving the same kind of request, heel suggests a rule that would stop the asking. After 5 approvals on at least 2 different days in the last 30, a card appears under **Suggested rules** at the top of the Approvals page and on Activity: what the rule would do, in plain words, and what it rests on ("You approved 6 times on 3 days since Nov 12, all to work.com"). Denials work the same way and suggest a deny rule.
+
+- **Nothing changes until you add it.** **Review and add** opens the suggestion as a rule change, like an agent's proposal: you read the file after the change and add it with your passkey. **Don't suggest this again** hides it for good.
+- **It's never wider than what you approved.** The rule names the agent the requests came from, the account and the action, and what they had in common that a rule can check: the repo, the calendar, or the recipients' domains. Requests with none of those (a refund of any amount, say) aren't suggested as an allow at all. A rule that would also cover a request you denied in the last 30 days isn't suggested.
+- **It doesn't skip your guards.** Proposed rules go first in your file, so heel won't suggest one where the rule that asked has a count or a state check (`items`, `checks: passing`), or where that rule has since changed.
+- **Only what you decided counts.** An agent asking over and over earns nothing until you approve, and decisions in one sitting count as one day. Requests org rules asked about aren't counted.
+- **In the file,** the rule's comment says `# Suggested by heel for <agent>: ...`, not that the agent proposed it.
+
+Change the numbers, or turn suggestions off, in `heel.yaml` ([`learning`](configuration.md)).
 
 ## Hiding what the agent reads
 

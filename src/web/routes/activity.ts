@@ -17,6 +17,8 @@ import {
 import type { SessionView } from "../sessions.ts";
 import { ACTIVITY_SCRIPT, activityPage, activityRow, agentsPage } from "../ui/activity-page.ts";
 import { toHtmlString } from "../ui/html.ts";
+import { suggestionCards } from "../ui/suggestions.ts";
+import { suggestionsOf } from "./suggestions.ts";
 
 /**
  * Observability on the human plane (A5).
@@ -148,6 +150,11 @@ export function activityRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
         nextBefore: rows.length === PAGE ? (rows.at(-1)?.id ?? null) : null,
         hidden: deps.hiddenCounts === undefined ? null : deps.hiddenCounts(),
         suggestions: suggestRules(stopped),
+        learned: suggestionCards(
+          suggestionsOf(deps, session, deps.now()),
+          session.csrfToken,
+          "activity",
+        ),
       }),
       script: ACTIVITY_SCRIPT,
     });

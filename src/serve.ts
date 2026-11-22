@@ -481,6 +481,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         rules,
         ruleFiles: { paths: rules.paths, reload: () => logRulesOutcome(log, rules.reload()) },
         vapidPublicKey: notify.vapidPublicKey,
+        learning: config.learning,
         agentPublicUrl: config.agentPublicUrl,
         upstreamOAuth: vault === null ? null : { signIns: upstreamSignIns, vault },
         checkKey: (provider, key) => checkKey(provider, key, fetch),

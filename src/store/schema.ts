@@ -914,6 +914,10 @@ export const RULE_PROPOSAL_STATUSES = [
 ] as const;
 export type RuleProposalStatus = (typeof RULE_PROPOSAL_STATUSES)[number];
 
+/** Who drafted a proposal: its agent (2.1), or heel from the owner's own decisions (2.10). */
+export const RULE_PROPOSAL_ORIGINS = ["agent", "heel"] as const;
+export type RuleProposalOrigin = (typeof RULE_PROPOSAL_ORIGINS)[number];
+
 /**
  * Rules an agent proposed for its owner's file (roadmap 2.1). An agent can
  * only add rules, and only to its owner's file; the owner applies them with a
@@ -940,8 +944,13 @@ export const ruleProposals = sqliteTable(
     hide: text("hide", { mode: "json" }).$type<ProposedHide[]>().notNull().default([]),
     /** Directories the agent asks `heel run` to work in, added to its own; never another agent's. */
     workdirs: text("workdirs", { mode: "json" }).$type<ProposedWorkdir[]>().notNull().default([]),
-    /** The agent's own words on why, shown as its claim. */
+    /** The agent's own words on why, shown as its claim; for heel's own, the evidence. */
     reason: text("reason"),
+    /**
+     * `heel` when heel drafted it from the owner's decisions (2.10): `agentId`
+     * is then the agent the decisions were about, not one that asked.
+     */
+    origin: text("origin", { enum: RULE_PROPOSAL_ORIGINS }).notNull().default("agent"),
     status: text("status", { enum: RULE_PROPOSAL_STATUSES }).notNull(),
     createdAt: createdAt(),
     expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
@@ -951,7 +960,21 @@ export const ruleProposals = sqliteTable(
   (t) => [
     index("rule_proposals_owner_status").on(t.ownerId, t.status),
     check("rule_proposals_status", sql`"status" IN (${sqlList(RULE_PROPOSAL_STATUSES)})`),
+    check("rule_proposals_origin", sql`"origin" IN (${sqlList(RULE_PROPOSAL_ORIGINS)})`),
   ],
+);
+
+/** Suggested rules a person dismissed (2.10), by suggestion key, so heel doesn't offer them again. */
+export const learningDismissals = sqliteTable(
+  "learning_dismissals",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id),
+    key: text("key").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.key] })],
 );
 
 /** One rule an agent proposed, with its one-line why (roadmap 2.2). */

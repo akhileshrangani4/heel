@@ -15,6 +15,7 @@ import { pushRoutes } from "./routes/push.ts";
 import { requestRoutes } from "./routes/requests.ts";
 import { signInRoutes } from "./routes/sign-in.ts";
 import { standingRoutes } from "./routes/standing.ts";
+import { suggestionRoutes } from "./routes/suggestions.ts";
 
 export type { HumanPlaneDeps } from "./http.ts";
 
@@ -58,6 +59,7 @@ export function createHumanApp(deps: HumanPlaneDeps): Hono {
   app.route("/", deviceRoutes(deps));
   app.route("/", approvalRoutes(deps));
   app.route("/", proposalRoutes(deps));
+  app.route("/", suggestionRoutes(deps));
   app.route("/", requestRoutes(deps));
   app.route("/", pauseRoutes(deps));
   app.route("/", standingRoutes(deps));

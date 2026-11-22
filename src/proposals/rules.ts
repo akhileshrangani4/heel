@@ -20,6 +20,7 @@ import {
   type ProposedHide,
   type ProposedRule,
   type ProposedWorkdir,
+  type RuleProposalOrigin,
   ruleProposals,
   users,
 } from "../store/schema.ts";
@@ -131,6 +132,8 @@ export function proposeRules(
   who: { orgId: string; ownerId: string; agentId: string },
   input: ProposeRulesInput,
   now: Date,
+  /** `heel` for a rule heel drafted from the owner's decisions (2.10). */
+  origin: RuleProposalOrigin = "agent",
 ): ProposeOutcome {
   const rules: ProposedRule[] = (input.rules ?? []).map((r) => ({
     rule: JSON.parse(JSON.stringify(r.rule)) as Record<string, unknown>,
@@ -173,10 +176,20 @@ export function proposeRules(
   const id = newId("ruleProposal");
   const expiresAt = new Date(now.getTime() + PROPOSAL_TTL_MS);
   db.transaction((tx) => {
-    tx.update(ruleProposals)
-      .set({ status: "superseded", decidedAt: now })
-      .where(and(eq(ruleProposals.agentId, who.agentId), eq(ruleProposals.status, "pending")))
-      .run();
+    // An agent's new proposal replaces its pending one. heel's suggestions stand on their own:
+    // they neither replace an agent's proposal nor each other.
+    if (origin === "agent") {
+      tx.update(ruleProposals)
+        .set({ status: "superseded", decidedAt: now })
+        .where(
+          and(
+            eq(ruleProposals.agentId, who.agentId),
+            eq(ruleProposals.origin, "agent"),
+            eq(ruleProposals.status, "pending"),
+          ),
+        )
+        .run();
+    }
     tx.insert(ruleProposals)
       .values({
         id,
@@ -187,6 +200,7 @@ export function proposeRules(
         hide,
         workdirs,
         reason: oneLine(input.reason, MAX_REASON_CHARS),
+        origin,
         status: "pending",
         createdAt: now,
         expiresAt,
@@ -310,7 +324,7 @@ function proposalSha(after: string, workRoots: readonly string[] | null): string
  * Comments and layout already in the file stay as they are.
  */
 export function previewProposal(
-  proposal: Pick<ProposalRow, "rules" | "hide" | "workdirs">,
+  proposal: Pick<ProposalRow, "rules" | "hide" | "workdirs"> & Partial<Pick<ProposalRow, "origin">>,
   file: string,
   display: string,
   agentName: string,
@@ -392,7 +406,12 @@ export function previewProposal(
     .reverse()
     .forEach((r) => {
       const node = doc.createNode(r.rule);
-      node.commentBefore = ` Proposed by ${agentName}${r.why === null ? "" : `: ${r.why}`}`;
+      // heel's own suggestions (2.10) say so: the agent didn't ask for them.
+      const by =
+        proposal.origin === "heel"
+          ? `Suggested by heel for ${agentName}`
+          : `Proposed by ${agentName}`;
+      node.commentBefore = ` ${by}${r.why === null ? "" : `: ${r.why}`}`;
       list.items.unshift(node);
     });
   if (proposal.hide.length > 0) {

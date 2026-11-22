@@ -55,6 +55,8 @@ export function activityPage(props: {
   nextBefore: number | null;
   hidden: Readonly<Record<string, number>> | null;
   suggestions: readonly Suggestion[];
+  /** Rules suggested from what the viewer decided (2.10), as cards. */
+  learned?: Html | "";
 }): Html {
   const latest = props.rows[0]?.id ?? 0;
   const params = (extra: Record<string, string>) =>
@@ -113,7 +115,8 @@ export function activityPage(props: {
       </table>`,
     )}
     ${props.nextBefore === null ? "" : html`<p><a href="/activity?${params({ before: String(props.nextBefore) })}">Older</a></p>`}
-    <h2>Suggested rules</h2>
+    ${props.learned ?? ""}
+    <h2>Suggested from Watch mode</h2>
     <p class="muted">
       Drawn from Watch mode: calls your rules would have stopped, grouped by account and
       action. Suggestions are only text. Read them, edit them, and add the ones you want to your rules

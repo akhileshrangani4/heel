@@ -55,6 +55,8 @@ Open **Settings → Pause** and pause what you need, or run `heel pause --agent 
 
 An agent can also propose rules for your file. They wait under **Rule changes** on the Approvals page, and nothing changes until you add them with your passkey. See [Your agent can propose rules](rules.md#your-agent-can-propose-rules).
 
+When you keep approving the same kind of request, heel suggests a rule for it under **Suggested rules** at the top of the page. **Review and add** opens it as a rule change; nothing changes until you add it with your passkey. See [heel suggests rules from what you decide](rules.md#heel-suggests-rules-from-what-you-decide).
+
 ![A proposed rule: vendor-mail, with the agent's why and where it goes](images/proposal.png)
 
 ## Hints

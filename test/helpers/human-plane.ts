@@ -106,6 +106,8 @@ export function humanPlaneHarness(
     builtInGoogle?: BuiltInGoogleClient;
     /** What host names resolve to (connection requests check this before approval). */
     resolveHost?: (host: string) => Promise<readonly string[]>;
+    /** Rule suggestions from decisions (2.10); off when absent. */
+    learning?: HumanPlaneDeps["learning"];
   } = {},
 ): HumanPlaneHarness {
   const h = approvalHarness(options);
@@ -142,6 +144,7 @@ export function humanPlaneHarness(
       : { ruleFiles: { paths: rulesPaths(options.rulesHome), reload: () => {} } }),
     ...(options.checkKey === undefined ? {} : { checkKey: options.checkKey }),
     ...(options.background === undefined ? {} : { background: options.background }),
+    ...(options.learning === undefined ? {} : { learning: options.learning }),
     now: () => h.clock.now,
   });
 
