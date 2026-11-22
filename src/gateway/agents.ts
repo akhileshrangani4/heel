@@ -220,6 +220,25 @@ export function setWorkRoots(
   roots: readonly string[],
   protectedPaths: readonly string[] = [],
 ): { name: string; workRoots: string[] } {
+  return db.transaction((tx) => {
+    const { agentId, workRoots } = checkedWorkRoots(tx, orgId, name, roots, protectedPaths);
+    tx.update(agents).set({ workRoots }).where(eq(agents.id, agentId)).run();
+    return { name, workRoots };
+  });
+}
+
+/**
+ * The checks `setWorkRoots` makes, without saving anything: the roots as
+ * they would be stored, or an AgentError saying which one can't be used and
+ * why. A proposal's preview uses it to show its owner the outcome first.
+ */
+export function checkedWorkRoots(
+  db: HeelDb | HeelTx,
+  orgId: string,
+  name: string,
+  roots: readonly string[],
+  protectedPaths: readonly string[] = [],
+): { agentId: string; workRoots: string[] } {
   const guarded = protectedPaths.map((p) => realOrSelf(p));
   const normalized = roots.map((root) => {
     const refuse = (why: string) =>
@@ -239,26 +258,23 @@ export function setWorkRoots(
     if (guarded.some((p) => overlaps(real, p))) throw refuse("it overlaps heel's own files");
     return real;
   });
-  return db.transaction((tx) => {
-    const agent = requireLiveAgent(tx, orgId, name);
-    const others = tx
-      .select({ ownerId: agents.ownerId, workRoots: agents.workRoots })
-      .from(agents)
-      .where(eq(agents.orgId, orgId))
-      .all()
-      .filter((a) => a.ownerId !== agent.ownerId)
-      .flatMap((a) => a.workRoots);
-    for (const root of normalized) {
-      if (others.some((other) => overlaps(root, other))) {
-        throw new AgentError(
-          "invalid_name",
-          `not a usable work root: ${root} (it overlaps another owner's agent)`,
-        );
-      }
+  const agent = requireLiveAgent(db, orgId, name);
+  const others = db
+    .select({ ownerId: agents.ownerId, workRoots: agents.workRoots })
+    .from(agents)
+    .where(eq(agents.orgId, orgId))
+    .all()
+    .filter((a) => a.ownerId !== agent.ownerId)
+    .flatMap((a) => a.workRoots);
+  for (const root of normalized) {
+    if (others.some((other) => overlaps(root, other))) {
+      throw new AgentError(
+        "invalid_name",
+        `not a usable work root: ${root} (it overlaps another owner's agent)`,
+      );
     }
-    tx.update(agents).set({ workRoots: normalized }).where(eq(agents.id, agent.id)).run();
-    return { name, workRoots: normalized };
-  });
+  }
+  return { agentId: agent.id, workRoots: normalized };
 }
 
 /** Directories that can never be a work root themselves: the agent would see too much. */

@@ -12,7 +12,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 import { compileRulesText, loadRuleSet, rulesPaths } from "../../src/config/rules.ts";
-import { addAgent } from "../../src/gateway/agents.ts";
+import { addAgent, setWorkRoots, workRootsByName } from "../../src/gateway/agents.ts";
 import {
   applyProposal,
   describeProposal,
@@ -323,5 +323,97 @@ hide:
     const compiled = compileRulesText(preview.after, file, "rules/owner.yaml", "owner");
     expect(compiled.file.rules.map((r) => r.ref.name)).toEqual(["everything-else"]);
     expect(compiled.file.hide).toHaveLength(1);
+  });
+});
+
+describe("proposing workdirs", () => {
+  const ctx = (setup: ReturnType<typeof setUp>) => ({
+    db: setup.t.db,
+    orgId: setup.t.orgId,
+    protectedPaths: [setup.paths.home],
+  });
+
+  it("names them with the rest of a proposal", () => {
+    expect(describeProposal(0, 0, 1)).toBe("a workdir");
+    expect(describeProposal(1, 1, 2)).toBe("a new rule, a hide entry and 2 workdirs");
+  });
+
+  it("checks only the path's form when proposed, so the agent learns nothing about heel's host", () => {
+    const { t, who } = setUp(ASKS);
+    const relative = proposeRules(t.db, who, { workdirs: [{ path: "project" }] }, NOW);
+    expect(relative).toEqual({
+      ok: false,
+      problems: ["workdirs.0: an absolute, normalized path, such as /home/me/project"],
+    });
+    const dotted = proposeRules(t.db, who, { workdirs: [{ path: "/home/me/../etc" }] }, NOW);
+    expect(dotted.ok).toBe(false);
+    // A path that doesn't exist is the owner's to see, not the agent's.
+    const missing = proposeRules(t.db, who, { workdirs: [{ path: "/no/such/dir" }] }, NOW);
+    expect(missing.ok).toBe(true);
+  });
+
+  it("adds to the agent's own workdirs and leaves the rules file as it is", () => {
+    const setup = setUp(ASKS);
+    const { t, who, file } = setup;
+    const had = tempDir("heel-wd-had-");
+    const wanted = tempDir("heel-wd-new-");
+    setWorkRoots(t.db, t.orgId, "my-agent", [had]);
+    const proposed = proposeRules(
+      t.db,
+      who,
+      { workdirs: [{ path: wanted, why: "to build your project" }] },
+      NOW,
+    );
+    if (!proposed.ok) throw new Error(proposed.problems.join("; "));
+    const row = findProposal(t.db, t.orgId, proposed.proposalId);
+    if (row === null) throw new Error("stored");
+    expect(row.workdirs).toEqual([{ path: wanted, why: "to build your project" }]);
+
+    const preview = previewProposal(row, file, "rules/owner.yaml", "my-agent", ctx(setup));
+    if (!preview.ok) throw new Error(preview.problem);
+    expect(preview.after).toBe(ASKS);
+    expect(preview.workRoots).toHaveLength(2);
+
+    expect(applyProposal(t.db, row, file, preview, preview.sha, t.ownerId, NOW)).toEqual({
+      ok: true,
+    });
+    expect(readFileSync(file, "utf8")).toBe(ASKS);
+    expect(workRootsByName(t.db, t.orgId, "my-agent").workRoots).toEqual(preview.workRoots);
+    expect(findProposal(t.db, t.orgId, row.id)?.status).toBe("applied");
+  });
+
+  it("shows the owner why a workdir can't be added", () => {
+    const setup = setUp(ASKS);
+    const { t, who, file, paths } = setup;
+    for (const [path, why] of [
+      ["/no/such/dir", "it doesn't exist"],
+      [paths.home, "it overlaps heel's own files"],
+    ] as const) {
+      const proposed = proposeRules(t.db, who, { workdirs: [{ path }] }, NOW);
+      if (!proposed.ok) throw new Error(proposed.problems.join("; "));
+      const row = findProposal(t.db, t.orgId, proposed.proposalId);
+      if (row === null) throw new Error("stored");
+      const preview = previewProposal(row, file, "rules/owner.yaml", "my-agent", ctx(setup));
+      expect(preview.ok).toBe(false);
+      if (!preview.ok) expect(preview.problem).toContain(why);
+    }
+  });
+
+  it("refuses when the agent's workdirs changed after the passkey signed", () => {
+    const setup = setUp(ASKS);
+    const { t, who, file } = setup;
+    const proposed = proposeRules(t.db, who, { workdirs: [{ path: tempDir("heel-wd-") }] }, NOW);
+    if (!proposed.ok) throw new Error(proposed.problems.join("; "));
+    const row = findProposal(t.db, t.orgId, proposed.proposalId);
+    if (row === null) throw new Error("stored");
+    const signed = previewProposal(row, file, "rules/owner.yaml", "my-agent", ctx(setup));
+    if (!signed.ok) throw new Error(signed.problem);
+    setWorkRoots(t.db, t.orgId, "my-agent", [tempDir("heel-wd-other-")]);
+    const now = previewProposal(row, file, "rules/owner.yaml", "my-agent", ctx(setup));
+    if (!now.ok) throw new Error(now.problem);
+    expect(now.sha).not.toBe(signed.sha);
+    const applied = applyProposal(t.db, row, file, now, signed.sha, t.ownerId, NOW);
+    expect(applied.ok).toBe(false);
+    expect(findProposal(t.db, t.orgId, row.id)?.status).toBe("pending");
   });
 });

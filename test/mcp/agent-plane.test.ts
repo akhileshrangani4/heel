@@ -368,6 +368,29 @@ describe("heel_propose_rules", () => {
     expect(h.t.db.select().from(ruleProposals).all()).toEqual([]);
   });
 
+  it("takes workdirs for the agent's own heel run, checking only the path's form", async () => {
+    const h = await mcpHarness({ owner: READS_ALLOWED });
+    const client = await h.connect("/mcp/notes");
+    const { tools } = await client.listTools();
+    const schema = tools.find((tool) => tool.name === "heel_propose_rules")?.inputSchema as {
+      properties: Record<string, unknown>;
+    };
+    expect(Object.keys(schema.properties)).toContain("workdirs");
+    const result = await client.callTool({
+      name: "heel_propose_rules",
+      arguments: { workdirs: [{ path: "/home/me/code", why: "to run your tests" }] },
+    });
+    expect(result.structuredContent).toMatchObject({ status: "proposed" });
+    const [row] = h.t.db.select().from(ruleProposals).all();
+    expect(row?.workdirs).toEqual([{ path: "/home/me/code", why: "to run your tests" }]);
+    const relative = await client.callTool({
+      name: "heel_propose_rules",
+      arguments: { workdirs: [{ path: "code" }] },
+    });
+    expect(relative.isError).toBe(true);
+    expect(JSON.stringify(relative.structuredContent)).toContain("workdirs.0");
+  });
+
   it("refuses while the agent is paused", async () => {
     const h = await mcpHarness({ owner: READS_ALLOWED });
     pause(h.t.db, h.t.orgId, { scope: "global", target: "" }, h.t.ownerId, new Date());

@@ -64,6 +64,7 @@ export function proposalCardsFor(deps: HumanPlaneDeps, session: SessionView, now
     agent: nameOf(deps, "agent", row.agentId),
     rules: row.rules.length,
     hide: row.hide.length,
+    workdirs: row.workdirs.length,
     reason: row.reason,
     createdAt: row.createdAt,
     expiresAt: row.expiresAt,
@@ -104,7 +105,15 @@ export function proposalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
         },
       };
     }
-    return { where, effect: previewProposal(row, where.file, where.display, where.agent) };
+    const workdirs = {
+      db: deps.db,
+      orgId: deps.orgId,
+      protectedPaths: deps.ruleFiles === undefined ? [] : [deps.ruleFiles.paths.home],
+    };
+    return {
+      where,
+      effect: previewProposal(row, where.file, where.display, where.agent, workdirs),
+    };
   }
 
   const notFound = (c: Context<SignedInEnv>, session: SessionView) =>
@@ -146,6 +155,10 @@ export function proposalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
         file: where?.display ?? "your rules file",
         rules: row.rules.map((r) => ({ yaml: ruleYaml(r.rule), why: r.why })),
         hide: row.hide.map((h) => ({ yaml: ruleYaml(h.entry), why: h.why })),
+        workdirs: row.workdirs.map((w, i) => ({
+          ...w,
+          stored: effect.ok ? (effect.added[i] ?? null) : null,
+        })),
         createdAt: row.createdAt,
         expiresAt: row.expiresAt,
         decision:
@@ -199,7 +212,11 @@ export function proposalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     // The page showed the file as it was when it loaded; sign only that file.
     if (stringField(body, "sha") !== effect.sha) {
       return c.json(
-        { ok: false, message: "The rules file changed since you opened this page. Reload it." },
+        {
+          ok: false,
+          message:
+            "The rules file or the agent's workdirs changed since you opened this page. Reload it.",
+        },
         409,
       );
     }
@@ -250,7 +267,13 @@ export function proposalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     );
     if (!applied.ok) return c.json({ ok: false, message: applied.problem }, 409);
     deps.log.warn(
-      { proposal: row.id, agent: where.agent, file: where.display, by: session.userId },
+      {
+        proposal: row.id,
+        agent: where.agent,
+        file: where.display,
+        workdirs: effect.workRoots,
+        by: session.userId,
+      },
       "proposed rules added",
     );
     // Load them now rather than waiting for the file watcher.

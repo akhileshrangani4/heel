@@ -43,6 +43,12 @@ import {
 } from "./settings.ts";
 import type { CliRefusal } from "./types.ts";
 
+/** What an agent is told when heel run's directory isn't one of its workdirs. */
+const WORKDIR_HINT =
+  "This directory isn't one of your workdirs for heel run. To ask for it, call heel_propose_rules " +
+  "with workdirs: [{ path, why }]; your owner adds it with a passkey. A new proposal replaces your " +
+  "earlier one that's still waiting, so include anything from it you still need.";
+
 /**
  * The definition for a CLI account (D8b; spec: CLI runner): `heel run`
  * sends a command line and the directory it runs in; heel normalizes it,
@@ -244,7 +250,7 @@ export function cliDefinition(account: AccountRecord, deps: CliDeps): Definition
       if (argv[0] !== settings.command) return { ok: false, reason: "unsupported" };
       const dir = await resolved(cwd);
       if (dir === null || rootHolding(await liveRoots(base.agentId), dir) === null) {
-        return { ok: false, reason: "workdir_not_allowed" };
+        return { ok: false, reason: "workdir_not_allowed", detail: WORKDIR_HINT };
       }
       // Paths into the sandbox's own files (credential files, the egress socket, /proc).
       if (argv.slice(1).some(namesSandboxInternals)) return { ok: false, reason: "unsupported" };

@@ -90,7 +90,7 @@ Edit the file and heel reloads it on its own. Before you rely on a change, run `
 
 ## Your agent can propose rules
 
-When a call your agent needs keeps asking, or is denied, it can propose rules instead of asking you to edit the file. It can also propose [hide entries](#hiding-what-the-agent-reads), for mail you want kept from agents. Every MCP endpoint lists heel's own `heel_propose_rules` tool:
+When a call your agent needs keeps asking, or is denied, it can propose rules instead of asking you to edit the file. It can also propose [hide entries](#hiding-what-the-agent-reads), for mail you want kept from agents, and [workdirs](heel-run.md#3-give-the-agent-a-workdir), the directories its own `heel run` may work in. Every MCP endpoint lists heel's own `heel_propose_rules` tool:
 
 ```json
 {

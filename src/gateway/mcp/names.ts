@@ -36,8 +36,9 @@ export const HEEL_PROPOSE_RULES = "heel_propose_rules";
 export const HEEL_PROPOSE_RULES_TOOL: Tool = {
   name: HEEL_PROPOSE_RULES,
   description:
-    "Propose rules for your owner's heel rules file, for when a call you need is denied or asks every time, " +
-    "and hide entries, for email your owner wants kept from agents (yourself included). " +
+    "Propose rules for your owner's heel rules file, for when a call you need is denied or asks every time; " +
+    "hide entries, for email your owner wants kept from agents (yourself included); " +
+    "and workdirs, the directories your own heel run may work in. " +
     "Nothing changes until your owner reads them on heel's approval page and adds them with a passkey. " +
     "Rules go first in the file, so they decide the calls they match. Give each rule and entry a short why. " +
     "A newer proposal replaces your earlier one that is still waiting. Rules reference: https://useheel.dev/docs/rules-reference",
@@ -86,6 +87,28 @@ export const HEEL_PROPOSE_RULES_TOOL: Tool = {
             },
           },
           required: ["entry"],
+          additionalProperties: false,
+        },
+      },
+      workdirs: {
+        type: "array",
+        maxItems: 10,
+        description:
+          "Optional. Directories on heel's host where your heel run commands may start and change files, " +
+          "added to the ones you have. For when heel run says a directory isn't one of your workdirs.",
+        items: {
+          type: "object",
+          properties: {
+            path: {
+              type: "string",
+              description: "An absolute path, such as /home/me/project.",
+            },
+            why: {
+              type: "string",
+              description: "One plain sentence your owner reads: why you need to work there.",
+            },
+          },
+          required: ["path"],
           additionalProperties: false,
         },
       },

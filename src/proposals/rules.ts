@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { and, desc, eq, lt } from "drizzle-orm";
 import { Document, isMap, isNode, isSeq, parse, parseDocument, YAMLSeq } from "yaml";
 import { z } from "zod";
@@ -8,6 +8,7 @@ import { compileRulesText, type RulesPaths } from "../config/rules.ts";
 import { formatYamlIssue, YamlValidationError } from "../config/yaml.ts";
 import { canonicalHash } from "../core/canonical.ts";
 import type { CompiledRulesFile } from "../core/rules/compile.ts";
+import { AgentError, checkedWorkRoots } from "../gateway/agents.ts";
 
 export { describeProposal } from "./describe.ts";
 
@@ -18,6 +19,7 @@ import {
   agents,
   type ProposedHide,
   type ProposedRule,
+  type ProposedWorkdir,
   ruleProposals,
   users,
 } from "../store/schema.ts";
@@ -37,6 +39,10 @@ import { hasErrnoCode } from "../util/errno.ts";
  *   them. The approval page says which existing rules they come before.
  * - Proposed hide entries go at the end of the file's `hide:` list. A hide
  *   entry only takes more away from agents, never gives them anything.
+ * - Proposed workdirs are directories the proposing agent's own `heel run`
+ *   may work in, added to the ones it has. The agent learns only whether a
+ *   path is absolute: whether it exists, or overlaps heel or another owner,
+ *   is shown to the owner on the approval page, never to the agent.
  *
  * Rows are never changed once decided, so they are the change history too.
  */
@@ -45,6 +51,7 @@ import { hasErrnoCode } from "../util/errno.ts";
 export const PROPOSAL_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 export const MAX_PROPOSED_RULES = 20;
 export const MAX_PROPOSED_HIDE = 20;
+export const MAX_PROPOSED_WORKDIRS = 10;
 const MAX_PROPOSAL_BYTES = 32 * 1024;
 const MAX_WHY_CHARS = 200;
 const MAX_REASON_CHARS = 500;
@@ -70,12 +77,21 @@ export const ProposeRulesInput = z
       )
       .max(MAX_PROPOSED_HIDE)
       .default([]),
+    workdirs: z
+      .array(
+        z.strictObject({
+          path: z.string().min(1).max(1_024),
+          why: z.string().max(2_000).optional(),
+        }),
+      )
+      .max(MAX_PROPOSED_WORKDIRS)
+      .default([]),
     reason: z.string().max(4_000).optional(),
   })
-  .refine((input) => input.rules.length + input.hide.length > 0, {
-    message: "propose at least one rule or hide entry",
+  .refine((input) => input.rules.length + input.hide.length + input.workdirs.length > 0, {
+    message: "propose at least one rule, hide entry or workdir",
   });
-/** What callers pass; `rules` and `hide` may be left out. */
+/** What callers pass; `rules`, `hide` and `workdirs` may be left out. */
 export type ProposeRulesInput = z.input<typeof ProposeRulesInput>;
 
 export type ProposeOutcome =
@@ -124,10 +140,20 @@ export function proposeRules(
     entry: JSON.parse(JSON.stringify(h.entry)) as Record<string, unknown>,
     why: oneLine(h.why, MAX_WHY_CHARS),
   }));
-  if (Buffer.byteLength(JSON.stringify([rules, hide])) > MAX_PROPOSAL_BYTES) {
+  const workdirs: ProposedWorkdir[] = (input.workdirs ?? []).map((w) => ({
+    path: w.path,
+    why: oneLine(w.why, MAX_WHY_CHARS),
+  }));
+  if (Buffer.byteLength(JSON.stringify([rules, hide, workdirs])) > MAX_PROPOSAL_BYTES) {
     return { ok: false, problems: [`the proposal is larger than ${MAX_PROPOSAL_BYTES} bytes`] };
   }
   const problems: string[] = [];
+  // Only the path's form is checked here; the rest is for the owner's eyes (see above).
+  workdirs.forEach((w, i) => {
+    if (!isAbsolute(w.path) || resolve(w.path) !== w.path.replace(/(.)[\\/]$/, "$1")) {
+      problems.push(`workdirs.${i}: an absolute, normalized path, such as /home/me/project`);
+    }
+  });
   rules.forEach((r, i) => {
     if (!Rule.safeParse(r.rule).success) return; // compile below says what's wrong
     if (r.rule["watch"] === true) problems.push(`rules.${i}: a proposed rule can't be watch: true`);
@@ -159,6 +185,7 @@ export function proposeRules(
         agentId: who.agentId,
         rules,
         hide,
+        workdirs,
         reason: oneLine(input.reason, MAX_REASON_CHARS),
         status: "pending",
         createdAt: now,
@@ -248,12 +275,34 @@ export type ProposalPreview =
       ok: true;
       before: string;
       after: string;
-      /** Hash of `after`: the passkey challenge binds to it. */
+      /** Hash of `after` and the agent's workdirs after: the passkey challenge binds to it. */
       sha: string;
       /** The rules already in the file, which the proposed ones go before. */
       existing: number;
+      /** The agent's `heel run` directories after the change, as stored; null when none are proposed. */
+      workRoots: string[] | null;
+      /**
+       * Each proposed directory as heel would store it, symlinks followed, in
+       * proposal order. The owner approves these, not the agent's spelling.
+       */
+      added: string[];
     }
   | { ok: false; problem: string };
+
+/** What a preview needs to check proposed workdirs: the agent's own and heel's home. */
+export interface WorkdirContext {
+  db: HeelDb;
+  orgId: string;
+  /** heel's own files, which no workdir may overlap. */
+  protectedPaths: readonly string[];
+}
+
+/** Pure: the hash a passkey signs for a proposal, over everything applying it changes. */
+function proposalSha(after: string, workRoots: readonly string[] | null): string {
+  const hash = createHash("sha256").update(after);
+  if (workRoots !== null) hash.update(`\0workdirs\0${JSON.stringify(workRoots)}`);
+  return hash.digest("hex");
+}
 
 /**
  * Inserts the proposed rules at the top of the owner's file, each with a
@@ -261,11 +310,47 @@ export type ProposalPreview =
  * Comments and layout already in the file stay as they are.
  */
 export function previewProposal(
-  proposal: Pick<ProposalRow, "rules" | "hide">,
+  proposal: Pick<ProposalRow, "rules" | "hide" | "workdirs">,
   file: string,
   display: string,
   agentName: string,
+  workdirs?: WorkdirContext,
 ): ProposalPreview {
+  let workRoots: string[] | null = null;
+  let added: string[] = [];
+  if (proposal.workdirs.length > 0) {
+    if (workdirs === undefined) {
+      return { ok: false, problem: "heel can't change this agent's workdirs from here." };
+    }
+    try {
+      const current = currentWorkRoots(workdirs.db, workdirs.orgId, agentName);
+      const checked = checkedWorkRoots(
+        workdirs.db,
+        workdirs.orgId,
+        agentName,
+        [...current, ...proposal.workdirs.map((w) => w.path)],
+        workdirs.protectedPaths,
+      ).workRoots;
+      added = checked.slice(current.length);
+      workRoots = [...new Set(checked)];
+    } catch (error) {
+      if (!(error instanceof AgentError)) throw error;
+      return { ok: false, problem: `heel can't add these workdirs: ${error.message}.` };
+    }
+  }
+  // Workdirs alone leave the rules file exactly as it is.
+  if (proposal.rules.length === 0 && proposal.hide.length === 0) {
+    const text = readOwnerFile(file) ?? "";
+    return {
+      ok: true,
+      before: text,
+      after: text,
+      sha: proposalSha(text, workRoots),
+      existing: 0,
+      workRoots,
+      added,
+    };
+  }
   const before = readOwnerFile(file);
   let current: CompiledRulesFile | null = null;
   if (before !== null) {
@@ -358,9 +443,21 @@ export function previewProposal(
     ok: true,
     before: before ?? "",
     after,
-    sha: createHash("sha256").update(after).digest("hex"),
+    sha: proposalSha(after, workRoots),
     existing,
+    workRoots,
+    added,
   };
+}
+
+/** The directories an agent's `heel run` may use now. */
+function currentWorkRoots(db: HeelDb, orgId: string, agentName: string): string[] {
+  const row = db
+    .select({ workRoots: agents.workRoots })
+    .from(agents)
+    .where(and(eq(agents.orgId, orgId), eq(agents.name, agentName)))
+    .get();
+  return row?.workRoots ?? [];
 }
 
 /**
@@ -383,21 +480,33 @@ export function applyProposal(
     return { ok: false, problem: "This proposal is no longer waiting." };
   }
   if (preview.sha !== signedSha) {
-    return { ok: false, problem: "The rules file changed since you opened this page. Reload it." };
-  }
-  try {
-    mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(file, preview.after);
-  } catch (error) {
     return {
       ok: false,
-      problem: `heel couldn't write ${file}: ${error instanceof Error ? error.message : String(error)}`,
+      problem:
+        "The rules file or the agent's workdirs changed since you opened this page. Reload it.",
     };
   }
-  db.update(ruleProposals)
-    .set({ status: "applied", decidedBy: by, decidedAt: now })
-    .where(eq(ruleProposals.id, proposal.id))
-    .run();
+  if (proposal.rules.length > 0 || proposal.hide.length > 0) {
+    try {
+      mkdirSync(dirname(file), { recursive: true });
+      writeFileSync(file, preview.after);
+    } catch (error) {
+      return {
+        ok: false,
+        problem: `heel couldn't write ${file}: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  }
+  const workRoots = preview.workRoots;
+  db.transaction((tx) => {
+    if (workRoots !== null) {
+      tx.update(agents).set({ workRoots }).where(eq(agents.id, proposal.agentId)).run();
+    }
+    tx.update(ruleProposals)
+      .set({ status: "applied", decidedBy: by, decidedAt: now })
+      .where(eq(ruleProposals.id, proposal.id))
+      .run();
+  });
   return { ok: true };
 }
 

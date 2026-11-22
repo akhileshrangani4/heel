@@ -58,12 +58,22 @@ describe("the notice", () => {
   });
 
   it("tells an owner how many rules an agent proposes, and nothing of the rules themselves", () => {
-    const one = { kind: "proposal", agent: "inbox-bot", rules: 1, hide: 0, url: "u" } as const;
+    const one = {
+      kind: "proposal",
+      agent: "inbox-bot",
+      rules: 1,
+      hide: 0,
+      workdirs: 0,
+      url: "u",
+    } as const;
     expect(noticeText(one)).toEqual({
       title: "inbox-bot proposes a new rule",
       body: "Nothing changes until you add them. Open heel to read them and decide.",
     });
     expect(noticeText({ ...one, rules: 3 }).title).toBe("inbox-bot proposes 3 new rules");
+    expect(noticeText({ ...one, rules: 0, workdirs: 1 }).title).toBe(
+      "inbox-bot proposes a workdir",
+    );
     expect(proposalUrl(new URL("https://heel.example.com/"), "rpr_1")).toBe(
       "https://heel.example.com/proposals/rpr_1",
     );

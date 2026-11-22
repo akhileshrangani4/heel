@@ -1,7 +1,8 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { rulesPaths } from "../../src/config/rules.ts";
+import { workRootsByName } from "../../src/gateway/agents.ts";
 import { findProposal, proposeRules } from "../../src/proposals/rules.ts";
 import { attribute, humanPlaneHarness, issued, PUBLIC_URL } from "../helpers/human-plane.ts";
 import { tempDir } from "../helpers/store.ts";
@@ -216,5 +217,75 @@ describe("proposed hide entries on the approval page", () => {
     expect(added.status).toBe(200);
     expect(readFileSync(file, "utf8")).toContain("login_code");
     expect(findProposal(h.t.db, h.t.orgId, proposed.proposalId)?.status).toBe("applied");
+  });
+});
+
+describe("proposed workdirs on the approval page", () => {
+  it("says in plain words where the agent's heel run may work, and adds it with a passkey", async () => {
+    const { h, file } = setUp();
+    const before = readFileSync(file, "utf8");
+    const project = tempDir("heel-wd-project-");
+    const proposed = proposeRules(
+      h.t.db,
+      { orgId: h.t.orgId, ownerId: h.t.ownerId, agentId: h.agent.agentId },
+      { workdirs: [{ path: project, why: "to run your test suite" }] },
+      h.clock.now,
+    );
+    if (!proposed.ok) throw new Error(proposed.problems.join("; "));
+    const owner = await h.signIn(await h.enroll());
+    const listed = await (await h.fetch("/approvals", { as: owner })).text();
+    expect(listed).toContain("a workdir");
+    expect(listed).toContain("for its heel run");
+    const page = await (await h.fetch(`/proposals/${proposed.proposalId}`, { as: owner })).text();
+    expect(page).toContain("Workdirs for heel run");
+    expect(page).toContain("may run commands with heel run in");
+    expect(page).toContain(project);
+    expect(page).toContain("to run your test suite");
+    expect(page).toContain("Add this workdir");
+    expect(page).not.toContain("The file after the change");
+
+    const added = await h.ceremony(
+      owner,
+      {
+        url: "/proposals/challenge",
+        body: { proposalId: proposed.proposalId, sha: attribute(page, "data-sha") },
+      },
+      "/proposals/confirm",
+    );
+    expect(added.status).toBe(200);
+    expect(readFileSync(file, "utf8")).toBe(before);
+    const roots = workRootsByName(h.t.db, h.t.orgId, h.agent.agentName).workRoots;
+    expect(roots).toHaveLength(1);
+    const done = await (
+      await h.fetch(`/proposals/${proposed.proposalId}?applied`, { as: owner })
+    ).text();
+    expect(done).toContain("heel run can work there now");
+  });
+
+  it("shows the folder heel would store, when the agent's path is a symlink to another one", async () => {
+    const { h } = setUp();
+    const real = realpathSync(tempDir("heel-wd-real-"));
+    const link = join(tempDir("heel-wd-links-"), "looks-harmless");
+    symlinkSync(real, link);
+    const proposed = proposeRules(
+      h.t.db,
+      { orgId: h.t.orgId, ownerId: h.t.ownerId, agentId: h.agent.agentId },
+      { workdirs: [{ path: link }] },
+      h.clock.now,
+    );
+    if (!proposed.ok) throw new Error(proposed.problems.join("; "));
+    const owner = await h.signIn(await h.enroll());
+    const page = await (await h.fetch(`/proposals/${proposed.proposalId}`, { as: owner })).text();
+    expect(page).toContain(`may run commands with heel run in <code>${real}</code>`);
+    expect(page).toContain(`asked for <code>${link}</code>, which leads to this`);
+    await h.ceremony(
+      owner,
+      {
+        url: "/proposals/challenge",
+        body: { proposalId: proposed.proposalId, sha: attribute(page, "data-sha") },
+      },
+      "/proposals/confirm",
+    );
+    expect(workRootsByName(h.t.db, h.t.orgId, h.agent.agentName).workRoots).toEqual([real]);
   });
 });
