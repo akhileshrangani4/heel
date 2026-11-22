@@ -22,8 +22,6 @@ export type ConnectProps =
       agentName: string;
       /** A new agent, rather than this app's existing one. */
       newAgent?: boolean;
-      /** An agent an app of this name signed in as before, from another sign-in that this replaces. */
-      replaces?: boolean;
       request: ConnectRequest;
       /** Sends the person back to the client with `access_denied`. */
       declineHref: string;
@@ -52,13 +50,6 @@ export function connectPage(props: ConnectProps): Html {
       The app chose its own name. Only continue if you just started this sign-in yourself; an app on
       your own computer returns to localhost or 127.0.0.1.
     </p>
-    ${
-      props.replaces === true
-        ? html`<p><strong>An app of this name signed in as ${props.agentName} before.</strong> This
-            sign-in takes its place: ${props.agentName}'s grants and standing approvals carry over, and
-            the earlier sign-in stops working.</p>`
-        : ""
-    }
     <ul>
       <li>Every call it makes goes through your rules: some run, some wait for you, some are denied.</li>
       <li>It never sees your account credentials.</li>

@@ -56,14 +56,14 @@ codex mcp add heel --url "http://127.0.0.1:7300/mcp" --bearer-token-env-var HEEL
 }
 ```
 
-**heel on another machine: sign in instead of a token.** When heel's agent plane has an HTTPS address (`agent_public_url`, which `heel init --approve-from tailscale` or `cloudflare` sets), an agent signs in to heel with OAuth: you confirm it on heel's page with your passkey, and no token is copied anywhere. heel names the agent after the app, and an app that signs in again under the same name stays the same agent. Only approve a sign-in you just started.
+**heel on another machine: sign in instead of a token.** When heel's agent plane has an HTTPS address (`agent_public_url`, which `heel init --approve-from tailscale` or `cloudflare` sets), an agent signs in to heel with OAuth: you confirm it on heel's page with your passkey, and no token is copied anywhere. heel names the agent after the app; each new sign-in is a new agent, so revoke an old one you no longer use on the **Agents** page. Only approve a sign-in you just started.
 
 ```sh
 claude mcp add --transport http --scope user heel https://heel-box.your-tailnet.ts.net:8443/mcp
 # then /mcp in Claude Code, pick heel, Authenticate
 
 codex mcp add heel --url https://heel-box.your-tailnet.ts.net:8443/mcp
-# opens heel's sign-in page itself
+# usually opens heel's sign-in page itself; if it doesn't: codex mcp login heel
 ```
 
 **Claude, ChatGPT or Grok connectors** sign in the same way: add `<agent_public_url>/mcp` as a custom connector. See [One heel for every machine](running.md#one-heel-for-every-machine).
