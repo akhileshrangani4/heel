@@ -968,7 +968,7 @@ export const ruleProposals = sqliteTable(
   ],
 );
 
-export const RULE_CHANGE_SOURCES = ["proposal", "outside"] as const;
+export const RULE_CHANGE_SOURCES = ["proposal", "outside", "web"] as const;
 export type RuleChangeSource = (typeof RULE_CHANGE_SOURCES)[number];
 
 /**
@@ -990,7 +990,7 @@ export const ruleChanges = sqliteTable(
     at: integer("at", { mode: "timestamp_ms" }).notNull(),
     source: text("source", { enum: RULE_CHANGE_SOURCES }).notNull(),
     proposalId: text("proposal_id").references(() => ruleProposals.id),
-    /** Who added the proposal; null for a change made outside heel. */
+    /** Who added the proposal, or made the change in the web app (2.9); null for one made outside heel. */
     decidedBy: text("decided_by").references(() => users.id),
     /** The change as a line diff, capped. */
     diff: text("diff").notNull(),

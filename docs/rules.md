@@ -84,7 +84,9 @@ Pause, org rules, hidden mail and calls heel can't check safely hold in every mo
 
 ## Editing rules
 
-Edit the file and heel reloads it on its own. Before you rely on a change, run `heel rules check` (it reports every problem and names that match nothing) and `heel rules test` with your cases ([how](rules-reference.md#testing-rules)). Editing a rule ends the standing approvals made from it, so a widened rule asks again.
+**In the web app**, **Rules** (linked from Activity) shows your rules as sentences, in the order heel reads them. Change what a rule decides from its menu, or remove a rule or a hide entry: heel shows what your rules will say afterwards, checks they load, and saves with your passkey. **Edit the file directly** opens the YAML for anything the menus don't do, with the same check before you save. Every change lands in the rule history.
+
+Or edit the file and heel reloads it on its own. Before you rely on a change, run `heel rules check` (it reports every problem and names that match nothing) and `heel rules test` with your cases ([how](rules-reference.md#testing-rules)). Editing a rule ends the standing approvals made from it, so a widened rule asks again.
 
 **Describe a rule in words** with `heel rules draft "merges to main ask"`: a model you configure drafts the YAML and a diff for you to read and save. It never sees a live call, and never saves anything itself.
 

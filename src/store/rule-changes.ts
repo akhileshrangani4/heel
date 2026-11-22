@@ -136,11 +136,31 @@ export function recordProposalChange(
   saveSnapshot(db, change.file, change.after, change.now);
 }
 
+/** Records a change made in the web app's rules editor (2.9), and remembers the new text. */
+export function recordWebChange(
+  db: HeelDb,
+  change: { orgId: string; userId: string; file: string; before: string; after: string; now: Date },
+): void {
+  db.insert(ruleChanges)
+    .values({
+      id: newId("ruleChange"),
+      orgId: change.orgId,
+      userId: change.userId,
+      file: change.file,
+      at: change.now,
+      source: "web",
+      decidedBy: change.userId,
+      diff: capped(lineDiff(change.before, change.after)),
+    })
+    .run();
+  saveSnapshot(db, change.file, change.after, change.now);
+}
+
 export interface RuleChangeView {
   id: string;
   file: string;
   at: Date;
-  source: "proposal" | "outside";
+  source: "proposal" | "outside" | "web";
   /** For a proposal: the agent it was for, and whether heel drafted it. */
   agent: string | null;
   origin: "agent" | "heel" | null;

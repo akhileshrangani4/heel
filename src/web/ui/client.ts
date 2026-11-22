@@ -214,6 +214,14 @@ export function clientScript(csrfToken: string | null): string {
         sign: getAssertion,
         finish: "/grants/confirm",
       }),
+    saveRules: ({ binding, options, status }) =>
+      run({
+        status,
+        start: { url: "/rules/challenge", body: { before: binding.before, after: binding.after, text: options.text } },
+        sign: getAssertion,
+        finish: "/rules/confirm",
+        extra: { text: options.text },
+      }),
     manageAccount: ({ binding, options, status }) => {
       const key = options && typeof options.key === "string" ? options.key : "";
       const body = { ...options, ...binding };
