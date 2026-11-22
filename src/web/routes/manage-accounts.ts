@@ -47,6 +47,14 @@ import type { SessionView } from "../sessions.ts";
  */
 
 const MAX_KEY_CHARS = 8_192;
+
+/** The groups an approvers form lists, one per line: a group name may itself hold a comma. */
+export function groupLines(text: string): string[] {
+  return text
+    .split(/\r?\n/)
+    .map((g) => g.trim())
+    .filter((g) => g !== "");
+}
 const SERVICES = new Set<string>([...REQUESTABLE_SERVICES, "mcp"]);
 
 export function manageAccountRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
@@ -198,10 +206,7 @@ export function manageAccountRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
         if (person === null) return { problem: "Someone you picked isn't on this heel any more." };
         approvers.push({ kind: "user", principal: person.id });
       }
-      const groups = (stringField(body, "groups") ?? "")
-        .split(",")
-        .map((g) => g.trim())
-        .filter((g) => g !== "");
+      const groups = groupLines(stringField(body, "groups") ?? "");
       for (const group of groups) {
         const problem = groupProblem(group);
         if (problem !== null) return { problem };

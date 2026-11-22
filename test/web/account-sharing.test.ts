@@ -2,6 +2,8 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { accounts, users } from "../../src/store/schema.ts";
 import { setApprovers, sharingOf } from "../../src/store/sharing.ts";
+import { groupLines } from "../../src/web/routes/manage-accounts.ts";
+import { connectionsPage } from "../../src/web/ui/connections.ts";
 import {
   type Browser,
   type HumanPlaneHarness,
@@ -210,6 +212,28 @@ describe("sharing accounts in the web app (2.9)", () => {
     const page = await (await h.fetch("/connections", { as: owner })).text();
     expect(page).toMatch(/id="approvers-row0-all-0" type="checkbox" name="user:sam" checked/);
     expect(page).toContain("For acme/prod only");
+  });
+
+  it("keeps a group whose name holds a comma when the form is saved as it was filled", () => {
+    const page = String(
+      connectionsPage({
+        rows: [
+          {
+            alias: "gh",
+            provider: "github",
+            status: "active",
+            signsIn: false,
+            setup: null,
+            sharing: { sharedWith: [], approvers: [{ group: "Eng, Platform" }, { group: "sec" }] },
+          },
+        ],
+        outcome: { kind: "none" },
+        signInForm: { action: "/connections/sign-in", csrfToken: "t" },
+        manage: { csrfToken: "t", people: ["sam"], groups: true, admin: true },
+      }),
+    );
+    const filled = /name="groups"[^>]*>\n([^<]*)<\/textarea>/.exec(page)?.[1] ?? "";
+    expect(groupLines(filled)).toEqual(["Eng, Platform", "sec"]);
   });
 
   it("refuses repo approvers on an account that isn't GitHub", async () => {

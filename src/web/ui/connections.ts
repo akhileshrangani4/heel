@@ -272,8 +272,9 @@ function approversForm(
     ${
       manage.groups === true
         ? html`<div class="row">
-            <label for="approvers-${id}-groups">Groups (comma between)</label>
-            <input id="approvers-${id}-groups" name="groups" autocomplete="off" value="${groups.join(", ")}" />
+            <label for="approvers-${id}-groups">Groups (one per line)</label>
+            <textarea id="approvers-${id}-groups" name="groups" rows="2" spellcheck="false">
+${groups.join("\n")}</textarea>
           </div>`
         : ""
     }
@@ -281,7 +282,7 @@ function approversForm(
       repo === null
         ? "Nobody named means the owner decides again."
         : repo === ""
-          ? "Calls on that repo go to them instead."
+          ? "Calls on that repo go to them instead, replacing any approvers it already has."
           : "Nobody named means calls on this repo go back to the approvers for every call."
     }</p>
     ${ceremonyButton({
