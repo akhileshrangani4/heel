@@ -13,6 +13,10 @@ import { oneRule, pipelineHarness } from "../helpers/pipeline.ts";
  * an unknown outcome: nothing ran. The Nov 21 setup dry run connected
  * placeholder keys, and the agent got "upstream outcome unknown" with
  * nothing in heel's log, so it guessed at whitespace and a heel bug.
+ *
+ * The answers below are what each service sent a bogus key on Nov 21 2026:
+ * GitHub, Notion and Stripe 401; Slack 200 with ok: false and invalid_auth;
+ * Linear 401 with AUTHENTICATION_ERROR.
  */
 
 const token = async (): Promise<string> => "bad-key";
@@ -50,7 +54,22 @@ describe("a rejected key", () => {
       await expect(slack.call("auth.test", {}, signal)).rejects.toThrow(CredentialRejectedError);
     }
 
-    // Linear answers 400 with an authentication error in its GraphQL errors.
+    // Linear answers 401 with an authentication error in its GraphQL errors (checked
+    // against the live API, Nov 21 2026); a 400 carrying the same error counts too.
+    const linear401 = new LinearClient(
+      answering(401, {
+        errors: [
+          {
+            message: "Authentication required, not authenticated",
+            extensions: { type: "authentication error", code: "AUTHENTICATION_ERROR" },
+          },
+        ],
+      }),
+      token,
+    );
+    await expect(linear401.request("{ viewer { id } }", {}, signal)).rejects.toThrow(
+      CredentialRejectedError,
+    );
     const linear = new LinearClient(
       answering(400, {
         errors: [
