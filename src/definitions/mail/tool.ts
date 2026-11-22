@@ -4,8 +4,10 @@ import type { Call, ProviderFields } from "../../core/call.ts";
 import type { Hiding } from "../../core/hide.ts";
 import type { StateCheck } from "../../core/rules/compile.ts";
 import {
+  CredentialRejectedError,
   type Definition,
   type HardDenyReason,
+  keyRejectedMessage,
   type Normalized,
   ResponseUnparseableError,
 } from "../../gateway/pipeline/ports.ts";
@@ -124,6 +126,10 @@ export function mailDefinition<M>(input: {
         prepared = await tool.prepare(mailbox, parsed.data, ctx.hide, ctx.signal);
       } catch (error) {
         if (errors.isNotFound(error)) return { ok: false, reason: "not_available" };
+        if (error instanceof CredentialRejectedError) {
+          const detail = keyRejectedMessage(error.service, base.account);
+          return { ok: false, reason: "lookup_unavailable", detail };
+        }
         return { ok: false, reason: "lookup_unavailable" };
       }
       if ("deny" in prepared) return { ok: false, reason: prepared.deny };

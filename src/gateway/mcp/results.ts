@@ -104,7 +104,7 @@ export function decisionFor(
         status: "upstream_error",
         upstreamStatus: result.upstreamStatus,
         body: result.body,
-        message: `${call.account} answered ${what} with an error.`,
+        message: result.message ?? `${call.account} answered ${what} with an error.`,
       };
     case "upstream_outcome_unknown":
       return {

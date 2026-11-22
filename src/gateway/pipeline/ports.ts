@@ -119,6 +119,30 @@ export class UpstreamError extends Error {
   }
 }
 
+/**
+ * The service turned down the account's key itself (wrong, expired or
+ * revoked): nothing ran, so it's an answer, not an unknown outcome. The
+ * agent and the log say so, so the owner knows to replace the key rather
+ * than guess at heel.
+ */
+export class CredentialRejectedError extends UpstreamError {
+  readonly service: string;
+
+  constructor(service: string) {
+    super(401, { error: `${service} rejected the account's key` });
+    this.name = "CredentialRejectedError";
+    this.service = service;
+  }
+}
+
+/** Pure: what the agent and the log are told when a service rejects an account's key. */
+export function keyRejectedMessage(service: string, account: string): string {
+  return (
+    `${service} rejected the key heel holds for ${account} (wrong, expired or revoked), so nothing ran. ` +
+    "Your owner can replace it on heel's Connections page."
+  );
+}
+
 /** The definition knows the response shape but couldn't parse this one (spec: Fail-closed). */
 export class ResponseUnparseableError extends Error {
   constructor(message = "response does not have the shape heel knows") {
@@ -346,8 +370,11 @@ export type PipelineResult =
     }
   | { status: "paused"; scope: PauseScope }
   | { status: "expired"; approvalId: string }
-  /** The upstream answered with an error; the call ran and stays counted. */
-  | { status: "upstream_error"; upstreamStatus: number; body: unknown }
+  /**
+   * The upstream answered with an error; the call ran and stays counted.
+   * `message`, when set, is what to tell the agent (a rejected key).
+   */
+  | { status: "upstream_error"; upstreamStatus: number; body: unknown; message?: string }
   /** The request may have reached the upstream; heel never retries a write by itself. */
   | { status: "upstream_outcome_unknown" };
 

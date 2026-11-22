@@ -80,7 +80,14 @@ function respond(c: Context, result: PipelineResult): Response {
     case "expired":
       return c.json({ status: "expired", approvalId: result.approvalId }, 410);
     case "upstream_error":
-      return c.json({ status: "error", upstreamStatus: result.upstreamStatus }, 502);
+      return c.json(
+        {
+          status: "error",
+          upstreamStatus: result.upstreamStatus,
+          ...(result.message === undefined ? {} : { message: result.message }),
+        },
+        502,
+      );
     case "upstream_outcome_unknown":
       return c.json({ status: "outcome_unknown" }, 502);
   }

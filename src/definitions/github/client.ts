@@ -1,3 +1,4 @@
+import { CredentialRejectedError } from "../../gateway/pipeline/ports.ts";
 import type { FetchFn } from "../sign-in.ts";
 export const GITHUB_API = "https://api.github.com";
 
@@ -73,6 +74,8 @@ export class GitHubClient {
       }
     }
     if (response.ok) return body;
+    // A bad token: GitHub turned it down before doing anything.
+    if (response.status === 401) throw new CredentialRejectedError("GitHub");
     if (method === "GET") {
       if (response.status === 404) throw new GitHubNotFoundError(`${path} not found`);
       throw new Error(`GitHub answered ${response.status} for ${path}`);

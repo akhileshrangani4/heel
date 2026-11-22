@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { CredentialRejectedError } from "../../gateway/pipeline/ports.ts";
 import type { FetchFn } from "../sign-in.ts";
 
 /**
@@ -108,6 +109,8 @@ export class StripeClient {
         throw new Error("Stripe's answer isn't readable");
       return body;
     }
+    // A bad key: Stripe turned it down before doing anything.
+    if (response.status === 401) throw new CredentialRejectedError("Stripe");
     body ??= {};
     const error = (body["error"] ?? {}) as { code?: unknown; type?: unknown };
     const code = String(error.code ?? error.type ?? "error");

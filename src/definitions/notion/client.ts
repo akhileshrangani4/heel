@@ -1,3 +1,4 @@
+import { CredentialRejectedError } from "../../gateway/pipeline/ports.ts";
 import type { FetchFn } from "../sign-in.ts";
 
 /**
@@ -86,6 +87,8 @@ export class NotionClient {
     }
     if (response.ok) return parsed;
     const code = typeof parsed["code"] === "string" ? parsed["code"] : "error";
+    // A bad token: Notion turned it down before doing anything.
+    if (response.status === 401) throw new CredentialRejectedError("Notion");
     if (method === "GET" || path === "/v1/search") {
       if (response.status === 404) throw new NotionNotFoundError(`${path}: ${code}`);
       throw new Error(`Notion answered ${response.status} ${code} for ${path}`);
