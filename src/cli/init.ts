@@ -104,6 +104,11 @@ export function initSummary(
       `Approve at ${addresses.approvals}`,
       `Agents on your other machines connect at ${addresses.agents}/mcp`,
       "",
+      "Add heel to an agent on any computer. It signs in with your passkey, so there's no token to copy:",
+      `  Claude Code:  claude mcp add --transport http --scope user heel ${addresses.agents}/mcp`,
+      "                then /mcp, pick heel, Authenticate",
+      `  Codex:        codex mcp add heel --url ${addresses.agents}/mcp && codex mcp login heel`,
+      "",
     );
   }
   lines.push("Next:");
@@ -120,7 +125,9 @@ export function initSummary(
     addresses === null
       ? "       and open the link it prints."
       : "       and open the link it prints on your phone. Then turn on notifications on the page that follows.",
-    `  ${n++}. Add an agent and copy its token:   heel agent add my-agent`,
+    addresses === null
+      ? `  ${n++}. Add an agent and copy its token:   heel agent add my-agent`
+      : `  ${n++}. Add heel to your agents, as above (or heel agent add <name> for a token)`,
     `  ${n++}. Connect an account, for example:   heel connect github --as github --credential-stdin < token.txt`,
     "",
     "Watch it all live with heel tui. Your rules are in rules/owner.yaml: reads run, everything else asks you.",

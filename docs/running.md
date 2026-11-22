@@ -12,7 +12,7 @@ heel only controls an agent that has to go through it. An agent that can read he
 
 | Where | Agents on the same machine | Good for |
 | --- | --- | --- |
-| **Another machine** (a VPS, a Mac mini) | Can't reach it; they only see the ports you share | Daily use: [one heel for every machine](#one-heel-for-every-machine) |
+| **Another machine** (a VPS, a Mac mini). Recommended | Can't reach it; they only see the ports you share | Daily use: [one heel for every machine](#one-heel-for-every-machine) |
 | **Its own OS user, or Docker** | Can't read its files, if they can't use `sudo` or `docker` | Daily use on one machine |
 | **Your own user** (`~/.heel`) | Can read and change everything | Trying heel out |
 
@@ -83,27 +83,23 @@ agent_public_url: https://heel-box.your-tailnet.ts.net:8443   # where agents con
 
 **3. Enroll and connect accounts on the server.** `heel user enroll <you>` and `heel connect …` run on the server, over its admin socket. Open the enrollment link on your phone and allow notifications.
 
-**4. Add one agent per machine and tool.** A separate token for each lets you see which machine made a call, and pause or rotate one without touching the others:
+**4. Add heel to the agent on each computer.** It signs in with your passkey, so there's no token to copy between machines. On each computer:
 
 ```sh
-heel agent add laptop-claude --owner <you>
-heel agent add desktop-codex --owner <you>
+claude mcp add --transport http --scope user heel https://heel-box.your-tailnet.ts.net:8443/mcp
+# then /mcp in Claude Code, pick heel, Authenticate
+
+codex mcp add heel --url https://heel-box.your-tailnet.ts.net:8443/mcp
+codex mcp login heel
 ```
 
-**5. Point each agent at the server.** In the agent's MCP settings on each computer, use `agent_public_url` and that agent's token:
+The browser opens heel's page: sign in, check the app's name and where it returns to, and choose **Connect with a passkey**. Each app on each computer becomes its own agent, named after the app (a second one gets `-2`), so you can see which one made a call and pause or revoke one without touching the others. Signed-in agents renew on their own.
 
-```json
-{
-  "mcpServers": {
-    "heel": {
-      "url": "https://heel-box.your-tailnet.ts.net:8443/mcp",
-      "headers": { "Authorization": "Bearer heel_…" }
-    }
-  }
-}
-```
+For an app that can't sign in, add an agent with a token instead (`heel agent add laptop-cursor`, or **Agents → Add an agent**) and put `agent_public_url`/mcp and the token in its MCP settings.
 
 Each call is decided by your rules on the server and asks your phone when a rule says `ask`, wherever the agent runs.
+
+**Or let an agent do all of it.** [Set up heel with one prompt](setup.md) asks where heel should run; pick a server and the agent sets heel up there over SSH (with your OK), then adds itself to heel from your computer.
 
 What to know:
 

@@ -59,7 +59,13 @@ Some steps may be done already, for example if I restarted you partway: check ea
 Rules for the whole task:
 - Never read, print, copy or send the value of a key, token, password or secret. The one exception is heel's own token for you in step 5, if heel prints it: pass it straight to the command that adds heel to your app, and don't repeat it in our chat.
 - Use heel's command line only for the steps below. Don't run heel connect, edit heel's rules files or approve anything yourself: connections and rules go through requests I approve.
-- Don't install system software, edit shell profiles or change files outside heel without asking me first.
+- Don't install system software, edit shell profiles or change files outside heel without asking me first, here or on a server.
+
+0. Ask me where heel should run:
+   - on a server I use (a VPS, a Mac mini, a home server) where heel isn't set up yet. This is the safest place: agents on my computers can't reach heel's files, and every computer I use can share one heel;
+   - on a server where heel already runs;
+   - on this computer.
+   If heel already runs on a server, skip to step 5. If it goes on a new server, ask how you reach it (for example ssh my-server) and whether you may run commands there. If I say yes, do steps 1 to 4 on the server, running each command as ssh <host> '<command>'; in step 3, check Tailscale or cloudflared on the server, not here, and leave out "this computer only", since I'll approve from my phone. If a command isn't found over ssh, ask me how Node is installed there. If I'd rather you didn't, ask me to give this same line to an agent on the server (or to run steps 1 to 4 there myself) and to tell you heel's agent address when it's done; then continue at step 5.
 
 1. Check Node: node -v must be 26.13 or later. If it isn't, stop and tell me how to install it (from nodejs.org, or with mise or nvm). Don't install it yourself.
 
@@ -69,11 +75,13 @@ Rules for the whole task:
 
 4. My passkey: run heel user enroll owner and give me the link it prints. Ask me to open it (on my phone, if I chose Tailscale or Cloudflare) and choose Create a passkey, then Turn on notifications on the page that follows. Wait until I say I'm done, then run heel status and check that Passkeys is 1 or more.
 
-5. Add yourself as an agent: heel agent add <a short name for you, like claude-code> --client claude-code. heel adds itself to Claude Code for every project, and the token goes straight into Claude Code's config, so you never see it. If heel says it couldn't, run the command it prints instead. For Codex, use --client codex and run the commands it prints. For any other app, leave out --client and tell me the MCP URL to add, with the token as a bearer token.
+5. Add yourself as an agent.
+   - If heel runs on this computer: heel agent add <a short name for you, like claude-code> --client claude-code. heel adds itself to Claude Code for every project, and the token goes straight into Claude Code's config, so you never see it. If heel says it couldn't, run the command it prints instead. For Codex, use --client codex and run the commands it prints. For any other app, leave out --client and tell me the MCP URL to add, with the token as a bearer token.
+   - If heel runs on a server: there's no token. Use heel's agent address, the one heel init printed after "Agents on your other machines connect at" (ask me for it if you don't have it), and add it as a remote MCP server that signs in. In Claude Code: claude mcp add --transport http --scope user heel <address>/mcp. In Codex: codex mcp add heel --url <address>/mcp, then codex mcp login heel. heel names the agent after your app, and I confirm it with my passkey.
 
-6. Ask me to load heel in your app (in Claude Code, run /mcp or restart), and to tell you when it's done. Then check that heel's tools are there, such as heel_accounts.
+6. Ask me to load heel in your app and to tell you when it's done. In Claude Code that's /mcp or a restart; with heel on a server, I pick heel in /mcp, choose Authenticate, sign in on heel's page and choose Connect with a passkey. Then check that heel's tools are there, such as heel_accounts.
 
-heel now runs on this machine as me, so you could still read its files. When we're done, tell me that heel is safest under its own user or on a server, and point me to https://useheel.dev/docs/running.`;
+If heel runs on this computer, it runs as me, so you could still read its files. When we're done, tell me that heel is safest under its own user or on a server, and point me to https://useheel.dev/docs/running.`;
 }
 
 /** Pure: the whole thing, install and then services, as one prompt. */
