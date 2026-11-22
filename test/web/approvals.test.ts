@@ -384,6 +384,8 @@ describe("the approval page", () => {
       .run();
     const page = await (await h.fetch(`/approvals/${approvalId}`, { as: owner })).text();
     expect(page).toContain("approving starts it again at once");
+    expect(page).toContain("Nothing runs until you approve.");
+    expect(page).not.toContain("sends the same call again");
 
     const callHash = h.audit().find((r) => r.approvalId === approvalId)?.callHash ?? "";
     const done = await decide(h, owner, approvalId, { callHash, intent: "approve" });
@@ -391,6 +393,12 @@ describe("the approval page", () => {
       message: "Approved. The background script carries on now, from this call.",
     });
     expect(decided).toEqual([approvalId]);
+    // Once approved, the page doesn't say the script waits for the owner, or for the agent.
+    const afterPage = await (await h.fetch(`/approvals/${approvalId}`, { as: owner })).text();
+    expect(afterPage).toContain("heel is starting the script again");
+    expect(afterPage).not.toContain("waiting for you");
+    expect(afterPage).toContain("when the script carries on from this call");
+    expect(afterPage).not.toContain("re-sends the identical call");
 
     const agentsPage = await (await h.fetch("/agents", { as: owner })).text();
     expect(agentsPage).toContain("Running scripts");

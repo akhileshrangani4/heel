@@ -412,13 +412,21 @@ function scriptView(
         html`<p>Stopped. The script won't carry on; ${request.agent} would have to start again.</p>`,
       )
     : "";
+  const decided = request.status !== "pending";
   const waiting =
     parked === null
       ? stoppedNotice
-      : html`<div class="script-stop">
+      : decided && background
+        ? html`<p>Approved: heel is starting the script again from this call.</p>`
+        : html`<div class="script-stop">
           <p>
-            The script is paused at this call, waiting for you. Stopping it means it never
-            carries on, whatever you decide here.
+            ${
+              decided
+                ? html`The script is still paused at this call, until ${request.agent} resumes it.
+                  Stopping it means it never carries on.`
+                : html`The script is paused at this call, waiting for you. Stopping it means it
+                  never carries on, whatever you decide here.`
+            }
           </p>
           ${
             background
@@ -494,8 +502,12 @@ function statusNotice(request: ApprovalRequestView, now: Date): Html {
         "ok",
         html`<p>
           Approved${decided ? html` by ${decided.by} at ${time(decided.at)}` : ""}. It runs once
-          when the agent re-sends the identical call, after the rules are checked again. Unused,
-          it expires ${time(request.expiresAt)} (${formatRelative(request.expiresAt, now)}).
+          ${
+            request.script === null
+              ? "when the agent re-sends the identical call"
+              : "when the script carries on from this call"
+          }, after the rules are checked again. Unused, it expires ${time(request.expiresAt)}
+          (${formatRelative(request.expiresAt, now)}).
         </p>`,
       );
     case "denied":
@@ -623,8 +635,11 @@ function decisionControls(
         describedBy: helpId,
       })}
       <p id="${helpId}" class="ap-note">
-        Every decision asks for your passkey. Nothing runs until you approve and the agent sends
-        the same call again.
+        Every decision asks for your passkey. ${
+          request.script === null
+            ? "Nothing runs until you approve and the agent sends the same call again."
+            : "Nothing runs until you approve."
+        }
       </p>
     </div>
     ${
