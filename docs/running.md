@@ -99,7 +99,7 @@ For an app that can't sign in, add an agent with a token instead (`heel agent ad
 
 Each call is decided by your rules on the server and asks your phone when a rule says `ask`, wherever the agent runs.
 
-**Or let an agent do all of it.** [Set up heel with one prompt](setup.md) asks where heel should run; pick a server and the agent sets heel up there over SSH (with your OK), then adds itself to heel from your computer.
+**Or let an agent do all of it.** [Set up heel with one prompt](setup.md) asks where heel should run; pick a server and the agent sets heel up there over SSH (with your OK), then adds itself to heel from your computer. Afterwards that agent can still reach heel's files through your SSH login, so run heel under its own user on the server, or take the agent's SSH access away.
 
 What to know:
 

@@ -81,7 +81,7 @@ Rules for the whole task:
 
 6. Ask me to load heel in your app and to tell you when it's done. In Claude Code that's /mcp or a restart; with heel on a server, I pick heel in /mcp, choose Authenticate, sign in on heel's page and choose Connect with a passkey. Then check that heel's tools are there, such as heel_accounts.
 
-If heel runs on this computer, it runs as me, so you could still read its files. When we're done, tell me that heel is safest under its own user or on a server, and point me to https://useheel.dev/docs/running.`;
+If heel runs on this computer, it runs as me, so you could still read its files. When we're done, tell me that heel is safest under its own user or on a server, and point me to https://useheel.dev/docs/running. If you set heel up on a server over ssh, tell me that you can still reach heel's files there through that ssh access: heel only holds you to its rules if your ssh login can't read heel's home (heel under its own user there) or if I take that access away.`;
 }
 
 /** Pure: the whole thing, install and then services, as one prompt. */
