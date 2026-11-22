@@ -71,6 +71,12 @@ export interface Call {
   ownerId: string;
   /** Agent-supplied; scoped per agent. */
   runId?: string;
+  /**
+   * The code-mode script the call came from, heel's own id for it, kept
+   * across a park and resume, so Activity can show a script's calls
+   * together (C3). Never part of the call hash or any rule.
+   */
+  scriptId?: string;
 
   // what
   surface: Surface;

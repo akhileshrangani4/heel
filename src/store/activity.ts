@@ -18,6 +18,8 @@ export interface ActivityQuery {
   agentId?: string | undefined;
   account?: string | undefined;
   kind?: AuditKind | undefined;
+  /** Only one code-mode script's calls (auditLog.scriptId). */
+  scriptId?: string | undefined;
   /** Rows with an id below this, for the next page; or above `afterId` for a live stream. */
   beforeId?: number | undefined;
   afterId?: number | undefined;
@@ -34,6 +36,7 @@ export function readActivity(db: HeelDb, query: ActivityQuery): ActivityRow[] {
   if (query.agentId !== undefined) conditions.push(eq(auditLog.agentId, query.agentId));
   if (query.account !== undefined) conditions.push(eq(auditLog.account, query.account));
   if (query.kind !== undefined) conditions.push(eq(auditLog.kind, query.kind));
+  if (query.scriptId !== undefined) conditions.push(eq(auditLog.scriptId, query.scriptId));
   if (query.beforeId !== undefined) conditions.push(lt(auditLog.id, query.beforeId));
   if (query.afterId !== undefined) conditions.push(gt(auditLog.id, query.afterId));
   const order = query.afterId !== undefined ? auditLog.id : desc(auditLog.id);

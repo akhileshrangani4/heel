@@ -49,6 +49,8 @@ export interface CallRequest {
    * own code; never part of the arguments, the call hash or any rule.
    */
   script?: ApprovalScript;
+  /** heel's id for the code-mode script the call came from (Call.scriptId). */
+  scriptId?: string;
   /**
    * Aborts when the surface's request ends early (the client hung up). It
    * stops a call already executing, so a `heel run` command or a script

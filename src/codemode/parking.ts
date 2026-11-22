@@ -46,6 +46,8 @@ export interface ParkInput {
   approvalId: string;
   runId: string | undefined;
   reason: string | undefined;
+  /** heel's id for the script, kept so its calls stay grouped on Activity. */
+  scriptId: string;
   /** The script's code, kept so a later ask in the resumed script still shows it. */
   code: string;
   calls: readonly ParkedCall[];
@@ -95,6 +97,7 @@ export function parkScript(db: HeelDb, sealer: Sealer, input: ParkInput, now: Da
         approvalId: input.approvalId,
         runId: input.runId ?? null,
         reason: input.reason ?? null,
+        scriptId: input.scriptId,
         code: input.code,
         calls: [...input.calls],
         modulesHash: modulesHash(input.modules),
@@ -146,6 +149,8 @@ export interface ClaimedScript {
   approvalId: string;
   runId: string | undefined;
   reason: string | undefined;
+  /** Undefined for a script parked before scripts had ids. */
+  scriptId: string | undefined;
   code: string;
   calls: ParkedCall[];
   modulesHash: string;
@@ -190,6 +195,7 @@ export function openParked(
     approvalId: row.approvalId,
     runId: row.runId ?? undefined,
     reason: row.reason ?? undefined,
+    scriptId: row.scriptId ?? undefined,
     code: row.code,
     calls: row.calls,
     modulesHash: row.modulesHash,

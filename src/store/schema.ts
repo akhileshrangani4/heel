@@ -781,6 +781,8 @@ export const auditLog = sqliteTable(
     agentId: text("agent_id").notNull(),
     ownerId: text("owner_id").notNull(),
     runId: text("run_id"),
+    /** The code-mode script the call came from (Call.scriptId); groups a script's calls on Activity. */
+    scriptId: text("script_id"),
     surface: text("surface").$type<Surface>().notNull(),
     account: text("account").notNull(),
     provider: text("provider").notNull(),
@@ -802,6 +804,7 @@ export const auditLog = sqliteTable(
     index("audit_log_org_at").on(t.orgId, t.at),
     index("audit_log_agent_at").on(t.agentId, t.at),
     index("audit_log_approval").on(t.approvalId),
+    index("audit_log_script").on(t.scriptId),
     check("audit_log_kind", sql`"kind" IN (${sqlList(AUDIT_KINDS)})`),
     check(
       "audit_log_pause_scope",
@@ -1064,6 +1067,8 @@ export const parkedScripts = sqliteTable(
     reason: text("reason"),
     /** Calls the script made before it parked, the parked one last; heel's 200-call limit counts them. */
     calls: text("calls", { mode: "json" }).$type<ParkedCall[]>().notNull(),
+    /** heel's id for the script, kept across the park, so its calls stay grouped on Activity. */
+    scriptId: text("script_id"),
     /** The script's code, so an ask later in a resumed script still shows the approver its script. */
     code: text("code").notNull().default(""),
     /** A hash of the modules the script ran against; a resume against different ones is refused. */

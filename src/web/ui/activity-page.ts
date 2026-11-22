@@ -32,7 +32,11 @@ export function activityRow(row: ActivityRow): Html {
       row.mode === null || row.mode === "enforce" ? "" : html` <span class="muted">(watch)</span>`
     }</td>
     <td class="mono">${row.account}</td>
-    <td class="mono">${row.action ?? row.tool}</td>
+    <td><span class="mono">${row.action ?? row.tool}</span>${
+      row.scriptId === null
+        ? ""
+        : html` <a class="muted" href="/activity?script=${encodeURIComponent(row.scriptId)}" title="This script's calls">script</a>`
+    }</td>
     <td>${row.rule === null ? html`<span class="muted">none</span>` : html`<span class="mono">${row.rule.name ?? `${row.rule.file}:${row.rule.line}`}</span>`}</td>
     <td class="muted">${row.reason ?? ""}</td>
   </tr>`;
@@ -41,7 +45,13 @@ export function activityRow(row: ActivityRow): Html {
 export function activityPage(props: {
   rows: readonly ActivityRow[];
   agents: readonly { id: string; name: string }[];
-  filter: { agent?: string | undefined; account?: string | undefined; kind?: string | undefined };
+  filter: {
+    agent?: string | undefined;
+    account?: string | undefined;
+    kind?: string | undefined;
+    /** One code-mode script's calls (C3). */
+    script?: string | undefined;
+  };
   nextBefore: number | null;
   hidden: Readonly<Record<string, number>> | null;
   suggestions: readonly Suggestion[];
@@ -54,7 +64,14 @@ export function activityPage(props: {
       ),
     ).toString();
   return html`<h1>Activity</h1>
-    <p class="muted">Every decision heel made, newest first. New rows appear as they happen.</p>
+    ${
+      props.filter.script === undefined
+        ? html`<p class="muted">Every decision heel made, newest first. New rows appear as they happen.</p>`
+        : html`<p>
+            One script's calls, newest first, including those made after it was parked and
+            resumed. <a href="/activity">All activity</a>
+          </p>`
+    }
     ${
       props.hidden === null
         ? ""
