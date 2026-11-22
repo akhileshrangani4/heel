@@ -109,7 +109,7 @@ export async function mcpHarness(options: {
   github?: { fetch: (input: string | URL | Request, init?: RequestInit) => Promise<Response> };
   /** When heel_history suggests rules (2.10); never without it. */
   learning?: { decisions: number; days: number };
-  /** Holds asking calls open for their decision (2.11); answers at once without it. */
+  /** Holds asking calls open for their decision (2.12); answers at once without it. */
   approvalWait?: ApprovalWait;
 }): Promise<McpHarness> {
   const t = testStore();

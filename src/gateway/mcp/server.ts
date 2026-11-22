@@ -119,7 +119,7 @@ export interface McpSurfaceDeps {
   onAgentRequest?: (requestId: string) => void;
   /** heel's approval page, named in the setup prompt; the prompt says "heel's approval page" without it. */
   approvalsUrl?: string;
-  /** How long a call that needs approval is held open for its decision (2.11); not at all when absent. */
+  /** How long a call that needs approval is held open for its decision (2.12); not at all when absent. */
   approvalWait?: ApprovalWait;
 }
 
@@ -132,7 +132,7 @@ interface Held {
   until: number;
 }
 
-/** How many calls one agent may have held at once; more answer at once (2.11). */
+/** How many calls one agent may have held at once; more answer at once (2.12). */
 export const MAX_HELD_PER_AGENT = 8;
 
 /**
@@ -186,7 +186,7 @@ export interface McpSurface {
   close(): Promise<void>;
 }
 
-/** What a held call tells the client while it waits (2.11). */
+/** What a held call tells the client while it waits (2.12). */
 const WAITING_NOTE = "Waiting for approval on heel's approval page.";
 
 /** `_meta` key an agent puts its run id under (spec: Run ids). */
@@ -202,7 +202,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
   const heldCalls = new Map<string, number>();
 
   /**
-   * Holds the request until `decided()` or the call's window ends (2.11);
+   * Holds the request until `decided()` or the call's window ends (2.12);
    * true once decided. A script that asks twice shares one window.
    */
   async function hold(held: Held, decided: () => boolean): Promise<boolean> {
@@ -469,7 +469,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
   }
 
   /**
-   * `run_code`, held (2.11): a script parked at a call that asks waits for
+   * `run_code`, held (2.12): a script parked at a call that asks waits for
    * the decision and carries on from that call in the same answer.
    */
   async function runCodeHeld(
@@ -726,7 +726,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
   }
 
   /**
-   * `heel_accounts` with `wait: true` (2.11): held until something this agent
+   * `heel_accounts` with `wait: true` (2.12): held until something this agent
    * asked for is decided, so it learns of a connection or a rule without its
    * person telling it to look again. Nothing waiting answers at once.
    */

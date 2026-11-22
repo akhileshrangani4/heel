@@ -82,7 +82,7 @@ describe("heel serve: the MCP agent plane", () => {
     expect(allowed.isError).toBeFalsy();
     expect(upstream.calls).toEqual([{ name: "search_notes", arguments: { query: "q3" } }]);
 
-    // The call that asks is held open (2.11) until the owner decides, then answers with the result.
+    // The call that asks is held open (2.12) until the owner decides, then answers with the result.
     const asked = client.callTool({ name: "delete_note", arguments: { id: "n1" } });
     let request = store.db.select().from(approvals).get();
     while (request === undefined) {

@@ -663,7 +663,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         // heel_history (2.10) suggests the same rules the owner's pages do.
         learning: { rules, threshold: config.learning },
         onAgentRequest: (requestId) => notifier.agentRequested(requestId),
-        // A call that asks is held open until the owner decides, so the agent carries on by itself (2.11).
+        // A call that asks is held open until the owner decides, so the agent carries on by itself (2.12).
         approvalWait: DEFAULT_APPROVAL_WAIT,
         codeWorker,
         // An asking script is saved, sealed with the vault, so the agent can resume it (C2).

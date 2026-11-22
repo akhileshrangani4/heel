@@ -1,5 +1,5 @@
 /**
- * Holding a call open until its person decides (roadmap 2.11).
+ * Holding a call open until its person decides (roadmap 2.12).
  *
  * A call that needs approval used to answer `pending` at once, and the agent
  * had to be told to check again after the passkey tap. Now heel keeps the
@@ -42,7 +42,7 @@ export const DEFAULT_APPROVAL_WAIT: ApprovalWait = {
   beatMs: 20_000,
 };
 
-/** Doesn't hold: answers at once, as heel did before 2.11. */
+/** Doesn't hold: answers at once, as heel did before 2.12. */
 export const NO_APPROVAL_WAIT: ApprovalWait = { windowMs: () => 0, pollMs: 1_000, beatMs: 20_000 };
 
 /** Tells the client heel is still waiting. */

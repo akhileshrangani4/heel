@@ -6,7 +6,7 @@ server:
   # aren't proxied (spec: D5). heel lists one prompt of its own (setup, roadmap
   # 2.6), so prompts-list passes; the conformance scenarios' own test prompts
   # don't exist on heel. heel logs to the client while a call waits for
-  # approval (2.11), so logging-set-level passes.
+  # approval (2.12), so logging-set-level passes.
   - completion-complete
   - resources-list
   - resources-read-text

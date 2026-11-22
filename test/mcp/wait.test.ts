@@ -9,7 +9,7 @@ import { agentRequests, approvals } from "../../src/store/schema.ts";
 import { type McpHarness, mcpHarness } from "../helpers/mcp.ts";
 
 /**
- * Roadmap 2.11: a call that needs approval waits for the decision and
+ * Roadmap 2.12: a call that needs approval waits for the decision and
  * answers with the result, so the person never has to tell the agent to look
  * again after the passkey tap. Past the window it answers `pending`, as before.
  */
@@ -43,7 +43,7 @@ async function decideWhenAsked(h: McpHarness, intent: "approve" | "deny"): Promi
   throw new Error("the call never asked");
 }
 
-describe("a call that needs approval waits for the decision (2.11)", () => {
+describe("a call that needs approval waits for the decision (2.12)", () => {
   it("answers with the result once approved, running the call once", async () => {
     const h = await mcpHarness({ owner: RULES, approvalWait: wait(5_000) });
     const client = await h.connect("/mcp/notes");

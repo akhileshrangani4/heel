@@ -115,7 +115,7 @@ export function decisionFor(
   }
 }
 
-/** An identical call used this call's approval while it waited (2.11): it ran there, not here. */
+/** An identical call used this call's approval while it waited (2.12): it ran there, not here. */
 export function usedDecision(approvalId: string, call: CallLabel): Decision {
   return {
     status: "used",
