@@ -137,4 +137,4 @@ Mostly on the helper path, which is the newer and weaker of the two:
 
 On both paths:
 
-- **The script's last expression isn't returned to the agent.** Only stdout, the status and the list of calls are. A script has to `print` what it wants to see.
+- **A script's last expression comes back as `output`,** beside its stdout, the status and the list of calls, like a REPL. None adds nothing; a value larger than the stdout cap (1 MB) is left out with a note (`output_omitted`).

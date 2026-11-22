@@ -64,6 +64,30 @@ describe("code mode over MCP", () => {
     expect(h.upstream.calls.map((c) => c.name)).toEqual(["search_notes"]);
   });
 
+  it("returns the script's last expression as output, beside what it printed (C1)", async () => {
+    const h = await mcpHarness({ owner: SEARCH_ALLOWED, codeWorker: () => new MontyWorker() });
+    const client = await h.connect("/mcp");
+    const run = async (code: string) =>
+      (await client.callTool({ name: "run_code", arguments: { code } })).structuredContent as {
+        status: string;
+        stdout: string;
+        output?: unknown;
+        output_omitted?: string;
+      };
+    const last = await run('print("hi")\nrows = [{"n": 1}, {"n": 2}, {"n": 3}]\nrows[:2]');
+    expect(last).toMatchObject({
+      status: "completed",
+      stdout: "hi\n",
+      output: [{ n: 1 }, { n: 2 }],
+    });
+    // A script ending in an assignment has nothing to return.
+    expect(await run("x = 1")).not.toHaveProperty("output");
+    // Too big to send back: left out, with a note.
+    const big = await run('"x" * 2000000');
+    expect(big).not.toHaveProperty("output");
+    expect(big.output_omitted).toMatch(/print the part you need/);
+  });
+
   it("says code mode needs the sandbox when there's no worker", async () => {
     const h = await mcpHarness({ owner: SEARCH_ALLOWED });
     const response = await h.request("/mcp", {
