@@ -19,6 +19,7 @@ import { missingSignInSetup } from "../../definitions/sign-in-setup.ts";
 import { needsKey } from "../../requests/connection.ts";
 import { accountsOwnedBy } from "../../store/directory.ts";
 import { errorShape } from "../../util/error-shape.ts";
+import { type AccountNote, accountNotes } from "../account-notes.ts";
 import {
   formField,
   type HumanPlaneDeps,
@@ -90,18 +91,15 @@ function outcomeFrom(
   aliases: ReadonlySet<string>,
   /** Every account this person has, signed in or not. */
   all: ReadonlySet<string> = aliases,
+  note: AccountNote | null = null,
 ): ConnectionsOutcome {
   const alias = query["account"] ?? "";
   if (query["connected"] !== undefined && aliases.has(alias)) return { kind: "connected", alias };
-  // From the web app's own changes (2.9): claimed only when the account's state agrees.
-  const unchecked = query["unchecked"] !== undefined;
-  const here = query["connected-here"] ?? query["rekeyed"];
-  if (here !== undefined && all.has(here)) {
-    return { kind: query["rekeyed"] !== undefined ? "rekeyed" : "added", alias: here, unchecked };
+  // The web app's own changes (2.9) come as a note heel wrote, never from the link itself.
+  if (note !== null) {
+    const agrees = note.kind === "removed" ? !all.has(note.alias) : all.has(note.alias);
+    if (agrees) return note;
   }
-  const removed = query["removed"];
-  if (removed !== undefined && !all.has(removed))
-    return { kind: "removed", alias: removed, unchecked: false };
   const failure = query["failed"] === undefined ? null : failures.get(query["failed"]);
   if (failure !== null) return { kind: "failed", alias: failure.alias, message: failure.message };
   return { kind: "none" };
@@ -175,6 +173,7 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
           failures,
           new Set(rows.filter((row) => row.status === "active").map((row) => row.alias)),
           new Set(rows.map((row) => row.alias)),
+          accountNotes(deps).take(session.userId, c.req.query("note") ?? ""),
         ),
         signInForm: { action: "/connections/sign-in", csrfToken: session.csrfToken },
         manage: { csrfToken: session.csrfToken },

@@ -10,6 +10,7 @@ import {
 import { accounts } from "../../store/schema.ts";
 import { ConnectError, connectAccount, isValidAlias } from "../../vault/connect.ts";
 import { removeAccount, setAccountCredential } from "../../vault/manage.ts";
+import { accountNotes } from "../account-notes.ts";
 import {
   type HumanPlaneDeps,
   jsonBody,
@@ -57,6 +58,13 @@ export function manageAccountRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
 
   function intentOf(session: SessionView, body: Record<string, unknown> | null) {
     const op = stringField(body, "op") ?? "";
+    // Without the vault there's nowhere to keep a key or a sign-in: say so before the passkey.
+    if (deps.upstreamOAuth === null) {
+      return {
+        problem:
+          "heel's vault isn't open (no master key), so it can't store accounts. Start heel with its master key.",
+      };
+    }
     const alias = (stringField(body, "alias") ?? "").trim();
     if (op === "connect") {
       const service = stringField(body, "service") ?? "";
@@ -77,7 +85,9 @@ export function manageAccountRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
         const url = (stringField(body, "url") ?? "").trim();
         const problem = agentUrlProblem(url);
         if (problem !== null) return { problem };
-        return { binding: { op, service, alias, url } };
+        // Whether it signs in with OAuth (most do); one that doesn't connects as it is.
+        const oauth = stringField(body, "oauth") === "no" ? "no" : "yes";
+        return { binding: { op, service, alias, url, oauth } };
       }
       return { binding: { op, service, alias } };
     }
@@ -87,7 +97,8 @@ export function manageAccountRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       if (!needsKey(account.provider)) {
         return { problem: "This account signs in instead of holding a key: sign in again below." };
       }
-      return { binding: { op, alias } };
+      // The account itself, not just its name: one removed and reconnected meanwhile isn't it.
+      return { binding: { op, alias, account: account.id } };
     }
     return { problem: "Unknown change." };
   }
@@ -98,7 +109,7 @@ export function manageAccountRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     if ("problem" in intent) return c.json({ ok: false, message: intent.problem }, 400);
     const issued = await deps.passkeys.assertionOptions({
       orgId: deps.orgId,
-      purpose: "manage",
+      purpose: "account",
       userId: session.userId,
       binding: intent.binding,
       now: deps.now(),
@@ -112,7 +123,7 @@ export function manageAccountRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     const body = await jsonBody(c);
     const verified = await deps.passkeys.verifyAssertion({
       orgId: deps.orgId,
-      purpose: "manage",
+      purpose: "account",
       userId: session.userId,
       challengeId: stringField(body, "challengeId") ?? "",
       response: body?.["response"],
@@ -120,7 +131,7 @@ export function manageAccountRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     });
     if (!verified.ok) return c.json({ ok: false, message: "The passkey check didn't pass." }, 401);
     // What to do comes from the signed challenge; the one thing read from this body is a key.
-    const { op, service, alias, url } = verified.binding;
+    const { op, service, alias, url, oauth, account } = verified.binding;
     if (typeof alias !== "string")
       return c.json({ ok: false, message: "That change isn't yours to make." }, 409);
     const pasted = stringField(body, "key")?.trim() ?? "";
@@ -133,7 +144,7 @@ export function manageAccountRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     const checked =
       wantsKey && deps.checkKey !== undefined ? await deps.checkKey(provider, pasted) : null;
     if (checked?.status === "rejected") return c.json({ ok: false, message: checked.message }, 409);
-    const unchecked = checked?.status === "unchecked" ? "&unchecked" : "";
+    const isUnchecked = checked?.status === "unchecked";
     try {
       if (op === "connect" && typeof service === "string" && SERVICES.has(service)) {
         if (typeof url === "string") {
@@ -149,7 +160,7 @@ export function manageAccountRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
             ownerId: session.userId,
             provider: service,
             alias,
-            ...(typeof url === "string" ? { url, oauth: true, publicOnly: true } : {}),
+            ...(typeof url === "string" ? { url, oauth: oauth !== "no", publicOnly: true } : {}),
             ...(needsKey(service)
               ? { credential: { type: "static" as const, value: pasted } }
               : {}),
@@ -162,10 +173,16 @@ export function manageAccountRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
         );
         return c.json({
           ok: true,
-          next: `/connections?connected-here=${encodeURIComponent(alias)}${unchecked}`,
+          next: `/connections?note=${accountNotes(deps).add(session.userId, { kind: "added", alias, unchecked: isUnchecked })}`,
         });
       }
-      if (op === "rekey" && owned(session, alias) !== null) {
+      const current = op === "rekey" ? owned(session, alias) : null;
+      if (
+        op === "rekey" &&
+        current !== null &&
+        current.id === account &&
+        needsKey(current.provider)
+      ) {
         const set = setAccountCredential(
           deps.db,
           deps.upstreamOAuth?.vault ?? null,
@@ -183,7 +200,7 @@ export function manageAccountRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
         );
         return c.json({
           ok: true,
-          next: `/connections?rekeyed=${encodeURIComponent(alias)}${unchecked}`,
+          next: `/connections?note=${accountNotes(deps).add(session.userId, { kind: "rekeyed", alias, unchecked: isUnchecked })}`,
         });
       }
     } catch (error) {
@@ -202,7 +219,12 @@ export function manageAccountRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     const removed = removeAccount(deps.db, deps.orgId, alias, deps.now());
     deps.onAccountConfigured?.(removed.accountId);
     deps.log.warn({ account: alias, by: session.userId }, "account removed from the web app");
-    return c.redirect(`/connections?removed=${encodeURIComponent(alias)}`, 303);
+    const note = accountNotes(deps).add(session.userId, {
+      kind: "removed",
+      alias,
+      unchecked: false,
+    });
+    return c.redirect(`/connections?note=${note}`, 303);
   });
 
   return app;

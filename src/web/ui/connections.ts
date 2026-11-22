@@ -76,7 +76,8 @@ const SERVICE_CHOICES = [
 ] as const;
 
 function connectForm(): Html {
-  return html`<form id="connect-form" onsubmit="return false">
+  // A div, not a form: nothing here can ever submit, so the key can't end up in a URL.
+  return html`<div id="connect-form" class="form">
     <input type="hidden" name="op" value="connect" />
     <label for="connect-service">Service</label>
     <select id="connect-service" name="service">
@@ -86,6 +87,11 @@ function connectForm(): Html {
     <input id="connect-alias" name="alias" maxlength="64" autocomplete="off" />
     <label for="connect-url">URL (MCP servers only)</label>
     <input id="connect-url" name="url" placeholder="https://notes.example.com/mcp" autocomplete="off" />
+    <label for="connect-oauth">MCP server signs in with OAuth?</label>
+    <select id="connect-oauth" name="oauth">
+      <option value="yes">Yes (most do): sign in after</option>
+      <option value="no">No: it needs no sign-in</option>
+    </select>
     <label for="connect-key">Key or token (services that take one)</label>
     <input id="connect-key" name="key" type="password" autocomplete="off" />
     ${ceremonyButton({
@@ -96,16 +102,17 @@ function connectForm(): Html {
       binding: {},
       optionsFrom: "connect-form",
     })}
-  </form>`;
+  </div>`;
 }
 
-function rowControls(row: ConnectionRow, csrfToken: string): Html {
-  const key = row.alias.replace(/[^a-z0-9-]/g, "-");
+function rowControls(row: ConnectionRow, csrfToken: string, index: number): Html {
+  // By row, not by name: no two names can make the same id.
+  const key = `row${String(index)}`;
   return html`<details class="conn-manage">
     <summary>Manage ${row.alias}</summary>
     ${
       row.holdsKey === true
-        ? html`<form id="rekey-${key}" onsubmit="return false">
+        ? html`<div id="rekey-${key}" class="form">
             <label for="rekey-${key}-key">New key</label>
             <input id="rekey-${key}-key" name="key" type="password" autocomplete="off" />
             ${ceremonyButton({
@@ -116,7 +123,7 @@ function rowControls(row: ConnectionRow, csrfToken: string): Html {
               binding: { op: "rekey", alias: row.alias },
               optionsFrom: `rekey-${key}`,
             })}
-          </form>`
+          </div>`
         : ""
     }
     ${postForm(
@@ -201,7 +208,7 @@ export function connectionsPage(props: ConnectionsProps): Html {
               }
             </p>
             <ul class="conn-list" aria-label="Your accounts">
-              ${props.rows.map((row) => {
+              ${props.rows.map((row, index) => {
                 const step = nextStep(row, props.signInForm);
                 return html`<li class="card conn" data-alias="${row.alias}">
                   <div class="conn-head">
@@ -212,7 +219,7 @@ export function connectionsPage(props: ConnectionsProps): Html {
                     ${row.status === "active" ? badge("Ready", "ok") : badge("Needs sign-in", "warn")}
                   </div>
                   ${step === "" ? "" : html`<div class="conn-step">${step}</div>`}
-                  ${props.manage === undefined ? "" : rowControls(row, props.manage.csrfToken)}
+                  ${props.manage === undefined ? "" : rowControls(row, props.manage.csrfToken, index)}
                 </li>`;
               })}
             </ul>`

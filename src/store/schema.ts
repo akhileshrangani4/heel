@@ -475,6 +475,7 @@ export const CHALLENGE_PURPOSES = [
   "rules",
   "connection",
   "manage",
+  "account",
 ] as const;
 export type ChallengePurpose = (typeof CHALLENGE_PURPOSES)[number];
 

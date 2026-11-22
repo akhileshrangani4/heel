@@ -67,9 +67,8 @@ describe("accounts in the web app (2.9)", () => {
       "ghp_secret_value",
     );
     expect(done.status).toBe(200);
-    expect(((await done.json()) as { next: string }).next).toBe(
-      "/connections?connected-here=gh-web",
-    );
+    const { next } = (await done.json()) as { next: string };
+    expect(next).toMatch(/^\/connections\?note=/);
     expect(checked).toEqual(["bad", "ghp_secret_value"]);
     const row = h.t.db
       .select()
@@ -80,9 +79,11 @@ describe("accounts in the web app (2.9)", () => {
     // Stored sealed: the raw key isn't in the credentials table, or on the page.
     const sealed = JSON.stringify(h.t.db.select().from(credentials).all());
     expect(sealed).not.toContain("ghp_secret_value");
-    const page = await (await h.fetch("/connections?connected-here=gh-web", { as: owner })).text();
+    const page = await (await h.fetch(next, { as: owner })).text();
     expect(page).toContain("Connected <strong>gh-web</strong>");
     expect(page).not.toContain("ghp_secret_value");
+    // A note is read once: the same link says nothing the second time.
+    expect(await (await h.fetch(next, { as: owner })).text()).not.toContain("Connected <strong>");
   });
 
   it("connects a sign-in account with no key, and refuses a taken name before the passkey", async () => {
@@ -127,7 +128,31 @@ describe("accounts in the web app (2.9)", () => {
         .all()
         .some((a) => a.alias === "gh-web"),
     ).toBe(false);
-    const page = await (await h.fetch("/connections?removed=gh-web", { as: owner })).text();
+    const page = await (await h.fetch(removed.headers.get("location") ?? "", { as: owner })).text();
     expect(page).toContain("Removed <strong>gh-web</strong>");
+  });
+
+  it("claims nothing from a crafted link, and refuses before the passkey when the vault is closed", async () => {
+    const { h } = setUp();
+    const owner = await h.signIn(await h.enroll());
+    await manage(h, owner, { op: "connect", service: "github", alias: "gh-web" }, "first");
+    for (const query of [
+      "rekeyed=gh-web",
+      "connected-here=gh-web",
+      "removed=anything",
+      "note=made-up",
+    ]) {
+      const page = await (await h.fetch(`/connections?${query}`, { as: owner })).text();
+      expect(page).not.toMatch(/Replaced <strong>|Connected <strong>|Removed <strong>/);
+    }
+    const closed = humanPlaneHarness();
+    const someone = await closed.signIn(await closed.enroll());
+    const refused = await manage(closed, someone, {
+      op: "connect",
+      service: "github",
+      alias: "gh",
+    });
+    expect(refused.status).toBe(400);
+    expect(await refused.text()).toMatch(/vault isn't open/);
   });
 });
