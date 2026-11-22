@@ -15,10 +15,10 @@ describe("a proposed rule in plain words (roadmap 2.3)", () => {
       ),
     ).toBe("claude-code may open a GitHub issue on github without asking you.");
     expect(ruleInWords(rule({ kind: "read" }, "allow"))).toBe(
-      "Any agent may read anything on any account without asking you.",
+      "Any of your agents may read anything on any of your accounts without asking you.",
     );
     expect(ruleInWords(rule({}, "ask"))).toBe(
-      "heel asks you before any agent can do anything on any account.",
+      "heel asks you before any of your agents can do anything on any of your accounts.",
     );
   });
 
@@ -28,7 +28,7 @@ describe("a proposed rule in plain words (roadmap 2.3)", () => {
         rule({ action: "email.send", recipients: { all_domain_in: ["work.com"] } }, "allow"),
       ),
     ).toBe(
-      "Any agent may send an email on any account only to people at work.com, without asking you.",
+      "Any of your agents may send an email on any of your accounts only to people at work.com, without asking you.",
     );
     expect(
       ruleInWords(
@@ -42,7 +42,7 @@ describe("a proposed rule in plain words (roadmap 2.3)", () => {
         ),
       ),
     ).toBe(
-      "Any agent can't send an email on any account when anyone it goes to is at gmail.com and that's more than 5 in an hour: heel refuses it.",
+      "Any of your agents can't send an email on any of your accounts when anyone it goes to is at gmail.com and that's more than 5 in an hour: heel refuses it.",
     );
     expect(
       ruleInWords(
@@ -56,7 +56,7 @@ describe("a proposed rule in plain words (roadmap 2.3)", () => {
         ),
       ),
     ).toBe(
-      "Any agent may merge a pull request or push to a GitHub repository on any account in acme/web once the pull request's required checks pass, without asking you.",
+      "Any of your agents may merge a pull request or push to a GitHub repository on any of your accounts in acme/web once the pull request's required checks pass, without asking you.",
     );
     expect(
       ruleInWords(
@@ -66,7 +66,7 @@ describe("a proposed rule in plain words (roadmap 2.3)", () => {
         ),
       ),
     ).toBe(
-      "Any agent may refund a Stripe payment on stripe of at most 50 in usd, without asking you.",
+      "Any of your agents may refund a Stripe payment on stripe of at most 50 in usd, without asking you.",
     );
   });
 
@@ -84,7 +84,7 @@ describe("a proposed rule in plain words (roadmap 2.3)", () => {
       ),
     );
     expect(words).toBe(
-      "Any agent may do github.read when the agent matches /^ci-/, account matches /^gh-/, args.force is true and query.per_page is at most 100, without asking you.",
+      "Any of your agents may do github.read when the agent matches /^ci-/, account matches /^gh-/, args.force is true and query.per_page is at most 100, without asking you.",
     );
   });
 

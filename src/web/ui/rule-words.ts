@@ -121,9 +121,10 @@ function where(match: Record<string, Condition>): { text: string; used: string[]
   }
   if (match["provider"] !== undefined) {
     const provider = listed(match["provider"], (p) => p);
-    if (provider !== null) return { text: ` on any ${provider} account`, used: ["provider"] };
+    if (provider !== null)
+      return { text: ` on any of your ${provider} accounts`, used: ["provider"] };
   }
-  return { text: match["account"] === undefined ? " on any account" : "", used: [] };
+  return { text: match["account"] === undefined ? " on any of your accounts" : "", used: [] };
 }
 
 /**
@@ -211,9 +212,9 @@ function clauses(key: string, condition: Condition): Clause[] {
   }
 }
 
-/** "any agent" starts a sentence as "Any agent"; an agent's own name stays as it is. */
+/** "any of your agents" starts a sentence capitalized; an agent's own name stays as it is. */
 function capital(who: string): string {
-  return who === "any agent" ? "Any agent" : who;
+  return who === "any of your agents" ? "Any of your agents" : who;
 }
 
 /** Pure: one rule as a sentence an owner reads before adding it. */
@@ -222,7 +223,7 @@ export function ruleInWords(rule: Record<string, unknown>): string {
   const used = new Set<string>();
   const agent = match["agent"] === undefined ? null : listed(match["agent"], (a) => a);
   if (agent !== null) used.add("agent");
-  const who = agent ?? "any agent";
+  const who = agent ?? "any of your agents";
   const action = doing(match);
   for (const key of action.used) used.add(key);
   const place = where(match);
