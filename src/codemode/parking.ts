@@ -215,3 +215,31 @@ export function releaseParked(db: HeelDb, agent: { agentId: string }, id: string
     .get();
   return gone !== undefined;
 }
+
+/** The parked script waiting on an approval, if any: for the approval page. */
+export function parkedFor(
+  db: HeelDb,
+  orgId: string,
+  approvalId: string,
+  now: Date,
+): { id: string } | null {
+  const row = db
+    .select({ id: parkedScripts.id, expiresAt: parkedScripts.expiresAt })
+    .from(parkedScripts)
+    .where(and(eq(parkedScripts.orgId, orgId), eq(parkedScripts.approvalId, approvalId)))
+    .get();
+  return row === undefined || row.expiresAt <= now ? null : { id: row.id };
+}
+
+/**
+ * Stops the script parked on an approval, from the approval page: it's
+ * deleted, so the agent can't resume it. It only takes something away, so it
+ * needs no passkey. How many it stopped (0 or 1).
+ */
+export function stopParked(db: HeelDb, orgId: string, approvalId: string): number {
+  return db
+    .delete(parkedScripts)
+    .where(and(eq(parkedScripts.orgId, orgId), eq(parkedScripts.approvalId, approvalId)))
+    .returning({ id: parkedScripts.id })
+    .all().length;
+}

@@ -275,7 +275,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
         deps.parking === undefined ? null : findParked(deps.db, agent, resumeId, now());
       if (parked === null) {
         return answer(
-          "there's no parked script with that resume id: it already ran, expired, or isn't yours",
+          "there's no parked script with that resume id: it already ran, expired, your owner stopped it, or it isn't yours",
         );
       }
       const status = approvalStatusForAgent(deps.db, agent, parked.approvalId, now());
