@@ -77,7 +77,8 @@ export class EnrollmentError extends Error {
  * - **First passkey:** `heel user enroll <user>` over the admin socket.
  * - **Another device:** from the approval page, after the person confirms with
  *   a passkey they already have (`afterPasskey`). Works at once.
- * - **Recovery:** `heel user enroll` for someone who already has a passkey.
+ * - **Recovery:** `heel user enroll`, or an admin on the People page, for
+ *   someone who already has a passkey.
  *   It works only after `RECOVERY_DELAY_MS`, and the approval page shows it
  *   with a way to cancel, so an agent that can run `heel` can't quietly add
  *   a passkey of its own.
@@ -86,7 +87,19 @@ export class EnrollmentError extends Error {
  */
 export function createEnrollment(
   db: HeelDb,
-  input: { orgId: string; userName: string; publicUrl: URL; now: Date; afterPasskey?: boolean },
+  input: {
+    orgId: string;
+    userName: string;
+    publicUrl: URL;
+    now: Date;
+    afterPasskey?: boolean;
+    /**
+     * A passkey for an old address counts too (links made in the web app):
+     * after `public_url` changes, nobody else may skip the day's wait by
+     * making a link for someone who hasn't enrolled at the new address yet.
+     */
+    anyPasskeyIsRecovery?: boolean;
+  },
 ): Enrollment {
   const user = db
     .select({ id: users.id, disabledAt: users.disabledAt })
@@ -99,8 +112,10 @@ export function createEnrollment(
   if (user.disabledAt !== null) {
     throw new EnrollmentError("user_disabled", `user "${input.userName}" is disabled`);
   }
-  // Only a passkey that works at this address counts: after public_url
-  // changes, the old ones can't sign in here, so enrolling isn't recovery.
+  // On the host, only a passkey that works at this address counts: after
+  // public_url changes, the old ones can't sign in here, so enrolling isn't
+  // recovery. A link made in the web app counts any passkey (another person
+  // makes it, so it always waits).
   const hasPasskey =
     db
       .select({ id: passkeys.id })
@@ -108,7 +123,9 @@ export function createEnrollment(
       .where(
         and(
           eq(passkeys.userId, user.id),
-          or(isNull(passkeys.rpId), eq(passkeys.rpId, relyingPartyFor(input.publicUrl).id)),
+          input.anyPasskeyIsRecovery === true
+            ? undefined
+            : or(isNull(passkeys.rpId), eq(passkeys.rpId, relyingPartyFor(input.publicUrl).id)),
         ),
       )
       .get() !== undefined;
@@ -303,7 +320,8 @@ export type AssertionSubject =
         | "rules"
         | "connection"
         | "manage"
-        | "account";
+        | "account"
+        | "people";
       userId: string;
     };
 

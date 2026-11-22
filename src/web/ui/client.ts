@@ -238,6 +238,13 @@ export function clientScript(csrfToken: string | null): string {
         for (const field of document.querySelectorAll("input[name=key]")) field.value = "";
       });
     },
+    managePeople: ({ binding, options, status }) =>
+      run({
+        status,
+        start: { url: "/people/challenge", body: { ...options, ...binding } },
+        sign: getAssertion,
+        finish: "/people/confirm",
+      }),
     manageAgent: ({ binding, options, status }) =>
       run({
         status,

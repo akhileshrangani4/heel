@@ -17,6 +17,7 @@ The `heel` command sets heel up and runs it. Except for `heel run`, it works on 
 | See what's going on | `heel status` |
 | Watch it live | `heel tui` |
 | Create your passkey | `heel user enroll owner` |
+| Add a person (no sign-in provider) | `heel user add <name>`, then `heel user enroll <name>` for their passkey link (or the **People** page) |
 | Connect an account | `heel connect <service> --as <alias>` ([all of them](connect.md)) |
 | Add an agent | `heel agent add <name>` |
 | New token for an agent | `heel agent rotate <name>` |
