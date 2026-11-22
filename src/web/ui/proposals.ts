@@ -69,9 +69,10 @@ export interface ProposalPageProps {
   reason: string | null;
   /** The file the rules go into, relative to heel's home: `rules/alice.yaml`. */
   file: string;
-  rules: readonly { yaml: string; why: string | null }[];
+  /** Each rule as heel will write it, and in plain words (roadmap 2.3). */
+  rules: readonly { yaml: string; words: string; why: string | null }[];
   /** Hide entries, added to the end of the file's `hide:` list. */
-  hide: readonly { yaml: string; why: string | null }[];
+  hide: readonly { yaml: string; words: string; why: string | null }[];
   /**
    * Directories the agent asks its own `heel run` to work in: `path` as the
    * agent wrote it, `stored` as heel would store it (symlinks followed), or
@@ -211,12 +212,16 @@ export function proposalPage(props: ProposalPageProps): Html {
         : html`<ul class="req-list" aria-label="Proposed rules">
       ${props.rules.map(
         (rule) => html`<li class="card">
+          <p class="rule-words"><strong>${rule.words}</strong></p>
           ${
             rule.why === null
               ? ""
-              : html`<p><span class="muted">${props.agent}: </span>${rule.why}</p>`
+              : html`<p><span class="muted">${props.agent} says: </span>${rule.why}</p>`
           }
-          <pre class="mono">${rule.yaml}</pre>
+          <details>
+            <summary>As YAML</summary>
+            <pre class="mono">${rule.yaml}</pre>
+          </details>
         </li>`,
       )}
     </ul>`
@@ -228,12 +233,16 @@ export function proposalPage(props: ProposalPageProps): Html {
           <ul class="req-list" aria-label="Proposed hide entries">
             ${props.hide.map(
               (entry) => html`<li class="card">
+                <p class="rule-words"><strong>${entry.words}</strong></p>
                 ${
                   entry.why === null
                     ? ""
-                    : html`<p><span class="muted">${props.agent}: </span>${entry.why}</p>`
+                    : html`<p><span class="muted">${props.agent} says: </span>${entry.why}</p>`
                 }
-                <pre class="mono">${entry.yaml}</pre>
+                <details>
+                  <summary>As YAML</summary>
+                  <pre class="mono">${entry.yaml}</pre>
+                </details>
               </li>`,
             )}
           </ul>`

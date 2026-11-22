@@ -47,6 +47,8 @@ describe("proposed rules on the approval page", () => {
     expect(await (await h.fetch("/approvals", { as: owner })).text()).toContain("proposes");
     const page = await (await h.fetch(`/proposals/${id}`, { as: owner })).text();
     expect(page).toContain("so I can summarise your inbox");
+    // What the rule does, in words, from the rule itself (roadmap 2.3).
+    expect(page).toContain("Any agent may do email.read on any account without asking you.");
     // A crafted link can't make a pending proposal look added or rejected.
     for (const crafted of ["applied", "rejected"]) {
       const shown = await (await h.fetch(`/proposals/${id}?${crafted}`, { as: owner })).text();

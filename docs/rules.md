@@ -110,11 +110,11 @@ When a call your agent needs keeps asking, or is denied, it can propose rules in
 }
 ```
 
-Either list can be left out, but a proposal needs at least one rule or hide entry.
+Any list can be left out, but a proposal needs at least one rule, hide entry or workdir.
 
 ![A proposed rule: vendor-mail, with the agent's why and where it goes](images/proposal.png)
 
-- **Nothing changes until you add them.** heel tells you a proposal is waiting the same way it tells you about a request (push, email or Slack, whichever you set up), and it shows in `heel status` and `heel tui`. The notification says only which agent and how many rules or hide entries; read them on the page. The proposal shows up under **Rule changes** on the Approvals page. Its page shows each rule with the agent's why, which of your rules they come before, and the whole file after the change. **Add these rules** asks for your passkey; **Reject** doesn't.
+- **Nothing changes until you add them.** heel tells you a proposal is waiting the same way it tells you about a request (push, email or Slack, whichever you set up), and it shows in `heel status` and `heel tui`. The notification says only which agent and how many rules or hide entries; read them on the page. The proposal shows up under **Rule changes** on the Approvals page. Its page says what each rule does in plain words ("claude-code may open a GitHub issue on github without asking you."), written by heel from the rule itself, never from the agent's why. Under it come the agent's why, the rule as YAML, which of your rules they come before, and the whole file after the change. A condition heel has no words for is spelled out as it is ("when args.force is true"), never left out. **Add these rules** asks for your passkey; **Reject** doesn't.
 - **Rules go first in your file,** above your own rules, each with a `# Proposed by <agent>: <why>` comment. The first rule that matches decides, so a proposed `allow` decides a call that one of your rules would have asked about. The page says so.
 - **Hide entries go at the end of your `hide:` list,** with the same comment. A hide entry only takes email away from agents, never gives them anything, and the page says that too.
 - **heel writes the file, never the agent.** The agent sends rule objects, not YAML, and only ever for its own owner's file. It never sees your file: a proposal is checked on its own, and only its own problems go back to the agent. heel can't add a `watch: true` rule or org rules this way.
