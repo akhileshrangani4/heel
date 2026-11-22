@@ -230,9 +230,9 @@ export function proposalPage(props: ProposalPageProps): Html {
       ${
         props.origin === "heel"
           ? html`<p>
-              ${props.agent} didn't ask for this. heel drafted it from requests you decided in
-              the last 30 days, counted from heel's own records, and kept it to what those
-              requests had in common.
+              heel drafted this, not ${props.agent}: from requests you decided in the last 30
+              days, counted from heel's own records, and kept to what those requests had in
+              common.
             </p>`
           : props.reason === null
             ? ""

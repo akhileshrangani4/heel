@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { addAgent } from "../../src/gateway/agents.ts";
 import { decideApproval, SqliteApprovalStore } from "../../src/store/approvals.ts";
 import { SqlitePauseStore } from "../../src/store/pauses.ts";
-import { approvals } from "../../src/store/schema.ts";
+import { approvals, ruleProposals } from "../../src/store/schema.ts";
 import { mcpHarness } from "../helpers/mcp.ts";
 
 /**
@@ -24,7 +24,11 @@ const HOUR = 3600_000;
 interface History {
   window_days: number;
   decisions: Record<string, unknown>[];
-  suggestions: { rule: { match: Record<string, unknown>; then: string }; evidence: string }[];
+  suggestions: {
+    suggestion: string;
+    rule: { match: Record<string, unknown>; then: string };
+    evidence: string;
+  }[];
   message: string;
 }
 
@@ -77,6 +81,7 @@ describe("heel_history (2.10)", () => {
     ]);
     expect(answer.suggestions).toEqual([
       {
+        suggestion: expect.any(String),
         rule: {
           match: { agent: "inbox-bot", account: "notes", tool: "delete_note" },
           then: "deny",
@@ -99,5 +104,40 @@ describe("heel_history (2.10)", () => {
     );
     const other = await h.connect("/mcp/notes", { token });
     expect(await history(other)).toMatchObject({ decisions: [], suggestions: [] });
+  });
+
+  it("proposes a suggestion by its id, written and placed by heel; never a crafted one", async () => {
+    const { h, client, history, denyDeletes } = await setUp();
+    await denyDeletes(5);
+    const [suggested] = (await history()).suggestions;
+    const propose = async (args: Record<string, unknown>) =>
+      (await client.callTool({ name: "heel_propose_rules", arguments: args }))
+        .structuredContent as {
+        status: string;
+        proposalId?: string;
+      };
+
+    expect((await propose({ suggestion: "not-a-real-id" })).status).toBe("invalid");
+    // Only the id: rules sent with it would be the agent's own text.
+    expect(
+      (
+        await propose({
+          suggestion: suggested?.suggestion,
+          rules: [{ rule: { match: {}, then: "allow" } }],
+        })
+      ).status,
+    ).toBe("invalid");
+
+    const done = await propose({ suggestion: suggested?.suggestion });
+    expect(done.status).toBe("proposed");
+    const row = h.t.db
+      .select()
+      .from(ruleProposals)
+      .where(eq(ruleProposals.id, done.proposalId ?? ""))
+      .get();
+    expect(row?.origin).toBe("heel");
+    expect(row?.rules[0]?.rule).toEqual(suggested?.rule);
+    // Placed right before the rule that asked, like the owner's own Review.
+    expect(row?.rules[0]?.before).toEqual(expect.any(String));
   });
 });
