@@ -6,6 +6,7 @@ import { connectionRoutes } from "./routes/connections.ts";
 import { deviceRoutes } from "./routes/devices.ts";
 import { enrollRoutes } from "./routes/enroll.ts";
 import { grantRoutes } from "./routes/grants.ts";
+import { manageAgentRoutes } from "./routes/manage-agents.ts";
 import { modeRoutes } from "./routes/modes.ts";
 import { oauthRoutes } from "./routes/oauth.ts";
 import { oidcRoutes } from "./routes/oidc.ts";
@@ -68,6 +69,7 @@ export function createHumanApp(deps: HumanPlaneDeps): Hono {
   app.route("/", connectionRoutes(deps));
   app.route("/", modeRoutes(deps));
   app.route("/", grantRoutes(deps));
+  app.route("/", manageAgentRoutes(deps));
   app.route("/", activityRoutes(deps));
   app.notFound((c) => c.text("Not found.", 404));
   app.onError((error, c) => {

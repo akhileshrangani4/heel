@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { AUDIT_KINDS, type AuditKind } from "../../core/audit.ts";
 import { suggestRules } from "../../core/suggestions.ts";
-import { listAgents } from "../../gateway/agents.ts";
+import { listAgents, workRootsOf } from "../../gateway/agents.ts";
 import { agentInventory, readActivity, wouldHaveStopped } from "../../store/activity.ts";
 import { agents } from "../../store/schema.ts";
 import {
@@ -44,6 +44,14 @@ function visibleOwners(session: SessionView): string[] | null {
 
 function isKind(value: string | undefined): value is AuditKind {
   return value !== undefined && (AUDIT_KINDS as readonly string[]).includes(value);
+}
+
+/** What an agent change from the web app did, for the notice on Agents (2.9). */
+function doneMessage(query: Record<string, string>): string | null {
+  if ("revoked" in query) return "Revoked. Its tokens stopped working, and its scripts stopped.";
+  if ("workdir-added" in query) return "Folder added. Its heel run can work there now.";
+  if ("workdir-removed" in query) return "Folder removed.";
+  return null;
 }
 
 export function activityRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
@@ -95,6 +103,15 @@ export function activityRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
           },
         })),
         stopped: "script-stopped" in c.req.query(),
+        manage: {
+          csrfToken: session.csrfToken,
+          viewerId: session.userId,
+          admin: session.role === "admin",
+          workRoots: new Map(
+            list.map((a) => [a.agentId, a.revoked ? [] : workRootsOf(deps.db, a.agentId)]),
+          ),
+          done: doneMessage(c.req.query()),
+        },
         tokens: new Map(
           listAgents(deps.db, deps.orgId).map((a) => [
             a.id,

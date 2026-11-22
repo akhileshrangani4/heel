@@ -3,6 +3,7 @@ import { TOKEN_WARNING_DAYS } from "../../gateway/agents.ts";
 import type { ActivityRow, AgentActivity } from "../../store/activity.ts";
 import { type Html, html } from "./html.ts";
 import { badge, type FormTarget, notice, postForm, scrollRegion, time } from "./layout.ts";
+import { addAgentForm, agentControls } from "./manage-agents.ts";
 
 /**
  * The observability pages (A5): what agents did, as heel decided it. Every
@@ -142,6 +143,14 @@ function tokenCell(expiry: Date | "never" | null | undefined, now: Date): Html {
 export function agentsPage(props: {
   agents: readonly AgentActivity[];
   sinceHours: number;
+  /** Managing agents here (2.9): who may, their workdirs, and what just happened. */
+  manage?: {
+    csrfToken: string;
+    viewerId: string;
+    admin: boolean;
+    workRoots: ReadonlyMap<string, readonly string[]>;
+    done: string | null;
+  };
   /** Each agent's static token expiry: a date, "never", or null without one. */
   tokens?: ReadonlyMap<string, Date | "never" | null>;
   now?: Date;
@@ -195,6 +204,8 @@ export function agentsPage(props: {
   return html`<h1>Agents</h1>
     <p class="muted">Every agent you may see, and what it did in the last ${String(props.sinceHours)} hours.</p>
     ${props.stopped === true ? notice("info", html`<p>Stopped. The script won't carry on.</p>`) : ""}
+    ${props.manage?.done === null || props.manage?.done === undefined ? "" : notice("ok", html`<p>${props.manage.done}</p>`)}
+    ${props.manage === undefined ? "" : addAgentForm()}
     ${running}
     ${
       expiring.length === 0
@@ -204,7 +215,7 @@ export function agentsPage(props: {
             html`<p>
               ${expiring.length === 1 ? "One agent's token" : `${String(expiring.length)} agents' tokens`}
               expire soon: ${expiring.map((a) => a.name).join(", ")}. Issue a new one with
-              <code>heel agent rotate &lt;agent&gt;</code> and update the agent's configuration.
+              <code>heel agent rotate &lt;agent&gt;</code>, or under Manage below, and update the agent's configuration.
             </p>`,
           )
     }
@@ -212,16 +223,34 @@ export function agentsPage(props: {
       props.agents.length === 0
         ? html`<div class="card req-empty">
             <p><strong>No agents yet.</strong></p>
-            <p class="muted">Add one from the command line: <code>heel agent add &lt;name&gt;</code></p>
+            <p class="muted">Add one above, or from the command line: <code>heel agent add &lt;name&gt;</code></p>
           </div>`
         : html`<ul class="conn-list agent-list" aria-label="Agents">
-            ${props.agents.map((a) => agentCard(a, props.tokens?.get(a.agentId), now))}
+            ${props.agents.map((a) => agentCard(a, props.tokens?.get(a.agentId), now, props.manage))}
           </ul>`
     }`;
 }
 
 /** One agent: who owns it, its token, and what it did in the window. */
-function agentCard(a: AgentActivity, token: Date | "never" | null | undefined, now: Date): Html {
+function agentCard(
+  a: AgentActivity,
+  token: Date | "never" | null | undefined,
+  now: Date,
+  manage?: {
+    csrfToken: string;
+    viewerId: string;
+    admin: boolean;
+    workRoots: ReadonlyMap<string, readonly string[]>;
+  },
+): Html {
+  const controls =
+    manage !== undefined && !a.revoked && (manage.admin || a.ownerId === manage.viewerId)
+      ? agentControls({
+          name: a.name,
+          workRoots: manage.workRoots.get(a.agentId) ?? [],
+          csrfToken: manage.csrfToken,
+        })
+      : "";
   const stat = (label: string, value: number) =>
     html`<li><strong>${String(value)}</strong><span>${label}</span></li>`;
   return html`<li class="card conn" data-agent="${a.name}">
@@ -243,6 +272,7 @@ function agentCard(a: AgentActivity, token: Date | "never" | null | undefined, n
       ${a.accounts.length === 0 ? "No accounts used" : html`Accounts: <span class="mono">${a.accounts.join(", ")}</span>`}
       ${a.revoked ? "" : html` · Token expires: ${tokenCell(token, now)}`}
     </p>
+    ${controls}
   </li>`;
 }
 

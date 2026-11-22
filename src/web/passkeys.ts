@@ -301,7 +301,8 @@ export type AssertionSubject =
         | "grant"
         | "add_device"
         | "rules"
-        | "connection";
+        | "connection"
+        | "manage";
       userId: string;
     };
 
