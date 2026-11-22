@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { and, eq, isNull } from "drizzle-orm";
 import { Hono } from "hono";
 import { GOOGLE_CALLBACK_PATH, MICROSOFT_CALLBACK_PATH } from "../../config/schema.ts";
 import { CALENDAR_PROFILE, GMAIL_PROFILE, googleSignIn } from "../../definitions/google/oauth.ts";
@@ -18,6 +19,8 @@ import {
 import { missingSignInSetup } from "../../definitions/sign-in-setup.ts";
 import { needsKey } from "../../requests/connection.ts";
 import { accountsOwnedBy } from "../../store/directory.ts";
+import { users } from "../../store/schema.ts";
+import { sharingOf } from "../../store/sharing.ts";
 import { errorShape } from "../../util/error-shape.ts";
 import { type AccountNote, accountNotes } from "../account-notes.ts";
 import {
@@ -156,6 +159,7 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
         providers.has(account.provider) || (oauth !== null && isOAuthUpstream(account.settings)),
       // From the config, not `providers`: that's also empty when the vault is closed.
       holdsKey: needsKey(account.provider),
+      sharing: sharingOf(deps.db, session.orgId, account.alias),
       setup: missingSignInSetup(account.provider, {
         google: deps.providerClients.google !== null || builtIn != null,
         microsoft: deps.providerClients.microsoft !== null,
@@ -176,7 +180,19 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
           accountNotes(deps).take(session.userId, c.req.query("note") ?? ""),
         ),
         signInForm: { action: "/connections/sign-in", csrfToken: session.csrfToken },
-        manage: { csrfToken: session.csrfToken },
+        manage: {
+          csrfToken: session.csrfToken,
+          people: deps.db
+            .select({ id: users.id, name: users.name })
+            .from(users)
+            .where(and(eq(users.orgId, session.orgId), isNull(users.disabledAt)))
+            .all()
+            .filter((u) => u.id !== session.userId)
+            .map((u) => u.name)
+            .sort(),
+          groups: deps.oidc != null,
+          admin: session.role === "admin",
+        },
       }),
     });
   });
