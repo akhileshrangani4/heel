@@ -46,6 +46,7 @@ import { errorShape } from "../../util/error-shape.ts";
 import type {
   AdapterInput,
   AllowedVia,
+  ApprovalScript,
   ApprovalStore,
   CallRequest,
   DecisionAdapter,
@@ -299,6 +300,8 @@ interface DecideInput {
   reason: string | null;
   /** The agent's MCP client, stored on a new request only. */
   client: string | null;
+  /** The script the call came from, stored on a new request only (CallRequest.script). */
+  script: ApprovalScript | null;
 }
 
 type Decided =
@@ -425,6 +428,7 @@ class DecisionPipeline implements Pipeline {
       states: new Map(),
       adapters: new Map(),
       reason: request.reason ?? null,
+      script: request.script ?? null,
       client: clientFor(request.surface, agent.clientName ?? null),
     });
     if (decided.kind === "final") {
@@ -904,6 +908,7 @@ class DecisionPipeline implements Pipeline {
         origin: rule.layer,
         reason: input.reason,
         client: input.client,
+        script: input.script,
       },
       at,
     );

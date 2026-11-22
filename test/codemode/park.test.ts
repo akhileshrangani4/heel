@@ -73,6 +73,12 @@ describe("a script that asks is parked, and resumes after the decision (C2)", ()
     expect((first as { message?: string }).message).toContain(`{"resume": "${first.resume}"}`);
     expect(first.approvalId).toEqual(expect.any(String));
     expect(h.upstream.calls.map((c) => c.name)).toEqual(["search_notes"]);
+    // The approver sees the script and what it already called (C3).
+    expect(h.t.db.select().from(approvals).get()?.script).toEqual({
+      code: SCRIPT,
+      truncated: false,
+      before: [{ account: "notes", tool: "search_notes", decision: "allow" }],
+    });
     // The snapshot is stored sealed, not as Monty's raw bytes.
     const [row] = h.t.db.select().from(parkedScripts).all();
     expect(row?.snapshot.includes(Buffer.from("search_notes"))).toBe(false);

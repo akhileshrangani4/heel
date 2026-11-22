@@ -49,6 +49,7 @@ export const PENDING_REQUEST: ApprovalRequestView = {
   action: "email.send",
   rule: { name: "client-sends-ask", file: "rules/alice.yaml", line: 14 },
   reason: "Sending Bob the Q4 renewal schedule and pricing he asked for in yesterday's thread.",
+  script: null,
   client: "claude-code",
   args: {
     from: "alice@company.com",

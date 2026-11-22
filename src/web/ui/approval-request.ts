@@ -1,5 +1,6 @@
 import type { RuleRef, Surface } from "../../core/call.ts";
 import type { ApprovalHints, HintTone } from "../../core/hints.ts";
+import type { ApprovalScript } from "../../gateway/pipeline/ports.ts";
 import type { ApprovalOrigin, ApprovalStatus } from "../../store/schema.ts";
 import { type CeremonyCallback, ceremonyButton } from "./ceremony.ts";
 import {
@@ -52,6 +53,8 @@ export interface ApprovalRequestView {
    * never what the call does: it's shown apart from heel's facts, as quoted words.
    */
   reason: string | null;
+  /** The code-mode script the call came from, as the agent wrote it (C3), or null. */
+  script: ApprovalScript | null;
   /** The MCP client the agent used, as that client named itself; null when unknown. */
   client: string | null;
   /** The canonical, post-rewrite arguments: exactly what will run. */
@@ -371,6 +374,40 @@ function reasonView(request: ApprovalRequestView): Html | "" {
   </figure>`;
 }
 
+/**
+ * The script a code-mode call came from (code mode round 2, C3): what it
+ * already called, then its code, as text. It's the agent's own code, shown
+ * so the approver sees what else the script means to do; heel checks every
+ * call in it on its own, whatever the code says.
+ */
+function scriptView(request: ApprovalRequestView): Html | "" {
+  const script = request.script;
+  if (script === null) return "";
+  const before =
+    script.before.length === 0
+      ? html`<p class="muted">This is the script's first call to your accounts.</p>`
+      : html`<p>Before this call, the script made ${script.before.length === 1 ? "1 call" : `${script.before.length} calls`}:</p>
+          <ol class="script-calls">
+            ${script.before.map(
+              (c) =>
+                html`<li><span class="mono">${c.tool}</span> on <span class="mono">${c.account}</span> <span class="muted">(${c.decision})</span></li>`,
+            )}
+          </ol>`;
+  return html`<section class="card script" aria-label="The script this call comes from">
+    <h2 class="section-title">From a script</h2>
+    <p>
+      ${request.agent} sent this call from a script. If you approve, the script carries on from
+      here, and every later call in it is checked by your rules on its own.
+    </p>
+    ${before}
+    <details>
+      <summary>The script (${request.agent}'s own code; heel didn't check what it says)</summary>
+      <pre class="mono">${script.code}</pre>
+      ${script.truncated ? html`<p class="muted">Cut here: the script is longer than heel keeps.</p>` : ""}
+    </details>
+  </section>`;
+}
+
 /** What the request's status means for the approver, in one notice. */
 const HINT_TONE: Record<HintTone, Tone> = { warn: "warn", note: "info", ok: "ok" };
 const HINT_LABEL: Record<HintTone, string> = { warn: "check", note: "note", ok: "ok" };
@@ -611,6 +648,7 @@ export function approvalRequest(props: ApprovalRequestProps): Html {
         <mark>${said.place}</mark>${said.rest}
       </h1>
       ${reasonView(request)}
+      ${scriptView(request)}
       <ul class="ap-facts">
         <li class="ap-fact">
           <span>Asked by rule</span><strong>${request.rule.name ?? formatRule(request.rule)}</strong>

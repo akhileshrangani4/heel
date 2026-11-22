@@ -1,5 +1,6 @@
 import type { AuthenticatedAgent } from "../gateway/agent-tokens.ts";
 import type { Pipeline } from "../gateway/pipeline/pipeline.ts";
+import { approvalScript } from "../gateway/pipeline/ports.ts";
 import type { HeelDb } from "../store/db.ts";
 import { type ClaimedScript, parkScript, type Sealer } from "./parking.ts";
 import type { StubModule } from "./stubs.ts";
@@ -94,6 +95,8 @@ export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
     return { ...result, stdout, calls };
   };
 
+  // A resumed script runs no new code: its code is the one it parked with.
+  const code = input.resume?.code ?? input.code;
   // A resumed script's earlier calls count toward its limit; the parked one runs again here.
   const before = input.resume === undefined ? 0 : Math.max(0, input.resume.calls.length - 1);
   /** Saves the script suspended at an asking call: `{ resume }`, or `{ notParked }` saying why not. */
@@ -130,6 +133,7 @@ export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
         approvalId,
         runId: input.runId,
         reason: input.reason,
+        code,
         calls: [...(input.resume?.calls.slice(0, -1) ?? []), ...calls],
         modules: input.modules,
         snapshot: saved.snapshot,
@@ -211,6 +215,8 @@ export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
       args,
       ...(input.runId === undefined ? {} : { runId: input.runId }),
       ...(input.reason === undefined ? {} : { reason: input.reason }),
+      // The approver sees the script and what it already called (C3).
+      script: approvalScript(code, [...(input.resume?.calls.slice(0, -1) ?? []), ...calls]),
     });
     const record = (decision: CallRecord["decision"]) =>
       calls.push({ account: module.account, tool, decision });

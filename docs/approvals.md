@@ -14,6 +14,8 @@ Open one to see everything that will run: for an email, every recipient, the sub
 
 ![An email waiting for approval: To bob@vendor.com, subject Q3 invoice](images/approval-email.png)
 
+When the call comes from a code-mode script, the page also shows the script under **From a script**: the calls it already made, and its code, as the agent wrote it. It's there so you can see what else the script means to do; heel still checks every later call in it on its own. If you approve, the agent resumes the script and it carries on from that call.
+
 ## Decide
 
 - **Approve once:** this exact call runs the next time the agent sends it, once.
