@@ -185,8 +185,10 @@ export const RUN_CODE_TOOL: Tool = {
     "Run a Python script (Monty's subset) that calls your accounts as modules: `import gmail_work` then " +
     "`gmail_work.send(...)`. The script's last expression comes back as `output`, beside what it printed. " +
     "Every call is checked by heel on its own. A denial raises PermissionError " +
-    "at the call. If a call needs approval or you're paused, the script stops there and the result says " +
-    "so, with what already ran; send the rest as a new script once it's approved. A `busy` status means " +
+    "at the call. If a call needs approval, the script waits there: the result is `pending` with the " +
+    "approval id and a `resume` id; once heel_status says the approval is decided, call run_code with " +
+    "`resume` (no code) and the script carries on from that call. If there's no `resume` id (`notParked` " +
+    "says why), or you're paused, the script ended there; send the rest as a new script. A `busy` status means " +
     "heel already runs as many scripts as it allows at once, yours or all agents', so this one didn't " +
     "start; send it again once one has finished. See heel_stubs for " +
     "the functions and their arguments.",
@@ -194,7 +196,12 @@ export const RUN_CODE_TOOL: Tool = {
   inputSchema: {
     type: "object",
     properties: {
-      code: { type: "string", description: "The script." },
+      code: { type: "string", description: "The script. Leave it out with `resume`." },
+      resume: {
+        type: "string",
+        description:
+          "A parked script's `resume` id, from a `pending` result, to carry on once its approval is decided.",
+      },
       run_id: { type: "string", description: "Your run id, for per-run limits." },
       heel_reason: {
         type: "string",
@@ -204,7 +211,6 @@ export const RUN_CODE_TOOL: Tool = {
           "changes whether a call runs.",
       },
     },
-    required: ["code"],
     additionalProperties: false,
   },
 };

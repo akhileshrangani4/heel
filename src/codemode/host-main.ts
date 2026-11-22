@@ -130,7 +130,13 @@ export async function codemodeHostMain(): Promise<void> {
       if (scripts.has(id)) send({ id, type: "stdout", text });
     });
     const step = await script.worker
-      .start(message.code, fromWireModules(message.modules), message.limits, stdout)
+      .start(
+        message.code,
+        fromWireModules(message.modules),
+        message.limits,
+        stdout,
+        message.snapshot,
+      )
       .catch((error: unknown): Step => ({ kind: "failed", error: String(error) }));
     report(id, step);
   };

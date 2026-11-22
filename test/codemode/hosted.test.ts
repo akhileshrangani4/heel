@@ -64,6 +64,49 @@ describe("the code-mode helper", () => {
     }
   });
 
+  it("parks a script at a call and resumes it in a fresh worker at that call (C2)", async () => {
+    if (MODULE === null) throw new Error("no module");
+    const limits = {
+      maxCalls: 200,
+      maxSeconds: 30,
+      maxMemory: 256 * 1024 * 1024,
+      maxStdout: 1_000_000,
+    };
+    let printed = "";
+    const first = new HostedCodeWorker(host);
+    let step = await first.start(
+      'import acct\nacct.ok()\nprint("before")\nr = acct.ask()\nprint("after", r)',
+      [MODULE],
+      limits,
+      (text) => {
+        printed += text;
+      },
+    );
+    if (step.kind !== "call") throw new Error(`expected a call, got ${step.kind}`);
+    step = await step.resume({ ok: true });
+    if (step.kind !== "call" || step.fn !== "ask") throw new Error("expected the ask");
+    const parked = await step.park();
+    await first.stop();
+    if (parked.kind !== "parked") throw new Error(`expected parked, got ${JSON.stringify(parked)}`);
+
+    const second = new HostedCodeWorker(host);
+    let resumed = await second.start(
+      "",
+      [MODULE],
+      limits,
+      (text) => {
+        printed += text;
+      },
+      parked.snapshot,
+    );
+    if (resumed.kind !== "call" || resumed.fn !== "ask")
+      throw new Error("expected to resume at the ask");
+    resumed = await resumed.resume("approved");
+    await second.stop();
+    expect(resumed.kind).toBe("done");
+    expect(printed).toBe("before\nafter approved\n");
+  });
+
   it("runs scripts side by side", async () => {
     const results = await Promise.all(
       [1, 2, 3, 4].map((n) => run(`import acct\nacct.ok()\nprint(${n})`)),

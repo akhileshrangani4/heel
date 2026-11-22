@@ -422,12 +422,20 @@ export class HostedCodeWorker implements CodeWorker {
     modules: readonly StubModule[],
     limits: ScriptLimits,
     stdout: (text: string) => void,
+    snapshot?: string,
   ): Promise<Step> {
     // Stopped before it started (the client hung up first): the script never reaches the helper.
     if (this.#stopped) return { kind: "failed", error: "the script was stopped" };
     const id = this.#host.open(stdout, limits);
     this.#id = id;
-    const start: ToHost = { id, type: "start", code, modules: toWireModules(modules), limits };
+    const start: ToHost = {
+      id,
+      type: "start",
+      code,
+      modules: toWireModules(modules),
+      limits,
+      ...(snapshot === undefined ? {} : { snapshot }),
+    };
     return this.#step(id, await this.#host.next(id, start));
   }
 

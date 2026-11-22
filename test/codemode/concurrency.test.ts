@@ -159,6 +159,7 @@ describe("code mode's concurrency limits", () => {
           positional: 0,
           resume: () => Promise.reject(new Error("the worker crashed")),
           raise: () => Promise.reject(new Error("the worker crashed")),
+          park: () => Promise.reject(new Error("the worker crashed")),
         }),
         stop: async () => {
           stopped.push("stop");

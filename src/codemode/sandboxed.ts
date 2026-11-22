@@ -69,6 +69,7 @@ export class SandboxedCodeWorker implements CodeWorker {
     modules: readonly StubModule[],
     limits: ScriptLimits,
     stdout: (text: string) => void,
+    snapshot?: string,
   ): Promise<Step> {
     const workRoot = mkdtempSync(join(tmpdir(), "heel-codemode-"));
     this.#workRoot = workRoot;
@@ -121,7 +122,13 @@ export class SandboxedCodeWorker implements CodeWorker {
       };
       this.#deliver(this.#ended);
     });
-    return this.#next({ type: "start", code, modules: toWireModules(modules), limits });
+    return this.#next({
+      type: "start",
+      code,
+      modules: toWireModules(modules),
+      limits,
+      ...(snapshot === undefined ? {} : { snapshot }),
+    });
   }
 
   #deliver(step: WireStep): void {

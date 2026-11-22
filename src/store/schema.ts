@@ -1023,3 +1023,45 @@ export const agentRequests = sqliteTable(
     check("agent_requests_status", sql`"status" IN (${sqlList(AGENT_REQUEST_STATUSES)})`),
   ],
 );
+
+/** One call a script made, as `run_code` reports it; kept with a parked script. */
+export interface ParkedCall {
+  account: string;
+  tool: string;
+  decision: string;
+}
+
+/**
+ * A code-mode script parked at a call that asked for approval (code mode
+ * round 2, C2). The agent resumes it with `run_code({ resume })` once the
+ * approval is decided; the parked call then runs through the pipeline again,
+ * so the approval, not this row, decides it. The snapshot is Monty's dump of
+ * the suspended script, which holds whatever it already read, so it is sealed
+ * with the vault's key, bound to this row and its agent. A row is deleted
+ * when it's resumed, and is useless after `expiresAt` (its approval's).
+ */
+export const parkedScripts = sqliteTable(
+  "parked_scripts",
+  {
+    id: text("id").primaryKey(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => orgs.id),
+    agentId: text("agent_id")
+      .notNull()
+      .references(() => agents.id),
+    /** The approval the parked call is waiting on. */
+    approvalId: text("approval_id").notNull(),
+    /** The script's run id, so per-run counts carry on after it resumes. */
+    runId: text("run_id"),
+    reason: text("reason"),
+    /** Calls the script made before it parked, the parked one last; heel's 200-call limit counts them. */
+    calls: text("calls", { mode: "json" }).$type<ParkedCall[]>().notNull(),
+    /** A hash of the modules the script ran against; a resume against different ones is refused. */
+    modulesHash: text("modules_hash").notNull(),
+    snapshot: blob("snapshot", { mode: "buffer" }).notNull(),
+    createdAt: createdAt(),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (t) => [index("parked_scripts_agent").on(t.agentId)],
+);

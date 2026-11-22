@@ -214,6 +214,7 @@ class LaneWorker implements CodeWorker {
     modules: readonly StubModule[],
     limits: ScriptLimits,
     stdout: (text: string) => void,
+    snapshot?: string,
   ): Promise<Step> {
     if (this.#stopped) return { kind: "failed", error: "the script was stopped" };
     const { lane, cancel } = this.#lanes.acquire(this.#agentId);
@@ -228,7 +229,7 @@ class LaneWorker implements CodeWorker {
       return { kind: "failed", error: "the script was stopped" };
     }
     this.#inner = new HostedCodeWorker(got.host);
-    return this.#inner.start(code, modules, limits, stdout);
+    return this.#inner.start(code, modules, limits, stdout, snapshot);
   }
 
   #giveBack(): void {

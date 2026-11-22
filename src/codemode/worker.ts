@@ -20,6 +20,9 @@ import type { StubModule } from "./stubs.ts";
  * - `done`: the script ended; `output` is its last expression.
  * - `failed`: a type error found before running, an uncaught exception, or a
  *   limit hit. Nothing after it runs.
+ * - `parked`: the script was suspended at a call that needs approval and
+ *   saved (code mode round 2, C2). `snapshot` is Monty's dump, base64; a new
+ *   worker started with it resumes at that same call. Nothing runs here after it.
  */
 export type Step =
   | {
@@ -31,9 +34,15 @@ export type Step =
       positional: number;
       resume(value: unknown): Promise<Step>;
       raise(type: "PermissionError" | "RuntimeError", message: string): Promise<Step>;
+      /** Saves the script, suspended at this call: `parked`, or `failed` when it can't be saved. */
+      park(): Promise<Step>;
     }
   | { kind: "done"; output: unknown }
-  | { kind: "failed"; error: string };
+  | { kind: "failed"; error: string }
+  | { kind: "parked"; snapshot: string };
+
+/** The largest saved script heel keeps, before base64 (code mode round 2, C2). */
+export const MAX_SNAPSHOT_BYTES = 4 * 1024 * 1024;
 
 export interface ScriptLimits {
   /** Host calls one script may make (spec: 200). */
@@ -54,11 +63,16 @@ export const DEFAULT_LIMITS: ScriptLimits = {
 };
 
 export interface CodeWorker {
+  /**
+   * Runs `code`, or, with `snapshot` (a `parked` step's), resumes a saved
+   * script at the call it was parked at; `code` is then ignored.
+   */
   start(
     code: string,
     modules: readonly StubModule[],
     limits: ScriptLimits,
     stdout: (text: string) => void,
+    snapshot?: string,
   ): Promise<Step>;
   /**
    * Ends the script for good; a suspended one never resumes, and a step heel

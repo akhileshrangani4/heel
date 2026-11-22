@@ -87,6 +87,39 @@ for (const [where, available, makeWorker] of WORKERS) {
   }
 
   describe.skipIf(!available)(`code mode ${where}`, () => {
+    it("parks a script at a call and resumes it in a new worker at that call (C2)", async () => {
+      if (MODULE === null) throw new Error("no module");
+      const limits = {
+        maxCalls: 200,
+        maxSeconds: 30,
+        maxMemory: 256 * 1024 * 1024,
+        maxStdout: 1_000_000,
+      };
+      let printed = "";
+      const print = (text: string) => {
+        printed += text;
+      };
+      const first = makeWorker();
+      const step = await first.start(
+        'import acct\nprint("before")\nr = acct.ok()\nprint("after", r)',
+        [MODULE],
+        limits,
+        print,
+      );
+      if (step.kind !== "call") throw new Error(`expected a call, got ${step.kind}`);
+      const parked = await step.park();
+      await first.stop();
+      if (parked.kind !== "parked")
+        throw new Error(`expected parked, got ${JSON.stringify(parked)}`);
+      const second = makeWorker();
+      const resumed = await second.start("", [MODULE], limits, print, parked.snapshot);
+      if (resumed.kind !== "call") throw new Error(`expected the parked call, got ${resumed.kind}`);
+      const done = await resumed.resume("approved");
+      await second.stop();
+      expect(done.kind).toBe("done");
+      expect(printed).toBe("before\nafter approved\n");
+    }, 60_000);
+
     it("runs a script and relays an allowed call", async () => {
       const { result, seen } = await run(`import acct\nprint(acct.ok())`);
       expect(result).toMatchObject({ status: "completed" });
