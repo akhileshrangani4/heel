@@ -2,6 +2,7 @@ import { loadConfig, resolveConfigSource } from "../config/load.ts";
 import type { HeelConfig } from "../config/schema.ts";
 import { YamlValidationError } from "../config/yaml.ts";
 import { hasErrnoCode } from "../util/errno.ts";
+import type { KeyCheck } from "../vault/key-check.ts";
 
 /** Exit codes, from sysexits(3) as the spec uses for `heel run`. */
 export const EXIT = {
@@ -32,7 +33,15 @@ export interface CliIo {
    * command instead, so no test can ever change a real app's config.
    */
   exec?: ExecFn;
+  checkKey?: CheckKeyFn;
 }
+
+/**
+ * Checks a pasted key with its service before `heel connect` stores it
+ * (roadmap T12). Only the `heel` binary passes one, so tests never reach a
+ * real API; when absent, keys are stored unchecked.
+ */
+export type CheckKeyFn = (provider: string, key: string) => Promise<KeyCheck>;
 
 /** A program's exit code and its stdout and stderr together. Code 127: not installed. */
 export type ExecFn = (

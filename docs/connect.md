@@ -23,6 +23,8 @@ heel knows these services' tools, so rules can name what a call does (`action: g
 
 `--credential-stdin` reads the credential from standard input, so it never lands in your shell history: pipe it in, or paste it and press Ctrl-D.
 
+heel checks a GitHub, Slack, Linear, Notion or Stripe key before it stores it, with one read the service's own API answers for any key (GitHub `/user`, Slack `auth.test`, Linear `viewer`, Notion `/v1/users/me`, Stripe `/v1/balance`). A key the service turns down (wrong, expired or revoked) isn't connected, and heel says so. If heel can't settle it (no network, an outage, a restricted key that can't make that read), it connects the key and tells you it couldn't check. The same happens when you paste a key on an agent's connection request.
+
 **Gmail and Google Calendar** sign in with heel's own Google sign-in: after `heel connect`, open **Connections** and select **Sign in** ([details](google-sign-in.md), including heel on another machine). **Outlook** signs in through your own Microsoft app, set in `heel.yaml` as `providers.microsoft`.
 
 ## Any MCP server

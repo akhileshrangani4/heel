@@ -58,6 +58,7 @@ import { SqlitePauseStore } from "./store/pauses.ts";
 import { OidcClient, oidcSettings } from "./teams/oidc.ts";
 import { isCliProvider, listAccounts } from "./vault/connect.ts";
 import { loadMasterKey, MasterKeyError } from "./vault/key.ts";
+import { checkKey } from "./vault/key-check.ts";
 import type { RefresherLookup } from "./vault/refresh.ts";
 import { loadSecret } from "./vault/secret-file.ts";
 import { Vault, VaultError } from "./vault/vault.ts";
@@ -473,6 +474,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         vapidPublicKey: notify.vapidPublicKey,
         agentPublicUrl: config.agentPublicUrl,
         upstreamOAuth: vault === null ? null : { signIns: upstreamSignIns, vault },
+        checkKey: (provider, key) => checkKey(provider, key, fetch),
         watchFallback: watch,
         providerClients,
         builtInGoogle,

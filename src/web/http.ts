@@ -12,6 +12,7 @@ import type { Logger } from "../log.ts";
 import type { SqliteApprovalStore } from "../store/approvals.ts";
 import type { HeelDb } from "../store/db.ts";
 import type { OidcClient } from "../teams/oidc.ts";
+import type { KeyCheck } from "../vault/key-check.ts";
 import type { Vault } from "../vault/vault.ts";
 import type { Passkeys } from "./passkeys.ts";
 import {
@@ -52,6 +53,12 @@ export interface HumanPlaneDeps {
    * is closed, since the tokens would have nowhere to go.
    */
   upstreamOAuth: { signIns: UpstreamSignIns; vault: Vault; fetch?: FetchLike } | null;
+  /**
+   * Checks a key the owner pasted with its service before heel stores it
+   * (roadmap T12). heel's own server passes one; when absent, keys are stored
+   * unchecked, so tests never reach a real API.
+   */
+  checkKey?: (provider: string, key: string) => Promise<KeyCheck>;
   /**
    * The operator's own OAuth clients, for signing in built-in mail accounts:
    * Google for Gmail (D9a-1), Microsoft for Outlook (D9b). Each is null when
