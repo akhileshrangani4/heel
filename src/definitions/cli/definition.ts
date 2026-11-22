@@ -46,7 +46,8 @@ import type { CliRefusal } from "./types.ts";
 /** What an agent is told when heel run's directory isn't one of its workdirs. */
 const WORKDIR_HINT =
   "This directory isn't one of your workdirs for heel run. To ask for it, call heel_propose_rules " +
-  "with workdirs: [{ path, why }]; your owner adds it with a passkey.";
+  "with workdirs: [{ path, why }]; your owner adds it with a passkey. A new proposal replaces your " +
+  "earlier one that's still waiting, so include anything from it you still need.";
 
 /**
  * The definition for a CLI account (D8b; spec: CLI runner): `heel run`

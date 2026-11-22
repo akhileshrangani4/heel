@@ -155,7 +155,10 @@ export function proposalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
         file: where?.display ?? "your rules file",
         rules: row.rules.map((r) => ({ yaml: ruleYaml(r.rule), why: r.why })),
         hide: row.hide.map((h) => ({ yaml: ruleYaml(h.entry), why: h.why })),
-        workdirs: row.workdirs,
+        workdirs: row.workdirs.map((w, i) => ({
+          ...w,
+          stored: effect.ok ? (effect.added[i] ?? null) : null,
+        })),
         createdAt: row.createdAt,
         expiresAt: row.expiresAt,
         decision:

@@ -161,6 +161,10 @@ describe("/run", () => {
     const h = cliPipeline({ owner: ALLOW_GH });
     const answer = await h.run({ argv: ["gh", "pr", "list", "-R", "acme/web"], cwd: tmpdir() });
     expect(answer).toMatchObject({ status: 403, body: { reason: "workdir_not_allowed" } });
+    // The agent is told how to ask for it, not left at a dead end.
+    expect(answer).toMatchObject({
+      body: { message: expect.stringContaining("heel_propose_rules with workdirs") },
+    });
     expect(h.started).toEqual([]);
   });
 

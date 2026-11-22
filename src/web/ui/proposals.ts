@@ -72,8 +72,12 @@ export interface ProposalPageProps {
   rules: readonly { yaml: string; why: string | null }[];
   /** Hide entries, added to the end of the file's `hide:` list. */
   hide: readonly { yaml: string; why: string | null }[];
-  /** Directories the agent asks its own `heel run` to work in. */
-  workdirs: readonly { path: string; why: string | null }[];
+  /**
+   * Directories the agent asks its own `heel run` to work in: `path` as the
+   * agent wrote it, `stored` as heel would store it (symlinks followed), or
+   * null when it can't be added.
+   */
+  workdirs: readonly { path: string; stored: string | null; why: string | null }[];
   createdAt: Date;
   expiresAt: Date;
   decision: { by: string; at: Date } | null;
@@ -241,7 +245,17 @@ export function proposalPage(props: ProposalPageProps): Html {
           <ul class="req-list" aria-label="Proposed workdirs">
             ${props.workdirs.map(
               (dir) => html`<li class="card">
-                <p>${props.agent} may run commands with heel run in <code>${dir.path}</code></p>
+                <p>
+                  ${props.agent} may run commands with heel run in <code>${dir.stored ?? dir.path}</code>
+                </p>
+                ${
+                  dir.stored === null || dir.stored === dir.path.replace(/(.)[\\/]$/, "$1")
+                    ? ""
+                    : html`<p class="muted">
+                        ${props.agent} asked for <code>${dir.path}</code>, which leads to this
+                        folder. This is the one you're adding.
+                      </p>`
+                }
                 ${
                   dir.why === null
                     ? ""

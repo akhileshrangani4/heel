@@ -334,7 +334,7 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
           rules: row.rules.length,
           hide: row.hide.length,
           workdirs: row.workdirs.length,
-          summary: `${agentName} proposes ${describeProposal(row.rules.length, row.hide.length, row.workdirs.length)} for ${ownerName}${row.rules.length + row.hide.length > 0 ? "'s rules" : ""}`,
+          summary: `${agentName} proposes ${describeProposal(row.rules.length, row.hide.length, row.workdirs.length)}${row.rules.length + row.hide.length > 0 ? ` for ${ownerName}'s rules` : " for its heel run"}`,
           reason: row.reason,
           createdAt: row.createdAt.toISOString(),
           expiresAt: row.expiresAt.toISOString(),

@@ -281,6 +281,11 @@ export type ProposalPreview =
       existing: number;
       /** The agent's `heel run` directories after the change, as stored; null when none are proposed. */
       workRoots: string[] | null;
+      /**
+       * Each proposed directory as heel would store it, symlinks followed, in
+       * proposal order. The owner approves these, not the agent's spelling.
+       */
+      added: string[];
     }
   | { ok: false; problem: string };
 
@@ -312,19 +317,22 @@ export function previewProposal(
   workdirs?: WorkdirContext,
 ): ProposalPreview {
   let workRoots: string[] | null = null;
+  let added: string[] = [];
   if (proposal.workdirs.length > 0) {
     if (workdirs === undefined) {
       return { ok: false, problem: "heel can't change this agent's workdirs from here." };
     }
     try {
       const current = currentWorkRoots(workdirs.db, workdirs.orgId, agentName);
-      workRoots = checkedWorkRoots(
+      const checked = checkedWorkRoots(
         workdirs.db,
         workdirs.orgId,
         agentName,
         [...current, ...proposal.workdirs.map((w) => w.path)],
         workdirs.protectedPaths,
       ).workRoots;
+      added = checked.slice(current.length);
+      workRoots = [...new Set(checked)];
     } catch (error) {
       if (!(error instanceof AgentError)) throw error;
       return { ok: false, problem: `heel can't add these workdirs: ${error.message}.` };
@@ -340,6 +348,7 @@ export function previewProposal(
       sha: proposalSha(text, workRoots),
       existing: 0,
       workRoots,
+      added,
     };
   }
   const before = readOwnerFile(file);
@@ -437,6 +446,7 @@ export function previewProposal(
     sha: proposalSha(after, workRoots),
     existing,
     workRoots,
+    added,
   };
 }
 

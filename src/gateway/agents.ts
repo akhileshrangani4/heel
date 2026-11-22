@@ -274,7 +274,7 @@ export function checkedWorkRoots(
       );
     }
   }
-  return { agentId: agent.id, workRoots: [...new Set(normalized)] };
+  return { agentId: agent.id, workRoots: normalized };
 }
 
 /** Directories that can never be a work root themselves: the agent would see too much. */
