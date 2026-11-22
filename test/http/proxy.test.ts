@@ -5,7 +5,7 @@ import { UpstreamPool } from "../../src/definitions/mcp/upstream.ts";
 import { definitionRegistry } from "../../src/definitions/registry.ts";
 import { addAgent } from "../../src/gateway/agents.ts";
 import { createAgentApp } from "../../src/gateway/app.ts";
-import { proxiedPath } from "../../src/gateway/http-proxy.ts";
+import { overridesHost, proxiedPath } from "../../src/gateway/http-proxy.ts";
 import { createPipeline } from "../../src/gateway/pipeline/pipeline.ts";
 import { SqliteApprovalStore } from "../../src/store/approvals.ts";
 import { SqlitePauseStore } from "../../src/store/pauses.ts";
@@ -275,6 +275,21 @@ describe("the HTTP proxy", () => {
     expect(
       (await request("/http/tickets/tickets", { headers: { "x-forwarded-host": "evil" } })).status,
     ).toBe(400);
+  });
+
+  it("accepts the forwarded headers a proxy in front of heel adds for the same host (2.7)", () => {
+    // tailscale serve adds X-Forwarded-Host naming the host the request came to.
+    expect(overridesHost("heel-box.ts.net:8443", "heel-box.ts.net:8443", undefined)).toBe(false);
+    expect(overridesHost("heel-box.ts.net:8443", "evil.example", undefined)).toBe(true);
+    expect(overridesHost("heel-box.ts.net:8443", "heel-box.ts.net:8443, evil", undefined)).toBe(
+      true,
+    );
+    expect(overridesHost("a.example", undefined, 'for=1.2.3.4;host="a.example";proto=https')).toBe(
+      false,
+    );
+    expect(overridesHost("a.example", undefined, "for=1.2.3.4;host=b.example")).toBe(true);
+    expect(overridesHost("a.example", undefined, "for=1.2.3.4;proto=https")).toBe(false);
+    expect(overridesHost(undefined, "a.example", undefined)).toBe(true);
   });
 });
 

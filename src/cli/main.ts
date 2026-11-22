@@ -1258,18 +1258,25 @@ async function initCommand(args: string[], io: CliIo): Promise<number> {
         home: { type: "string" },
         yes: { type: "boolean", short: "y" },
         "approve-from": { type: "string" },
+        "new-address": { type: "boolean" },
       },
       allowPositionals: true,
       strict: true,
     }),
   );
   if (positionals.length > 0) throw new UsageError(`unexpected argument "${positionals[0]}"`);
-  const { chooseHome, confirm, initHome, initSummary, chooseApproveFrom } = await import(
+  const { chooseHome, confirm, initHome, initSteps, initSummary, chooseApproveFrom } = await import(
     "./init.ts"
   );
-  const { APPROVE_FROM, isApproveFrom, listenPorts, setUpTailscale, writeAddresses } = await import(
-    "./approve-from.ts"
-  );
+  const {
+    addressProblem,
+    APPROVE_FROM,
+    isApproveFrom,
+    listenPorts,
+    passkeyProblem,
+    setUpTailscale,
+    writeAddresses,
+  } = await import("./approve-from.ts");
   const flag = values["approve-from"];
   if (flag !== undefined && !isApproveFrom(flag)) {
     throw new UsageError(`--approve-from is one of ${APPROVE_FROM.join(", ")}`);
@@ -1305,9 +1312,18 @@ async function initCommand(args: string[], io: CliIo): Promise<number> {
           `  tailscale serve --bg --https=8443 http://127.0.0.1:${ports.agent}\n`,
       );
     } else {
-      const set = await setUpTailscale(io.exec, ports);
+      // Checked before Tailscale changes anything: heel.yaml's addresses, and a passkey it would orphan.
+      const databasePath = join(home, "heel.db");
+      const set = await setUpTailscale(
+        io.exec,
+        ports,
+        (want) =>
+          addressProblem(configPath, want) ??
+          (values["new-address"] === true ? null : passkeyProblem(databasePath, want)),
+      );
       if (!set.ok) {
-        io.stdout.write(initSummary(home, steps, true, null));
+        // What was done, and the problem: no next steps, so nobody enrolls on the wrong address.
+        io.stdout.write(initSteps(steps));
         io.stderr.write(`heel: ${set.problem}\n`);
         return EXIT.failed;
       }

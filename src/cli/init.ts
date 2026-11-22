@@ -74,6 +74,11 @@ export function initHome(home: string): InitStep[] {
   return steps;
 }
 
+/** Pure: just the steps heel init did, for when it stops partway. */
+export function initSteps(steps: readonly InitStep[]): string {
+  return `\n${steps.map((s) => `  ${s.done === "created" ? "created" : "kept   "}  ${s.what}`).join("\n")}\n\n`;
+}
+
 /** Pure: what `heel init` prints after the steps. */
 export function initSummary(
   home: string,
