@@ -154,3 +154,31 @@ export function revokeAgentTokens(tx: HeelTx, agentId: string, now: Date): void 
     .where(and(eq(agentTokens.agentId, agentId), isNull(agentTokens.revokedAt)))
     .run();
 }
+
+/**
+ * Whether an agent a request authenticated earlier may still act: its token,
+ * the agent and its owner unrevoked, the token unexpired. Code mode checks
+ * it before each call of a script, since a script, a background one above
+ * all (C6), can outlive the request that started it.
+ */
+export function agentStillLive(
+  db: HeelDb,
+  agent: AuthenticatedAgent,
+  now: Date = new Date(),
+): boolean {
+  const row = db
+    .select({
+      tokenRevokedAt: agentTokens.revokedAt,
+      tokenExpiresAt: agentTokens.expiresAt,
+      agentRevokedAt: agents.revokedAt,
+      ownerDisabledAt: users.disabledAt,
+    })
+    .from(agentTokens)
+    .innerJoin(agents, eq(agents.id, agentTokens.agentId))
+    .innerJoin(users, eq(users.id, agents.ownerId))
+    .where(eq(agentTokens.id, agent.tokenId))
+    .get();
+  if (row === undefined) return false;
+  if (row.tokenRevokedAt || row.agentRevokedAt || row.ownerDisabledAt) return false;
+  return row.tokenExpiresAt === null || row.tokenExpiresAt.getTime() > now.getTime();
+}

@@ -9,6 +9,7 @@ import {
 } from "@modelcontextprotocol/server";
 
 import { eq } from "drizzle-orm";
+import { BackgroundRunner } from "../../codemode/background.ts";
 import {
   type ClaimedScript,
   findParked,
@@ -37,6 +38,7 @@ import { accountsUsableBy } from "../../store/sharing.ts";
 import { errorShape } from "../../util/error-shape.ts";
 import { isBuiltInProvider, isMcpProvider } from "../../vault/connect.ts";
 import type { AuthenticatedAgent } from "../agent-tokens.ts";
+import { agentStillLive } from "../agent-tokens.ts";
 import { TOKEN_WARNING_DAYS } from "../agents.ts";
 import type { Pipeline } from "../pipeline/pipeline.ts";
 import type { Definition, DefinitionRegistry, PauseStore } from "../pipeline/ports.ts";
@@ -155,6 +157,8 @@ const HEEL_TOOL_NAMES: ReadonlySet<string> = new Set(HEEL_TOOLS.map((tool) => to
 export interface McpSurface {
   /** Whether bare `/mcp` serves code mode: only with a sandboxed worker. */
   readonly codeMode: boolean;
+  /** Background scripts (C6), when code mode and parking are on. */
+  readonly background: BackgroundRunner | null;
   /** Serves one MCP request for an authenticated agent. */
   serve(request: Request, agent: AuthenticatedAgent, scope: McpScope): Promise<Response>;
   close(): Promise<void>;
@@ -237,6 +241,21 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     return modules.flat();
   }
 
+  // Background scripts (C6) need code mode and somewhere to park.
+  const background =
+    deps.codeWorker !== undefined && deps.parking !== undefined
+      ? new BackgroundRunner({
+          db: deps.db,
+          sealer: deps.parking.sealer,
+          pipeline: deps.pipeline,
+          codeWorker: deps.codeWorker,
+          slots: deps.slots,
+          modulesFor,
+          log: deps.log,
+          now,
+        })
+      : null;
+
   async function heelStubs(
     agent: AuthenticatedAgent,
     args: Record<string, unknown>,
@@ -267,11 +286,39 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     const { args: scriptArgs, reason } = takeReason(args);
     const code = typeof scriptArgs["code"] === "string" ? scriptArgs["code"] : "";
     const resumeId = typeof scriptArgs["resume"] === "string" ? scriptArgs["resume"] : undefined;
+    const runId =
+      typeof scriptArgs["run_id"] === "string"
+        ? scriptArgs["run_id"]
+        : typeof metaRunId === "string"
+          ? metaRunId
+          : undefined;
     const answer = (error: string): CallToolResult =>
       runCodeResult({ status: "error", stdout: "", calls: [], error });
     if (resumeId !== undefined && code !== "")
       return answer("send either code or resume, not both");
     if (resumeId === undefined && code === "") return answer("send the script as code");
+    if (scriptArgs["background"] === true) {
+      if (resumeId !== undefined) return answer("a background script can't resume a parked one");
+      if (background === null) return answer("background scripts aren't available on this heel");
+      const started = background.start(agent, { code, runId, reason });
+      if (!started.ok) {
+        return runCodeResult({ status: "busy", stdout: "", calls: [], error: started.message });
+      }
+      return runCodeResult({
+        status: "running",
+        script: started.id,
+        message: `Running in the background. Follow it with heel_status({"script_id": "${started.id}"}); it carries on by itself after any approval.`,
+        stdout: "",
+        calls: [],
+        error: null,
+      });
+    }
+    // A background script that parked is heel's to resume, once its approval is decided.
+    if (resumeId !== undefined && background?.isParkedBackground(resumeId) === true) {
+      return answer(
+        "heel resumes this background script by itself once its approval is decided; follow it with heel_status",
+      );
+    }
     if (deps.parking !== undefined) purgeExpiredParked(deps.db, now());
     // A parked script still waiting on its approval: say so without taking a slot or loading it.
     if (resumeId !== undefined) {
@@ -296,12 +343,6 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
         });
       }
     }
-    const runId =
-      typeof scriptArgs["run_id"] === "string"
-        ? scriptArgs["run_id"]
-        : typeof metaRunId === "string"
-          ? metaRunId
-          : undefined;
     const slot = deps.slots?.tryAcquire(agent.agentId) ?? UNLIMITED_SLOT;
     if (!slot.ok)
       return runCodeResult({ status: "busy", stdout: "", calls: [], error: slot.message });
@@ -341,6 +382,8 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
         modules,
         pipeline: deps.pipeline,
         worker,
+        // A revoked agent, a disabled owner or an expired token stops the script at its next call.
+        stillLive: () => agentStillLive(deps.db, agent, now()),
         ...(resume === undefined || resumeId === undefined
           ? {}
           : { resume, onRestored: () => releaseParked(deps.db, agent, resumeId) }),
@@ -369,7 +412,8 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
   }
 
   function runCodeResult(body: {
-    status: ScriptStatus | "busy";
+    status: ScriptStatus | "busy" | "running";
+    script?: string;
     approvalId?: string;
     resume?: string;
     message?: string;
@@ -505,6 +549,15 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
   }
 
   function heelStatus(agent: AuthenticatedAgent, args: Record<string, unknown>): CallToolResult {
+    if (typeof args["script_id"] === "string") {
+      const view = background?.view(agent, args["script_id"]) ?? null;
+      const answer = view ?? { scriptId: args["script_id"], status: "unknown" };
+      return {
+        ...(view === null && { isError: true }),
+        content: [{ type: "text", text: JSON.stringify(answer) }],
+        structuredContent: answer as Record<string, unknown>,
+      };
+    }
     const approvalId = typeof args["approval_id"] === "string" ? args["approval_id"] : "";
     const status = approvalStatusForAgent(deps.db, agent, approvalId, now());
     const answer = { approvalId, status: status ?? "unknown" };
@@ -630,6 +683,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
 
   return {
     codeMode: deps.codeWorker !== undefined,
+    background,
     serve: async (request, agent, scope) => {
       await noteClient(request, agent);
       return handler.fetch(request, {
@@ -642,7 +696,10 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
         },
       });
     },
-    close: () => handler.close(),
+    close: async () => {
+      await background?.close();
+      await handler.close();
+    },
   };
 }
 

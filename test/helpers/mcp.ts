@@ -6,7 +6,7 @@ import { UpstreamPool } from "../../src/definitions/mcp/upstream.ts";
 import { definitionRegistry } from "../../src/definitions/registry.ts";
 import { addAgent } from "../../src/gateway/agents.ts";
 import { createAgentApp } from "../../src/gateway/app.ts";
-import { createMcpSurface } from "../../src/gateway/mcp/server.ts";
+import { createMcpSurface, type McpSurface } from "../../src/gateway/mcp/server.ts";
 import { createPipeline } from "../../src/gateway/pipeline/pipeline.ts";
 import type { SandboxSlots } from "../../src/gateway/sandbox-slots.ts";
 import { SqliteApprovalStore } from "../../src/store/approvals.ts";
@@ -53,11 +53,14 @@ export const UPSTREAM_TOOLS: Tool[] = [
 /** A fake upstream MCP server; `calls` records every tool call that reached it. */
 export function fakeUpstream() {
   const calls: { name: string; arguments: unknown }[] = [];
+  /** Runs on each call the upstream receives, before it answers (tests use it to act mid-script). */
+  const hooks: ((name: string) => void)[] = [];
   const handler = createMcpHandler(({ requestInfo }) => {
     const server = new Server({ name: "notes", version: "1.0.0" }, { capabilities: { tools: {} } });
     server.setRequestHandler("tools/list", async () => ({ tools: UPSTREAM_TOOLS }));
     server.setRequestHandler("tools/call", async (request) => {
       calls.push({ name: request.params.name, arguments: request.params.arguments });
+      for (const hook of hooks) hook(request.params.name);
       const text =
         request.params.name === "echo_auth"
           ? `auth: ${requestInfo?.headers.get("authorization") ?? "none"}`
@@ -72,7 +75,7 @@ export function fakeUpstream() {
   });
   const fetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> =>
     handler.fetch(new Request(input, init));
-  return { calls, fetch };
+  return { calls, fetch, hooks };
 }
 
 export interface McpHarness {
@@ -86,6 +89,8 @@ export interface McpHarness {
   connect(path: string, options?: { token?: string }): Promise<Client>;
   /** Raw HTTP to the agent plane. */
   request(path: string, init?: RequestInit): Promise<Response>;
+  /** The MCP surface, for its background scripts (C6). */
+  mcp: McpSurface;
 }
 
 export async function mcpHarness(options: {
@@ -185,6 +190,7 @@ export async function mcpHarness(options: {
     upstream,
     notified,
     token,
+    mcp,
     async connect(path, connectOptions = {}) {
       const transport = new StreamableHTTPClientTransport(new URL(path, "http://localhost"), {
         fetch: appFetch,

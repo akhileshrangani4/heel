@@ -330,4 +330,77 @@ describe("the approval page", () => {
     // The approval itself is untouched: it's still waiting for a decision.
     expect(h.status(approvalId)).toBe("pending");
   });
+
+  it("says approving starts a background script again, and the Agents page lists and stops it (C6)", async () => {
+    const decided: string[] = [];
+    const stopped: string[] = [];
+    const h = humanPlaneHarness({
+      owner: ASK_SENDS,
+      background: {
+        approvalDecided: (id) => decided.push(id),
+        list: () => [
+          {
+            id: "scr_test",
+            agentId: "agt",
+            agentName: "inbox-bot",
+            status: "parked",
+            approvalId: null,
+            calls: 2,
+            startedAt: new Date(),
+          },
+        ],
+        stop: (id) => {
+          stopped.push(id);
+          return true;
+        },
+        waitsOn: () => true,
+      },
+    });
+    const owner = await h.signIn(await h.enroll());
+    const approvalId = pendingId(await h.call({ args: SEND }));
+    const row = h.t.db.select().from(approvals).get();
+    if (row === undefined) throw new Error("no approval");
+    h.t.db
+      .update(approvals)
+      .set({ script: { code: "x", truncated: false, before: [] } })
+      .run();
+    h.t.db
+      .insert(parkedScripts)
+      .values({
+        id: "pks_bg",
+        orgId: row.orgId,
+        agentId: row.agentId,
+        approvalId,
+        runId: null,
+        reason: null,
+        calls: [],
+        code: "x",
+        modulesHash: "x",
+        snapshot: Buffer.from("sealed"),
+        createdAt: new Date(),
+        expiresAt: row.expiresAt,
+      })
+      .run();
+    const page = await (await h.fetch(`/approvals/${approvalId}`, { as: owner })).text();
+    expect(page).toContain("approving starts it again at once");
+
+    const callHash = h.audit().find((r) => r.approvalId === approvalId)?.callHash ?? "";
+    const done = await decide(h, owner, approvalId, { callHash, intent: "approve" });
+    expect(await done.json()).toMatchObject({
+      message: "Approved. The background script carries on now, from this call.",
+    });
+    expect(decided).toEqual([approvalId]);
+
+    const agentsPage = await (await h.fetch("/agents", { as: owner })).text();
+    expect(agentsPage).toContain("Running scripts");
+    expect(agentsPage).toContain("waiting for approval");
+    const stop = await h.fetch("/agents/scripts/scr_test/stop", {
+      as: owner,
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ csrf: owner.csrf }).toString(),
+    });
+    expect(stop.status).toBe(303);
+    expect(stopped).toEqual(["scr_test"]);
+  });
 });

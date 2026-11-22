@@ -117,6 +117,8 @@ export interface ApprovalRequestProps {
    */
   parked?: { stop: FormTarget } | null;
   stopped?: boolean;
+  /** The parked script is a background one: approving starts it again at once (C6). */
+  background?: boolean;
 }
 
 /** What remembered folds are keyed by: the action, or `provider:tool` without one. */
@@ -399,6 +401,7 @@ function scriptView(
   request: ApprovalRequestView,
   parked: { stop: FormTarget } | null,
   stopped: boolean,
+  background: boolean,
 ): Html | "" {
   const script = request.script;
   if (script === null) return "";
@@ -417,6 +420,13 @@ function scriptView(
             The script is paused at this call, waiting for you. Stopping it means it never
             carries on, whatever you decide here.
           </p>
+          ${
+            background
+              ? html`<p><strong>It's a background script: approving starts it again at once.</strong>
+                  This call runs, then the rest of the script, without ${request.agent} asking
+                  again. Denying ends it.</p>`
+              : ""
+          }
           ${postForm(parked.stop, {}, html`<button type="submit" class="btn btn-secondary">Stop the script</button>`)}
         </div>`;
   const before =
@@ -685,7 +695,7 @@ export function approvalRequest(props: ApprovalRequestProps): Html {
         <mark>${said.place}</mark>${said.rest}
       </h1>
       ${reasonView(request)}
-      ${scriptView(request, props.parked ?? null, props.stopped === true)}
+      ${scriptView(request, props.parked ?? null, props.stopped === true, props.background === true)}
       <ul class="ap-facts">
         <li class="ap-fact">
           <span>Asked by rule</span><strong>${request.rule.name ?? formatRule(request.rule)}</strong>

@@ -102,6 +102,16 @@ The 200-call limit covers the whole script: Monty's own budget restarts on load,
 
 A dump larger than 4 MB, an agent with 5 scripts already waiting on undecided approvals, or heel without a vault means no parking: the script ends as below, and `notParked` says why.
 
+### Background scripts
+
+`run_code({ background: true })` answers at once with the script's id and runs it in `background.ts`, with no request held open (code mode round 2, C6; Avi's design):
+
+- One running or parked script per agent, held by a unique index on `background_scripts`. Up to 10 minutes of compute per segment and 30 minutes in all; time waiting in heel doesn't count toward the 10.
+- Before each call, heel checks the token that started the script, its agent and owner are still good (`agentStillLive`); revoking or rotating the agent also stops its scripts at once.
+- A call that asks parks it (above). When the decision commits, the approval route tells the runner: approved, heel resumes the script itself, and the parked call goes through the pipeline again (I-53: approving still executes nothing by itself; the resumed call does). Denied or expired, the script ends: no code runs because someone pressed Deny. The agent's own `resume` is refused for a background script, so the two can't race. At start, heel ends scripts left running and acts on parked ones decided while it was down.
+- What a script printed and returned is sealed with the vault's key, kept a day, and readable only by its agent through `heel_status({ script_id })`.
+- The owner sees running and parked scripts on the Agents page and in `heel status`, and stops them there (no passkey). The approval page says when approving will start a background script again.
+
 ### A pause, or a stop
 
 The script is never resumed. `run.ts` calls `worker.stop()` and returns what ran so far. No `try/except` in the script can run, because the script never gets control back.

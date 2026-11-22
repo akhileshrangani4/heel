@@ -9,6 +9,7 @@ import { JevAdapter } from "./adapters/jev.ts";
 import { createAdminHandler } from "./admin/handlers.ts";
 import { startAdminServer } from "./admin/server.ts";
 import { SiemSink } from "./audit/siem.ts";
+import type { BackgroundRunner } from "./codemode/background.ts";
 import { CodemodeLanes } from "./codemode/lanes.ts";
 import { purgeExpiredParked } from "./codemode/parking.ts";
 import { SandboxedCodeWorker } from "./codemode/sandboxed.ts";
@@ -407,6 +408,9 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
     const vault = opening.ok ? opening.vault : null;
 
     let evictLocalServer: (accountId: string) => void = () => {};
+    // Background code-mode scripts (C6) live on the agent plane, which starts later; the admin
+    // socket and the human plane reach them through this.
+    let backgroundRunner: BackgroundRunner | null = null;
     const admin = await startAdminServer({
       path: config.adminSocketPath,
       handle: createAdminHandler({
@@ -420,6 +424,10 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         now,
         // The pool exists only once the agent plane is up; until then nothing is running to stop.
         onAccountConfigured: (accountId) => evictLocalServer(accountId),
+        backgroundScripts: {
+          list: () => backgroundRunner?.list(null) ?? [],
+          stopAgent: (agentId) => backgroundRunner?.stopAgent(orgId, agentId),
+        },
         signIns: {
           google: providerClients.google !== null || builtInGoogle !== null,
           microsoft: providerClients.microsoft !== null,
@@ -476,6 +484,12 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         agentPublicUrl: config.agentPublicUrl,
         upstreamOAuth: vault === null ? null : { signIns: upstreamSignIns, vault },
         checkKey: (provider, key) => checkKey(provider, key, fetch),
+        background: {
+          approvalDecided: (approvalId) => backgroundRunner?.approvalDecided(approvalId),
+          list: (ownerIds) => backgroundRunner?.list(ownerIds) ?? [],
+          stop: (id) => backgroundRunner?.stop(id, orgId) ?? false,
+          waitsOn: (approvalId) => backgroundRunner?.waitsOn(approvalId) ?? false,
+        },
         watchFallback: watch,
         providerClients,
         builtInGoogle,
@@ -622,6 +636,9 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         // An asking script is saved, sealed with the vault, so the agent can resume it (C2).
         ...(vault === null ? {} : { parking: { sealer: vault } }),
       });
+      backgroundRunner = mcp.background;
+      // Scripts a previous run left running end; parked ones decided meanwhile resume or end.
+      backgroundRunner?.recover();
       closers.push(() => mcp.close());
       const app = createAgentApp({
         http: { db: store.db, pipeline, log },

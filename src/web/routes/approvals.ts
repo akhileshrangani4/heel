@@ -258,6 +258,7 @@ export function approvalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
                 },
               },
         stopped: "script-stopped" in c.req.query(),
+        background: deps.background?.waitsOn(record.row.id) === true,
       })}`,
       script: clientScript(session.csrfToken),
     });
@@ -345,6 +346,9 @@ export function approvalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       now,
     });
     if (!result.ok) return c.json({ ok: false, message: REFUSED[result.reason] }, 409);
+    // After the decision has committed: a background script parked on it resumes or ends (C6).
+    const resumesScript = deps.background?.waitsOn(decision.approvalId) === true;
+    deps.background?.approvalDecided(decision.approvalId);
     deps.log.info(
       {
         approvalId: decision.approvalId,
@@ -356,7 +360,13 @@ export function approvalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     return c.json({
       ok: true,
       message:
-        result.status === "approved" ? "Approved. It runs when the agent re-sends it." : "Denied.",
+        result.status === "approved"
+          ? resumesScript
+            ? "Approved. The background script carries on now, from this call."
+            : "Approved. It runs when the agent re-sends it."
+          : resumesScript
+            ? "Denied. The background script waiting on it has ended."
+            : "Denied.",
       next: `/approvals/${encodeURIComponent(decision.approvalId)}`,
     });
   });

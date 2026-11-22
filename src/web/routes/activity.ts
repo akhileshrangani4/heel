@@ -9,6 +9,7 @@ import { agents } from "../../store/schema.ts";
 import {
   type HumanPlaneDeps,
   renderPage,
+  requireCsrfField,
   requireSession,
   type SignedInEnv,
   viewerOf,
@@ -84,6 +85,14 @@ export function activityRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       body: agentsPage({
         agents: list,
         sinceHours: 24,
+        scripts: (deps.background?.list(visibleOwners(session)) ?? []).map((s) => ({
+          ...s,
+          stop: {
+            action: `/agents/scripts/${encodeURIComponent(s.id)}/stop`,
+            csrfToken: session.csrfToken,
+          },
+        })),
+        stopped: "script-stopped" in c.req.query(),
         tokens: new Map(
           listAgents(deps.db, deps.orgId).map((a) => [
             a.id,
@@ -93,6 +102,17 @@ export function activityRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
         now: deps.now(),
       }),
     });
+  });
+
+  // Stopping a background script only takes something away: a plain form, no passkey (C6).
+  app.post("/agents/scripts/:id/stop", signedIn, requireCsrfField(), (c) => {
+    const session = c.get("session");
+    const id = c.req.param("id");
+    const mine = (deps.background?.list(visibleOwners(session)) ?? []).some((s) => s.id === id);
+    if (!mine) return c.text("There's no running script with that id that you can stop.", 404);
+    deps.background?.stop(id);
+    deps.log.info({ script: id, by: session.userId }, "background script stopped");
+    return c.redirect("/agents?script-stopped", 303);
   });
 
   app.get("/activity", signedIn, (c) => {

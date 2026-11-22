@@ -12,6 +12,7 @@ import { KEY_BYTES } from "../../src/vault/crypto.ts";
 import type { KeyCheck } from "../../src/vault/key-check.ts";
 import { Vault } from "../../src/vault/vault.ts";
 import { createHumanApp } from "../../src/web/app.ts";
+import type { HumanPlaneDeps } from "../../src/web/http.ts";
 import { CSRF_HEADER } from "../../src/web/http.ts";
 import { createEnrollment, Passkeys, relyingPartyFor } from "../../src/web/passkeys.ts";
 import { type ApprovalHarness, approvalHarness } from "./approvals.ts";
@@ -99,6 +100,8 @@ export function humanPlaneHarness(
     rulesHome?: string;
     /** Checks pasted keys (roadmap T12); none when absent, as in every other test. */
     checkKey?: (provider: string, key: string) => Promise<KeyCheck>;
+    /** Background scripts (C6), as serve.ts hands them to the human plane. */
+    background?: HumanPlaneDeps["background"];
     /** heel's built-in Google client (roadmap 1.14), used when `providerClients.google` is unset. */
     builtInGoogle?: BuiltInGoogleClient;
     /** What host names resolve to (connection requests check this before approval). */
@@ -138,6 +141,7 @@ export function humanPlaneHarness(
       ? {}
       : { ruleFiles: { paths: rulesPaths(options.rulesHome), reload: () => {} } }),
     ...(options.checkKey === undefined ? {} : { checkKey: options.checkKey }),
+    ...(options.background === undefined ? {} : { background: options.background }),
     now: () => h.clock.now,
   });
 

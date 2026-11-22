@@ -24,7 +24,7 @@ import type { HeelDb } from "../store/db.ts";
 import { LOCAL_OWNER_NAME } from "../store/install.ts";
 import { setUserEmail } from "../store/notifications.ts";
 import { ADMIN_SOCKET_ACTOR, listPauses, type PauseKey, pause } from "../store/pauses.ts";
-import { accounts, passkeys, users } from "../store/schema.ts";
+import { accounts, agents, passkeys, users } from "../store/schema.ts";
 import {
   SharingError,
   setApprovers,
@@ -75,6 +75,14 @@ export interface AdminDeps {
    * in yet. Left out, connect says nothing about it.
    */
   signIns?: ConfiguredSignIns;
+  /**
+   * Background code-mode scripts (C6): listed by `heel status`, and stopped
+   * when their agent is revoked or its token rotated. Absent without code mode.
+   */
+  backgroundScripts?: {
+    list(): readonly { id: string; agentName: string; status: string; calls: number }[];
+    stopAgent(agentId: string): void;
+  };
   /** Started by `heel start` (it sets HEEL_BACKGROUND=1), so `heel update` may restart it. */
   background?: boolean;
   now?: () => Date;
@@ -153,6 +161,16 @@ function signInState(deps: AdminDeps, provider: string): "ready" | "needs_setup"
   return missingSignInSetup(provider, deps.signIns) === null ? "ready" : "needs_setup";
 }
 
+/** Stops a revoked or rotated agent's background scripts (C6). */
+function stopScriptsOf(deps: AdminDeps, db: HeelDb, orgId: string, name: string): void {
+  const agent = db
+    .select({ id: agents.id })
+    .from(agents)
+    .where(and(eq(agents.orgId, orgId), eq(agents.name, name)))
+    .get();
+  if (agent !== undefined) deps.backgroundScripts?.stopAgent(agent.id);
+}
+
 function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminResponse {
   const { db, orgId } = deps;
   switch (request.method) {
@@ -191,13 +209,24 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
       );
     case "agent.workdirs.list":
       return adminOk(workRootsByName(db, orgId, request.params.name));
-    case "agent.rotate":
-      return adminOk(
-        rotateAgentToken(db, orgId, request.params.name, now, request.params.expiresInDays),
+    case "agent.rotate": {
+      const rotated = rotateAgentToken(
+        db,
+        orgId,
+        request.params.name,
+        now,
+        request.params.expiresInDays,
       );
+      // Scripts started with the old token stop now, rather than at their next call.
+      stopScriptsOf(deps, db, orgId, request.params.name);
+      return adminOk(rotated);
+    }
     case "agent.revoke":
       revokeAgent(db, orgId, request.params.name, now);
+      stopScriptsOf(deps, db, orgId, request.params.name);
       return adminOk({ name: request.params.name, revoked: true });
+    case "scripts.list":
+      return adminOk(deps.backgroundScripts?.list() ?? []);
     case "agent.list":
       return adminOk(
         listAgents(db, orgId).map((agent) => ({
