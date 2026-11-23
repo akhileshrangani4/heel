@@ -260,6 +260,15 @@ describe("what heel says at startup (T8)", () => {
     });
     expect(banner).toContain("Approve requests:   open http://localhost:7301");
     expect(banner).toContain("Agents connect to:  http://127.0.0.1:7300/mcp");
+    const server = startupBanner(
+      new URL("https://heel.example.com"),
+      {
+        agent: { state: "listening", url: "http://127.0.0.1:7300" },
+        human: { state: "listening", url: "http://127.0.0.1:7301" },
+      },
+      new URL("https://heel-agents.example.com"),
+    );
+    expect(server).toContain("Agents connect to:  https://heel-agents.example.com/mcp");
     const refused = startupBanner(new URL("http://heel.example.com"), {
       agent: { state: "refused", reason: "vault unavailable" },
       human: { state: "refused", reason: "public_url must be https" },
