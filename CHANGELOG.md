@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.10](https://github.com/akhileshrangani4/heel/compare/v0.2.9...v0.2.10) (2026-11-23)
+
+
+### Features
+
+* **mcp:** a call that needs approval waits for your tap (2.12) ([#218](https://github.com/akhileshrangani4/heel/issues/218)) ([faddda1](https://github.com/akhileshrangani4/heel/commit/faddda1fadd6f60d20c60fda836dc94ac4b3d909))
+* **web:** Paste and finish for Google sign-in on a server ([#221](https://github.com/akhileshrangani4/heel/issues/221)) ([4e79f1d](https://github.com/akhileshrangani4/heel/commit/4e79f1da09676b2f8b6fdc707839af8fd03ecb3a))
+
+
+### Bug Fixes
+
+* **cli:** heel start and serve print the agent address agents use ([#222](https://github.com/akhileshrangani4/heel/issues/222)) ([4d0f2f7](https://github.com/akhileshrangani4/heel/commit/4d0f2f7907a6ecf710779d3dfb052db2aa85095d))
+* **web:** load the passkey script on Connections and Agents ([#220](https://github.com/akhileshrangani4/heel/issues/220)) ([99d20f8](https://github.com/akhileshrangani4/heel/commit/99d20f8d05fb29e5f6435c613a95379bd3d0c820))
+* **web:** names typed on a phone work for new accounts and people ([#223](https://github.com/akhileshrangani4/heel/issues/223)) ([ed80244](https://github.com/akhileshrangani4/heel/commit/ed802442f3159e239bdf8b5a42ea4f450d5d700b))
+
 ## [0.2.9](https://github.com/akhileshrangani4/heel/compare/v0.2.8...v0.2.9) (2026-11-22)
 
 
