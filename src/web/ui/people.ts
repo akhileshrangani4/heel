@@ -108,7 +108,7 @@ export function peoplePage(props: {
             <input type="hidden" name="op" value="add" />
             <div class="row">
               <label for="add-person-name">Name</label>
-              <input id="add-person-name" name="name" maxlength="64" autocomplete="off" placeholder="sam" />
+              <input id="add-person-name" name="name" maxlength="64" autocomplete="off" placeholder="sam" autocapitalize="off" autocorrect="off" spellcheck="false" />
             </div>
             <p class="muted">Lower-case, like a username. They get their own rules file and nothing of yours. Next you get a link that sets up their passkey.</p>
             ${ceremonyButton({

@@ -28,6 +28,7 @@ import {
   stringField,
 } from "../http.ts";
 import type { SessionView } from "../sessions.ts";
+import { typedName } from "../typed-name.ts";
 
 /**
  * Accounts from the web app (roadmap 2.9), as `heel connect`, `heel account
@@ -134,7 +135,9 @@ export function manageAccountRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
           "heel's vault isn't open (no master key), so it can't store accounts. Start heel with its master key.",
       };
     }
-    const alias = (stringField(body, "alias") ?? "").trim();
+    const typed = (stringField(body, "alias") ?? "").trim();
+    // A new account's name as people type it on a phone ("Gmail work"); existing ones are matched exactly.
+    const alias = op === "connect" ? typedName(typed) : typed;
     if (op === "connect") {
       const service = stringField(body, "service") ?? "";
       if (!SERVICES.has(service)) return { problem: "Pick a service." };
