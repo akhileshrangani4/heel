@@ -71,15 +71,15 @@ rules:
 
 /** The two settings agents usually get, before heel. */
 const OPTIONS: [string, string][] = [
-  ['ask about everything', 'safe for an hour. by the twentieth prompt you approve without reading.'],
-  ['allow everything', 'fast, until one call deletes, sends or merges something you can’t take back.'],
+  ['ask every time', 'you stop reading.'],
+  ['allow everything', 'until it deletes something.'],
 ];
 
 /** How heel works, in the words the flow demo uses. */
 const STEPS: [string, string][] = [
-  ['say what it’s for', 'a rules file you can read: reads run, sending email asks, deleting over 20 is blocked.'],
-  ['it calls through heel', 'heel holds the keys for github, gmail, slack, any mcp server, api or cli. the agent gets a heel token.'],
-  ['every call gets a verdict', 'it runs, it waits for your passkey on your phone, or it’s blocked before it reaches the service.'],
+  ['write rules', 'what runs, what asks, what’s blocked.'],
+  ['connect through heel', 'heel holds the keys.'],
+  ['approve from your phone', 'risky calls wait for your passkey.'],
 ];
 
 /** The quick start's commands, in order (docs/quickstart.md). */
@@ -178,8 +178,7 @@ export default function HomePage() {
             className="rise mt-2 max-w-xl text-balance text-neutral-600 short:hidden dark:text-neutral-300"
             style={{ animationDelay: '150ms' }}
           >
-            every call is checked against what the agent is for. it runs, it waits for your passkey,
-            or it&rsquo;s blocked. the agent never holds your keys.
+            it checks every call. risky ones wait for you.
           </p>
           <div
             className="rise mt-6 flex flex-wrap items-center justify-center gap-3"
@@ -205,11 +204,8 @@ export default function HomePage() {
 
       <section data-snap className={screen}>
         <h2 className="text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">
-          your agent needs access. you can&rsquo;t watch every call.
+          you can&rsquo;t watch every call.
         </h2>
-        <p className="mt-4 max-w-xl leading-relaxed text-neutral-600 dark:text-neutral-300">
-          without heel there are two settings, and neither works for long.
-        </p>
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           {OPTIONS.map(([title, body]) => (
             <div

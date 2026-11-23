@@ -197,8 +197,8 @@ const PHASES: Phase[] = [
         'shipped',
       ],
       [
-        'what heel is, in two sentences',
-        'the home page says what heel does and how before anything else, names the two settings agents get without it, and shows how it works in three steps.',
+        'what heel is, up front',
+        'the home page says what heel does first, then how, in three steps.',
         'shipped',
       ],
     ],
