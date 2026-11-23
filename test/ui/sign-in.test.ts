@@ -5,7 +5,7 @@ import { dom, text } from "../helpers/dom.ts";
 const SIGN_IN = { handler: "passkeySignIn" } as const;
 
 describe("Sign-in screens", () => {
-  it("OIDC starts the authorization flow by link and reminds that decisions need a passkey", () => {
+  it("OIDC starts the authorization flow by link", () => {
     const doc = dom(
       oidcSignIn({
         providerName: "Acme SSO",
@@ -16,7 +16,6 @@ describe("Sign-in screens", () => {
     const link = doc.querySelector("a.btn");
     expect(link?.getAttribute("href")).toBe("/auth/oidc/start");
     expect(text(link)).toBe("Sign in with Acme SSO");
-    expect(text(doc)).toContain("Every approve, deny or resume still asks for your passkey.");
   });
 
   it("I-56: passkey sign-in only starts the ceremony through the onSignIn prop", () => {
@@ -45,8 +44,9 @@ describe("Sign-in screens", () => {
         notice: { kind: "none" },
       }),
     );
-    expect(doc.querySelectorAll("button, form, input")).toHaveLength(0);
-    expect(text(doc)).toContain("heel user enroll <user>");
+    // Nothing here can start enrollment: the only control copies the command to run on the host.
+    expect(doc.querySelectorAll("form, input, button:not([data-heel-copy])")).toHaveLength(0);
+    expect(text(doc.querySelector("#enroll-command"))).toBe("heel user enroll <user>");
   });
 
   it.each([

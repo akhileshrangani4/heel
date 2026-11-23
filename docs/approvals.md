@@ -47,7 +47,7 @@ Your phone has to reach heel's approval page over HTTPS, and heel has to know th
    public_url: https://heel.example.com
    ```
 3. **Create your passkey on your phone.** `heel user enroll owner` now prints a link at that address. Open it on your phone.
-4. **Turn on notifications.** Add the page to your home screen (an iPhone only notifies for pages added this way), then select **Turn on notifications** on the Approvals page. Email and Slack can notify too: see `notify` in [Configuration](configuration.md).
+4. **Turn on notifications.** Add the page to your home screen (an iPhone only notifies for pages added this way), then turn on **Notifications on this device** under **Settings → Devices**. Email and Slack can notify too: see `notify` in [Configuration](configuration.md).
 
 If you change `public_url` later, create your passkey again.
 

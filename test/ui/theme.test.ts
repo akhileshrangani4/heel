@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { btn } from "../../src/web/ui/shadcn/button.ts";
 import { PALETTES, STYLESHEET } from "../../src/web/ui/theme.ts";
 
 /** WCAG 2.x relative luminance of a `#rrggbb` colour. */
@@ -75,7 +76,9 @@ describe("theme", () => {
   it("breaks table words only when a single token overflows, and never splits a button label", () => {
     // `anywhere` let narrow columns split ordinary words ("Revo/ke", "Accoun/t").
     expect(STYLESHEET).toMatch(/table\.data th,table\.data td\{[^}]*overflow-wrap:break-word/);
-    expect(STYLESHEET).toMatch(/\.btn\{[^}]*white-space:nowrap/);
+    // Every button is shadcn's Button, whose classes keep its label on one line.
+    expect(btn("outline").split(" ")).toContain("whitespace-nowrap");
+    expect(STYLESHEET).toMatch(/\.whitespace-nowrap\{white-space:nowrap\}/);
   });
 
   it("I-57: never clips or ellipsizes text", () => {

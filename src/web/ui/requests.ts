@@ -5,6 +5,7 @@ import { ceremonyButton } from "./ceremony.ts";
 import { formatRelative } from "./format.ts";
 import { type Html, html } from "./html.ts";
 import { badge, type FormTarget, notice, postForm, type Tone, time } from "./layout.ts";
+import { btn } from "./shadcn/button.ts";
 
 /** One waiting connection request, as the Approvals list shows it. */
 export interface RequestCard {
@@ -221,7 +222,7 @@ export function requestPage(props: RequestPageProps): Html {
         ? postForm(
             props.signIn,
             { alias: props.alias },
-            html`<button type="submit" class="btn btn-primary">Sign in to ${props.service}</button>`,
+            html`<button type="submit" class="${btn()}">Sign in to ${props.service}</button>`,
           )
         : ""
     }
@@ -265,7 +266,7 @@ export function requestPage(props: RequestPageProps): Html {
                   })
                 : ""
             }
-            ${postForm(props.reject, {}, html`<button type="submit" class="btn btn-secondary">Reject</button>`)}
+            ${postForm(props.reject, {}, html`<button type="submit" class="${btn("outline")}">Reject</button>`)}
             <p id="request-passkey" class="muted">
               Connecting asks for your passkey. Nothing is connected, and nothing is contacted,
               until you do. Requests expire ${formatRelative(props.expiresAt, props.now)}.

@@ -157,7 +157,7 @@ export function pushRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
 
   app.post("/push/unsubscribe-all", signedIn, requireCsrfField(), (c) => {
     const removed = removeAllPushSubscriptions(deps.db, c.get("session").userId);
-    return c.redirect(`/approvals?notifications-off=${removed}`, 303);
+    return c.redirect(`/devices?notifications-off=${removed}`, 303);
   });
 
   return app;

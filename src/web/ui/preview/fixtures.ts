@@ -2,7 +2,6 @@ import type { ApprovalRequestView } from "../approval-request.ts";
 import type { PauseNotice } from "../layout.ts";
 import type { ActivePause } from "../pause-control.ts";
 import type { PendingRow } from "../pending-list.ts";
-import type { DiffLine, RuleTestResult, WatchEntry } from "../rules-page.ts";
 import type { StandingRow } from "../standing-approval-list.ts";
 import { emailPreviewFrom, headline } from "../summary.ts";
 
@@ -343,74 +342,6 @@ export const PAUSED_STANDING: readonly StandingRow[] = ACTIVE_STANDING.map((r) =
   ...r,
   paused: true,
 }));
-
-export const WATCH_ENTRIES: readonly WatchEntry[] = [
-  {
-    at: minutes(-3),
-    agent: "inbox-bot",
-    account: "gmail-work",
-    what: "email.remove",
-    rule: { name: "bulk-removal-ask", file: "rules/alice.yaml", line: 22 },
-    would: "ask",
-    source: "rule",
-  },
-  {
-    at: minutes(-9),
-    agent: "ci-bot",
-    account: "github",
-    what: "github.merge",
-    rule: null,
-    would: "deny",
-    source: "global",
-  },
-  {
-    at: minutes(-20),
-    agent: "inbox-bot",
-    account: "gmail-work",
-    what: "email.label",
-    rule: { name: "label-allow", file: "rules/alice.yaml", line: 34 },
-    would: "allow",
-    source: "rule",
-  },
-];
-
-export const DRAFT_PROMPT = "Ask before deleting more than 20 emails in one run on my work account";
-
-export const DRAFT_DIFF: readonly DiffLine[] = [
-  { op: "same", text: "rules:" },
-  { op: "add", text: "  - name: bulk-removal-ask" },
-  { op: "add", text: "    match:" },
-  { op: "add", text: "      action: email.remove" },
-  { op: "add", text: "      account: gmail-work" },
-  { op: "add", text: "      items: { over: 20, per: run }" },
-  { op: "add", text: "    then: ask" },
-  { op: "same", text: "  - name: client-sends-ask" },
-];
-
-export const PASSING_TESTS: readonly RuleTestResult[] = [
-  {
-    name: "21st removal this run asks",
-    pass: true,
-    expected: "ask",
-    actual: "ask (bulk-removal-ask)",
-  },
-  {
-    name: "personal account never emails a client",
-    pass: true,
-    expected: "deny (rule 2)",
-    actual: "deny (rule 2)",
-  },
-];
-
-export const FAILING_TESTS: readonly RuleTestResult[] = [
-  ...PASSING_TESTS.slice(0, 1),
-  {
-    name: "merge with red checks falls through to deny",
-    pass: false,
-    expected: "deny (default)",
-    actual: "allow (merge-any)",
-  },
-];
 
 /** A pending request with the Jev approval adapter's hints. */
 export const HINTED_REQUEST: ApprovalRequestView = {

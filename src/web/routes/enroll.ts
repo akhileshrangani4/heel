@@ -97,7 +97,7 @@ export function enrollRoutes(deps: HumanPlaneDeps): Hono {
     return renderPage(c, {
       title: "Welcome",
       viewer: viewerOf(session),
-      current: "approvals",
+      current: "home",
       body: welcomePage({
         vapidPublicKey: deps.vapidPublicKey,
         devices: pushSubscriptionsOf(deps.db, session.userId).length,

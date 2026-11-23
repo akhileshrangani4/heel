@@ -22,6 +22,7 @@ import {
 } from "../../definitions/sign-in.ts";
 import { missingSignInSetup } from "../../definitions/sign-in-setup.ts";
 import { needsKey } from "../../requests/connection.ts";
+import { lastUsedByAccount } from "../../store/activity.ts";
 import { accountsOwnedBy } from "../../store/directory.ts";
 import { users } from "../../store/schema.ts";
 import { sharingOf } from "../../store/sharing.ts";
@@ -170,8 +171,15 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
 
   app.get("/connections", signedIn, (c) => {
     const session = c.get("session");
-    const rows = accountsOwnedBy(deps.db, session.orgId, session.userId).map((account) => ({
+    const owned = accountsOwnedBy(deps.db, session.orgId, session.userId);
+    const lastUsed = lastUsedByAccount(
+      deps.db,
+      session.orgId,
+      owned.map((a) => a.alias),
+    );
+    const rows = owned.map((account) => ({
       alias: account.alias,
+      lastUsedAt: lastUsed.get(account.alias) ?? null,
       provider: account.provider,
       status: account.status,
       signsIn:
@@ -200,6 +208,7 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
           accountNotes(deps).take(session.userId, c.req.query("note") ?? ""),
         ),
         signInForm: { action: "/connections/sign-in", csrfToken: session.csrfToken },
+        now: deps.now(),
         manage: {
           csrfToken: session.csrfToken,
           people: deps.db

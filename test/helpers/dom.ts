@@ -77,5 +77,11 @@ export function accessibleName(control: UiElement, doc: UiDocument): string {
 
 /** Controls a person can operate: everything that must have a name. */
 export function interactiveControls(doc: UiDocument): UiElement[] {
-  return [...doc.querySelectorAll("button, a[href], select, textarea, input:not([type=hidden])")];
+  // An element with the `hidden` attribute is out of reach and out of the accessibility tree:
+  // e.g. the Rules preview's textarea that only carries the file text to the passkey Save.
+  return [
+    ...doc.querySelectorAll(
+      "button:not([hidden]), a[href]:not([hidden]), select:not([hidden]), textarea:not([hidden]), input:not([type=hidden]):not([hidden])",
+    ),
+  ];
 }

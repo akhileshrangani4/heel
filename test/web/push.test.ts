@@ -45,15 +45,18 @@ describe("the installable approval page", () => {
     );
   });
 
-  it("offers to turn on notifications on the approvals page, with the install's VAPID key", async () => {
+  it("offers to turn on notifications under Settings, Devices, with the install's VAPID key", async () => {
     const h = humanPlaneHarness();
     const owner = await h.signIn(await h.enroll());
 
-    const page = await (await h.fetch("/approvals", { as: owner })).text();
+    const page = await (await h.fetch("/devices", { as: owner })).text();
 
     expect(page).toContain("Turn on notifications");
     expect(page).toContain(`data-key="${TEST_VAPID_PUBLIC_KEY}"`);
     expect(page).toContain('rel="manifest"');
+    // Notifications are a setting, not something waiting on Approvals.
+    const approvals = await (await h.fetch("/approvals", { as: owner })).text();
+    expect(approvals).not.toContain('id="heel-push"');
   });
 });
 
@@ -163,7 +166,7 @@ describe("device subscriptions", () => {
     const h = humanPlaneHarness();
     const owner = await h.signIn(await h.enroll());
     await h.fetch("/push/subscribe", { as: owner, ...postJson(SUBSCRIPTION) });
-    const page = await (await h.fetch("/approvals", { as: owner })).text();
+    const page = await (await h.fetch("/devices", { as: owner })).text();
     expect(page).toContain("1 device gets notifications for you.");
     expect(page).toContain('action="/push/unsubscribe-all"');
 

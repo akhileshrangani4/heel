@@ -6,7 +6,12 @@ import { exportAuditPage } from "../../audit/export.ts";
 import { AUDIT_KINDS, type AuditKind } from "../../core/audit.ts";
 import { suggestRules } from "../../core/suggestions.ts";
 import { listAgents, workRootsOf } from "../../gateway/agents.ts";
-import { agentInventory, readActivity, wouldHaveStopped } from "../../store/activity.ts";
+import {
+  accountsSeen,
+  agentInventory,
+  readActivity,
+  wouldHaveStopped,
+} from "../../store/activity.ts";
 import { agents } from "../../store/schema.ts";
 import {
   type HumanPlaneDeps,
@@ -168,7 +173,9 @@ export function activityRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       current: "activity",
       body: activityPage({
         rows,
+        now: deps.now(),
         agents: agentChoices(session),
+        accounts: accountsSeen(deps.db, { orgId: deps.orgId, ownerIds: visibleOwners(session) }),
         filter: {
           agent: filter.agentId,
           account: filter.account,
@@ -176,6 +183,7 @@ export function activityRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
           script: filter.scriptId,
         },
         nextBefore: rows.length === PAGE ? (rows.at(-1)?.id ?? null) : null,
+        paged: Number.isFinite(before),
         hidden: deps.hiddenCounts === undefined ? null : deps.hiddenCounts(),
         suggestions: suggestRules(stopped),
         canExport: session.role === "admin",
@@ -242,6 +250,7 @@ export function activityRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     const filter = filterOf(query);
     const resumeFrom = Number.parseInt(c.req.header("last-event-id") ?? query["after"] ?? "0", 10);
     let after = Number.isFinite(resumeFrom) ? resumeFrom : 0;
+    const names = new Map(agentChoices(session).map((a) => [a.id, a.name]));
     return streamSSE(c, async (stream) => {
       const ends = Date.now() + STREAM_LIFETIME_MS;
       while (!stream.aborted && Date.now() < ends) {
@@ -256,7 +265,7 @@ export function activityRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
           await stream.writeSSE({
             event: "row",
             id: String(row.id),
-            data: toHtmlString(activityRow(row)),
+            data: toHtmlString(activityRow(row, names.get(row.agentId))),
           });
           after = row.id;
         }

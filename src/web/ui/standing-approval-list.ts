@@ -1,8 +1,18 @@
 import type { RuleRef } from "../../core/call.ts";
 import type { StandingScope } from "../../store/schema.ts";
 import { formatRelative, formatRule } from "./format.ts";
-import { type Html, html } from "./html.ts";
-import { badge, type FormTarget, notice, postForm, type Tone, time } from "./layout.ts";
+import { howItWorks } from "./grants-page.ts";
+import { type Html, html, trusted } from "./html.ts";
+import {
+  badge,
+  type FormTarget,
+  notice,
+  postForm,
+  scrollRegion,
+  type Tone,
+  time,
+} from "./layout.ts";
+import { btn } from "./shadcn/button.ts";
 
 /**
  * Where a standing approval stands. `lapsed` means its parent rule was edited
@@ -79,10 +89,12 @@ function stateDetail(row: StandingRow, now: Date): Html {
  */
 export function standingApprovalList(props: StandingApprovalListProps): Html {
   const heading = html`<h1>Standing approvals</h1>
-    <p class="muted">
-      Each one turns a single rule's ask into allow for one agent until it ends. It lapses when
-      that rule is edited or deleted, and a deny above the rule still wins.
-    </p>`;
+    <p class="muted">Turns one rule's ask into allow for one agent, until it ends.</p>
+    ${howItWorks(
+      "How standing approvals work",
+      html`Each one turns a single rule's ask into allow for one agent until it ends. It lapses when
+      that rule is edited or deleted, and a deny above the rule still wins.`,
+    )}`;
   if (!props.load.ok) {
     return html`${heading}
       ${notice(
@@ -94,44 +106,42 @@ export function standingApprovalList(props: StandingApprovalListProps): Html {
   const rows = props.load.rows;
   if (rows.length === 0) {
     return html`${heading}
-      <p>No standing approvals. Approving a request as standing adds one here.</p>`;
+      <div class="req-empty">
+        <span class="req-empty-icon agents-empty-icon">${trusted(CLOCK_CHECK)}</span>
+        <p class="req-empty-title">No standing approvals</p>
+        <p class="muted">Approving a request for longer adds one here.</p>
+      </div>`;
   }
   return html`${heading}
-    <p class="muted req-count">
-      ${rows.length === 1 ? "1 standing approval" : `${rows.length} standing approvals`}
-    </p>
-    <ul class="req-list" aria-label="Standing approvals">
-      ${rows.map(
-        (row) => html`<li class="card req" data-status="${row.state}">
-          <div class="ap-meta">
-            ${stateBadge(row)}
-            <span class="ap-agent">${row.agent}</span>
-            <span class="muted">on ${row.account}</span>
-            <span class="muted">by ${row.createdBy}, ${time(row.createdAt)}</span>
-          </div>
-          <h2 class="req-title">${scopeText(row)}</h2>
-          <div class="req-foot-row">
-            <p class="req-foot muted">
-              ${stateDetail(row, props.now)} · Rule ${formatRule(row.rule)} ·
-              <span class="mono">${row.id}</span>
-            </p>
-            ${
-              row.state === "active"
-                ? postForm(
-                    props.revokeForm,
-                    { id: row.id },
-                    html`<button
-                      type="submit"
-                      class="btn btn-danger"
-                      aria-label="Revoke ${row.id} for ${row.agent} on ${row.account}"
-                    >
-                      Revoke
-                    </button>`,
-                  )
-                : ""
-            }
-          </div>
-        </li>`,
-      )}
-    </ul>`;
+    ${scrollRegion(
+      "Standing approvals",
+      html`<table class="data rows-table">
+        <caption class="visually-hidden">Standing approvals</caption>
+        <thead>
+          <tr><th scope="col">Covers</th><th scope="col">Rule</th><th scope="col">State</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr>
+        </thead>
+        <tbody>
+          ${rows.map(
+            (row) => html`<tr data-status="${row.state}">
+              <td><strong>${scopeText(row)}</strong>
+                <span class="cell-sub">${row.agent} on ${row.account} · by ${row.createdBy}, ${time(row.createdAt)}</span></td>
+              <td class="muted">${formatRule(row.rule)}<span class="cell-sub mono">${row.id}</span></td>
+              <td>${stateBadge(row)}<span class="cell-sub">${stateDetail(row, props.now)}</span></td>
+              <td class="cell-actions">${
+                row.state === "active"
+                  ? postForm(
+                      props.revokeForm,
+                      { id: row.id },
+                      html`<button type="submit" class="${btn("ghost", "sm", "text-destructive")}" aria-label="Revoke ${row.id} for ${row.agent} on ${row.account}">Revoke</button>`,
+                    )
+                  : ""
+              }</td>
+            </tr>`,
+          )}
+        </tbody>
+      </table>`,
+    )}`;
 }
+
+/** lucide's calendar-check. */
+const CLOCK_CHECK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="m9 16 2 2 4-4"/></svg>`;

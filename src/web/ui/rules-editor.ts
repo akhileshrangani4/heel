@@ -1,9 +1,11 @@
 import type { RulesEdit, RulesFileView } from "../../proposals/edit.ts";
 import { ceremonyButton } from "./ceremony.ts";
-import { type Html, html } from "./html.ts";
-import { badge, notice } from "./layout.ts";
+import { type Html, html, trusted } from "./html.ts";
+import { APPLY_ON_CHANGE, CHEVRON_DOWN } from "./icons.ts";
+import { notice } from "./layout.ts";
 import { diffLines } from "./proposals.ts";
 import { hideInWords, ruleInWords } from "./rule-words.ts";
+import { btn } from "./shadcn/button.ts";
 
 /**
  * The Rules page (roadmap 2.9): your rules as sentences, in the order heel
@@ -55,16 +57,87 @@ function describe(edit: RulesEdit, before: RulesFileView, after: RulesFileView):
   }
 }
 
-function problemsList(problems: readonly string[]): Html {
-  return html`<ul class="problems">${problems.map((p) => html`<li class="mono">${p}</li>`)}</ul>`;
+/** lucide's trash-2. */
+const TRASH_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>`;
+
+/** Lines kept around each change in the preview's diff. */
+const CONTEXT = 2;
+
+/**
+ * Only the changed lines of a `lineDiff` ("+ ", "- ", "  " prefixed), with
+ * CONTEXT unchanged lines around each change and a gap marker between far
+ * apart changes, plus the added and removed counts.
+ */
+export function changedHunks(diff: string): { lines: string[]; added: number; removed: number } {
+  const all = diff.replace(/\n$/, "").split("\n");
+  const changed = all.map((line) => line.startsWith("+ ") || line.startsWith("- "));
+  const keep = all.map((_, i) => {
+    for (let j = Math.max(0, i - CONTEXT); j <= Math.min(all.length - 1, i + CONTEXT); j++) {
+      if (changed[j]) return true;
+    }
+    return false;
+  });
+  const lines: string[] = [];
+  let gap = false;
+  all.forEach((line, i) => {
+    if (keep[i]) {
+      if (gap && lines.length > 0) lines.push("@ ⋯");
+      gap = false;
+      lines.push(line);
+    } else gap = true;
+  });
+  return {
+    lines,
+    added: all.filter((l) => l.startsWith("+ ")).length,
+    removed: all.filter((l) => l.startsWith("- ")).length,
+  };
 }
+
+/** The changed lines, open, with their counts. */
+function changeView(diff: string): Html {
+  const hunks = changedHunks(diff);
+  return html`<div class="rules-diff">
+    <p class="rules-diff-head">
+      <span>The change to your rules file</span>
+      <span class="rules-diff-count"><span class="add">+${String(hunks.added)}</span> <span class="remove">−${String(hunks.removed)}</span></span>
+    </p>
+    <ul class="diff" aria-label="The change to your rules file">
+      ${hunks.lines.map((line) => {
+        const sign = line.slice(0, 1);
+        if (sign === "@") return html`<li data-op="gap" aria-hidden="true">${line.slice(2)}</li>`;
+        const op = sign === "+" ? "add" : sign === "-" ? "remove" : "same";
+        const word = op === "add" ? "Added" : op === "remove" ? "Removed" : "";
+        return html`<li data-op="${op}"><span class="sign" aria-hidden="true">${sign.trim()}</span>${word === "" ? "" : html`<span class="visually-hidden">${word}: </span>`}${line.slice(2)}</li>`;
+      })}
+    </ul>
+  </div>`;
+}
+
+/** `file:line:col: message`, as `heel rules check` prints a problem, split for display. */
+function splitProblem(problem: string): { where: string | null; what: string } {
+  const match = /^(\S+?:\d+(?::\d+)?):\s+(.*)$/s.exec(problem);
+  return match === null
+    ? { where: null, what: problem }
+    : { where: match[1] ?? null, what: match[2] ?? problem };
+}
+
+/** Each problem on its own line: where (file:line:col) in mono, then what. */
+function problemsList(problems: readonly string[]): Html {
+  return html`<ul class="problems">${problems.map((p) => {
+    const { where, what } = splitProblem(p);
+    return html`<li>${where === null ? "" : html`<span class="problem-where mono">${where}</span>`}<span class="problem-what">${what}</span></li>`;
+  })}</ul>`;
+}
+
+/** lucide's file-lock. */
+const FILE_LOCK_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9.8V20a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v1.5"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><rect width="8" height="5" x="2" y="13" rx="1"/><path d="M8 13v-2a2 2 0 1 0-4 0v2"/></svg>`;
 
 function previewPanel(preview: RulesPreview, current: RulesFileView): Html {
   if (preview.unchanged) {
     return html`<section class="card preview" aria-labelledby="preview-heading">
       <h2 id="preview-heading">Nothing would change</h2>
       <p>${preview.edit.kind === "decision" ? "That rule already decides that." : "That's what your rules file already says."}</p>
-      <p><a class="btn btn-secondary" href="/rules">Back</a></p>
+      <p><a class="${btn("outline")}" href="/rules">Back</a></p>
     </section>`;
   }
   return html`<section class="card preview" aria-labelledby="preview-heading">
@@ -89,9 +162,10 @@ function previewPanel(preview: RulesPreview, current: RulesFileView): Html {
           )
         : ""
     }
-    <details>
-      <summary>The exact change to the file</summary>
-      ${diffLines(preview.diff, "The change to your rules file")}
+    ${changeView(preview.diff)}
+    <details class="fold">
+      <summary>The whole file after the change${trusted(CHEVRON_DOWN)}</summary>
+      ${diffLines(preview.diff, "Your rules file after the change")}
     </details>
     ${
       preview.problems === null && !preview.trusted
@@ -111,34 +185,34 @@ ${preview.text}</textarea>
               binding: { before: preview.before, after: preview.after },
               optionsFrom: "rules-save",
             })}
-            <a class="btn btn-secondary" href="/rules">Cancel</a>
+            <a class="${btn("outline")}" href="/rules">Cancel</a>
           </div>`
-          : html`<p><a class="btn btn-secondary" href="/rules">Back</a></p>`
+          : html`<p><a class="${btn("outline")}" href="/rules">Back</a></p>`
     }
   </section>`;
 }
 
 function ruleRow(r: RulesFileView["rules"][number], csrf: string): Html {
-  return html`<li class="card rule-row">
-    <p class="rule-words">
-      <strong>${ruleInWords(r.rule)}</strong>
-    </p>
-    <div class="rule-meta muted">
-      ${r.name === null ? "" : html`<span class="mono">${r.name}</span> · `}${badge(DECISION_WORDS[r.decision] ?? r.decision, r.decision === "deny" ? "error" : r.decision === "ask" ? "warn" : "ok")}
+  const n = String(r.index + 1);
+  return html`<li class="rule-row">
+    <span class="rule-n" aria-hidden="true">${n}</span>
+    <div class="rule-text">
+      <p class="rule-words">${ruleInWords(r.rule)}</p>
+      ${r.name === null ? "" : html`<p class="rule-name mono">${r.name}</p>`}
     </div>
     <form method="get" action="/rules" class="rule-actions">
       <input type="hidden" name="op" value="decision" />
       <input type="hidden" name="index" value="${String(r.index)}" />
       <input type="hidden" name="csrf" value="${csrf}" />
-      <label for="then-${String(r.index)}">Change it to</label>
-      <select id="then-${String(r.index)}" name="then">
+      <label for="then-${String(r.index)}" class="visually-hidden">Change rule ${n} to</label>
+      <select id="then-${String(r.index)}" name="then" onchange="${APPLY_ON_CHANGE}">
         ${["allow", "ask", "deny"].map(
           (d) =>
             html`<option value="${d}"${d === r.decision ? " selected" : ""}>${DECISION_WORDS[d] ?? d}</option>`,
         )}
       </select>
-      <button type="submit" class="btn btn-secondary">Preview</button>
-      <a class="btn btn-danger" href="/rules?op=remove-rule&amp;index=${String(r.index)}&amp;csrf=${encodeURIComponent(csrf)}">Remove…</a>
+      <noscript><button type="submit" class="${btn("outline", "sm")}">Preview</button></noscript>
+      <a class="${btn("ghost", "icon-sm", "rule-remove")}" href="/rules?op=remove-rule&amp;index=${String(r.index)}&amp;csrf=${encodeURIComponent(csrf)}" aria-label="Remove rule ${n}" title="Remove rule ${n}">${trusted(TRASH_ICON)}</a>
     </form>
   </li>`;
 }
@@ -152,15 +226,18 @@ export function rulesEditorPage(props: {
 }): Html {
   const heading = html`<h1>Rules</h1>`;
   if (props.file === null) {
-    return html`${heading}<p class="muted">heel can't edit rules files from here.</p>`;
+    return html`${heading}
+      <div class="req-empty">
+        <span class="req-empty-icon rules-empty-icon">${trusted(FILE_LOCK_ICON)}</span>
+        <p class="req-empty-title">heel can't edit rules files from here</p>
+        <p class="muted">This heel reads its rules from files it doesn't manage. Change them where they live, and <code>heel rules check</code> on heel's machine says whether they load.</p>
+      </div>`;
   }
   const { view } = props.file;
   return html`${heading}
-    <p class="muted">
-      What heel does with each call your agents make, read from the top: the first rule that
-      matches decides, and a call no rule matches is refused. Your file is
-      <span class="mono">${props.file.display}</span>; every change is in the
-      <a href="/rules/history">rule history</a>.
+    <p class="rules-lede">Read from the top: the first rule that matches decides; anything else is refused.</p>
+    <p class="rules-file muted">
+      <span class="mono">${props.file.display}</span> · <a href="/rules/history">Rule history</a>
     </p>
     ${props.saved === "live" ? notice("ok", html`<p>Saved. heel is using your rules now.</p>`) : ""}
     ${
@@ -184,7 +261,10 @@ export function rulesEditorPage(props: {
     <h2>Your rules</h2>
     ${
       view.rules.length === 0
-        ? html`<p class="muted">No rules yet: every call is refused. Agents can propose rules, and heel suggests some from what you approve.</p>`
+        ? html`<div class="req-empty rules-empty">
+            <p class="req-empty-title">No rules yet</p>
+            <p class="muted">Every call is refused until a rule allows it. Agents can propose rules, and heel suggests some from what you approve.</p>
+          </div>`
         : html`<ol class="rule-list" aria-label="Your rules, in order">${view.rules.map((r) => ruleRow(r, props.csrfToken))}</ol>`
     }
     ${
@@ -193,21 +273,25 @@ export function rulesEditorPage(props: {
         : html`<h2>Hidden from agents</h2>
           <ul class="rule-list">
             ${view.hide.map(
-              (h) => html`<li class="card rule-row">
-                <p class="rule-words">${hideInWords(h.entry)}</p>
-                <a class="btn btn-danger" href="/rules?op=remove-hide&amp;index=${String(h.index)}&amp;csrf=${encodeURIComponent(props.csrfToken)}">Remove…</a>
+              (h, i) => html`<li class="rule-row">
+                <span class="rule-n" aria-hidden="true">${String(i + 1)}</span>
+                <div class="rule-text"><p class="rule-words">${hideInWords(h.entry)}</p></div>
+                <div class="rule-actions">
+                  <a class="${btn("ghost", "icon-sm", "rule-remove")}" href="/rules?op=remove-hide&amp;index=${String(h.index)}&amp;csrf=${encodeURIComponent(props.csrfToken)}" aria-label="Remove hide entry ${String(i + 1)}" title="Remove hide entry ${String(i + 1)}">${trusted(TRASH_ICON)}</a>
+                </div>
               </li>`,
             )}
           </ul>`
     }
-    <details class="rules-yaml">
-      <summary>Edit the file directly (YAML)</summary>
+    <details class="rules-yaml fold">
+      <summary>Edit the file directly (YAML)${trusted(CHEVRON_DOWN)}</summary>
       <p class="muted">For anything the menus above don't do. heel checks it and shows what it means before you save. <a href="https://useheel.dev/docs/rules-reference" target="_blank" rel="noopener">Every key</a>.</p>
       <form method="post" action="/rules/check">
         <input type="hidden" name="csrf" value="${props.csrfToken}" />
-        <textarea name="text" rows="18" class="mono" spellcheck="false">
+        <label for="rules-yaml-text" class="visually-hidden">Your rules file (YAML)</label>
+        <textarea id="rules-yaml-text" name="text" rows="18" class="mono" spellcheck="false">
 ${props.file.text}</textarea>
-        <button type="submit" class="btn btn-secondary">Check it</button>
+        <button type="submit" class="${btn("outline")}">Check it</button>
       </form>
     </details>`;
 }

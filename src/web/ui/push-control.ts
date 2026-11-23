@@ -1,12 +1,15 @@
 import { type Html, html } from "./html.ts";
 import { type FormTarget, notice, postForm } from "./layout.ts";
+import { btn } from "./shadcn/button.ts";
+import { switchFace } from "./switch.ts";
 
 /**
- * Turns on approval notifications for the device the page is open on (spec:
- * Notifications). A plain button, not a passkey ceremony: getting notified
- * can't decide anything. The page script (client.ts) does the work, and
- * explains when the browser can't receive push, such as an iPhone browser
- * tab, where heel has to be added to the Home Screen first.
+ * Turns approval notifications on or off for the device the page is open on
+ * (spec: Notifications): one switch, which the page script (client.ts) turns
+ * on when this browser is already subscribed. A plain button, not a passkey ceremony: getting notified can't
+ * decide anything. The script explains when the browser can't receive push,
+ * such as an iPhone browser tab, where heel has to be added to the Home
+ * Screen first. Turning off every device is a quieter link under the count.
  */
 export function pushControl(props: {
   vapidPublicKey: string;
@@ -14,18 +17,18 @@ export function pushControl(props: {
   devices?: { count: number; turnOff: FormTarget; turnedOff: number | null };
 }): Html {
   const devices = props.devices;
-  return html`<section aria-labelledby="push-heading" class="push">
-    <h2 id="push-heading">Notifications on this device</h2>
-    <p class="muted">
-      Get a notification here when an agent's call needs you. It names the agent, the action and
-      the account, never the call's contents, and opening it brings you back to this page.
-    </p>
-    <div class="actions">
-      <button type="button" class="btn btn-secondary" id="heel-push" data-key="${props.vapidPublicKey}">
-        Turn on notifications
-      </button>
+  return html`<section aria-labelledby="push-heading" class="settings-card push">
+    <div class="settings-row">
+      <div class="settings-row-text">
+        <h2 id="push-heading" class="settings-row-title">Notifications on this device</h2>
+        <p class="muted" id="push-help">
+          Get a notification here when an agent's call needs you. It names the agent, the action and
+          the account, never the call's contents.
+        </p>
+      </div>
+      <button type="button" class="ui-switch" role="switch" aria-checked="false" aria-label="Turn on notifications" aria-describedby="push-help" id="heel-push" data-key="${props.vapidPublicKey}">${switchFace(false, "Off")}</button>
     </div>
-    <p id="heel-push-status" class="muted" role="status" aria-live="polite"></p>
+    <p id="heel-push-status" class="muted settings-row-status" role="status" aria-live="polite"></p>
     ${
       devices === undefined
         ? ""
@@ -37,22 +40,22 @@ export function pushControl(props: {
                   html`<p>Notifications are off on ${devices.turnedOff === 1 ? "1 device" : `${devices.turnedOff} devices`}.</p>`,
                 )
           }
-          <p class="muted">
-            ${
+          <div class="settings-row-foot">
+            <span class="muted">${
               devices.count === 0
                 ? "No device gets notifications yet."
                 : `${devices.count === 1 ? "1 device gets" : `${devices.count} devices get`} notifications for you. If you don't recognize that many, turn them all off and turn this one back on.`
+            }</span>
+            ${
+              devices.count === 0
+                ? ""
+                : postForm(
+                    devices.turnOff,
+                    {},
+                    html`<button type="submit" class="${btn("link", "sm", "px-0 text-muted-foreground")}">Turn off on all devices</button>`,
+                  )
             }
-          </p>
-          ${
-            devices.count === 0
-              ? ""
-              : postForm(
-                  devices.turnOff,
-                  {},
-                  html`<button type="submit" class="btn btn-secondary">Turn off on all devices</button>`,
-                )
-          }`
+          </div>`
     }
   </section>`;
 }

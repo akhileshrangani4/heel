@@ -1,6 +1,7 @@
 import type { Mode } from "../../core/modes.ts";
 import { ceremonyButton } from "./ceremony.ts";
-import { type Html, html } from "./html.ts";
+import { type Html, html, trusted } from "./html.ts";
+import { CHEVRON_DOWN } from "./icons.ts";
 import { badge, type FormTarget, notice, postForm, scrollRegion } from "./layout.ts";
 
 /**
@@ -43,27 +44,41 @@ function tone(mode: Mode) {
   return mode === "enforce" ? "ok" : "warn";
 }
 
-/** One button: the other mode from what applies now. */
-function controls(row: ModeRow, tighten: FormTarget, orgEffective: Mode): Html {
-  if (row.effective !== "enforce") {
-    return postForm(
-      tighten,
-      { owner: row.ownerId },
-      html`<button type="submit" class="btn btn-primary">Switch to Enforce</button>`,
-    );
-  }
+/**
+ * "Enforce | Watch": the mode that applies now is the pressed segment and does
+ * nothing; the other is the switch itself. Tightening to Enforce is a plain
+ * form, like pausing; loosening to Watch is a passkey ceremony, like resuming.
+ */
+function segmented(row: ModeRow, tighten: FormTarget, orgEffective: Mode): Html {
+  const current = modeLabel(row.effective);
+  const pressed = (label: "Enforce" | "Watch") =>
+    html`<span class="seg-item" aria-current="true" aria-pressed="true">${label}</span>`;
   // A person's own Watch can't loosen an org default of Enforce, so offering it
   // would only store a setting that does nothing.
-  if (row.ownerId !== "" && orgEffective === "enforce") {
-    return html`<span class="muted">Follows the org default</span>`;
+  if (current === "Enforce" && row.ownerId !== "" && orgEffective === "enforce") {
+    return html`<span class="seg" aria-label="${row.label}'s mode">
+        ${pressed("Enforce")}<span class="seg-item" aria-disabled="true">Watch</span>
+      </span>
+      <span class="muted seg-note">Follows the org default</span>`;
   }
-  return ceremonyButton({
-    callback: { handler: "mode" },
-    intent: "mode",
-    label: "Switch to Watch",
-    tone: "secondary",
-    binding: { owner: row.ownerId, mode: "shadow" },
-  });
+  const other =
+    current === "Enforce"
+      ? ceremonyButton({
+          callback: { handler: "mode" },
+          intent: "mode",
+          label: "Watch",
+          tone: "secondary",
+          binding: { owner: row.ownerId, mode: "shadow" },
+          asSegment: { ariaLabel: `Switch ${row.label} to Watch` },
+        })
+      : postForm(
+          tighten,
+          { owner: row.ownerId },
+          html`<button type="submit" class="seg-item"><span class="visually-hidden">Switch to </span>Enforce</button>`,
+        );
+  return html`<span class="seg" aria-label="${row.label}'s mode">${
+    current === "Enforce" ? html`${pressed("Enforce")}${other}` : html`${other}${pressed("Watch")}`
+  }</span>`;
 }
 
 function switchedNotice(
@@ -94,19 +109,22 @@ export function modesPage(props: {
   const org = props.rows.find((r) => r.ownerId === "");
   const orgEffective = org?.effective ?? "enforce";
   return html`<h1>Modes</h1>
-    <p>A mode decides whether heel's decisions take effect.</p>
-    <ul>
-      <li><strong>Enforce</strong>: ${DESCRIPTION.Enforce}</li>
-      <li>
-        <strong>Watch</strong>: ${DESCRIPTION.Watch} Use it to try new rules on real traffic, then
-        switch to Enforce.
-      </li>
-    </ul>
-    <p class="muted">
-      Some things hold in both modes: pause, org rules, hidden mail, and calls heel can't check
-      safely are still stopped. A person's own mode can only be stricter than the org default.
-      Switching to Watch needs your passkey.
-    </p>
+    <p class="muted">Enforce applies your rules; Watch lets calls run and shows what heel would have done.</p>
+    <details class="set-fold">
+      <summary>How modes work${trusted(CHEVRON_DOWN)}</summary>
+      <ul>
+        <li><strong>Enforce</strong>: ${DESCRIPTION.Enforce}</li>
+        <li>
+          <strong>Watch</strong>: ${DESCRIPTION.Watch} Use it to try new rules on real traffic, then
+          switch to Enforce.
+        </li>
+      </ul>
+      <p class="muted">
+        Some things hold in both modes: pause, org rules, hidden mail, and calls heel can't check
+        safely are still stopped. A person's own mode can only be stricter than the org default.
+        Switching to Watch needs your passkey.
+      </p>
+    </details>
     ${
       props.watchFallback
         ? notice(
@@ -128,8 +146,7 @@ export function modesPage(props: {
         <tr>
           <th scope="col">Who</th>
           <th scope="col">Mode</th>
-          <th scope="col">What it means</th>
-          <th scope="col">Switch</th>
+          <th scope="col">What applies</th>
         </tr>
       </thead>
       <tbody>
@@ -147,9 +164,8 @@ export function modesPage(props: {
                 : "";
           return html`<tr>
             <th scope="row">${row.label}</th>
-            <td>${badge(`${shown}${note}`, tone(row.effective))}</td>
-            <td class="muted">${DESCRIPTION[shown]}</td>
-            <td>${controls(row, props.tighten, orgEffective)}</td>
+            <td class="mode-switch">${segmented(row, props.tighten, orgEffective)}</td>
+            <td>${badge(`${shown}${note}`, tone(row.effective))}<span class="muted mode-means">${DESCRIPTION[shown]}</span></td>
           </tr>`;
         })}
       </tbody>

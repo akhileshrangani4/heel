@@ -35,7 +35,7 @@ import { addAccount, testStore } from "../../test/helpers/store.ts";
 
 const OUT = join(import.meta.dirname, "..", "..", "docs", "images");
 const GITHUB_TOKEN = "github-docs-token-not-real";
-const HEAD = "c".repeat(40);
+const HEAD = "4f9c2e7a1b8d3f6e0a5c9b2d7e4f1a8c3b6d9e2f";
 
 /** Just enough of GitHub's API for a pull request with green checks. */
 async function fakeGitHub(input: string | URL | Request, init?: RequestInit): Promise<Response> {
@@ -176,8 +176,11 @@ async function shoot(page: Page, name: string, { dark = false } = {}): Promise<v
   // The README's phones follow the reader's theme, so these screens come in dark too.
   if (dark) {
     await page.emulateMedia({ colorScheme: "dark" });
+    // Buttons fade between colours (shadcn's transition); wait for the fade to finish.
+    await page.waitForTimeout(400);
     await page.screenshot({ path: join(OUT, `${name}-dark.png`), fullPage: !phone });
     await page.emulateMedia({ colorScheme: "light" });
+    await page.waitForTimeout(400);
   }
 }
 
@@ -215,7 +218,12 @@ it("captures the docs screenshots", async () => {
     await page.goto(link.url);
     await shoot(page, "enroll");
     await page.getByRole("button", { name: "Create a passkey" }).click();
-    await page.waitForURL(/\/sign-in/);
+    // Enrolling signs you in and lands on the welcome page.
+    await page.waitForURL(/\/welcome$/);
+    await shoot(page, "welcome");
+    // Signed out, the same passkey signs back in.
+    await context.clearCookies();
+    await page.goto(`${origin}/sign-in`);
     await shoot(page, "sign-in");
     await page.getByRole("button", { name: "Sign in with a passkey" }).click();
     await page.waitForURL(/\/approvals$/);
@@ -252,8 +260,11 @@ it("captures the docs screenshots", async () => {
     await shoot(page, "approval-email", { dark: true });
     await page.goto(`${origin}/approvals/${merge.approvalId}`);
     await shoot(page, "approval-merge", { dark: true });
-    await page.getByRole("button", { name: "Approve once" }).click();
-    await page.waitForLoadState("networkidle");
+    const approve = page.getByRole("button", { name: "Approve once" });
+    await approve.click();
+    // Once the passkey check passes, the page reloads into its approved state,
+    // which has no approve button at all (while it waits, the button only relabels).
+    await page.waitForFunction("!document.querySelector('[data-heel-ceremony=\"approve-once\"]')");
     await page.reload();
     await shoot(page, "approval-approved");
 

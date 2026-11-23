@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { createPreviewApp } from "../../src/web/ui/preview/app.ts";
 import {
+  ALL_STORIES,
   COMPONENTS,
   findStory,
   REQUIRED_STATES,
   renderStory,
-  STORIES,
 } from "../../src/web/ui/preview/stories.ts";
 import { accessibleName, dom, interactiveControls, text } from "../helpers/dom.ts";
 
@@ -22,7 +22,7 @@ describe("UI preview harness", () => {
   });
 
   it("has no duplicate stories", () => {
-    const keys = STORIES.map((s) => `${s.component}/${s.state}`);
+    const keys = ALL_STORIES.map((s) => `${s.component}/${s.state}`);
     expect(new Set(keys).size).toBe(keys.length);
   });
 
@@ -33,7 +33,7 @@ describe("UI preview harness", () => {
     const links = new Set(
       [...dom(await index.text()).querySelectorAll("a[href]")].map((a) => a.getAttribute("href")),
     );
-    for (const story of STORIES) {
+    for (const story of ALL_STORIES) {
       for (const theme of THEMES) {
         const href = `/${story.component}/${story.state}?theme=${theme}`;
         expect(links.has(href), href).toBe(true);
@@ -51,7 +51,7 @@ describe("UI preview harness", () => {
     expect(res.status).toBe(404);
   });
 
-  describe.each(STORIES.map((s) => [`${s.component}/${s.state}`, s] as const))(
+  describe.each(ALL_STORIES.map((s) => [`${s.component}/${s.state}`, s] as const))(
     "%s",
     (_key, story) => {
       const doc = dom(renderStory(story, "light"));

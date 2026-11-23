@@ -41,13 +41,14 @@ describe("pages at phone width", () => {
 });
 
 describe("the top menu (1.11)", () => {
-  it("shows five sections, and the section's pages as tabs", async () => {
+  it("shows six sections, and the section's pages as tabs", async () => {
     const h = humanPlaneHarness();
     const admin = await h.signIn(await h.enroll());
     const page = await (await h.fetch("/grants", { as: admin })).text();
     const main = page.match(/<nav aria-label="Main">[\s\S]*?<\/nav>/)?.[0] ?? "";
-    expect(main.match(/<li>/g)).toHaveLength(5);
-    expect(main).toMatch(/aria-current="page"\s*>Agents</);
+    // Six sections, plus More, which holds Connections and Settings on a phone.
+    expect(main.match(/<li[ >]/g)).toHaveLength(7);
+    expect(main).toMatch(/aria-current="page"[^>]*>[\s\S]*?nav-label">Agents</);
     const tabs = page.match(/<nav class="subnav"[\s\S]*?<\/nav>/)?.[0] ?? "";
     expect(tabs).toContain(">Standing approvals<");
     expect(tabs).toMatch(/aria-current="page"\s*>Grants</);
@@ -67,8 +68,8 @@ describe("the Connections page (1.11)", () => {
     // Harness accounts are active: no setup hint, no dead-end "set up with heel connect".
     expect(page).not.toContain("Needs your Google OAuth client");
     expect(page).not.toContain("Set up with");
-    expect(page).toContain('class="card conn" data-alias="gmail-work"');
-    expect(page).toContain("Connect another account");
+    expect(page).toContain('class="conn" data-alias="gmail-work"');
+    expect(page).toContain("Add a connection");
   });
 });
 

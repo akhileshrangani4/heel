@@ -48,9 +48,11 @@ heel keeps running in the background, so the next steps happen in this same term
 heel user enroll owner
 ```
 
-Open the link it prints and select **Create a passkey**. Touch ID, Windows Hello or a security key all work. Then sign in with it.
+Open the link it prints and select **Create a passkey**. Touch ID, Windows Hello or a security key all work. heel signs you in and shows a welcome page, where you can turn on notifications for this device.
 
 ![Create a passkey for heel](images/enroll.png)
+
+![Your passkey is ready: add heel to your Home Screen and turn on notifications](images/welcome.png)
 
 You'll use this passkey to approve requests. To approve from your phone instead, see [Approve from your phone](approvals.md).
 

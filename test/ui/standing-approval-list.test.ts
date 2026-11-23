@@ -53,7 +53,7 @@ describe("StandingApprovalList", () => {
   });
 
   it("shows an empty state and a load-error alert", () => {
-    expect(text(render({ ok: true, rows: [] }))).toContain("No standing approvals.");
+    expect(text(render({ ok: true, rows: [] }))).toContain("No standing approvals");
     expect(text(render({ ok: false, message: "db down" }).querySelector("[role=alert]"))).toContain(
       "db down",
     );

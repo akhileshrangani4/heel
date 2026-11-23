@@ -6,6 +6,7 @@ import { connectionRoutes } from "./routes/connections.ts";
 import { deviceRoutes } from "./routes/devices.ts";
 import { enrollRoutes } from "./routes/enroll.ts";
 import { grantRoutes } from "./routes/grants.ts";
+import { homeRoutes } from "./routes/home.ts";
 import { manageAccountRoutes } from "./routes/manage-accounts.ts";
 import { manageAgentRoutes } from "./routes/manage-agents.ts";
 import { modeRoutes } from "./routes/modes.ts";
@@ -56,7 +57,7 @@ export function createHumanApp(deps: HumanPlaneDeps): Hono {
   app.get("/healthz", (c) => c.json({ status: "ok" }));
   // Before any route: a state-changing request from another origin never reaches one.
   app.use("*", requireSameOrigin(deps));
-  app.get("/", (c) => c.redirect("/approvals", 303));
+  app.route("/", homeRoutes(deps));
   app.route("/", signInRoutes(deps));
   app.route("/", oidcRoutes(deps));
   app.route("/", enrollRoutes(deps));

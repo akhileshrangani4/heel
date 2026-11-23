@@ -5,3 +5,5 @@ packages:
   - "."
 allowBuilds:
   esbuild: true
+  # Pulled in by @tailwindcss/cli for watch mode; gen:ui-css never watches.
+  "@parcel/watcher": false

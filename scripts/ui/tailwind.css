@@ -1,0 +1,121 @@
+/*
+ * The Tailwind input for heel's shadcn/ui components. `pnpm gen:ui-css`
+ * compiles it into src/web/ui/styles/tailwind.ts; `pnpm ui-css:drift` checks
+ * the committed file is current.
+ *
+ * No preflight: heel's own stylesheet (layer `heel`) styles every page, and
+ * Tailwind's utilities (layer `utilities`) win over it only where a
+ * component sets them. shadcn's colour tokens point at heel's palette, so
+ * both themes and the contrast test keep one source of colour.
+ */
+@layer theme, heel, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+
+/* Only shadcn's own files: scanning heel's pages would turn words like "hidden" or "table" into utilities. */
+@source "../../src/web/ui/shadcn";
+/* Extra classes heel's pages pass to btn() (its className argument). */
+@source inline("px-0 text-muted-foreground");
+
+/* heel's dark mode: the OS setting unless the page forces one with data-theme. */
+@custom-variant dark {
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]) *) {
+      @slot;
+    }
+  }
+  &:where([data-theme="dark"] *) {
+    @slot;
+  }
+}
+
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--accent-text);
+  --color-secondary: var(--surface);
+  --color-secondary-foreground: var(--text);
+  --color-muted: var(--surface);
+  --color-muted-foreground: var(--muted);
+  --color-accent: var(--surface);
+  --color-accent-foreground: var(--text);
+  --color-destructive: var(--danger);
+  /* --input outlines form fields, so it is heel's 3:1 `border`, not the quiet `line`. */
+  --color-border: var(--line);
+  --color-input: var(--border);
+  --color-ring: var(--focus);
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+}
+
+/* shadcn's default border colour for anything with a bare `border` class. */
+@layer components {
+  [data-slot] {
+    border-color: var(--color-border);
+  }
+
+  /* shadcn's Input and Textarea, on every text field heel renders. */
+  :where(
+    input[type="text"],
+    input[type="url"],
+    input[type="email"],
+    input[type="search"],
+    input[type="password"],
+    input[type="date"],
+    input[type="number"],
+    input:not([type])
+  ) {
+    @apply h-9 w-full min-w-0 rounded-md border border-input bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm dark:bg-input/30;
+    @apply focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50;
+  }
+  /*
+   * shadcn's NativeSelect on every <select>: a real select, so plain forms
+   * work with no script. Its chevron is drawn as a background (lucide's
+   * chevron-down, in --muted) instead of a sibling icon, so no page needs a
+   * wrapper element around its selects.
+   */
+  :where(select) {
+    @apply h-9 w-auto max-w-full min-w-0 appearance-none rounded-md border border-input bg-transparent px-3 py-2 pr-9 text-sm shadow-xs transition-[color,box-shadow] outline-none disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30 dark:hover:bg-input/50;
+    @apply focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238e8e96' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 1rem;
+  }
+  :where(select) option {
+    background-color: Canvas;
+    color: CanvasText;
+  }
+  :where(textarea) {
+    @apply flex field-sizing-content min-h-16 w-full rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 md:text-sm dark:bg-input/30;
+    @apply focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50;
+  }
+
+  /* shadcn's Table, on heel's data tables (their cells come from many pages). */
+  table.data {
+    @apply w-full caption-bottom text-sm;
+  }
+  table.data caption {
+    @apply px-3 pt-3 pb-1 text-left text-sm font-medium text-muted-foreground;
+    caption-side: top;
+  }
+  table.data thead tr {
+    @apply border-b;
+  }
+  table.data tr {
+    @apply border-b border-border transition-colors hover:bg-muted/50;
+  }
+  table.data tbody tr:last-child {
+    @apply border-0;
+  }
+  table.data th {
+    @apply h-10 px-3 text-left align-middle font-medium whitespace-nowrap text-muted-foreground;
+  }
+  table.data td,
+  table.data tbody th {
+    @apply px-3 py-2.5 align-middle text-foreground;
+  }
+}

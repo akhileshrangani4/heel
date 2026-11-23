@@ -14,8 +14,12 @@
       "!schema/heel-rules.schema.json",
       "!src/lookslike/weights.json",
       "!corpus/looks-like/manifest.json",
-      "!docs/site"
+      "!docs/site",
+      "!src/web/ui/styles/tailwind.ts"
     ]
+  },
+  "css": {
+    "parser": { "tailwindDirectives": true }
   },
   "formatter": {
     "enabled": true,

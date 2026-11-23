@@ -11,17 +11,17 @@ import {
   formatRule,
   plural,
 } from "./format.ts";
-import { flag, type Html, html } from "./html.ts";
+import { flag, type Html, html, trusted } from "./html.ts";
 import {
   badge,
   type FormTarget,
   notice,
   type PauseNotice,
   postForm,
-  scrollRegion,
   type Tone,
   time,
 } from "./layout.ts";
+import { btn } from "./shadcn/button.ts";
 import {
   argumentLines,
   clientLabel,
@@ -145,6 +145,41 @@ function lineCount(text: string): number {
   return text === "" ? 0 : text.split("\n").length;
 }
 
+/** lucide icons, drawn inline (decorative: the words beside them carry the meaning). */
+const svg = (paths: string) =>
+  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+const ICONS = {
+  chevron: svg('<path d="m6 9 6 6 6-6"/>'),
+  alert: svg(
+    '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+  ),
+  check: svg('<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>'),
+  x: svg('<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>'),
+  clock: svg('<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>'),
+  pause: svg(
+    '<circle cx="12" cy="12" r="10"/><line x1="10" x2="10" y1="15" y2="9"/><line x1="14" x2="14" y1="15" y2="9"/>',
+  ),
+  paperclip: svg(
+    '<path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"/>',
+  ),
+  back: svg('<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>'),
+} as const;
+
+/** The chevron at the right of every fold's summary; CSS turns it when the fold is open. */
+const CHEV = html`<span class="chev">${trusted(ICONS.chevron)}</span>`;
+
+/** A one-line status alert with an icon, styled like the pause alert. */
+function stateAlert(tone: Tone, icon: keyof typeof ICONS, content: Html): Html {
+  const role = tone === "error" ? "alert" : "status";
+  return html`<div class="ap-state" data-tone="${tone}" role="${role}">
+    <span class="ap-state-icon">${trusted(ICONS[icon])}</span>
+    <div class="ap-state-text">${content}</div>
+  </div>`;
+}
+
+/** Email bodies longer than this show the first lines and fold the rest. */
+const BODY_LINES_SHOWN = 12;
+
 /** Sections the person opened or closed before on this kind of request (store/folds.ts). */
 export type Folds = ReadonlyMap<string, boolean>;
 
@@ -162,7 +197,7 @@ function fold(
 ): Html {
   const open = folds.get(section) ?? openByDefault;
   return html`<details class="${className}" data-heel-fold="${section}"${flag("open", open)}>
-    <summary>${summary}</summary>
+    <summary><span class="fold-label">${summary}</span>${CHEV}</summary>
     ${content}
   </details>`;
 }
@@ -200,6 +235,31 @@ function recipients(
   </ul>`;
 }
 
+/**
+ * The body as readable text in a plain frame. A long one shows its first
+ * lines and folds the rest behind "Show all N lines"; every line is on the
+ * page either way (I-57), split across two blocks that join back exactly.
+ */
+function mailBody(body: string, folds: Folds): Html {
+  const lines = body.split("\n");
+  if (lines.length <= BODY_LINES_SHOWN) {
+    return html`<div class="ap-mail"><pre class="body">${body}</pre></div>`;
+  }
+  const head = lines.slice(0, BODY_LINES_SHOWN).join("\n");
+  const rest = lines.slice(BODY_LINES_SHOWN).join("\n");
+  return html`<div class="ap-mail">
+    <pre class="body">${head}</pre>
+    ${fold(
+      folds,
+      "body",
+      false,
+      html`Show all ${String(lines.length)} lines`,
+      html`<pre class="body">${rest}</pre>`,
+      "ap-fold ap-mail-more",
+    )}
+  </div>`;
+}
+
 function emailView(email: EmailPreview, headingId: string, folds: Folds): Html {
   const home = homeDomain(email.from);
   const attachments =
@@ -207,31 +267,18 @@ function emailView(email: EmailPreview, headingId: string, folds: Folds): Html {
       ? ""
       : html`<div class="ap-row">
           <span class="ap-key">Files</span>
-          ${scrollRegion(
-            "Attachments",
-            html`<table class="data">
-              <caption>
-                Attachments (not opened by heel)
-              </caption>
-              <thead>
-                <tr>
-                  <th scope="col">Name</th>
-                  <th scope="col">Type</th>
-                  <th scope="col">Size</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${email.attachments.map(
-                  (a) =>
-                    html`<tr>
-                      <td class="mono">${a.name}</td>
-                      <td class="mono">${a.type}</td>
-                      <td>${formatBytes(a.size)}</td>
-                    </tr>`,
-                )}
-              </tbody>
-            </table>`,
-          )}
+          <div>
+            <ul class="ap-files" aria-label="Attachments">
+              ${email.attachments.map(
+                (a) => html`<li class="ap-file">
+                  <span class="ap-file-icon">${trusted(ICONS.paperclip)}</span>
+                  <span class="ap-file-name mono">${a.name}</span>
+                  <span class="muted">${a.type} · ${formatBytes(a.size)}</span>
+                </li>`,
+              )}
+            </ul>
+            <p class="ap-files-note muted">Not opened by heel.</p>
+          </div>
         </div>`;
   const forwarded =
     email.forwarded === undefined
@@ -255,27 +302,18 @@ function emailView(email: EmailPreview, headingId: string, folds: Folds): Html {
             }
           </div>
         </div>`;
-  return html`<section class="card ap-card" aria-labelledby="${headingId}">
-    <div class="ap-card-head">
-      <h2 id="${headingId}">The email</h2>
-      <span class="muted">exactly what will be sent</span>
-    </div>
+  return html`<section class="ap-content" aria-labelledby="${headingId}">
+    <h2 id="${headingId}" class="visually-hidden">The email, exactly what will be sent</h2>
     <div class="ap-row"><span class="ap-key">From</span><span class="mono">${email.from}</span></div>
     <div class="ap-row"><span class="ap-key">To</span>${recipients("to", email.to, home, folds)}</div>
     <div class="ap-row"><span class="ap-key">Cc</span>${recipients("cc", email.cc, home, folds)}</div>
-    <div class="ap-row"><span class="ap-key">Bcc</span>${recipients("bcc", email.bcc, home, folds)}</div>
+    ${email.bcc.length === 0 ? "" : html`<div class="ap-row"><span class="ap-key">Bcc</span>${recipients("bcc", email.bcc, home, folds)}</div>`}
     <div class="ap-row"><span class="ap-key">Subject</span><strong>${email.subject}</strong></div>
     <div class="ap-row">
       <span class="ap-key">Body</span>
       <div>
         ${email.bodyFormat === "html" ? html`<p class="muted">HTML source, not rendered</p>` : ""}
-        ${fold(
-          folds,
-          "body",
-          true,
-          html`${plural(lineCount(email.body), "line")}`,
-          html`<pre class="body">${email.body}</pre>`,
-        )}
+        ${mailBody(email.body, folds)}
       </div>
     </div>
     ${forwarded} ${attachments}
@@ -283,7 +321,7 @@ function emailView(email: EmailPreview, headingId: string, folds: Folds): Html {
 }
 
 function mergeView(merge: MergePreview, headingId: string): Html {
-  return html`<section class="card ap-card" aria-labelledby="${headingId}">
+  return html`<section class="ap-content" aria-labelledby="${headingId}">
     <div class="ap-card-head"><h2 id="${headingId}">The merge</h2></div>
     <div class="ap-row"><span class="ap-key">Repo</span><span class="mono">${merge.repo}</span></div>
     <div class="ap-row"><span class="ap-key">Pull request</span><span>#${merge.number}</span></div>
@@ -294,7 +332,7 @@ function mergeView(merge: MergePreview, headingId: string): Html {
         ? ""
         : html`<div class="ap-row">
             <span class="ap-key">Commit</span>
-            <span><span class="mono">${merge.sha}</span>
+            <span><span class="mono ap-sha">${merge.sha}</span>
               <span class="muted">: GitHub refuses the merge if the branch moved past it</span></span>
           </div>`
     }
@@ -316,7 +354,7 @@ function httpView(http: HttpPreview, headingId: string): Html {
               ? html`<p class="muted">Sent as ${http.body.contentType}</p>`
               : ""
           }<pre class="body">${http.body.text}</pre>`;
-  return html`<section class="card ap-card" aria-labelledby="${headingId}">
+  return html`<section class="ap-content" aria-labelledby="${headingId}">
     <div class="ap-card-head">
       <h2 id="${headingId}">The request</h2>
       <span class="muted">exactly what the API receives</span>
@@ -337,7 +375,7 @@ function httpView(http: HttpPreview, headingId: string): Html {
 
 /** Every top-level argument as a readable row, for tools without their own view. */
 function argumentsView(request: ApprovalRequestView, headingId: string): Html {
-  return html`<section class="card ap-card" aria-labelledby="${headingId}">
+  return html`<section class="ap-content" aria-labelledby="${headingId}">
     <div class="ap-card-head">
       <h2 id="${headingId}">What it will run</h2>
       <span class="mono muted">${request.tool}</span>
@@ -386,7 +424,7 @@ function viaView(request: ApprovalRequestView): Html | "" {
 function reasonView(request: ApprovalRequestView): Html | "" {
   if (request.reason === null) return "";
   return html`<figure class="reason">
-    <figcaption>${request.agent} says (its own words; heel didn't check them)</figcaption>
+    <figcaption>${request.agent} says<span class="visually-hidden"> (its own words; heel didn't check them)</span>:</figcaption>
     <blockquote>${request.reason}</blockquote>
   </figure>`;
 }
@@ -435,7 +473,7 @@ function scriptView(
                   again. Denying ends it.</p>`
               : ""
           }
-          ${postForm(parked.stop, {}, html`<button type="submit" class="btn btn-secondary">Stop the script</button>`)}
+          ${postForm(parked.stop, {}, html`<button type="submit" class="${btn("outline")}">Stop the script</button>`)}
         </div>`;
   const before =
     script.before.length === 0
@@ -447,7 +485,7 @@ function scriptView(
                 html`<li><span class="mono">${c.tool}</span> on <span class="mono">${c.account}</span> <span class="muted">(${c.decision})</span></li>`,
             )}
           </ol>`;
-  return html`<section class="card script" aria-label="The script this call comes from">
+  return html`<section class="script ap-script" aria-label="The script this call comes from">
     <h2 class="section-title">From a script</h2>
     <p>
       ${request.agent} sent this call from a script. If you approve, the script carries on from
@@ -455,8 +493,8 @@ function scriptView(
     </p>
     ${before}
     ${waiting}
-    <details>
-      <summary>The script (${request.agent}'s own code; heel didn't check what it says)</summary>
+    <details class="ap-fold">
+      <summary><span class="fold-label">The script (${request.agent}'s own code; heel didn't check what it says)</span>${CHEV}</summary>
       <pre class="mono">${script.code}</pre>
       ${script.truncated ? html`<p class="muted">Cut here: the script is longer than heel keeps.</p>` : ""}
     </details>
@@ -471,9 +509,9 @@ const HINT_LABEL: Record<HintTone, string> = { warn: "check", note: "note", ok: 
 function hintsView(request: ApprovalRequestView): Html | "" {
   if (request.hints.length === 0) return "";
   const id = `hints-${request.id}`;
-  return html`<section class="card ap-card" aria-labelledby="${id}">
-    <div class="ap-card-head"><h2 id="${id}">Hints</h2></div>
-    <p class="muted">Advice from ${request.hints.map((h) => h.adapter).join(", ")}. It can't approve or deny anything: you decide.</p>
+  return html`<section class="ap-hints" aria-labelledby="${id}">
+    <h2 id="${id}" class="ap-side-label">Hints</h2>
+    <p class="muted ap-hints-note">Advice from ${request.hints.map((h) => h.adapter).join(", ")}. It can't approve or deny anything: you decide.</p>
     ${request.hints.map(({ adapter, result }) =>
       result.status === "pending"
         ? html`<p class="muted">Hints from ${adapter} are on the way. Reload in a few seconds.</p>`
@@ -498,8 +536,9 @@ function statusNotice(request: ApprovalRequestView, now: Date): Html {
       // The header carries the expiry and the decision bar says what approving does.
       return html``;
     case "approved":
-      return notice(
+      return stateAlert(
         "ok",
+        "check",
         html`<p>
           Approved${decided ? html` by ${decided.by} at ${time(decided.at)}` : ""}. It runs once
           ${
@@ -511,24 +550,27 @@ function statusNotice(request: ApprovalRequestView, now: Date): Html {
         </p>`,
       );
     case "denied":
-      return notice(
+      return stateAlert(
         "error",
+        "x",
         html`<p>
           Denied${decided ? html` by ${decided.by} at ${time(decided.at)}` : ""}. Re-sends of
           this call return “denied” until ${time(request.expiresAt)}.
         </p>`,
       );
     case "expired":
-      return notice(
+      return stateAlert(
         "warn",
+        "clock",
         html`<p>
           Expired ${time(request.expiresAt)}. It can no longer be decided; the agent's next
           identical call starts a new request.
         </p>`,
       );
     case "executed":
-      return notice(
+      return stateAlert(
         "info",
+        "check",
         html`<p>
           Ran once${request.executedAt ? html` at ${time(request.executedAt)}` : ""}. Another
           identical call is evaluated as a new call.
@@ -584,12 +626,66 @@ function standingOptions(request: ApprovalRequestView, fieldsetId: string, locke
   </fieldset>`;
 }
 
+/**
+ * The single biggest risk in the call, as one plain line for just above the
+ * decision buttons. Built only from the stored call heel will run (never the
+ * agent's words), and null when nothing stands out.
+ */
+export function biggestRisk(request: ApprovalRequestView): string | null {
+  if (request.email !== null) {
+    const email = request.email;
+    const home = homeDomain(email.from);
+    const all = [...email.to, ...email.cc, ...email.bcc];
+    const outside = groupByDomain(all, home).filter((g) => g.outside);
+    if (outside.length > 0) {
+      const people = outside.reduce((n, g) => n + g.addresses.length, 0);
+      const domains = outside.map((g) => g.domain || "an address with no domain").join(", ");
+      return `Goes to ${people === 1 ? "1 person" : `${people} people`} outside your domain (${domains}).`;
+    }
+    if (email.bcc.length > 0) {
+      return `Also goes to ${email.bcc.length === 1 ? "1 hidden recipient" : `${email.bcc.length} hidden recipients`} (Bcc).`;
+    }
+    return null;
+  }
+  if (request.merge !== null) {
+    const base = request.merge.base;
+    if (base !== null && /^(main|master|production|prod|release)$/i.test(base)) {
+      return `Merges into ${base} in ${request.merge.repo}.`;
+    }
+    return null;
+  }
+  if (request.http) {
+    if (request.http.method.toUpperCase() === "DELETE") {
+      return `Deletes ${request.http.path} on ${request.account}.`;
+    }
+  }
+  return null;
+}
+
+/** The adapters' "check" hints, as one compact line beside the risk; the rest are in Details. */
+function checkHints(request: ApprovalRequestView): Html | "" {
+  const checks = request.hints.flatMap(({ result }) =>
+    result.status === "ok" ? result.hints.filter((h) => h.tone === "warn") : [],
+  );
+  if (checks.length === 0) return "";
+  return html`<ul class="ap-check-hints" aria-label="Hints to check">
+    ${checks.map((h) => html`<li>${badge(HINT_LABEL[h.tone], HINT_TONE[h.tone])} ${h.text}</li>`)}
+  </ul>`;
+}
+
+/**
+ * The decision: the risk line, then Deny and Approve once side by side, and
+ * "Approve for longer" as a fold for the row under them. The passkey sentence
+ * is read out with the buttons (aria-describedby) rather than shown.
+ */
 function decisionControls(
   request: ApprovalRequestView,
   pause: PauseNotice | null,
   onDecide: CeremonyCallback,
-): Html {
-  if (request.status !== "pending" && request.status !== "expired") return html``;
+): { decide: Html | ""; longer: Html | "" } {
+  if (request.status !== "pending" && request.status !== "expired") {
+    return { decide: "", longer: "" };
+  }
   // An expired request can't be decided at all (I-55). Approving in a paused
   // scope is refused (I-61); denying only tightens, so it stays open.
   const expired = request.status === "expired";
@@ -597,24 +693,35 @@ function decisionControls(
   const fieldsetId = `standing-${request.id}`;
   const helpId = `decide-help-${request.id}`;
   const binding = { approvalId: request.id, callHash: request.callHash };
+  const risk = biggestRisk(request);
   const lockNote = expired
     ? html`<p>
         <strong>This request expired, so it can't be approved or denied.</strong> The agent's
         next identical call starts a new request.
       </p>`
     : pause
-      ? html`<p>
-        <strong
-          >Approving is unavailable while ${formatPauseScope(pause.scope, pause.target)} is
-          paused.</strong
-        >
-        Resume first; you can still deny.
-      </p>`
+      ? stateAlert(
+          "warn",
+          "pause",
+          html`<p>
+            <strong
+              >Approving is unavailable while ${formatPauseScope(pause.scope, pause.target)} is
+              paused.</strong
+            >
+            Resume first; you can still deny.
+          </p>`,
+        )
       : "";
-  // DOM order is approve once, approve as standing, deny; CSS puts deny first on the bar.
-  return html`<section class="ap-decide" aria-labelledby="decide-${request.id}">
+  // DOM order is approve once, then deny; CSS puts deny first on the bar.
+  const decide = html`<section class="ap-decide" aria-labelledby="decide-${request.id}">
     <h2 id="decide-${request.id}" class="visually-hidden">Decide</h2>
     ${lockNote}
+    ${
+      risk === null || expired
+        ? ""
+        : html`<p class="ap-risk" role="note"><span class="ap-risk-icon">${trusted(ICONS.alert)}</span><span><span class="ap-risk-word">Check:</span> ${risk}</span></p>`
+    }
+    ${expired ? "" : checkHints(request)}
     <div class="ap-bar">
       ${ceremonyButton({
         callback: onDecide,
@@ -634,19 +741,18 @@ function decisionControls(
         disabled: expired,
         describedBy: helpId,
       })}
-      <p id="${helpId}" class="ap-note">
-        Every decision asks for your passkey. ${
-          request.script === null
-            ? "Nothing runs until you approve. An agent still waiting on the call carries on then; otherwise it runs when the agent sends the same call again."
-            : "Nothing runs until you approve."
-        }
-      </p>
     </div>
-    ${
-      request.origin === "org"
-        ? standingOptions(request, fieldsetId, approveLocked)
-        : html`<details class="ap-more">
-            <summary>Approve for longer</summary>
+    <p id="${helpId}" class="visually-hidden">
+      Your passkey confirms every decision. Nothing runs until you approve.
+    </p>
+    ${request.origin === "org" ? standingOptions(request, fieldsetId, approveLocked) : ""}
+  </section>`;
+  const longer =
+    request.origin === "org"
+      ? ""
+      : html`<details class="ap-more">
+          <summary><span class="fold-label">Approve for longer</span>${CHEV}</summary>
+          <div class="ap-fold-body">
             ${standingOptions(request, fieldsetId, approveLocked)}
             <div class="actions">
               ${ceremonyButton({
@@ -660,9 +766,9 @@ function decisionControls(
                 optionsFrom: fieldsetId,
               })}
             </div>
-          </details>`
-    }
-  </section>`;
+          </div>
+        </details>`;
+  return { decide, longer };
 }
 
 /**
@@ -689,76 +795,47 @@ export function approvalRequest(props: ApprovalRequestProps): Html {
         : request.http
           ? httpView(request.http, `http-${request.id}`)
           : argumentsView(request, `what-${request.id}`);
-  const windows = request.counts.map(
-    (w) =>
-      html`<li class="ap-fact">
-        <span>This ${w.per}</span><strong>${plural(w.total, "item")}</strong>
-      </li>`,
-  );
-  return html`<article class="ap" data-heel-fold-kind="${foldKind(request)}">
-    <header class="card ap-head">
+  const pending = request.status === "pending";
+  const { decide, longer } = decisionControls(request, props.pause, props.onDecide);
+  const details = fold(
+    folds,
+    "details",
+    false,
+    html`Details`,
+    html`<div class="ap-fold-body">
       <div class="ap-meta">
         <span class="ap-agent">${request.agent}</span>
         ${viaView(request)}
         <span class="muted">on ${request.account}</span>
-        <span class="muted">${request.runId === null ? "no run id" : html`run <span class="mono">${request.runId}</span>`}</span>
         <span class="muted">${formatRelative(request.createdAt, props.now)}</span>
-        ${approvalStatusBadge(request.status)}
       </div>
-      <h1 class="ap-title">
-        ${said.agent} wants to <mark>${said.action}</mark> ${said.preposition}
-        <mark>${said.place}</mark>${said.rest}
-      </h1>
-      ${reasonView(request)}
-      ${scriptView(request, props.parked ?? null, props.stopped === true, props.background === true)}
-      <ul class="ap-facts">
-        <li class="ap-fact">
-          <span>Asked by rule</span><strong>${request.rule.name ?? formatRule(request.rule)}</strong>
-        </li>
-        ${windows}
-        <li class="ap-fact">
-          <span>${request.status === "pending" ? "Expires" : "Requested"}</span>
-          <strong>${formatRelative(request.status === "pending" ? request.expiresAt : request.createdAt, props.now)}</strong>
-        </li>
-      </ul>
-    </header>
-    ${statusNotice(request, props.now)}
-    ${view}
-    ${hintsView(request)}
-    ${decisionControls(request, props.pause, props.onDecide)}
-    <section class="card ap-card ap-details" aria-label="Details">
-      ${fold(
-        folds,
-        "details",
-        false,
-        html`Rule and call details`,
-        html`<dl class="facts">
-          <dt>Agent</dt>
-          <dd>${request.agent}</dd>
-          <dt>Run</dt>
-          <dd class="mono">${request.runId ?? html`<span class="muted">none</span>`}</dd>
-          <dt>Account</dt>
-          <dd>${request.account} <span class="muted">(${request.provider})</span></dd>
-          <dt>Action</dt>
-          <dd class="mono">${request.action ?? html`<span class="muted">none</span>`}</dd>
-          <dt>Tool</dt>
-          <dd class="mono">${request.tool} <span class="muted">via ${request.surface}</span></dd>
-          <dt>Rule</dt>
-          <dd>
-            ${formatRule(request.rule)}
-            <span class="muted">(${request.origin === "org" ? "org rules" : "owner's rules"})</span>
-          </dd>
-          <dt>Counts</dt>
-          <dd>${countsView(request)}</dd>
-          <dt>Requested</dt>
-          <dd>${time(request.createdAt)}</dd>
-          <dt>Expires</dt>
-          <dd>${time(request.expiresAt)} (${formatRelative(request.expiresAt, props.now)})</dd>
-          <dt>Request</dt>
-          <dd class="mono">${request.id}</dd>
-        </dl>`,
-        "",
-      )}
+      <h3 class="ap-sub">Rule and call details</h3>
+      <dl class="facts">
+        <dt>Agent</dt>
+        <dd>${request.agent}</dd>
+        <dt>Run</dt>
+        <dd class="mono">${request.runId ?? html`<span class="muted">none</span>`}</dd>
+        <dt>Account</dt>
+        <dd>${request.account} <span class="muted">(${request.provider})</span></dd>
+        <dt>Action</dt>
+        <dd class="mono">${request.action ?? html`<span class="muted">none</span>`}</dd>
+        <dt>Tool</dt>
+        <dd class="mono">${request.tool} <span class="muted">via ${request.surface}</span></dd>
+        <dt>Rule</dt>
+        <dd>
+          ${formatRule(request.rule)}
+          <span class="muted">(${request.origin === "org" ? "org rules" : "owner's rules"})</span>
+        </dd>
+        <dt>Counts</dt>
+        <dd>${countsView(request)}</dd>
+        <dt>Requested</dt>
+        <dd>${time(request.createdAt)}</dd>
+        <dt>Expires</dt>
+        <dd>${time(request.expiresAt)} (${formatRelative(request.expiresAt, props.now)})</dd>
+        <dt>Request</dt>
+        <dd class="mono">${request.id}</dd>
+      </dl>
+      ${hintsView(request)}
       ${fold(
         folds,
         "args",
@@ -768,8 +845,36 @@ export function approvalRequest(props: ApprovalRequestProps): Html {
           <pre class="args" tabindex="0" aria-labelledby="args-${request.id}">${formatArguments(
             request.args,
           )}</pre>`,
-        "",
+        "ap-args",
       )}
-    </section>
+    </div>`,
+    "ap-details",
+  );
+  return html`<article class="ap" data-heel-fold-kind="${foldKind(request)}">
+    <nav class="ap-crumbs" aria-label="Breadcrumb">
+      <a href="/approvals">${trusted(ICONS.back)}Approvals</a>
+      <span class="muted" aria-hidden="true">/</span>
+      <span aria-current="page">Request</span>
+    </nav>
+    <div class="ap-layout">
+      <h1 class="ap-title">
+        ${said.agent} wants to <mark>${said.action}</mark> ${said.preposition}
+        <mark>${said.place}</mark>${said.rest}
+      </h1>
+      <aside class="ap-side" aria-label="Decision">
+        <p class="ap-status">
+          ${approvalStatusBadge(request.status)}
+          <span class="muted">${pending ? html`expires ${formatRelative(request.expiresAt, props.now)}` : html`requested ${formatRelative(request.createdAt, props.now)}`}</span>
+        </p>
+        ${reasonView(request)}
+        ${statusNotice(request, props.now)}
+        ${decide}
+        <div class="ap-folds">${longer}${details}</div>
+      </aside>
+      <div class="ap-main">
+        ${view}
+        ${scriptView(request, props.parked ?? null, props.stopped === true, props.background === true)}
+      </div>
+    </div>
   </article>`;
 }
