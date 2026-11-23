@@ -1571,7 +1571,7 @@ async function statusCommand(args: string[], io: CliIo): Promise<number> {
       ping.notifiedDevices === undefined
         ? "?"
         : ping.notifiedDevices === 0
-          ? "no device yet: turn on notifications on the Approvals page"
+          ? "no device yet: turn on notifications under Settings, Devices"
           : `${ping.notifiedDevices} device${ping.notifiedDevices === 1 ? "" : "s"}`
     }`,
     `  Agents:    ${agents.filter((a) => a.revokedAt === null).length}`,

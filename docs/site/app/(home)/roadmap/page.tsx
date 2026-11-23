@@ -90,7 +90,7 @@ const PHASES: Phase[] = [
     gate: 'someone who has never seen heel approves an email from their phone without asking what anything means.',
   },
   {
-    status: 'now',
+    status: 'done',
     name: 'the agent sets heel up',
     summary:
       'your agent does the configuring. nothing it proposes takes effect until you approve it with a passkey.',
@@ -163,13 +163,13 @@ const PHASES: Phase[] = [
       [
         'a web app you read at a glance',
         'every page redesigned with shadcn/ui: a home page with what needs you, a bottom tab bar on your phone, approve and deny on screen the moment a request opens, and real menus, filters and dialogs instead of walls of forms.',
-        'started',
+        'shipped',
       ],
     ],
     gate: 'on a fresh server, one prompt to an agent puts github and gmail behind heel, and all you do is tap approve.',
   },
   {
-    status: 'next',
+    status: 'now',
     name: 'launch',
     summary: 'show the whole thing working, end to end.',
     items: [
@@ -191,11 +191,16 @@ const PHASES: Phase[] = [
         'heel at work up front: your intent, three calls and what heel does with each, with the rules behind them.',
         'shipped',
       ],
+      [
+        'docs in half the words',
+        'twelve pages, one per task: get started, use heel, reference, about. the quickstart starts with the one line to give your agent, and every old link still works.',
+        'started',
+      ],
     ],
     gate: 'people set heel up on their own, without help.',
   },
   {
-    status: 'later',
+    status: 'next',
     name: 'reach',
     summary: 'fewer setup steps, and heel where agents already run.',
     items: [

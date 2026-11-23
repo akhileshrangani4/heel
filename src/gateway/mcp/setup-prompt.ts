@@ -10,7 +10,7 @@
  *   it never connects an account or writes a rule directly.
  * - `setupPrompt`: from there, the owner's services behind heel. Every
  *   connection and rule is a request or a proposal that waits for the owner.
- * - `fullSetupPrompt`: both, as one prompt. It's printed in docs/setup.md
+ * - `fullSetupPrompt`: both, as one prompt. It's printed in docs/quickstart.md
  *   and served at useheel.dev/setup.md, so "follow useheel.dev/setup.md" is
  *   all an owner has to tell an agent. A test keeps the copies the same.
  *
@@ -73,7 +73,7 @@ Rules for the whole task:
 
 3. Ask me where I'll approve from: this computer only; my phone and other devices over Tailscale (Tailscale installed and signed in here); or anywhere through a Cloudflare tunnel on a domain I have on Cloudflare (cloudflared installed and cloudflared tunnel login done here; ask me for the hostname, like heel.example.com). Don't install either yourself: if what I pick isn't there, say so and offer this computer for now. Then set heel up and start it: heel init --yes --approve-from this-computer (or --approve-from tailscale, or --approve-from cloudflare --hostname <hostname>), then heel start. If heel init stops with a problem, tell me what it says. Run heel status to check it's running.
 
-4. My passkey: run heel user enroll owner and give me the link it prints. Ask me to open it (on my phone, if I chose Tailscale or Cloudflare) and choose Create a passkey, then Turn on notifications on the page that follows. Wait until I say I'm done, then run heel status and check that Passkeys is 1 or more.
+4. My passkey: run heel user enroll owner and give me the link it prints. Ask me to open it (on my phone, if I chose Tailscale or Cloudflare) and choose Create a passkey, then turn on the notifications switch on the welcome page that follows. Wait until I say I'm done, then run heel status and check that Passkeys is 1 or more.
 
 5. Add yourself as an agent.
    - If heel runs on this computer: heel agent add <a short name for you, like claude-code> --client claude-code. heel adds itself to Claude Code for every project, and the token goes straight into Claude Code's config, so you never see it. If heel says it couldn't, run the command it prints instead. For Codex, use --client codex and run the commands it prints. For any other app, leave out --client and tell me the MCP URL to add, with the token as a bearer token.

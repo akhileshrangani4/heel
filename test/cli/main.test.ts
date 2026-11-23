@@ -439,11 +439,11 @@ describe("heel CLI", () => {
     expect(gmail.code).toBe(EXIT.ok);
     expect(gmail.stdout).toContain('Connected gmail as "gmail-work"');
     expect(gmail.stdout).toContain("providers.google");
-    expect(gmail.stdout).toContain("https://useheel.dev/docs/google-sign-in");
+    expect(gmail.stdout).toContain("https://useheel.dev/docs/connect#google-sign-in");
     expect(gmail.stdout.trimEnd().split("\n")).toHaveLength(2);
 
     const calendar = await run(["connect", "google-calendar", "--as", "cal"], { HEEL_HOME: home });
-    expect(calendar.stdout).toContain("https://useheel.dev/docs/google-sign-in");
+    expect(calendar.stdout).toContain("https://useheel.dev/docs/connect#google-sign-in");
 
     const github = await run(["connect", "github", "--as", "gh"], { HEEL_HOME: home });
     expect(github.stdout).not.toContain("providers.");

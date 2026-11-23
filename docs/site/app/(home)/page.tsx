@@ -257,7 +257,7 @@ export default function HomePage() {
                 label="copy prompt"
                 command="Set up heel for me: run curl -fsSL https://useheel.dev/setup.md and follow it"
               />
-              <Link href="/docs/setup" className={pill}>
+              <Link href="/docs/quickstart" className={pill}>
                 how it works
               </Link>
             </div>

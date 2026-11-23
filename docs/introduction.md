@@ -1,21 +1,23 @@
 # Introduction
 
-heel sits between your AI agents and the accounts they use: GitHub, Gmail, Slack, any MCP server, API or CLI. Your agent calls heel instead of the service. heel checks each call against your rules, runs it, blocks it, or asks you first. When it asks, you approve or deny from your phone with a passkey. The agent never holds your credentials.
+heel is an open-source gateway that lets your AI agents use your accounts without ever holding their keys, and asks you before anything risky runs.
+
+Your agents reach GitHub, Gmail, Slack, any MCP server, API or CLI through heel instead of directly. heel holds the credentials. For each call, your rules decide: it runs, it waits for you, or it never runs. No model decides a call. When one waits, you approve or deny it from your phone with a passkey.
 
 ![An approval request on a phone: my-agent wants to send an email to bob@vendor.com](images/approval-email.png)
 
 ## How it works
 
-1. **Connect an account once.** heel keeps the credential encrypted. Your agent never sees it.
-2. **Point your agent at heel.** It gets one MCP server with every account's tools, and a heel token instead of your keys.
-3. **Write rules, or start with the defaults.** Reads run; everything else asks you. A call no rule matches is denied.
-4. **Approve what asks.** heel shows you exactly what will happen, in plain words. Nothing runs until you approve.
+- **Connect an account once.** heel keeps the credential encrypted. Your agent only sees its name, like `github`.
+- **Point your agent at heel.** It gets one MCP server with every account's tools, and its own heel token instead of your keys.
+- **Rules decide every call.** The starter rules let reads run and make everything else ask you. A call no rule matches is denied.
+- **You approve what asks.** heel shows exactly what will run, in plain words. Nothing runs until you approve.
+
+heel is open source and runs on your own machine or server. Nothing goes through a heel cloud.
 
 ## Start here
 
-- **[Quickstart](quickstart.md):** heel running, an agent connected and your first approval, in about 10 minutes.
+- **[Quickstart](quickstart.md):** have your agent set heel up with one line, or do it by hand in about 10 minutes.
+- **[Connect accounts](connect.md):** built-in services, any MCP server, HTTP API or CLI.
 - **[Write rules](rules.md):** decide what runs on its own, what asks, and what never runs.
-- **[Approve from your phone](approvals.md):** what an approval shows you, and approving for longer.
-- **[Run heel on a server](running.md):** one heel for every machine you use.
-
-heel is open source and runs on your own machine. Nothing goes through a heel cloud.
+- **[Approve requests](approvals.md):** what a request shows you, approving from your phone, and pausing everything.
