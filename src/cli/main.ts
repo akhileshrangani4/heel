@@ -310,7 +310,7 @@ async function serveCommand(args: string[], io: CliIo): Promise<number> {
     version: HEEL_VERSION,
     watch: values.watch ?? false,
   });
-  io.stderr.write(startupBanner(config.publicUrl, heel.planes));
+  io.stderr.write(startupBanner(config.publicUrl, heel.planes, config.agentPublicUrl));
   const signal = await waitForShutdownSignal();
   log.info({ signal }, "shutting down");
   await heel.close();
@@ -350,7 +350,7 @@ async function startCommand(args: string[], io: CliIo): Promise<number> {
         [
           `heel is running in the background (pid ${outcome.pid}).`,
           `  Approve requests:   open ${config.publicUrl.origin}`,
-          `  Agents connect to:  http://${config.listen.agent.host}:${config.listen.agent.port}/mcp`,
+          `  Agents connect to:  ${agentAddress(config.agentPublicUrl, `http://${config.listen.agent.host}:${config.listen.agent.port}`)}`,
           "  Live logs:          heel logs -f",
           "  Stop:               heel stop",
           "",
@@ -441,12 +441,22 @@ async function logsCommand(args: string[], io: CliIo): Promise<number> {
 }
 
 /**
+ * Pure: the address agents add, the way `heel init` prints it: on a server
+ * that's `agent_public_url` (an agent on this machine reaches the local port
+ * anyway, but one elsewhere can't), else the local agent port.
+ */
+export function agentAddress(agentPublicUrl: URL | null, local: string): string {
+  return new URL("/mcp", agentPublicUrl ?? local).href;
+}
+
+/**
  * Pure: the plain lines `heel serve` prints once it is up, after the JSON
  * logs, so a person sees where to go without reading them.
  */
 export function startupBanner(
   publicUrl: URL,
   planes: Pick<RunningHeel["planes"], "agent" | "human">,
+  agentPublicUrl: URL | null = null,
 ): string {
   const lines = ["", "heel is running."];
   if (planes.human.state === "listening") {
@@ -455,7 +465,7 @@ export function startupBanner(
     lines.push(`  Approval page:      off (${planes.human.reason})`);
   }
   if (planes.agent.state === "listening") {
-    lines.push(`  Agents connect to:  ${new URL("/mcp", planes.agent.url).href}`);
+    lines.push(`  Agents connect to:  ${agentAddress(agentPublicUrl, planes.agent.url)}`);
   } else {
     lines.push(`  Agent port:         off (${planes.agent.reason})`);
   }
