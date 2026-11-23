@@ -145,12 +145,18 @@ describe("Gmail with heel's built-in Google client", () => {
     const script = /<script>([\s\S]*?)<\/script>/.exec(page)?.[1] ?? "";
     expect(() => new Function(script)).not.toThrow();
     const body = /const find = \(text\) => \{([\s\S]*?)\n {2}\};/.exec(page)?.[1] ?? "";
-    const find = new Function("text", body) as (text: string) => string | null;
+    // The page's own sign-in state is "s".
+    const find = new Function("state", `return (text) => {${body}}`)("s") as (
+      text: string,
+    ) => string | null;
     expect(find("http://127.0.0.1:5555/?state=s&code=1")).toBe(
       "http://127.0.0.1:5555/?state=s&code=1",
     );
     expect(find("\u200e127.0.0.1:5555/?state=s&code=1\n")).toBe("127.0.0.1:5555/?state=s&code=1");
     expect(find("https://evil.example/?state=s")).toBeNull();
+    expect(find("old 127.0.0.1:1/?state=x&code=0 new 127.0.0.1:2/?state=s&code=1")).toBe(
+      "127.0.0.1:2/?state=s&code=1",
+    );
   });
 
   it("takes a pasted address that lost its http://", async () => {

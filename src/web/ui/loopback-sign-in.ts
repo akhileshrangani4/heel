@@ -31,11 +31,10 @@ const PASTE_SCRIPT = `
   // The loopback address anywhere in what was copied: some browsers add
   // invisible marks or drop the scheme.
   const find = (text) => {
-    const match = /(https?:\\/\\/)?(127\\.0\\.0\\.1|localhost):\\d+\\/?\\?[^\\s"'<>]*/i.exec(text);
-    return match ? match[0] : null;
+    const all = text.match(/(https?:\\/\\/)?(127\\.0\\.0\\.1|localhost):\\d+\\/?\\?[^\\s"'<>]*/gi) || [];
+    return all.find((address) => address.includes("state=" + state)) || all[0] || null;
   };
-  const manual = (message, value) => {
-    if (value) input.value = value;
+  const manual = (message) => {
     note.textContent = message;
     input.focus();
   };
