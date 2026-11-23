@@ -103,7 +103,7 @@ export function loopbackSignInPage(props: LoopbackSignInProps): Html {
             <code>http://127.0.0.1</code>).
           </p>
           <p class="muted">
-            If heel runs on this device, the Google tab shows Connections instead, and you're done.
+            If heel runs on this device (not in Docker), the Google tab shows Connections instead, and you're done.
           </p>
         </li>
         <li>
