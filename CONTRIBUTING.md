@@ -25,11 +25,16 @@ pnpm test:e2e        # end-to-end, including the incident replays
 pnpm test:invariants
 pnpm db:drift        # migrations match the schema (after a schema change: pnpm db:generate)
 pnpm schema:drift    # the rules JSON Schema matches the Zod schema
+pnpm ui-css:drift    # the committed web UI stylesheet matches scripts/ui/tailwind.css
+pnpm test:browser    # the approval page in a real browser
 pnpm package:smoke   # the npm package installs and serves
 ```
 
 - **The docs site:** it's in [`docs/site`](docs/site/README.md) and builds from the README and `docs/*.md`.
 - **The rules reference:** every example in [`docs/rules-reference.md`](docs/rules-reference.md) is run by `pnpm test`, and its built-in service tables come from the definitions. After changing a built-in tool, run `pnpm gen:rules-reference` (and update its entry in `scripts/lib/rules-reference.ts` if the test asks).
+- **The setup prompt:** the prompt an agent reads at useheel.dev/setup.md lives in `src/gateway/mcp/setup-prompt.ts`, and `docs/quickstart.md` prints it whole under "The prompt". Change the code, then paste it into the quickstart; `pnpm test` fails until they match.
+- **The web UI:** pages are server-rendered HTML in `src/web/ui/`, styled with shadcn/ui's Tailwind classes (`src/web/ui/shadcn/`) and no React. After changing a class or `scripts/ui/tailwind.css`, run `pnpm gen:ui-css`. `pnpm ui:preview` serves every page and state with fixture data at desktop and phone sizes.
+- **Screenshots:** after a UI change, run `pnpm docs:screenshots` to regenerate `docs/images/`, and update the README phones in `assets/readme/` too.
 
 ## PR titles
 

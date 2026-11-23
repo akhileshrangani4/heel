@@ -9,7 +9,7 @@ npm run dev      # http://localhost:3000
 npm run build
 ```
 
-- **Order and titles:** the sidebar order is `PAGES` in `scripts/sync.mjs`. Each page's title is its H1, and its description is its first sentence.
+- **Order and titles:** the sidebar's groups and their pages are `GROUPS` in `scripts/sync.mjs`. Each page's title is its H1, and its description is its first sentence.
 - **Links:** links between docs stay links between pages. Links to other repo files go to GitHub.
 - **Not published:** `docs/design/` and `docs/research/` stay in the repo.
 - **CI:** the `docs site builds` job builds the site on every PR.
