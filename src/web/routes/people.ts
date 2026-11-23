@@ -115,7 +115,7 @@ export function peopleRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       if (!admin) return { problem: "Only an admin makes passkey links." };
       const person = personNamed(stringField(body, "name") ?? "");
       if (person === null || person.disabledAt !== null) return { problem: "No such person." };
-      // Your own other device: "Add another device" on the Approvals page, which works at once.
+      // Your own other device: "Add a device" under Settings, Devices, which works at once.
       if (person.id === session.userId) {
         return { problem: "For a device of your own, use Add another device on Approvals." };
       }
