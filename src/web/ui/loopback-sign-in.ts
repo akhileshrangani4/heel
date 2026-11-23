@@ -45,7 +45,8 @@ const PASTE_SCRIPT = `
       return;
     }
     input.value = text;
-    form.requestSubmit();
+    // Older Safari has no requestSubmit; the box is filled, so submit() is safe.
+    if (form.requestSubmit) form.requestSubmit(); else form.submit();
   });
 })();
 `;
@@ -100,6 +101,9 @@ export function loopbackSignInPage(props: LoopbackSignInProps): Html {
             Google ends on a page that won't load. That's expected: heel runs on another machine.
             On that page, tap the address bar and copy the whole address (it starts
             <code>http://127.0.0.1</code>).
+          </p>
+          <p class="muted">
+            If heel runs on this device, the Google tab shows Connections instead, and you're done.
           </p>
         </li>
         <li>
