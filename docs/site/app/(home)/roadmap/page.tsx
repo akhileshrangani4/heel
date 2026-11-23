@@ -90,7 +90,7 @@ const PHASES: Phase[] = [
     gate: 'someone who has never seen heel approves an email from their phone without asking what anything means.',
   },
   {
-    status: 'now',
+    status: 'done',
     name: 'the agent sets heel up',
     summary:
       'your agent does the configuring. nothing it proposes takes effect until you approve it with a passkey.',
@@ -169,7 +169,7 @@ const PHASES: Phase[] = [
     gate: 'on a fresh server, one prompt to an agent puts github and gmail behind heel, and all you do is tap approve.',
   },
   {
-    status: 'next',
+    status: 'now',
     name: 'launch',
     summary: 'show the whole thing working, end to end.',
     items: [
@@ -200,7 +200,7 @@ const PHASES: Phase[] = [
     gate: 'people set heel up on their own, without help.',
   },
   {
-    status: 'later',
+    status: 'next',
     name: 'reach',
     summary: 'fewer setup steps, and heel where agents already run.',
     items: [
