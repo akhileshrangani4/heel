@@ -32,7 +32,7 @@ Tell your agent (Claude Code, Codex or any coding agent):
 Set up heel for me: run curl -fsSL https://useheel.dev/setup.md and follow it
 ```
 
-It installs heel, connects itself and puts your services behind heel. You make a passkey and approve each connection and rule ([Set up heel with one prompt](docs/setup.md)).
+It installs heel, connects itself and puts your services behind heel. You make a passkey and approve each connection and rule ([Quickstart](docs/quickstart.md)).
 
 To teach your agent how to work through heel (approvals, denials, asking for a connection), add the skill:
 
@@ -81,7 +81,7 @@ The first rule that matches decides, and a call no rule matches is denied. Rules
 
 ## What heel won't do
 
-- **Rules decide every call, not a model.** Allow, deny and ask come from your rules, grants and people. Whoever shapes a call (say, an injected instruction in an email) could shape a model judging it too. A model is involved in two places, and neither can let a call through: `looks_like` can only hide a message (and hides it when unsure), and the optional [hints](docs/hints.md) are advice on the approval page.
+- **Rules decide every call, not a model.** Allow, deny and ask come from your rules, grants and people. Whoever shapes a call (say, an injected instruction in an email) could shape a model judging it too. A model is involved in two places, and neither can let a call through: `looks_like` can only hide a message (and hides it when unsure), and the optional [hints](docs/approvals.md#hints) are advice on the approval page.
 - **Checking calls doesn't stop every prompt injection.** When each call in an attack is allowed, nothing gets blocked. heel narrows where data can go and what an agent can destroy.
 - **heel must hold every credential.** A token you also gave the agent directly goes around it.
 - **An agent that can read heel's files isn't controlled by it.** Run heel where your agents can't reach its files: on another machine, as its own user, or in Docker.
@@ -91,10 +91,10 @@ The first rule that matches decides, and a call no rule matches is denied. Rules
 
 The docs are at **[useheel.dev](https://useheel.dev/docs)**, and in [`docs/`](docs).
 
-- **Get started:** [Quickstart](docs/quickstart.md)
-- **Guides:** [Connect accounts](docs/connect.md) · [Connect your agent](docs/agents.md) · [Rules](docs/rules.md) · [Approvals](docs/approvals.md) · [heel run](docs/heel-run.md) · [Google sign-in](docs/google-sign-in.md) · [Running heel](docs/running.md)
-- **Concepts:** [How it works](docs/how-it-works.md) · [Why heel](docs/why.md) · [How it compares](docs/comparison.md) · [Incidents](docs/incidents.md)
-- **Reference:** [CLI](docs/cli.md) · [Configuration](docs/configuration.md) · [Rules reference](docs/rules-reference.md) · [Built-in services](docs/definitions.md) · [Hints](docs/hints.md)
+- **Get started:** [Introduction](docs/introduction.md) · [Quickstart](docs/quickstart.md)
+- **Use heel:** [Connect accounts](docs/connect.md) · [Connect your agent](docs/agents.md) · [Write rules](docs/rules.md) · [Approve requests](docs/approvals.md) · [Run heel on a server](docs/running.md)
+- **Reference:** [Rules reference](docs/rules-reference.md) · [CLI](docs/cli.md) · [Configuration](docs/configuration.md) · [Security](docs/security.md)
+- **About:** [Why heel](docs/why.md)
 
 Working on heel itself? See [CONTRIBUTING.md](CONTRIBUTING.md).
 

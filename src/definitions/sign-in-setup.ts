@@ -22,7 +22,7 @@ export interface SignInSetup {
 const GOOGLE: SignInSetup = {
   label: "Google",
   configKey: "providers.google",
-  docsUrl: `${DOCS_URL}/google-sign-in`,
+  docsUrl: `${DOCS_URL}/connect#google-sign-in`,
 };
 
 const MICROSOFT: SignInSetup = {

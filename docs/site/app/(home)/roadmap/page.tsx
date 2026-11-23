@@ -163,7 +163,7 @@ const PHASES: Phase[] = [
       [
         'a web app you read at a glance',
         'every page redesigned with shadcn/ui: a home page with what needs you, a bottom tab bar on your phone, approve and deny on screen the moment a request opens, and real menus, filters and dialogs instead of walls of forms.',
-        'started',
+        'shipped',
       ],
     ],
     gate: 'on a fresh server, one prompt to an agent puts github and gmail behind heel, and all you do is tap approve.',

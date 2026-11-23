@@ -1,10 +1,8 @@
 # Configuration
 
-[README](../README.md) · [Quickstart](quickstart.md) · [Connect accounts](connect.md) · [Connect your agent](agents.md) · [Rules](rules.md) · [Approvals](approvals.md) · [Running](running.md)
+Every `heel.yaml` key, where rules files live, and what heel prints when it starts.
 
-heel keeps everything in one folder, `HEEL_HOME`: its config, master key, database, rules and admin socket.
-
-Without `HEEL_HOME`, every `heel` command uses `/var/lib/heel` if it exists (a server install running as its own user, with the admin socket at `/run/heel/admin.sock`), and `~/.heel` otherwise, which is where `heel init` puts it. So on your own machine `heel serve` and a `heel connect` in another terminal find each other with nothing to set. Use another folder and you need `HEEL_HOME` in every shell.
+heel keeps everything in one folder, `HEEL_HOME`: config, master key, database, rules and admin socket. Without `HEEL_HOME`, `heel` uses `/var/lib/heel` if it exists (a server install as its own user, admin socket at `/run/heel/admin.sock`), otherwise `~/.heel`, where `heel init` puts it. If you use another folder, set `HEEL_HOME` in every shell.
 
 ## heel.yaml
 
@@ -12,19 +10,19 @@ heel reads `$HEEL_HOME/heel.yaml`, or the file named by `HEEL_CONFIG` or `--conf
 
 | Key | Default | What it's for |
 | --- | --- | --- |
-| `public_url` | `http://localhost:` + the `listen.human` port (`7301`) | The approval page's address. Its host becomes the passkey domain, so it must be `https://` anywhere but localhost. Links in notifications use it. Left unset, it follows `listen.human`, so moving the approval page to another port moves its links too. A localhost `public_url` on a different port from `listen.human` gets a `public_url_port` warning at startup, since links and passkey sign-in would go to the wrong port. |
+| `public_url` | `http://localhost:` + the `listen.human` port (`7301`) | The approval page's address, used in links and as the passkey domain, so it must be `https://` anywhere but localhost. Unset, it follows `listen.human`. A localhost `public_url` on another port than `listen.human` gets a `public_url_port` warning. |
 | `listen.agent`, `listen.human` | `127.0.0.1:7300`, `127.0.0.1:7301` | Where each plane listens. Use `0.0.0.0:<port>` in a container. |
 | `admin_socket` | `$HEEL_HOME/admin.sock` | The admin socket's path. |
 | `vault.key_file` | `master.key` | The master key file. `HEEL_MASTER_KEY` takes precedence. |
 | `database` | `heel.db` | The SQLite database. |
-| `providers.google`, `providers.microsoft` | none | Your OAuth clients, needed to sign in Gmail, Calendar and Outlook accounts. Each takes a `client_id`. The secret comes from `HEEL_GOOGLE_CLIENT_SECRET` (`HEEL_MICROSOFT_CLIENT_SECRET`) or the `client_secret_file`, `google-client-secret` (`microsoft-client-secret`) by default. Their redirect URIs are `public_url` + `/oauth/google/callback` and `/oauth/microsoft/callback`. Step by step for Google: [Set up Google sign-in for heel](google-sign-in.md). |
+| `providers.google`, `providers.microsoft` | none | Your OAuth clients, needed to sign in Gmail, Calendar and Outlook accounts. Each takes a `client_id`. The secret comes from `HEEL_GOOGLE_CLIENT_SECRET` (`HEEL_MICROSOFT_CLIENT_SECRET`) or the `client_secret_file`, `google-client-secret` (`microsoft-client-secret`) by default. Their redirect URIs are `public_url` + `/oauth/google/callback` and `/oauth/microsoft/callback`. Step by step: [Google sign-in](connect.md#google-sign-in). |
 | `agent_public_url` | none | Where cloud agents (Claude, ChatGPT and Grok connectors) reach the agent plane. Setting it turns on OAuth for them. |
 | `oidc` | none | Sign-in through your identity provider, for teams. |
 | `notify` | web push | Where approval requests are sent: web push, email, Slack. |
-| `adapters.approval` | none | Approval adapters that add hints to the approval page; `jev` sends pending calls to TypeSafe. See [Hints](approvals.md#hints). |
-| `sandboxes.per_agent`, `sandboxes.total` | `4`; one per GiB of memory less one, from 2 to 16 | How many code-mode scripts and `heel run` commands may run at once, for one agent and for all of them. Each runs in its own sandbox, whose processes may each use up to 1 GiB, so without a limit one agent could take the host's memory. Over either limit, heel answers `busy` at once and runs nothing; the agent sends it again later. A running local MCP server counts towards `total` too, without ever being refused, so with two local servers running, two fewer scripts or commands fit. |
+| `adapters.approval` | none | Approval adapters that add hints to the approval page; `jev` sends pending calls to TypeSafe. See [hints](approvals.md#hints). |
+| `sandboxes.per_agent`, `sandboxes.total` | `4`; one per GiB of memory less one, from 2 to 16 | How many code-mode scripts and `heel run` commands may run at once, per agent and in total (each sandbox's processes may use up to 1 GiB). Over a limit, heel answers `busy` and runs nothing. Running local MCP servers count towards `total` but are never refused. |
 | `tunnel.cloudflare.config` | none | A `cloudflared` config file, relative to heel's home, that heel runs a tunnel with (`cloudflared tunnel --config <file> run`) alongside itself, restarting it if it stops. `heel init --approve-from cloudflare` writes it and sets this. |
-| `learning.decisions`, `learning.days`, `learning.enabled` | `5`, `2`, `true` | When to suggest a rule from what you decide. After you approve the same kind of request `decisions` times, on at least `days` different days (UTC) in the last 30, heel suggests a rule on Approvals and Activity that would allow it for that agent; denials work the same way for deny rules. A suggestion is only a draft: you read it and add it with your passkey. `decisions` is at least 2. `enabled: false` turns suggestions off. |
+| `learning.decisions`, `learning.days`, `learning.enabled` | `5`, `2`, `true` | When heel suggests a rule: after `decisions` approvals (or denials) of the same kind on at least `days` different days (UTC) in the last 30. `decisions` is at least 2; `enabled: false` turns suggestions off. See [write rules](rules.md#heel-suggests-rules-from-what-you-decide). |
 | `log.level` | `info` | `debug`, `info`, `warn` or `error`. |
 
 [`examples/heel.yaml`](../examples/heel.yaml) is a commented starting point.
@@ -35,7 +33,7 @@ Rules live in `$HEEL_HOME/rules/<user>.yaml`, one file per user. A single-user i
 
 - `heel rules check` validates them.
 - `heel rules test` runs cases against them: see [Testing rules](rules-reference.md#testing-rules).
-- [`examples/rules/owner.yaml`](../examples/rules/owner.yaml) holds the examples from [rules.md](rules.md).
+- [`examples/rules/owner.yaml`](../examples/rules/owner.yaml) holds the examples from [write rules](rules.md).
 - With no rules files, every call is denied. heel logs a `no_rules` warning at startup when that's the case (see `heel logs`).
 
 ## What heel prints when it starts

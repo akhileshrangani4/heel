@@ -1,8 +1,8 @@
 # CLI
 
-[README](../README.md) · [Quickstart](quickstart.md) · [Connect accounts](connect.md) · [Connect your agent](agents.md) · [Rules](rules.md) · [Approvals](approvals.md) · [Running](running.md)
+Every `heel` command you'll use day to day, what `heel status` and `heel tui` show, and exit codes.
 
-The `heel` command sets heel up and runs it. Except for `heel run`, it works on the machine heel runs on, through a local admin socket. `heel help` lists every command; `heel <command> --help` shows one.
+The CLI works on the machine heel runs on, through a local admin socket (except `heel run`, which agents use). `heel help` lists every command; `heel <command> --help` shows one.
 
 ## Everyday commands
 
@@ -17,17 +17,17 @@ The `heel` command sets heel up and runs it. Except for `heel run`, it works on 
 | See what's going on | `heel status` |
 | Watch it live | `heel tui` |
 | Create your passkey | `heel user enroll owner` |
-| Add a person (no sign-in provider) | `heel user add <name>`, then `heel user enroll <name>` for their passkey link (or the **People** page) |
+| Add a person (no sign-in provider) | `heel user add <name>`, then `heel user enroll <name>` for their passkey link (or **Settings**, **People**) |
 | Connect an account | `heel connect <service> --as <alias>` ([all of them](connect.md)) |
 | Add an agent | `heel agent add <name>` |
 | New token for an agent | `heel agent rotate <name>` |
 | Stop calls at once | `heel pause --all`, `--agent <name>` or `--account <alias>` |
 | Check your rules | `heel rules check` |
 | Test your rules | `heel rules test cases.yaml` ([how](rules-reference.md#testing-rules)) |
-| Run a CLI through heel (agent side) | `heel run -- gh pr list -R acme/web` ([how](heel-run.md)) |
+| Run a CLI through heel (agent side) | `heel run -- gh pr list -R acme/web` ([how](connect.md)) |
 | Update heel | `heel update` (`--check` to only look) ([how](running.md#upgrading)) |
 
-Resuming after a pause needs your passkey, so it happens on the **Pause** page, not in the CLI.
+Resuming after a pause needs your passkey, so it happens in the web app (**Settings**, **Pause**), not in the CLI.
 
 ## heel status
 
@@ -46,7 +46,7 @@ heel 0.2.0 is running.
       http://localhost:7301/requests/req_…
 ```
 
-Rules your agents propose and connections they ask for are listed under **Requests** in `heel tui` too. Enter opens the page, where you decide with your passkey.
+`heel tui` lists the same under **Requests**; Enter opens the page, where you decide with your passkey.
 
 ## heel tui
 
@@ -84,4 +84,4 @@ Add `--json` for every field, ids included, for scripts.
 | 69 | heel isn't running. |
 | 78 | `heel.yaml`, or a file it names, is missing or invalid. |
 
-`heel run` has its own: 75 needs approval, 77 denied, 69 paused, 70 heel couldn't run it. See [heel run](heel-run.md#troubleshooting).
+`heel run` has its own: 75 needs approval, 77 denied, 69 paused, 70 heel couldn't run it. See [connect accounts](connect.md).

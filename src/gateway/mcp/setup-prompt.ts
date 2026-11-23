@@ -10,7 +10,7 @@
  *   it never connects an account or writes a rule directly.
  * - `setupPrompt`: from there, the owner's services behind heel. Every
  *   connection and rule is a request or a proposal that waits for the owner.
- * - `fullSetupPrompt`: both, as one prompt. It's printed in docs/setup.md
+ * - `fullSetupPrompt`: both, as one prompt. It's printed in docs/quickstart.md
  *   and served at useheel.dev/setup.md, so "follow useheel.dev/setup.md" is
  *   all an owner has to tell an agent. A test keeps the copies the same.
  *

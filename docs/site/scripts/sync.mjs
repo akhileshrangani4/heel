@@ -27,40 +27,30 @@ const GROUPS = [
     [
       ["index", "introduction.md"],
       ["quickstart", "quickstart.md"],
-      ["setup", "setup.md"],
     ],
   ],
   [
-    "Guides",
+    "Use heel",
     [
       ["connect", "connect.md"],
       ["agents", "agents.md"],
       ["rules", "rules.md"],
       ["approvals", "approvals.md"],
-      ["heel-run", "heel-run.md"],
-      ["google-sign-in", "google-sign-in.md"],
       ["running", "running.md"],
-      ["incidents", "incidents.md"],
-    ],
-  ],
-  [
-    "Concepts",
-    [
-      ["how-it-works", "how-it-works.md"],
-      ["why", "why.md"],
-      ["comparison", "comparison.md"],
     ],
   ],
   [
     "Reference",
     [
+      ["rules-reference", "rules-reference.md"],
       ["cli", "cli.md"],
       ["configuration", "configuration.md"],
-      ["sandbox", "sandbox.md"],
-      ["rules-reference", "rules-reference.md"],
-      ["definitions", "definitions.md"],
-      ["hints", "hints.md"],
+      ["security", "security.md"],
     ],
+  ],
+  [
+    "About",
+    [["why", "why.md"]],
   ],
 ];
 const PAGES = GROUPS.flatMap(([, pages]) => pages);

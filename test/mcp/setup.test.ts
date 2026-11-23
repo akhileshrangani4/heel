@@ -8,7 +8,7 @@ import { mcpHarness } from "../helpers/mcp.ts";
 
 /**
  * The setup prompt (roadmap 2.6): served as an MCP prompt, printed in
- * docs/setup.md, and backed by heel_accounts, which shows an agent what's
+ * docs/quickstart.md, and backed by heel_accounts, which shows an agent what's
  * behind heel and what it asked for, by name only.
  */
 
@@ -44,8 +44,8 @@ describe("the setup prompt", () => {
     );
   });
 
-  it("is printed in docs/setup.md whole, install first, so one line to an agent sets heel up", () => {
-    const doc = readFileSync(new URL("../../docs/setup.md", import.meta.url), "utf8");
+  it("is printed in docs/quickstart.md whole, install first, so one line to an agent sets heel up", () => {
+    const doc = readFileSync(new URL("../../docs/quickstart.md", import.meta.url), "utf8");
     expect(doc).toContain(`\`\`\`text\n${fullSetupPrompt(null)}\n\`\`\``);
     expect(doc).toContain(
       "Set up heel for me: run curl -fsSL https://useheel.dev/setup.md and follow it",

@@ -18,7 +18,7 @@ export default function proxy(request: NextRequest) {
   }
   // A person who types useheel.dev/setup gets the page about it.
   if (pathname === '/setup') {
-    return NextResponse.redirect(new URL('/docs/setup', request.nextUrl), {
+    return NextResponse.redirect(new URL('/docs/quickstart', request.nextUrl), {
       headers: { Vary: 'Accept' },
     });
   }
