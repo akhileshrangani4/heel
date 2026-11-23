@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { builtInGoogleClient } from "../../../src/definitions/google/builtin.ts";
 import { findAccount } from "../../../src/store/directory.ts";
 import { connectAccount } from "../../../src/vault/connect.ts";
+import { loopbackSignInPage } from "../../../src/web/ui/loopback-sign-in.ts";
 import { FakeGoogle, TEST_GOOGLE_CLIENT } from "../../helpers/fake-google.ts";
 import { humanPlaneHarness } from "../../helpers/human-plane.ts";
 
@@ -109,6 +110,71 @@ describe("Gmail with heel's built-in Google client", () => {
     const landed = await h.fetch(next, { as: owner });
     expect(landed.headers.get("location")).toContain("connected=1");
     expect(account(h)?.status).toBe("active");
+  });
+
+  it("on a server: leads with copying the address back, with a paste-and-finish button", async () => {
+    const { h } = setUp();
+    const owner = await h.signIn(await h.enroll());
+    const { text } = await start(h, owner);
+    expect(text).toContain("heel runs on another machine");
+    expect(text).toContain('id="paste-finish"');
+    expect(text).not.toContain("On the computer heel runs on");
+    const local = String(
+      loopbackSignInPage({
+        alias: "gmail-home",
+        google: "https://accounts.google.com/o/oauth2/v2/auth",
+        paste: { action: "/connections/google/paste", csrfToken: "t" },
+        state: "s",
+        remote: false,
+      }),
+    );
+    expect(local).toContain("On the computer heel runs on");
+    expect(local).toContain('id="paste-finish"');
+  });
+
+  it("Paste and finish finds the address in what was copied, scheme or not", () => {
+    const page = String(
+      loopbackSignInPage({
+        alias: "gmail-home",
+        google: "https://accounts.google.com/o/oauth2/v2/auth",
+        paste: { action: "/connections/google/paste", csrfToken: "t" },
+        state: "s",
+        remote: true,
+      }),
+    );
+    const script = /<script>([\s\S]*?)<\/script>/.exec(page)?.[1] ?? "";
+    expect(() => new Function(script)).not.toThrow();
+    const body = /const find = \(text\) => \{([\s\S]*?)\n {2}\};/.exec(page)?.[1] ?? "";
+    // The page's own sign-in state is "s".
+    const find = new Function("state", `return (text) => {${body}}`)("s") as (
+      text: string,
+    ) => string | null;
+    expect(find("http://127.0.0.1:5555/?state=s&code=1")).toBe(
+      "http://127.0.0.1:5555/?state=s&code=1",
+    );
+    expect(find("\u200e127.0.0.1:5555/?state=s&code=1\n")).toBe("127.0.0.1:5555/?state=s&code=1");
+    expect(find("https://evil.example/?state=s")).toBeNull();
+    expect(find("old 127.0.0.1:1/?state=x&code=0 new 127.0.0.1:2/?state=s&code=1")).toBe(
+      "127.0.0.1:2/?state=s&code=1",
+    );
+  });
+
+  it("takes a pasted address that lost its http://", async () => {
+    const { h, google } = setUp();
+    const owner = await h.signIn(await h.enroll());
+    const { google: authorize, state } = await start(h, owner);
+    const callback = google
+      .consent(authorize)
+      .toString()
+      .replace(/^http:\/\//, "");
+    const pasted = await h.fetch("/connections/google/paste", {
+      as: owner,
+      ...form({ csrf: owner.csrf, state, address: ` ${callback} ` }),
+    });
+    const next = pasted.headers.get("location") ?? "";
+    expect(next.startsWith("/connections/google/return?")).toBe(true);
+    const landed = await h.fetch(next, { as: owner });
+    expect(landed.headers.get("location")).toContain("connected=1");
   });
 
   it("refuses a pasted address for another listener, and from someone else", async () => {

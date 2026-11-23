@@ -11,7 +11,7 @@ Gmail and Google Calendar accounts sign in with Google from heel's **Connections
 3. Sign in with the Google account and allow what heel asks for ([why each permission](#what-heel-asks-google-for-and-why)).
    - **Google may say it hasn't verified heel yet.** Select **Advanced**, then **Go to heel**. Your data still goes only to your own heel.
 4. **On the computer heel runs on,** you land back on Connections with the account connected.
-   **On another device, or with heel in Docker,** Google's last page won't load: its address starts with `http://127.0.0.1`. Copy that address from the address bar, paste it into the box on heel's sign-in page, and select **Finish signing in**.
+   **With heel on a server, on another device, or in Docker,** Google's last page won't load: its address starts with `http://127.0.0.1`. That's expected. Copy that address from the address bar (on a phone, tap the address bar, then Copy), go back to heel's tab and select **Paste and finish**. If your browser won't let heel read what you copied, paste it into the box below the button and select **Finish signing in**.
 
 Google sends you back to an address on heel's own machine, so this works without `public_url` or an HTTPS address. Each sign-in is protected by PKCE and works once, for the person who started it.
 

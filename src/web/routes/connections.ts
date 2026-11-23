@@ -1,7 +1,11 @@
 import { randomBytes } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
 import { Hono } from "hono";
-import { GOOGLE_CALLBACK_PATH, MICROSOFT_CALLBACK_PATH } from "../../config/schema.ts";
+import {
+  GOOGLE_CALLBACK_PATH,
+  isLoopbackUrl,
+  MICROSOFT_CALLBACK_PATH,
+} from "../../config/schema.ts";
 import { CALENDAR_PROFILE, GMAIL_PROFILE, googleSignIn } from "../../definitions/google/oauth.ts";
 import { upstreamSettings } from "../../definitions/mcp/settings.ts";
 import {
@@ -107,6 +111,20 @@ function outcomeFrom(
   const failure = query["failed"] === undefined ? null : failures.get(query["failed"]);
   if (failure !== null) return { kind: "failed", alias: failure.alias, message: failure.message };
   return { kind: "none" };
+}
+
+/** Why a pasted Google address was refused, for the log; never the address itself. */
+function pasteRefusal(
+  pending: { userId: string } | null,
+  userId: string,
+  pasted: URL | null,
+  state: string,
+): string {
+  if (pending === null) return "no such sign-in, or it expired";
+  if (pending.userId !== userId) return "another person's sign-in";
+  if (pasted === null) return "not an address";
+  if (pasted.searchParams.get("state") !== state) return "another sign-in's address";
+  return "not this sign-in's listener";
 }
 
 function back(params: Record<string, string>): string {
@@ -227,6 +245,7 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
           google: url.toString(),
           paste: { action: GOOGLE_PASTE_PATH, csrfToken: session.csrfToken },
           state,
+          remote: !isLoopbackUrl(deps.publicUrl),
         }),
       });
     }
@@ -316,7 +335,9 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
   app.post(GOOGLE_PASTE_PATH, signedIn, requireCsrfField(), async (c) => {
     const session = c.get("session");
     const state = (await formField(c, "state")) ?? "";
-    const address = ((await formField(c, "address")) ?? "").trim();
+    const typed = ((await formField(c, "address")) ?? "").trim();
+    // Some browsers copy the address without its scheme.
+    const address = /^https?:\/\//i.test(typed) ? typed : `http://${typed}`;
     const pending = oauth?.signIns.get(state, deps.now()) ?? null;
     const pasted = URL.parse(address);
     const ownListener =
@@ -328,6 +349,9 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       pasted.pathname === "/" &&
       pasted.searchParams.get("state") === state;
     if (!ownListener || pasted === null) {
+      // Why, without the address itself (it carries the sign-in code).
+      const reason = pasteRefusal(pending, session.userId, pasted, state);
+      deps.log.info({ by: session.userId, reason }, "Google sign-in paste refused");
       return c.redirect(
         back({
           failed: failures.add(
