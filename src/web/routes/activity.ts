@@ -18,6 +18,7 @@ import {
 } from "../http.ts";
 import type { SessionView } from "../sessions.ts";
 import { ACTIVITY_SCRIPT, activityPage, activityRow, agentsPage } from "../ui/activity-page.ts";
+import { clientScript } from "../ui/client.ts";
 import { toHtmlString } from "../ui/html.ts";
 import { suggestionCards } from "../ui/suggestions.ts";
 import { suggestionsOf } from "./suggestions.ts";
@@ -100,6 +101,7 @@ export function activityRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     return renderPage(c, {
       title: "Agents",
       viewer: viewerOf(session),
+      script: clientScript(session.csrfToken),
       current: "agents",
       body: agentsPage({
         agents: list,

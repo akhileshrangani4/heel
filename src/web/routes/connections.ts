@@ -33,6 +33,7 @@ import {
   viewerOf,
 } from "../http.ts";
 import { LoopbackRedirects } from "../loopback.ts";
+import { clientScript } from "../ui/client.ts";
 import { type ConnectionsOutcome, connectionsPage } from "../ui/connections.ts";
 import { loopbackSignInPage } from "../ui/loopback-sign-in.ts";
 
@@ -168,6 +169,7 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     return renderPage(c, {
       title: "Connections",
       viewer: viewerOf(session),
+      script: clientScript(session.csrfToken),
       current: "connections",
       body: connectionsPage({
         rows,
