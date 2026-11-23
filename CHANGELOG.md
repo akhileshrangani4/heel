@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.2.11](https://github.com/akhileshrangani4/heel/compare/v0.2.10...v0.2.11) (2026-11-23)
+
+
+### Features
+
+* **web:** redesign every page with shadcn/ui, a Home dashboard and a phone tab bar ([#224](https://github.com/akhileshrangani4/heel/issues/224)) ([983f3b0](https://github.com/akhileshrangani4/heel/commit/983f3b046f1abe08bea7c6e78afb74061a5f5b95))
+
+
+### Documentation
+
+* 21 pages become 12, task-first and about half the words ([#226](https://github.com/akhileshrangani4/heel/issues/226)) ([45f4642](https://github.com/akhileshrangani4/heel/commit/45f4642a85c63677e6ca9c1d79944b789302354d))
+* AGENTS.md and CLAUDE.md for agents working on heel ([#228](https://github.com/akhileshrangani4/heel/issues/228)) ([70f98be](https://github.com/akhileshrangani4/heel/commit/70f98be21f26fc57a1a6357cd2d2f93d7cfa4264))
+* CONTRIBUTING and the site roadmap follow the redesign and docs consolidation ([#227](https://github.com/akhileshrangani4/heel/issues/227)) ([3e2362a](https://github.com/akhileshrangani4/heel/commit/3e2362a20cd91ee08d4ec93eb7ad46b1bb40531d))
+
 ## [0.2.10](https://github.com/akhileshrangani4/heel/compare/v0.2.9...v0.2.10) (2026-11-23)
 
 
