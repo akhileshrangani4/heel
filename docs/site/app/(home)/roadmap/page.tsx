@@ -194,7 +194,7 @@ const PHASES: Phase[] = [
       [
         'docs in half the words',
         'twelve pages, one per task: get started, use heel, reference, about. the quickstart starts with the one line to give your agent, and every old link still works.',
-        'started',
+        'shipped',
       ],
     ],
     gate: 'people set heel up on their own, without help.',
