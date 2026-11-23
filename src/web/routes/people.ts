@@ -17,6 +17,7 @@ import {
 } from "../http.ts";
 import { createEnrollment, EnrollmentError } from "../passkeys.ts";
 import type { SessionView } from "../sessions.ts";
+import { typedName } from "../typed-name.ts";
 import { clientScript } from "../ui/client.ts";
 import { type PeopleLink, peoplePage, personLinkPage } from "../ui/people.ts";
 
@@ -102,7 +103,7 @@ export function peopleRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     if (op === "add") {
       if (!admin) return { problem: "Only an admin adds people." };
       if (teamSignIn) return { problem: "People join this heel by signing in." };
-      const name = (stringField(body, "name") ?? "").trim();
+      const name = typedName(stringField(body, "name") ?? "");
       const problem = personNameProblem(name);
       if (problem !== null) return { problem };
       if (listPeople(deps.db, deps.orgId).some((p) => p.name.toLowerCase() === name)) {

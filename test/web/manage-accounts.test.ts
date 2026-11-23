@@ -106,6 +106,21 @@ describe("accounts in the web app (2.9)", () => {
     );
   });
 
+  it("takes a name typed on a phone: a capital first letter and spaces", async () => {
+    const { h } = setUp();
+    const owner = await h.signIn(await h.enroll());
+    const done = await manage(h, owner, { op: "connect", service: "gmail", alias: " Mail Work " });
+    expect(done.status).toBe(200);
+    const aliases = h.t.db
+      .select()
+      .from(accounts)
+      .all()
+      .map((a) => a.alias);
+    expect(aliases).toContain("mail-work");
+    const page = await (await h.fetch("/connections", { as: owner })).text();
+    expect(page).toMatch(/id="connect-alias"[^>]*autocapitalize="off"/);
+  });
+
   it("replaces a key with a passkey and removes an account with a form, only the owner's", async () => {
     const { h } = setUp();
     const owner = await h.signIn(await h.enroll());

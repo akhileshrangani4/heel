@@ -62,6 +62,9 @@ describe("people in the web app (2.9)", () => {
     const { h, owner } = await setUp();
     expect((await people(h, owner, { op: "add", name: "Sam!" })).status).toBe(400);
     expect((await people(h, owner, { op: "add", name: "OWNER" })).status).toBe(400);
+    // A name typed on a phone, capitalized and with a space, is made lowercase with a dash.
+    expect((await people(h, owner, { op: "add", name: "Jo Lee" })).status).toBe(200);
+    expect(h.t.db.select().from(users).where(eq(users.name, "jo-lee")).get()).toBeDefined();
     h.addUser("pat", "member");
     const pat = await h.signIn(await h.enroll("pat"));
     expect((await people(h, pat, { op: "add", name: "eve" })).status).toBe(400);

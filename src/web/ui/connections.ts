@@ -111,7 +111,7 @@ function connectForm(): Html {
     </div>
     <div class="row">
       <label for="connect-alias">Name</label>
-      <input id="connect-alias" name="alias" maxlength="64" autocomplete="off" placeholder="github-work" />
+      <input id="connect-alias" name="alias" maxlength="64" autocomplete="off" placeholder="github-work" autocapitalize="off" autocorrect="off" spellcheck="false" />
     </div>
     <div class="row" data-for="mcp" hidden>
       <label for="connect-url">Server URL</label>

@@ -29,7 +29,7 @@ export function addAgentForm(): Html {
       <input type="hidden" name="op" value="add" />
       <div class="row">
         <label for="add-agent-name">Name</label>
-        <input id="add-agent-name" name="name" maxlength="64" placeholder="claude-code" autocomplete="off" />
+        <input id="add-agent-name" name="name" maxlength="64" placeholder="claude-code" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" />
       </div>
       <div class="row">
         <label for="add-agent-days">Token lasts</label>
