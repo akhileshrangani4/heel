@@ -144,15 +144,19 @@ describe("the approval page in a browser", () => {
     // An agent's send asks; the owner approves it once.
     const approved = pendingId(await h.call({ args: SEND }));
     await page.goto(`${origin}/approvals/${approved}`);
-    await page.getByText("bob@vendor.com").first().waitFor();
+    // The address also sits in the closed Details fold, which comes first on the page.
+    await page.getByText("bob@vendor.com").filter({ visible: true }).first().waitFor();
     await shot("request");
 
     // Opening a section is remembered in heel: it's still open after a reload.
     const args = page.locator('details[data-heel-fold="args"]');
     expect(await args.evaluate((d) => (d as { open: boolean }).open)).toBe(false);
-    const saved = page.waitForResponse((r) => r.url().endsWith("/approvals/folds"));
-    // Full arguments sit inside the one Details fold.
+    // Full arguments sit inside the one Details fold; opening that is saved first.
     await page.locator('details[data-heel-fold="details"] > summary').click();
+    const saved = page.waitForResponse(
+      (r) =>
+        r.url().endsWith("/approvals/folds") && (r.request().postData() ?? "").includes('"args"'),
+    );
     await page.getByText("Full arguments, exactly what runs").click();
     expect((await saved).status()).toBe(200);
     await page.reload();
@@ -173,13 +177,13 @@ describe("the approval page in a browser", () => {
 
     // Pause the account with one tap; resuming asks for the passkey.
     await page.goto(`${origin}/pause`);
-    await page.getByRole("button", { name: /Pause .*gmail-work/ }).click();
+    await page.getByRole("switch", { name: /Pause .*gmail-work/ }).click();
     await page.waitForURL(/done=paused/);
     await shot("paused");
     expect(await h.call({ args: { ...SEND, subject: "while paused" } })).toMatchObject({
       status: "paused",
     });
-    await page.getByRole("button", { name: /Resume .*gmail-work/ }).click();
+    await page.getByRole("switch", { name: /Resume .*gmail-work/ }).click();
     await page.waitForURL(/done=resumed/);
     await shot("resumed");
     expect((await h.call({ args: { ...SEND, subject: "after resume" } })).status).toBe("pending");
