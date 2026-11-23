@@ -36,6 +36,8 @@ jobs:
         run: pnpm db:drift
       - name: Rules JSON Schema matches the Zod schema
         run: pnpm schema:drift
+      - name: The shadcn/ui stylesheet matches its Tailwind source
+        run: pnpm ui-css:drift
 
   oci-image:
     # D14: the image builds, starts with the example config, and answers on

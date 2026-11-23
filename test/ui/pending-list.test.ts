@@ -14,12 +14,28 @@ const render = (rows: Parameters<typeof pendingList>[0]["load"]) =>
   dom(pendingList({ now: NOW, load: rows }));
 
 describe("PendingList", () => {
-  it("links each request to its full page and shows agent, account and rule", () => {
+  it("makes each whole row the link to its full page, and leaves rule and id to that page", () => {
     const doc = render({ ok: true, rows: PENDING_ROWS });
-    const hrefs = [...doc.querySelectorAll(".req-title a")].map((a) => a.getAttribute("href"));
+    const hrefs = [...doc.querySelectorAll("a.req-row")].map((a) => a.getAttribute("href"));
     expect(hrefs).toEqual(PENDING_ROWS.map((r) => `/approvals/${r.id}`));
+    // One link per row: the title and "Review" sit inside it, never as links of their own.
+    expect(doc.querySelectorAll("a")).toHaveLength(PENDING_ROWS.length);
     expect(text(doc.querySelector(".req-count"))).toBe("3 requests");
-    expect(text(doc)).toContain("prod-merges-ask-admin (org-rules.yaml:8) (org)");
+    expect(text(doc)).not.toContain("org-rules.yaml:8");
+    expect(text(doc)).not.toContain(PENDING_ROWS[0]?.id ?? "-");
+  });
+
+  it("groups requests into what needs you, what was decided, and what expired", () => {
+    const doc = render({ ok: true, rows: [...PENDING_ROWS, ...APPROVED_ROWS, ...EXPIRED_ROWS] });
+    const titles = [...doc.querySelectorAll(".req-section-title")].map((h) => text(h));
+    expect(titles).toEqual([
+      `Needs you ${PENDING_ROWS.length}`,
+      `Decided in the last day ${APPROVED_ROWS.length}`,
+      `Expired ${EXPIRED_ROWS.length}`,
+    ]);
+    // Waiting rows carry no status badge: the section heading already says it.
+    expect(doc.querySelectorAll("section:first-of-type .badge")).toHaveLength(0);
+    expect(doc.querySelector(".req .req-icon")?.getAttribute("data-kind")).toBe("mail");
   });
 
   it("leads each card with heel's own sentence, the client, and the agent's reason as its words", () => {
@@ -46,11 +62,11 @@ describe("PendingList", () => {
   });
 
   it.each([
-    ["pending", PENDING_ROWS, "Pending", "Expires in"],
+    ["pending", PENDING_ROWS, "Needs you", "Expires in"],
     ["approved", APPROVED_ROWS, "Approved", "Runs when the agent sends it again"],
     ["denied", DENIED_ROWS, "Denied", "Re-sends return “denied” until"],
     ["expired", EXPIRED_ROWS, "Expired", "Expired"],
-    ["paused", PAUSED_ROWS, "Pending", "Paused (agent inbox-bot): approve after resume"],
+    ["paused", PAUSED_ROWS, "Needs you", "Paused (agent inbox-bot): approve after resume"],
   ] as const)("spells out the %s state in words", (_s, rows, badge, note) => {
     const page = text(render({ ok: true, rows }));
     expect(page).toContain(badge);

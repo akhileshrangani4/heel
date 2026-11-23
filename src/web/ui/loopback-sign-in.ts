@@ -1,5 +1,6 @@
 import { type Html, html, trusted } from "./html.ts";
 import type { FormTarget } from "./layout.ts";
+import { btn } from "./shadcn/button.ts";
 
 export interface LoopbackSignInProps {
   alias: string;
@@ -68,7 +69,7 @@ function pasteForm(props: LoopbackSignInProps): Html {
   return html`<form id="paste-form" method="post" action="${props.paste.action}" class="paste-form">
     <input type="hidden" name="csrf" value="${props.paste.csrfToken}" />
     <input type="hidden" name="state" value="${props.state}" />
-    <p><button type="button" id="paste-finish" class="btn btn-primary">Paste and finish</button></p>
+    <p><button type="button" id="paste-finish" class="${btn()}">Paste and finish</button></p>
     <p id="paste-note" class="muted" role="status" aria-live="polite"></p>
     <label for="address">Or paste the address here</label>
     <input
@@ -81,7 +82,7 @@ function pasteForm(props: LoopbackSignInProps): Html {
       inputmode="url"
       placeholder="http://127.0.0.1:…/?state=…&code=…"
     />
-    <button type="submit" class="btn btn-secondary">Finish signing in</button>
+    <button type="submit" class="${btn("outline")}">Finish signing in</button>
   </form>`;
 }
 
@@ -89,7 +90,7 @@ function googleStep(props: LoopbackSignInProps): Html {
   return html`<li>
     <p>Sign in with the Google account for <strong>${props.alias}</strong>, and allow what heel asks for. Google opens in a new tab; keep this one.</p>
     <p>
-      <a class="btn btn-primary" href="${props.google}" target="_blank" rel="noopener noreferrer"
+      <a class="${btn()}" href="${props.google}" target="_blank" rel="noopener noreferrer"
         >Continue to Google</a
       >
     </p>

@@ -37,7 +37,7 @@ describe("PauseControl", () => {
       expect(form.querySelector("button[type=submit]")).not.toBeNull();
       expect(form.querySelector("[data-heel-ceremony]")).toBeNull();
     }
-    expect(text(doc)).toContain("No passkey is needed to stop calls.");
+    expect(text(doc)).toContain("Pausing is instant.");
   });
 
   it("I-56: resume only starts the passkey ceremony through the onResume prop, and says so", () => {
@@ -58,7 +58,7 @@ describe("PauseControl", () => {
       expect(b.getAttribute("type")).toBe("button");
       expect(b.closest("form")).toBeNull();
       expect(text(doc.getElementById(b.getAttribute("aria-describedby") ?? ""))).toBe(
-        "Passkey required to resume.",
+        "Resuming asks for your passkey.",
       );
     }
     expect([...doc.querySelectorAll("form")].map((f) => f.getAttribute("action"))).not.toContain(

@@ -1,4 +1,5 @@
 import { flag, type Html, html, trusted } from "./html.ts";
+import { btn } from "./shadcn/button.ts";
 
 /**
  * Decision controls never decide. Every decision (approve once, approve as
@@ -47,7 +48,22 @@ export interface CeremonyButtonProps {
   describedBy?: string;
   /** Id of a fieldset whose inputs the handler reads (the standing-approval options). */
   optionsFrom?: string;
+  /** Id of a status line beside the button; progress and errors go there instead of the page's. */
+  statusId?: string;
+  /** A small icon drawn before the label (trusted SVG markup). */
+  icon?: string;
+  /**
+   * Draw the button as a switch (Settings, Pause): `role="switch"` with its
+   * state, `label` as the state in words beside the track, and `ariaLabel`
+   * naming what it switches.
+   */
+  asSwitch?: { checked: boolean; ariaLabel: string };
+  /** Draw the button as one segment of a segmented control (Modes), named by `ariaLabel`. */
+  asSegment?: { ariaLabel: string };
 }
+
+/** lucide's key-round, for the passkey sign-in button. */
+export const KEY_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/><circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/></svg>`;
 
 /** `approvalId` → `data-approval-id`. */
 function dataAttribute(key: string): string {
@@ -57,23 +73,36 @@ function dataAttribute(key: string): string {
 /** Binding keys become attribute names, so only plain identifiers are allowed. */
 const BINDING_KEY = /^[a-z][A-Za-z0-9]*$/;
 
+/** heel's three button tones, as shadcn/ui Button variants. */
+const TONE_VARIANT = { primary: "default", secondary: "outline", danger: "danger" } as const;
+
 export function ceremonyButton(props: CeremonyButtonProps): Html {
   const bindings = Object.entries(props.binding).map(([key, value]) => {
     if (!BINDING_KEY.test(key)) throw new TypeError(`invalid ceremony binding key: ${key}`);
     return html` ${trusted(dataAttribute(key))}="${value}"`;
   });
+  const sw = props.asSwitch;
   return html`<button
     type="button"
-    class="btn btn-${props.tone}"
+    class="${sw ? "ui-switch" : props.asSegment ? "seg-item" : btn(TONE_VARIANT[props.tone])}"${
+      props.asSegment ? html` aria-label="${props.asSegment.ariaLabel}"` : ""
+    }${
+      sw
+        ? html` role="switch" aria-checked="${sw.checked ? "true" : "false"}" aria-label="${sw.ariaLabel}"`
+        : ""
+    }
     data-heel-ceremony="${props.intent}"
     data-heel-handler="${props.callback.handler}"${bindings}${
       props.optionsFrom ? html` data-heel-options="${props.optionsFrom}"` : ""
-    }${props.describedBy ? html` aria-describedby="${props.describedBy}"` : ""}${flag(
-      "disabled",
-      props.disabled ?? false,
-    )}
+    }${props.statusId ? html` data-heel-status="${props.statusId}"` : ""}${
+      props.describedBy ? html` aria-describedby="${props.describedBy}"` : ""
+    }${flag("disabled", props.disabled ?? false)}
   >
-    ${props.label}
+    ${
+      sw
+        ? html`<span class="ui-switch-track" data-on="${sw.checked ? "true" : "false"}" aria-hidden="true"><span class="ui-switch-thumb"></span></span><span class="ui-switch-word">${props.label}</span>`
+        : html`${props.icon ? trusted(props.icon) : ""}${props.label}`
+    }
   </button>`;
 }
 
@@ -116,7 +145,29 @@ export const CEREMONY_SCRIPT = `
     delete binding.heelCeremony;
     delete binding.heelHandler;
     delete binding.heelOptions;
-    handler({ intent: button.dataset.heelCeremony, binding, options, status: status() });
+    delete binding.heelStatus;
+    const own = button.dataset.heelStatus ? document.getElementById(button.dataset.heelStatus) : null;
+    const result = handler({ intent: button.dataset.heelCeremony, binding, options, status: own || status() });
+    // While the passkey prompt is open, the button says so and can't be pressed twice.
+    if (result && typeof result.then === "function") {
+      const label = button.innerHTML;
+      button.disabled = true;
+      button.setAttribute("aria-busy", "true");
+      button.innerHTML = '<svg class="heel-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Waiting for your passkey\u2026';
+      const restore = () => { button.disabled = false; button.removeAttribute("aria-busy"); button.innerHTML = label; };
+      result.then(restore, restore);
+    }
+  });
+  // Copy buttons (presentation only; they decide nothing): copy the text of the element they name.
+  document.addEventListener("click", (event) => {
+    const target = event.target instanceof Element ? event.target.closest("button[data-heel-copy]") : null;
+    const source = target ? document.getElementById(target.dataset.heelCopy) : null;
+    if (!source || !navigator.clipboard) return;
+    navigator.clipboard.writeText(source.textContent.trim()).then(() => {
+      const before = target.textContent;
+      target.textContent = "Copied";
+      setTimeout(() => { target.textContent = before; }, 1500);
+    }, () => {});
   });
 })();
 `;

@@ -118,8 +118,35 @@ export function clientScript(csrfToken: string | null): string {
       pushButton.disabled = true;
       sayPush("This browser can't receive notifications. On an iPhone, add heel to your Home Screen and open it from there.");
     }
+    // One switch: on when this browser has a subscription, off when it has none.
+    const label = (on) => {
+      pushButton.setAttribute("aria-checked", on ? "true" : "false");
+      pushButton.setAttribute("aria-label", on ? "Turn off notifications on this device" : "Turn on notifications");
+      const track = pushButton.querySelector(".ui-switch-track");
+      if (track) track.dataset.on = on ? "true" : "false";
+      const word = pushButton.querySelector(".ui-switch-word");
+      if (word) word.textContent = on ? "On" : "Off";
+      pushButton.dataset.on = on ? "1" : "";
+    };
+    const current = async () => {
+      const registration = await navigator.serviceWorker.getRegistration("/");
+      return registration ? registration.pushManager.getSubscription() : null;
+    };
+    if (supported && Notification.permission === "granted") {
+      current().then((subscription) => label(Boolean(subscription))).catch(() => {});
+    }
     pushButton.addEventListener("click", async () => {
       try {
+        if (pushButton.dataset.on) {
+          const subscription = await current();
+          if (subscription) {
+            await post("/push/unsubscribe", { endpoint: subscription.endpoint });
+            await subscription.unsubscribe();
+          }
+          label(false);
+          sayPush("Notifications are off for this device.");
+          return;
+        }
         sayPush("Asking this browser for permission…");
         if ((await Notification.requestPermission()) !== "granted") {
           sayPush("Notifications are blocked for this site. Allow them in the browser's settings.");
@@ -134,9 +161,10 @@ export function clientScript(csrfToken: string | null): string {
             applicationServerKey: toBytes(pushButton.dataset.key),
           }));
         await post("/push/subscribe", subscription.toJSON());
+        label(true);
         sayPush("Notifications are on for this device.");
       } catch (error) {
-        sayPush("Couldn't turn on notifications: " + String((error && error.message) || error));
+        sayPush("Couldn't change notifications: " + String((error && error.message) || error));
       }
     });
   }

@@ -1,8 +1,13 @@
 import type { SignInSetup } from "../../definitions/sign-in-setup.ts";
 import type { AccountStatus } from "../../store/schema.ts";
 import { ceremonyButton } from "./ceremony.ts";
-import { type Html, html } from "./html.ts";
-import { badge, type FormTarget, notice, postForm } from "./layout.ts";
+import { dialog, dialogTrigger } from "./dialog.ts";
+import { formatRelative } from "./format.ts";
+import { type Html, html, trusted } from "./html.ts";
+import { CHEVRON_DOWN, ELLIPSIS } from "./icons.ts";
+import { badge, type FormTarget, notice, postForm, time } from "./layout.ts";
+import { serviceLogo } from "./logos.ts";
+import { btn } from "./shadcn/button.ts";
 
 export interface ConnectionRow {
   alias: string;
@@ -14,6 +19,8 @@ export interface ConnectionRow {
   setup: SignInSetup | null;
   /** It holds an API key (not a sign-in), which can be replaced here (2.9). */
   holdsKey?: boolean;
+  /** When heel last decided a call on it, from the audit log; null if never. */
+  lastUsedAt?: Date | null;
   /** Who else may use it, and who decides its asks (D13b), by name. */
   sharing?: {
     sharedWith: readonly { user?: string; group?: string }[];
@@ -31,6 +38,8 @@ export interface ConnectionsProps {
   rows: readonly ConnectionRow[];
   outcome: ConnectionsOutcome;
   signInForm: FormTarget;
+  /** For "last used 3 h ago"; defaults to the time of rendering. */
+  now?: Date;
   /** Connecting, replacing a key and removing from here (2.9). */
   manage?: {
     csrfToken: string;
@@ -81,65 +90,92 @@ function outcomeNotice(outcome: ConnectionsOutcome): Html | "" {
   }
 }
 
+/** What can be connected from here: value, name, one line, and what it needs. */
 const SERVICE_CHOICES = [
-  ["github", "GitHub (a token)"],
-  ["slack", "Slack (a bot token)"],
-  ["linear", "Linear (an API key)"],
-  ["notion", "Notion (an integration token)"],
-  ["stripe", "Stripe (a restricted key)"],
-  ["gmail", "Gmail (sign in after)"],
-  ["google-calendar", "Google Calendar (sign in after)"],
-  ["outlook", "Outlook (sign in after)"],
-  ["mcp", "A remote MCP server (its URL; sign in after if it asks)"],
+  { value: "github", name: "GitHub", line: "A personal access token", need: "key" },
+  { value: "gmail", name: "Gmail", line: "Sign in with Google after", need: "signin" },
+  {
+    value: "google-calendar",
+    name: "Google Calendar",
+    line: "Sign in with Google after",
+    need: "signin",
+  },
+  { value: "outlook", name: "Outlook", line: "Sign in with Microsoft after", need: "signin" },
+  { value: "slack", name: "Slack", line: "A bot token", need: "key" },
+  { value: "linear", name: "Linear", line: "An API key", need: "key" },
+  { value: "notion", name: "Notion", line: "An integration token", need: "key" },
+  { value: "stripe", name: "Stripe", line: "A restricted key", need: "key" },
+  { value: "mcp", name: "MCP server", line: "Its URL; sign in after if it asks", need: "mcp" },
 ] as const;
 
-/** Services you sign in to after connecting: no key to paste. */
-const SIGN_IN_SERVICES = ["gmail", "google-calendar", "outlook"];
-
-/** Which fields a service needs: a key, a URL (MCP servers), or neither (it signs in after). */
-const SHOW_FIELDS = `const f=this.closest('.stack-form'),v=this.value,need=v==='mcp'?'mcp':${JSON.stringify(SIGN_IN_SERVICES).replace(/"/g, "'")}.includes(v)?'signin':'key';for(const r of f.querySelectorAll('[data-for]'))r.hidden=r.dataset.for!==need`;
-
+/**
+ * The add-a-connection form, in its dialog. Services are radio tiles; which
+ * fields show follows the picked tile in CSS alone (`:has`), so it needs no
+ * script. A div, not a form: nothing here can ever submit, so the key can't
+ * end up in a URL. The connect ceremony reads every field in it.
+ */
 function connectForm(): Html {
-  // A div, not a form: nothing here can ever submit, so the key can't end up in a URL.
-  return html`<div id="connect-form" class="stack-form">
+  return html`<div id="connect-form" class="connect-form">
     <input type="hidden" name="op" value="connect" />
-    <div class="row">
-      <label for="connect-service">Service</label>
-      <select id="connect-service" name="service" onchange="${SHOW_FIELDS}">
-        ${SERVICE_CHOICES.map(([value, label]) => html`<option value="${value}">${label}</option>`)}
-      </select>
+    <fieldset class="svc-grid">
+      <legend class="visually-hidden">Service</legend>
+      ${SERVICE_CHOICES.map(
+        (c) => html`<label class="svc-tile">
+          <input type="radio" class="svc-radio" name="service" value="${c.value}" data-need="${c.need}" />
+          ${serviceLogo(c.value, c.name)}
+          <span class="svc-tile-text"><span class="svc-tile-name">${c.name}</span><span class="svc-tile-line">${c.line}</span></span>
+        </label>`,
+      )}
+    </fieldset>
+    <p class="connect-pick muted">Pick a service to connect.</p>
+    <div class="connect-fields">
+      <div class="connect-field">
+        <label for="connect-alias">Name</label>
+        <input id="connect-alias" name="alias" maxlength="64" autocomplete="off" placeholder="github-work" autocapitalize="off" autocorrect="off" spellcheck="false" />
+        <p class="muted">How rules and tools call it.</p>
+      </div>
+      <div class="connect-field" data-for="mcp">
+        <label for="connect-url">Server URL</label>
+        <input id="connect-url" name="url" placeholder="https://notes.example.com/mcp" autocomplete="off" />
+      </div>
+      <div class="connect-field" data-for="mcp">
+        <label for="connect-oauth">Signs in with OAuth?</label>
+        <select id="connect-oauth" name="oauth">
+          <option value="yes">Yes (most do): sign in after</option>
+          <option value="no">No: it needs no sign-in</option>
+        </select>
+      </div>
+      <div class="connect-field" data-for="key">
+        <label for="connect-key">Key or token</label>
+        <input id="connect-key" name="key" type="password" autocomplete="off" />
+        <p class="muted">It goes only to heel's vault, checked with the service first.</p>
+      </div>
+      <p class="muted" data-for="signin">You sign in right after, on this page.</p>
+      <p id="connect-status" class="connect-status" role="status" aria-live="polite"></p>
+      ${ceremonyButton({
+        callback: { handler: "manageAccount" },
+        intent: "manage-account",
+        label: "Connect with your passkey",
+        tone: "primary",
+        binding: {},
+        optionsFrom: "connect-form",
+        statusId: "connect-status",
+      })}
     </div>
-    <div class="row">
-      <label for="connect-alias">Name</label>
-      <input id="connect-alias" name="alias" maxlength="64" autocomplete="off" placeholder="github-work" autocapitalize="off" autocorrect="off" spellcheck="false" />
-    </div>
-    <div class="row" data-for="mcp" hidden>
-      <label for="connect-url">Server URL</label>
-      <input id="connect-url" name="url" placeholder="https://notes.example.com/mcp" autocomplete="off" />
-    </div>
-    <div class="row" data-for="mcp" hidden>
-      <label for="connect-oauth">Signs in with OAuth?</label>
-      <select id="connect-oauth" name="oauth">
-        <option value="yes">Yes (most do): sign in after</option>
-        <option value="no">No: it needs no sign-in</option>
-      </select>
-    </div>
-    <div class="row" data-for="key">
-      <label for="connect-key">Key or token</label>
-      <input id="connect-key" name="key" type="password" autocomplete="off" />
-    </div>
-    <p class="muted" data-for="signin" hidden>You sign in right after, on this page.</p>
-    <p class="muted">The name is how rules and tools call it. A key goes only to heel's vault, checked with the service first.</p>
-    ${ceremonyButton({
-      callback: { handler: "manageAccount" },
-      intent: "manage-account",
-      label: "Connect with your passkey",
-      tone: "primary",
-      binding: {},
-      optionsFrom: "connect-form",
-    })}
   </div>`;
 }
+
+/** lucide's plug, for the empty state. */
+const PLUG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4"/></svg>`;
+
+/** The commands that do the same from the machine heel runs on. */
+const CLI_FOLD = html`<details class="connect-cli">
+  <summary>From the command line${trusted(CHEVRON_DOWN)}</summary>
+  <p class="muted">On the machine heel runs on. heel asks for the key on stdin; for Gmail, Calendar and Outlook you sign in here afterwards.</p>
+  <pre class="args">heel connect github --as github --credential-stdin
+heel connect gmail --as gmail-work
+heel connect mcp --as notes --url https://notes.example.com/mcp --oauth</pre>
+</details>`;
 
 type Manage = NonNullable<ConnectionsProps["manage"]>;
 
@@ -169,7 +205,7 @@ function sharingControls(row: ConnectionRow, manage: Manage, key: string): Html 
               csrfToken: manage.csrfToken,
             },
             { kind: p.group === undefined ? "user" : "group", name: p.user ?? p.group ?? "" },
-            html`<button type="submit" class="btn btn-secondary btn-small">Stop sharing</button>`,
+            html`<button type="submit" class="${btn("outline", "sm")}">Stop sharing</button>`,
           )}
         </li>`,
       )}
@@ -301,7 +337,9 @@ function rowControls(row: ConnectionRow, manage: Manage, index: number): Html {
   // By row, not by name: no two names can make the same id.
   const key = `row${String(index)}`;
   return html`<details class="conn-manage">
-    <summary>Manage ${row.alias}</summary>
+    <summary class="${btn("ghost", "icon-sm")}" title="Manage ${row.alias}"><span class="visually-hidden">Manage ${row.alias}</span>${trusted(ELLIPSIS)}</summary>
+    <div class="conn-manage-panel">
+    <p class="conn-manage-title">Manage <span class="mono">${row.alias}</span></p>
     ${
       row.holdsKey === true
         ? html`<div id="rekey-${key}" class="stack-form">
@@ -325,8 +363,9 @@ function rowControls(row: ConnectionRow, manage: Manage, index: number): Html {
     ${postForm(
       { action: `/connections/${encodeURIComponent(row.alias)}/remove`, csrfToken },
       {},
-      html`<button type="submit" class="btn btn-danger" onclick="return confirm('Remove ${row.alias}? Its stored key goes, and agents can no longer use it.')">Remove ${row.alias}</button>`,
+      html`<button type="submit" class="${btn("danger")}" onclick="return confirm('Remove ${row.alias}? Its stored key goes, and agents can no longer use it.')">Remove ${row.alias}</button>`,
     )}
+    </div>
   </details>`;
 }
 
@@ -357,26 +396,51 @@ export function providerLabel(provider: string): string {
   return known[provider] ?? (prefix === "cli" ? "CLI" : (known[prefix] ?? provider));
 }
 
-/** The one next step a card shows, or nothing when the account is ready and needs none. */
-function nextStep(row: ConnectionRow, signInForm: FormTarget): Html | "" {
+/**
+ * The one next step a row shows, or nothing when the account is ready and
+ * needs none: a sign-in button (on the right of the row) or a hint to set
+ * something up first (a muted line under the name).
+ */
+function nextStep(
+  row: ConnectionRow,
+  signInForm: FormTarget,
+): { kind: "action" | "hint"; html: Html } | null {
   const ready = row.status === "active";
   // A client to configure matters only to an account that still has to sign in.
-  if (row.setup !== null && !ready) return setupNeeded(row.setup);
+  if (row.setup !== null && !ready) return { kind: "hint", html: setupNeeded(row.setup) };
   if (row.signsIn && row.setup === null) {
-    return postForm(
-      signInForm,
-      { alias: row.alias },
-      html`<button type="submit" class="btn ${ready ? "btn-secondary" : "btn-primary"}">
-        ${ready ? "Sign in again" : "Sign in"}
-      </button>`,
-    );
+    return {
+      kind: "action",
+      html: postForm(
+        signInForm,
+        { alias: row.alias },
+        html`<button type="submit" class="${btn(ready ? "outline" : "default", "sm")}">${ready ? "Sign in again" : "Sign in"}</button>`,
+      ),
+    };
   }
   if (!ready) {
-    return html`<span class="muted"
-      >Give heel a new key: <code>heel account set ${row.alias} --credential-stdin</code></span
-    >`;
+    return {
+      kind: "hint",
+      html: html`<span class="muted"
+        >Give heel a new key: <code>heel account set ${row.alias} --credential-stdin</code></span
+      >`,
+    };
   }
-  return "";
+  return null;
+}
+
+/** The status in words; colour only repeats it. */
+function statusPill(row: ConnectionRow): Html {
+  if (row.status === "active") return badge("Ready", "ok");
+  if (row.setup !== null) return badge("Set up first", "warn");
+  if (row.signsIn) return badge("Needs sign-in", "warn");
+  return badge("Needs a new key", "error");
+}
+
+function lastUsed(row: ConnectionRow, now: Date): Html {
+  const at = row.lastUsedAt ?? null;
+  if (at === null) return html`<span class="muted">Not used yet</span>`;
+  return html`<span class="muted">Used ${formatRelative(at, now)}</span><span class="visually-hidden">, ${time(at)}</span>`;
 }
 
 /**
@@ -385,48 +449,71 @@ function nextStep(row: ConnectionRow, signInForm: FormTarget): Html | "" {
  * in its vault and never shows them.
  */
 export function connectionsPage(props: ConnectionsProps): Html {
+  const now = props.now ?? new Date();
   const waiting = props.rows.filter((row) => row.status !== "active").length;
-  return html`<h1>Connections</h1>
-    <p class="muted">
-      The accounts your agents use through heel. Credentials stay in heel's vault; agents never see
-      them.
-    </p>
+  const canAdd = props.manage !== undefined;
+  const addButton = canAdd
+    ? dialogTrigger({ dialogId: "connect-another", label: "Add connection" })
+    : "";
+  return html`<div class="conn-page-head">
+      <div>
+        <h1>Connections</h1>
+        <p class="muted">
+          The accounts your agents use through heel. Credentials stay in heel's vault; agents never
+          see them.
+        </p>
+      </div>
+      ${addButton}
+    </div>
     ${outcomeNotice(props.outcome)}
     ${
       props.rows.length === 0
-        ? html`<div class="card req-empty">
-            <p><strong>No accounts yet.</strong></p>
-            <p class="muted">Connect one below, or from the command line: <code>heel connect &lt;service&gt; --as &lt;name&gt;</code></p>
+        ? html`<div class="req-empty conn-empty">
+            <span class="req-empty-icon conn-empty-icon">${trusted(PLUG)}</span>
+            <p class="req-empty-title">No accounts yet</p>
+            <p class="muted">Connect Gmail, Calendar, GitHub or any API so your agents can use it through heel.</p>
+            ${canAdd ? dialogTrigger({ dialogId: "connect-another", label: "Add connection", className: btn("outline", "sm") }) : html`<p class="muted">From the command line: <code>heel connect &lt;service&gt; --as &lt;name&gt;</code></p>`}
           </div>`
-        : html`<p class="muted req-count">
+        : html`<section class="conn-table" aria-labelledby="conn-count">
+            <p class="conn-table-head" id="conn-count">
               ${props.rows.length === 1 ? "1 account" : `${props.rows.length} accounts`}${
                 waiting === 0 ? "" : `, ${waiting} need${waiting === 1 ? "s" : ""} you`
               }
             </p>
-            <ul class="conn-list" aria-label="Your accounts">
+            <ul class="conn-rows" aria-label="Your accounts">
               ${props.rows.map((row, index) => {
                 const step = nextStep(row, props.signInForm);
-                return html`<li class="card conn" data-alias="${row.alias}">
-                  <div class="conn-head">
-                    <div>
+                return html`<li class="conn" data-alias="${row.alias}" data-status="${row.status}">
+                  <div class="conn-main">
+                    <span class="conn-icon">${serviceLogo(row.provider, row.alias)}</span>
+                    <div class="conn-id">
                       <h2 class="conn-name mono">${row.alias}</h2>
-                      <p class="muted conn-kind">${providerLabel(row.provider)}</p>
+                      <p class="muted conn-kind">${providerLabel(row.provider)} · ${lastUsed(row, now)}</p>
+                      ${step?.kind === "hint" ? html`<p class="conn-step conn-hint">${step.html}</p>` : ""}
                     </div>
-                    ${row.status === "active" ? badge("Ready", "ok") : badge("Needs sign-in", "warn")}
+                    <div class="conn-status">${statusPill(row)}</div>
+                    <div class="conn-actions">
+                      ${step?.kind === "action" ? html`<div class="conn-step">${step.html}</div>` : ""}
+                      ${props.manage === undefined ? "" : rowControls(row, props.manage, index)}
+                    </div>
                   </div>
-                  ${step === "" ? "" : html`<div class="conn-step">${step}</div>`}
-                  ${props.manage === undefined ? "" : rowControls(row, props.manage, index)}
                 </li>`;
               })}
-            </ul>`
+            </ul>
+          </section>`
     }
-    <div class="card conn-add">
-      <h2>Connect another account</h2>
-      ${props.manage === undefined ? "" : connectForm()}
-      <p class="muted">Or from the machine heel runs on. heel asks for the key on stdin, or for Gmail,
-        Calendar and Outlook, you sign in here afterwards.</p>
-      <pre class="args">heel connect github --as github --credential-stdin
-heel connect gmail --as gmail-work
-heel connect mcp --as notes --url https://notes.example.com/mcp --oauth</pre>
-    </div>`;
+    ${
+      canAdd
+        ? dialog({
+            id: "connect-another",
+            title: "Add a connection",
+            description: "Pick a service, name it, and confirm with your passkey.",
+            wide: true,
+            body: html`${connectForm()} ${CLI_FOLD}`,
+          })
+        : html`<section class="card conn-add">
+            <h2>Connect from the command line</h2>
+            ${CLI_FOLD}
+          </section>`
+    }`;
 }

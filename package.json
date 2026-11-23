@@ -56,6 +56,8 @@
     "ui:preview": "node ./scripts/ui-preview.ts",
     "gen:schema": "node ./scripts/gen-rules-schema.ts",
     "schema:drift": "node ./scripts/gen-rules-schema.ts --check",
+    "gen:ui-css": "node ./scripts/gen-ui-css.ts",
+    "ui-css:drift": "node ./scripts/gen-ui-css.ts --check",
     "gen:looks-like": "node ./scripts/gen-looks-like.ts",
     "eval:looks-like": "node ./scripts/eval-looks-like.ts",
     "gen:cli-tables": "node ./scripts/gen-cli-tables.ts",
@@ -70,6 +72,8 @@
     "@simplewebauthn/server": "~14.1.0",
     "@slack/web-api": "~8.3.0",
     "better-sqlite3": "~13.1.1",
+    "class-variance-authority": "~0.7.1",
+    "clsx": "~2.1.1",
     "drizzle-orm": "~0.45.4",
     "hono": "~4.13.18",
     "nodemailer": "~10.5.0",
@@ -77,6 +81,7 @@
     "pino": "~10.4.0",
     "re2js": "~2.10.0",
     "reflect-metadata": "~0.2.2",
+    "tailwind-merge": "~3.7.0",
     "web-push": "~4.0.0",
     "yaml": "~2.9.1",
     "zod": "~4.6.7"
@@ -84,11 +89,13 @@
   "devDependencies": {
     "@biomejs/biome": "~2.6.7",
     "@playwright/test": "~1.65.0",
+    "@tailwindcss/cli": "~4.3.5",
     "@types/better-sqlite3": "~9.6.0",
     "@types/node": "~26.6.6",
     "drizzle-kit": "~0.31.11",
     "fast-check": "~4.10.2",
     "linkedom": "~0.18.15",
+    "tailwindcss": "~4.3.5",
     "typescript": "~7.0.2",
     "vitest": "~5.1.0"
   }

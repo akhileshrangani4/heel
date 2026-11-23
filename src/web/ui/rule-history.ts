@@ -1,7 +1,8 @@
 import type { RuleChangeView } from "../../store/rule-changes.ts";
-import { formatRelative } from "./format.ts";
-import { type Html, html } from "./html.ts";
-import { badge, time } from "./layout.ts";
+import { formatRelative, formatUtc } from "./format.ts";
+import { type Html, html, trusted } from "./html.ts";
+import { CHEVRON_DOWN } from "./icons.ts";
+import { badge } from "./layout.ts";
 import { diffLines } from "./proposals.ts";
 
 /** Only the lines a change added or removed: unchanged lines would bury them. */
@@ -49,29 +50,31 @@ export function ruleHistoryPage(props: {
     ${
       props.changes.length === 0
         ? html`<p class="muted">No changes yet.</p>`
-        : html`<ul class="req-list" aria-label="Rules file changes">
+        : html`<ol class="timeline" aria-label="Rules file changes">
           ${props.changes.map(
-            (change) => html`<li class="card req">
-              <div class="ap-meta">
-                ${badge(
-                  change.source === "proposal"
-                    ? "Proposal added"
-                    : change.source === "web"
-                      ? "Rules page"
-                      : "Outside heel",
-                  change.source === "outside" ? "warn" : "ok",
-                )}
-                <span class="mono">${change.file}</span>
-                <span class="muted">${formatRelative(change.at, props.now)}</span>
+            (change) => html`<li class="timeline-item" data-source="${change.source}">
+              <span class="timeline-dot" aria-hidden="true"></span>
+              <div class="timeline-body">
+                <p class="timeline-head">
+                  ${badge(
+                    change.source === "proposal"
+                      ? "Proposal added"
+                      : change.source === "web"
+                        ? "Rules page"
+                        : "Outside heel",
+                    change.source === "outside" ? "warn" : change.source === "web" ? "info" : "ok",
+                  )}
+                  <span class="mono">${change.file}</span>
+                  <time class="muted" datetime="${change.at.toISOString()}" title="${formatUtc(change.at)}">${formatRelative(change.at, props.now)}</time>
+                </p>
+                <p class="timeline-who">${who(change)}</p>
+                <details class="fold">
+                  <summary>What changed${trusted(CHEVRON_DOWN)}</summary>
+                  ${diffLines(changedOnly(change.diff) || "  (only spacing or order changed)", "What changed")}
+                </details>
               </div>
-              <p>${who(change)}</p>
-              <details>
-                <summary>What changed</summary>
-                ${diffLines(changedOnly(change.diff) || "  (only spacing or order changed)", "What changed")}
-              </details>
-              <p class="req-foot muted">${time(change.at)}</p>
             </li>`,
           )}
-        </ul>`
+        </ol>`
     }`;
 }

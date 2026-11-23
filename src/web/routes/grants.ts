@@ -105,6 +105,7 @@ export function grantRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
         agents: mine,
         outcome,
         revoke: { action: "/grants/revoke", csrfToken: session.csrfToken },
+        now: deps.now(),
       }),
       script: clientScript(session.csrfToken),
     });

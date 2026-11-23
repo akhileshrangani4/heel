@@ -1,19 +1,28 @@
 import { Hono } from "hono";
+import { pushSubscriptionsOf } from "../../store/notifications.ts";
 import {
   formField,
   type HumanPlaneDeps,
   jsonBody,
+  renderPage,
   requireCsrfField,
   requireCsrfHeader,
   requireSession,
   type SignedInEnv,
   stringField,
+  viewerOf,
 } from "../http.ts";
 import { cancelEnrollment, createEnrollment, pendingRecoveries } from "../passkeys.ts";
+import { clientScript } from "../ui/client.ts";
+import { addDeviceControl } from "../ui/devices.ts";
+import { html } from "../ui/html.ts";
+import { pushControl } from "../ui/push-control.ts";
 
 /**
  * Passkeys on more devices (spec: Q-N2), from the human plane:
  *
+ * - `GET /devices`: Settings, Devices. Notifications on this device, how many
+ *   of the person's devices get them, and adding a passkey on another device.
  * - `POST /devices/challenge` then `POST /devices/confirm`: a signed-in person
  *   confirms with a passkey they have and gets a one-time enrollment link that
  *   works at once. This is how to add a phone without waiting a day.
@@ -23,6 +32,27 @@ import { cancelEnrollment, createEnrollment, pendingRecoveries } from "../passke
 export function deviceRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
   const app = new Hono<SignedInEnv>();
   const signedIn = requireSession(deps);
+
+  app.get("/devices", signedIn, (c) => {
+    const session = c.get("session");
+    const off = c.req.query("notifications-off") ?? "";
+    return renderPage(c, {
+      title: "Devices",
+      viewer: viewerOf(session),
+      current: "devices",
+      body: html`<h1>Devices</h1>
+        ${pushControl({
+          vapidPublicKey: deps.vapidPublicKey,
+          devices: {
+            count: pushSubscriptionsOf(deps.db, session.userId).length,
+            turnOff: { action: "/push/unsubscribe-all", csrfToken: session.csrfToken },
+            turnedOff: /^\d+$/.test(off) ? Number(off) : null,
+          },
+        })}
+        ${addDeviceControl()}`,
+      script: clientScript(session.csrfToken),
+    });
+  });
 
   app.post("/devices/challenge", signedIn, requireCsrfHeader(), async (c) => {
     const session = c.get("session");

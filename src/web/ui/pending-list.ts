@@ -1,9 +1,11 @@
 import type { RuleRef } from "../../core/call.ts";
 import type { ApprovalOrigin, ApprovalStatus } from "../../store/schema.ts";
 import { approvalStatusBadge } from "./approval-request.ts";
-import { formatPauseScope, formatRelative, formatRule } from "./format.ts";
-import { type Html, html } from "./html.ts";
+import { formatPauseScope, formatRelative } from "./format.ts";
+import { type Html, html, trusted } from "./html.ts";
+import { CHEVRON_RIGHT } from "./icons.ts";
 import { notice, type PauseNotice, time } from "./layout.ts";
+import { serviceLogo } from "./logos.ts";
 import { clientLabel, type Headline } from "./summary.ts";
 
 export interface PendingRow {
@@ -56,11 +58,59 @@ function stateNote(row: PendingRow, now: Date): Html {
   }
 }
 
+/** The kind of service a request is for, read from its action or tool and account names. */
+export type ServiceKind = "mail" | "calendar" | "github" | "http" | "other";
+
+export function serviceKind(row: Pick<PendingRow, "action" | "tool" | "account">): ServiceKind {
+  const action = row.action ?? "";
+  const hay = `${action} ${row.tool} ${row.account}`.toLowerCase();
+  if (action.startsWith("email.") || /\b(gmail|outlook|mail)\b/.test(hay)) return "mail";
+  if (action.startsWith("calendar.") || hay.includes("calendar")) return "calendar";
+  if (action.startsWith("github.") || hay.includes("github")) return "github";
+  if (/^(get|put|post|patch|delete) \//i.test(row.tool) || action.startsWith("http."))
+    return "http";
+  return "other";
+}
+
+const KIND_LABEL: Record<ServiceKind, string> = {
+  mail: "Email",
+  calendar: "Calendar",
+  github: "GitHub",
+  http: "HTTP API",
+  other: "Service",
+};
+
+/** The provider whose mark stands for a request, from its action and account name. */
+function providerOf(row: Pick<PendingRow, "action" | "tool" | "account">): string {
+  const kind = serviceKind(row);
+  const microsoft = /outlook|microsoft|office/i.test(row.account);
+  if (kind === "mail") return microsoft ? "outlook" : "gmail";
+  if (kind === "calendar") return microsoft ? "outlook" : "google-calendar";
+  if (kind === "github") return "github";
+  if (kind === "http") return "http";
+  return row.account;
+}
+
+/** The service's mark; decorative, since the title names the account. */
+export function serviceIcon(row: Pick<PendingRow, "action" | "tool" | "account">): Html {
+  const kind = serviceKind(row);
+  return html`<span class="req-icon" data-kind="${kind}" title="${KIND_LABEL[kind]}"
+    >${serviceLogo(providerOf(row), row.account)}</span
+  >`;
+}
+
+const SECTIONS = [
+  { id: "waiting", title: "Needs you", statuses: ["pending"] },
+  { id: "decided", title: "Decided in the last day", statuses: ["approved", "denied", "executed"] },
+  { id: "expired", title: "Expired", statuses: ["expired"] },
+] as const;
+
 /**
- * Requests waiting on, or recently decided by, this approver, as cards that
- * lead with heel's own sentence for each call. Each links to the full
- * approval page; deciding happens only there (spec: The approval page), so
- * the list has no decision controls at all (I-56).
+ * Requests waiting on, or recently decided by, this approver, grouped into
+ * what needs you, what was decided, and what expired. Each row leads with
+ * heel's own sentence and links to the full approval page; deciding happens
+ * only there (spec: The approval page), so the list has no decision
+ * controls at all (I-56).
  */
 export function pendingList(props: PendingListProps): Html {
   const heading = html`<h1>Approvals</h1>`;
@@ -83,9 +133,10 @@ export function pendingList(props: PendingListProps): Html {
         </p>`;
     }
     return html`${heading}
-      <div class="card req-empty">
-        <p><strong>Nothing is waiting for you.</strong></p>
-        <p class="muted">New requests appear here and in your notifications.</p>
+      <div class="req-empty">
+        <span class="req-empty-icon">${trusted(CHECK_CIRCLE)}</span>
+        <p class="req-empty-title">You're all caught up</p>
+        <p class="muted">Nothing is waiting for you. New requests show up here and in your notifications.</p>
       </div>`;
   }
   const waiting = rows.filter((row) => row.status === "pending").length;
@@ -95,36 +146,55 @@ export function pendingList(props: PendingListProps): Html {
         waiting > 0 && waiting < rows.length ? `, ${waiting} waiting for you` : ""
       }
     </p>
-    <ul class="req-list" aria-label="Approval requests">
-      ${rows.map((row) => requestCard(row, props.now))}
-    </ul>`;
+    ${SECTIONS.map((section) => {
+      const these = rows.filter((row) =>
+        (section.statuses as readonly ApprovalStatus[]).includes(row.status),
+      );
+      if (these.length === 0) return "";
+      const headingId = `req-${section.id}`;
+      return html`<section class="req-section" aria-labelledby="${headingId}">
+        <h2 id="${headingId}" class="req-section-title">
+          ${section.title} <span class="req-section-count">${String(these.length)}</span>
+        </h2>
+        <ul class="req-group" aria-label="${section.title}">
+          ${these.map((row) => requestRow(row, props.now, section.id !== "waiting"))}
+        </ul>
+      </section>`;
+    })}`;
 }
 
-function requestCard(row: PendingRow, now: Date): Html {
+/** lucide's circle-check. */
+const CHECK_CIRCLE = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>`;
+
+/**
+ * One request: the whole row is the link to its page. "Review" shows on
+ * hover and focus on wide screens; a chevron says the row opens.
+ */
+function requestRow(row: PendingRow, now: Date, showStatus: boolean): Html {
   const said = row.headline;
-  return html`<li class="card req" data-status="${row.status}">
-    <div class="ap-meta">
-      ${approvalStatusBadge(row.status)}
-      <span class="ap-agent">${row.agent}</span>
-      ${row.client === null ? "" : html`<span class="muted">via ${clientLabel(row.client)}</span>`}
-      <span class="muted">on ${row.account}</span>
-      <span class="muted">${formatRelative(row.createdAt, now)}</span>
-    </div>
-    <h2 class="req-title">
-      <a href="${row.href}"
-        >${said.agent} wants to <mark>${said.action}</mark> ${said.preposition}
-        <mark>${said.place}</mark>${said.rest}</a
-      >
-    </h2>
-    ${
-      row.reason === null
-        ? ""
-        : html`<p class="req-reason"><span class="muted">${row.agent} says:</span> ${row.reason}</p>`
-    }
-    <p class="req-foot muted">
-      ${stateNote(row, now)} · Rule
-      ${formatRule(row.rule)}${row.origin === "org" ? " (org)" : ""} ·
-      <span class="mono">${row.id}</span> · requested ${time(row.createdAt)}
-    </p>
+  return html`<li class="req" data-status="${row.status}">
+    <a class="req-row" href="${row.href}">
+      ${serviceIcon(row)}
+      <span class="req-body">
+        <span class="ap-meta">
+          <span class="ap-agent">${row.agent}</span>
+          ${row.client === null ? "" : html`<span class="muted">via ${clientLabel(row.client)}</span>`}
+          <span class="muted">${formatRelative(row.createdAt, now)}</span>
+          ${showStatus ? approvalStatusBadge(row.status) : ""}
+        </span>
+        <span class="req-title"
+          >${said.agent} wants to <mark>${said.action}</mark> ${said.preposition}
+          <mark>${said.place}</mark>${said.rest}</span
+        >
+        ${
+          row.reason === null
+            ? ""
+            : html`<span class="req-reason"><span class="muted">${row.agent} says:</span> ${row.reason}</span>`
+        }
+        <span class="req-foot muted">${stateNote(row, now)}</span>
+      </span>
+      <span class="req-review" aria-hidden="true">Review</span>
+      <span class="req-go" aria-hidden="true">${trusted(CHEVRON_RIGHT)}</span>
+    </a>
   </li>`;
 }

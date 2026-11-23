@@ -1,6 +1,8 @@
 import { ceremonyButton } from "./ceremony.ts";
-import { type Html, html } from "./html.ts";
+import { type Html, html, trusted } from "./html.ts";
+import { ELLIPSIS } from "./icons.ts";
 import { notice, postForm, time } from "./layout.ts";
+import { btn } from "./shadcn/button.ts";
 
 /**
  * Managing agents from the web app (roadmap 2.9): adding one, a new token, a
@@ -21,11 +23,9 @@ function daysSelect(id: string): Html {
   </select>`;
 }
 
-/** The form that adds an agent: its name, and how long its token lasts. */
+/** The form that adds an agent: its name, and how long its token lasts. Shown in the Add an agent dialog. */
 export function addAgentForm(): Html {
-  return html`<section aria-labelledby="add-agent-heading" class="card">
-    <h2 id="add-agent-heading">Add an agent</h2>
-    <form id="add-agent-form" class="stack-form" onsubmit="return false">
+  return html`<form id="add-agent-form" class="stack-form dialog-form" onsubmit="return false">
       <input type="hidden" name="op" value="add" />
       <div class="row">
         <label for="add-agent-name">Name</label>
@@ -42,10 +42,10 @@ export function addAgentForm(): Html {
         tone: "primary",
         binding: {},
         optionsFrom: "add-agent-form",
+        statusId: "add-agent-status",
       })}
-    </form>
-    <p class="muted">Its token is shown once, on the next page. Copy it into the agent's MCP settings.</p>
-  </section>`;
+      <p id="add-agent-status" class="dialog-status" role="status" aria-live="polite"></p>
+    </form>`;
 }
 
 /** One live agent's controls: a new token, workdirs, revoke. */
@@ -57,8 +57,9 @@ export function agentControls(props: {
   own: boolean;
 }): Html {
   const key = props.name.replace(/[^A-Za-z0-9_-]/g, "-");
-  return html`<details class="agent-manage">
-    <summary>Manage ${props.name}</summary>
+  return html`<details class="row-manage">
+    <summary class="${btn("ghost", "icon-sm")}" title="Manage ${props.name}"><span class="visually-hidden">Manage ${props.name}</span>${trusted(ELLIPSIS)}</summary>
+    <div class="row-manage-panel">
     ${
       props.own
         ? html`<form id="rotate-${key}" onsubmit="return false">
@@ -89,7 +90,7 @@ export function agentControls(props: {
                     csrfToken: props.csrfToken,
                   },
                   { path: root },
-                  html`<button type="submit" class="btn btn-secondary">Remove</button>`,
+                  html`<button type="submit" class="${btn("outline")}">Remove</button>`,
                 )}</li>`,
             )}
           </ul>`
@@ -113,8 +114,9 @@ export function agentControls(props: {
     ${postForm(
       { action: `/agents/${encodeURIComponent(props.name)}/revoke`, csrfToken: props.csrfToken },
       {},
-      html`<button type="submit" class="btn btn-danger" onclick="return confirm('Revoke ${props.name}? Its tokens stop working at once, and its name can\\'t be used again.')">Revoke ${props.name}</button>`,
+      html`<button type="submit" class="${btn("danger")}" onclick="return confirm('Revoke ${props.name}? Its tokens stop working at once, and its name can\\'t be used again.')">Revoke ${props.name}</button>`,
     )}
+    </div>
   </details>`;
 }
 
@@ -151,5 +153,5 @@ export function newTokenPage(
           <p>For Claude Code:</p>
           <input class="mono" readonly value="${command ?? ""}" onclick="this.select()" />`
     }
-    <p><a class="btn btn-primary" href="/agents">Done</a></p>`;
+    <p><a class="${btn()}" href="/agents">Done</a></p>`;
 }

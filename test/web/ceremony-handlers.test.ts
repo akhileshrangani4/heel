@@ -44,6 +44,6 @@ describe("passkey buttons", () => {
         });
       }
     }
-    expect(checked).toEqual(expect.arrayContaining(["connections", "agents", "approvals"]));
+    expect(checked).toEqual(expect.arrayContaining(["connections", "agents", "devices"]));
   });
 });

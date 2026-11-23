@@ -1,6 +1,10 @@
-import { ceremonyButton } from "./ceremony.ts";
-import { type Html, html } from "./html.ts";
+import { ceremonyButton, KEY_ICON } from "./ceremony.ts";
+import { type Html, html, trusted } from "./html.ts";
 import { notice, time } from "./layout.ts";
+import { btn } from "./shadcn/button.ts";
+
+/** lucide's link-2-off. */
+const LINK_OFF_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 17H7A5 5 0 0 1 7 7"/><path d="M15 7h2a5 5 0 0 1 4 8"/><line x1="8" x2="12" y1="12" y2="12"/><line x1="2" x2="22" y1="2" y2="22"/></svg>`;
 
 export type EnrollProps =
   /** A live one-time link from `heel user enroll`. */
@@ -18,13 +22,18 @@ export type EnrollProps =
 export function enrollPage(props: EnrollProps): Html {
   if (props.kind === "invalid") {
     return html`<div class="signin">
-      <h1>Enroll a passkey</h1>
-      ${notice(
-        "error",
-        html`<p><strong>This link can't be used.</strong> It was already used, or more than 15
-            minutes have passed.</p>
-          <p>On the heel host, run <code>heel user enroll &lt;user&gt;</code> for a new one.</p>`,
-      )}
+      <div class="signin-empty">
+        <span class="signin-empty-icon">${trusted(LINK_OFF_ICON)}</span>
+        <h1>This link can't be used</h1>
+        <p class="muted">
+          It was already used, or more than 15 minutes have passed. Run this on the heel host for a
+          new one.
+        </p>
+      </div>
+      <div class="signin-command">
+        <code id="enroll-command">heel user enroll &lt;user&gt;</code>
+        <button type="button" class="${btn("ghost", "sm")}" data-heel-copy="enroll-command">Copy</button>
+      </div>
     </div>`;
   }
   if (props.kind === "waiting") {
@@ -56,6 +65,7 @@ export function enrollPage(props: EnrollProps): Html {
         tone: "primary",
         binding: { token: props.token },
         describedBy: "enroll-help",
+        icon: KEY_ICON,
       })}
     </div>
   </div>`;

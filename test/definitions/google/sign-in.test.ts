@@ -196,7 +196,8 @@ describe("Connections without providers.google", () => {
 
     expect(page).not.toContain("providers.google");
     // An account that hasn't signed in yet: Sign in is the card's primary button.
-    expect(rowOf(page, "gmail-home")).toContain('type="submit" class="btn btn-primary"');
+    // shadcn's Button in its default (primary) variant.
+    expect(rowOf(page, "gmail-home")).toMatch(/type="submit" class="btn [^"]*\bbg-primary\b/);
   });
 
   it("keys off the config, so a configured client gets no setup hint even while sign-in is off", async () => {

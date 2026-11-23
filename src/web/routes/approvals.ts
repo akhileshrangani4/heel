@@ -10,7 +10,6 @@ import {
 } from "../../store/approvals.ts";
 import { foldsFor, isFoldName, rememberFold } from "../../store/folds.ts";
 import { hintsFor } from "../../store/hints.ts";
-import { pushSubscriptionsOf } from "../../store/notifications.ts";
 import { type Decision, decisionBinding, decisionFromBinding } from "../decisions.ts";
 import {
   type HumanPlaneDeps,
@@ -28,10 +27,9 @@ import { pauseNoticeFor } from "../pause-targets.ts";
 import type { SessionView } from "../sessions.ts";
 import { type ApprovalRequestView, approvalRequest, foldKind } from "../ui/approval-request.ts";
 import { clientScript } from "../ui/client.ts";
-import { addDeviceControl, recoveryNotices } from "../ui/devices.ts";
+import { recoveryNotices } from "../ui/devices.ts";
 import { html } from "../ui/html.ts";
 import { type PendingRow, pendingList } from "../ui/pending-list.ts";
-import { pushControl } from "../ui/push-control.ts";
 import { suggestionCards } from "../ui/suggestions.ts";
 import { emailPreviewFrom, headline, httpPreviewFrom, mergePreviewFrom } from "../ui/summary.ts";
 import { proposalCardsFor } from "./proposals.ts";
@@ -211,16 +209,7 @@ export function approvalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       ${pendingList({ now, load: { ok: true, rows }, ruleChangesWaiting: changes.count + asks.count })}
       ${asks.cards}
       ${changes.cards}
-      ${pushControl({
-        vapidPublicKey: deps.vapidPublicKey,
-        devices: {
-          count: pushSubscriptionsOf(deps.db, session.userId).length,
-          turnOff: { action: "/push/unsubscribe-all", csrfToken: session.csrfToken },
-          turnedOff: /^\d+$/.test(c.req.query("notifications-off") ?? "")
-            ? Number(c.req.query("notifications-off"))
-            : null,
-        },
-      })} ${addDeviceControl()}`,
+`,
       script: clientScript(session.csrfToken),
     });
   });

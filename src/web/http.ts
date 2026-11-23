@@ -10,7 +10,7 @@ import type { MicrosoftClient } from "../definitions/microsoft/oauth.ts";
 import type { RulesSource } from "../gateway/pipeline/pipeline.ts";
 import type { PauseStore } from "../gateway/pipeline/ports.ts";
 import type { Logger } from "../log.ts";
-import type { SqliteApprovalStore } from "../store/approvals.ts";
+import { listApprovalsFor, type SqliteApprovalStore } from "../store/approvals.ts";
 import type { HeelDb } from "../store/db.ts";
 import type { OidcClient } from "../teams/oidc.ts";
 import type { KeyCheck } from "../vault/key-check.ts";
@@ -128,7 +128,7 @@ export interface HumanPlaneDeps {
 
 /** What a route behind `requireSession` can read from the context. */
 export interface SignedInEnv {
-  Variables: { session: SessionView };
+  Variables: { session: SessionView; approvalsWaiting?: number };
 }
 
 /** The header the page script sends its CSRF token in; plain forms send a `csrf` field. */
@@ -144,7 +144,9 @@ export function renderPage(
   props: PageProps,
   status: 200 | 400 | 403 | 404 | 503 = 200,
 ): Response {
-  return c.html(toHtmlString(page(props)), status);
+  // requireSession counts the viewer's waiting requests once per page, for the menu.
+  const waiting = props.waiting ?? (c as Context<SignedInEnv>).get("approvalsWaiting");
+  return c.html(toHtmlString(page(waiting === undefined ? props : { ...props, waiting })), status);
 }
 
 // ── sessions ────────────────────────────────────────────────────────────────
@@ -168,6 +170,13 @@ export function requireSession(deps: HumanPlaneDeps): MiddlewareHandler<SignedIn
       return c.json({ error: "signed_out" }, 401);
     }
     c.set("session", session);
+    if (c.req.method === "GET") {
+      const now = deps.now();
+      c.set(
+        "approvalsWaiting",
+        listApprovalsFor(deps.db, session, now).filter((r) => r.status === "pending").length,
+      );
+    }
     return next();
   };
 }

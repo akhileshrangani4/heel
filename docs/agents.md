@@ -17,7 +17,7 @@ MCP URL: http://127.0.0.1:7300/mcp
 
 Give each agent and machine its own token, so you can see which one made a call and pause one without the others.
 
-**Or from the web app.** On **Agents**, **Add an agent** asks for your passkey, then shows the token once with its MCP address and the `claude mcp add` command to copy. Each agent's **Manage** gives it a new token (passkey; the old one stops working), adds a folder its `heel run` may work in (passkey) or removes one, and revokes it. Members manage their own agents; admins anyone's.
+**Or from the web app.** On **Agents**, **+ Add agent** opens a short form that asks for your passkey, then shows the token once with its MCP address and the `claude mcp add` command to copy. Each agent's **⋯** menu gives it a new token (passkey; the old one stops working), adds a folder its `heel run` may work in (passkey) or removes one, and revokes it. Members manage their own agents; admins anyone's.
 
 ## Add heel to your agent
 

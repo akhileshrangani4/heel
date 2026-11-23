@@ -2,6 +2,7 @@ import { ceremonyButton } from "./ceremony.ts";
 import { formatRelative } from "./format.ts";
 import { type Html, html } from "./html.ts";
 import { type FormTarget, notice, postForm, time } from "./layout.ts";
+import { btn } from "./shadcn/button.ts";
 
 /** A recovery link someone made from the command line, waiting out its delay. */
 export interface RecoveryNotice {
@@ -33,7 +34,7 @@ export function recoveryNotices(
         ${postForm(
           cancel,
           { id: r.id },
-          html`<button type="submit" class="btn btn-secondary">Cancel this link</button>`,
+          html`<button type="submit" class="${btn("outline")}">Cancel this link</button>`,
         )}`,
     ),
   )}`;
@@ -44,17 +45,19 @@ export function recoveryNotices(
  * passkey they already have, and gets a one-time link to open there.
  */
 export function addDeviceControl(): Html {
-  return html`<section aria-labelledby="device-heading" class="push">
-    <h2 id="device-heading">Add another device</h2>
-    <p class="muted" id="device-help">
-      Confirm with this passkey to get a one-time link. Open it within 15 minutes on the device you
-      want to add, such as your phone.
-    </p>
-    <div class="actions">
+  return html`<section aria-labelledby="device-heading" class="settings-card push">
+    <div class="settings-row">
+      <div class="settings-row-text">
+        <h2 id="device-heading" class="settings-row-title">Add another device</h2>
+        <p class="muted" id="device-help">
+          Confirm with this passkey to get a one-time link. Open it within 15 minutes on the device
+          you want to add, such as your phone.
+        </p>
+      </div>
       ${ceremonyButton({
         callback: { handler: "addDevice" },
         intent: "add-device",
-        label: "Add another device",
+        label: "Add a device",
         tone: "secondary",
         binding: {},
         describedBy: "device-help",

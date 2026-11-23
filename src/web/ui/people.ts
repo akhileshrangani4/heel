@@ -1,7 +1,10 @@
 import type { PersonView } from "../../store/people.ts";
 import { ceremonyButton } from "./ceremony.ts";
-import { type Html, html } from "./html.ts";
-import { badge, notice, time } from "./layout.ts";
+import { dialog, dialogTrigger } from "./dialog.ts";
+import { type Html, html, trusted } from "./html.ts";
+import { ELLIPSIS } from "./icons.ts";
+import { badge, notice, scrollRegion, time } from "./layout.ts";
+import { btn } from "./shadcn/button.ts";
 
 /**
  * The People page (roadmap 2.9): who uses this heel, a passkey link for each,
@@ -58,32 +61,37 @@ function linkButton(person: PersonView, key: string): Html {
   </div>`;
 }
 
-function personCard(
+function personRow(
   person: PersonView,
   props: { viewerId: string; admin: boolean },
   index: number,
 ): Html {
   const key = `p${String(index)}`;
   const you = person.id === props.viewerId;
-  return html`<li class="card person">
-    <p><strong class="mono">${person.name}</strong>${you ? " (you)" : ""}
+  return html`<tr class="person" data-person="${person.name}">
+    <th scope="row" class="person-name"><strong class="mono">${person.name}</strong>${you ? html` <span class="muted">(you)</span>` : ""}</th>
+    <td class="person-role">
       ${badge(person.role === "admin" ? "admin" : "member", person.role === "admin" ? "warn" : "ok")}
-      ${person.disabled ? badge("disabled", "error") : ""}</p>
-    <p class="muted">${
+      ${person.disabled ? badge("disabled", "error") : ""}
+    </td>
+    <td class="person-meta muted">${
       person.passkeys === 0
         ? "No passkey yet."
         : `${String(person.passkeys)} passkey${person.passkeys === 1 ? "" : "s"}.`
-    } ${person.email === null ? "No notification email." : `Notifications: ${person.email}.`}</p>
-    ${
+    } ${person.email === null ? "No notification email." : `Notifications: ${person.email}.`}</td>
+    <td class="person-manage">${
       person.disabled
         ? ""
-        : html`<details>
-          <summary>Manage ${person.name}</summary>
-          ${props.admin && !you ? linkButton(person, key) : ""}
-          ${emailForm(person, key)}
+        : html`<details class="set-menu">
+          <summary class="${btn("ghost", "icon-sm")}" aria-label="Manage ${person.name}" title="Manage ${person.name}">${trusted(ELLIPSIS)}</summary>
+          <div class="set-menu-panel">
+            <p class="set-menu-title">Manage ${person.name}</p>
+            ${props.admin && !you ? linkButton(person, key) : ""}
+            ${emailForm(person, key)}
+          </div>
         </details>`
-    }
-  </li>`;
+    }</td>
+  </tr>`;
 }
 
 export function peoplePage(props: {
@@ -93,39 +101,61 @@ export function peoplePage(props: {
   teamSignIn: boolean;
   saved: boolean;
 }): Html {
-  return html`<h1>People</h1>
-    <p class="muted">${
-      props.admin
-        ? "Everyone who uses this heel. Each person has their own agents, accounts and rules, and sees only their own."
-        : "You, as heel knows you."
-    }</p>
+  const canAdd = props.admin && !props.teamSignIn;
+  return html`<div class="set-head">
+      <div>
+        <h1>People</h1>
+        <p class="muted">${
+          props.admin
+            ? "Everyone who uses this heel. Each person has their own agents, accounts and rules, and sees only their own."
+            : "You, as heel knows you."
+        }</p>
+      </div>
+      ${canAdd ? dialogTrigger({ dialogId: "add-person-dialog", label: "+ Add person", className: btn("default", "sm") }) : ""}
+    </div>
     ${props.saved ? notice("ok", html`<p>Saved.</p>`) : ""}
     ${
-      props.admin && !props.teamSignIn
-        ? html`<section class="card" aria-labelledby="add-person-heading">
-          <h2 id="add-person-heading">Add a person</h2>
-          <div id="add-person" class="stack-form">
-            <input type="hidden" name="op" value="add" />
-            <div class="row">
-              <label for="add-person-name">Name</label>
-              <input id="add-person-name" name="name" maxlength="64" autocomplete="off" placeholder="sam" autocapitalize="off" autocorrect="off" spellcheck="false" />
-            </div>
-            <p class="muted">Lower-case, like a username. They get their own rules file and nothing of yours. Next you get a link that sets up their passkey.</p>
-            ${ceremonyButton({
-              callback: { handler: "managePeople" },
-              intent: "manage-people",
-              label: "Add with your passkey",
-              tone: "primary",
-              binding: {},
-              optionsFrom: "add-person",
-            })}
-          </div>
-        </section>`
+      canAdd
+        ? dialog({
+            id: "add-person-dialog",
+            title: "Add a person",
+            description:
+              "Lower-case, like a username. They get their own rules file and nothing of yours. Next you get a link that sets up their passkey.",
+            body: html`<div id="add-person" class="stack-form">
+              <input type="hidden" name="op" value="add" />
+              <div class="row">
+                <label for="add-person-name">Name</label>
+                <input id="add-person-name" name="name" maxlength="64" autocomplete="off" placeholder="sam" autocapitalize="off" autocorrect="off" spellcheck="false" />
+              </div>
+              ${ceremonyButton({
+                callback: { handler: "managePeople" },
+                intent: "manage-people",
+                label: "Add with your passkey",
+                tone: "primary",
+                binding: {},
+                optionsFrom: "add-person",
+              })}
+            </div>`,
+          })
         : props.admin
           ? html`<p class="muted">People join by signing in with your sign-in provider; then they show up here.</p>`
           : ""
     }
-    <ul class="person-list">${props.people.map((p, i) => personCard(p, props, i))}</ul>`;
+    ${scrollRegion(
+      "People",
+      html`<table class="data person-table">
+        <caption class="visually-hidden">People</caption>
+        <thead>
+          <tr>
+            <th scope="col">Person</th>
+            <th scope="col">Role</th>
+            <th scope="col">Passkeys and notifications</th>
+            <th scope="col"><span class="visually-hidden">Manage</span></th>
+          </tr>
+        </thead>
+        <tbody>${props.people.map((p, i) => personRow(p, props, i))}</tbody>
+      </table>`,
+    )}`;
 }
 
 /** The link, once. */
@@ -151,5 +181,5 @@ export function personLinkPage(link: PeopleLink | null): Html {
         ? html`It works once, until ${time(new Date(link.expiresAt))}.`
         : html`A recovery link: it works from ${time(new Date(link.activeFrom))} until ${time(new Date(link.expiresAt))}. Until then, their Approvals page shows it with a way to cancel.`
     }</p>
-    <p><a class="btn btn-primary" href="/people">Done</a></p>`;
+    <p><a class="${btn()}" href="/people">Done</a></p>`;
 }

@@ -3,6 +3,7 @@ import { ruleYaml } from "../../proposals/rules.ts";
 import { type Html, html } from "./html.ts";
 import { postForm } from "./layout.ts";
 import { ruleInWords } from "./rule-words.ts";
+import { btn } from "./shadcn/button.ts";
 
 /**
  * Rules heel suggests from what you decided (roadmap 2.10). Each one is read
@@ -36,12 +37,12 @@ export function suggestionCards(
             ${postForm(
               { action: `/suggestions/${encodeURIComponent(s.key)}/propose`, csrfToken },
               {},
-              html`<button type="submit" class="btn btn-primary">Review and add</button>`,
+              html`<button type="submit" class="${btn()}">Review and add</button>`,
             )}
             ${postForm(
               { action: `/suggestions/${encodeURIComponent(s.key)}/dismiss`, csrfToken },
               { from },
-              html`<button type="submit" class="btn btn-secondary">Don't suggest this again</button>`,
+              html`<button type="submit" class="${btn("outline")}">Don't suggest this again</button>`,
             )}
           </div>
         </li>`,

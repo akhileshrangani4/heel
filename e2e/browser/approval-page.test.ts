@@ -151,6 +151,8 @@ describe("the approval page in a browser", () => {
     const args = page.locator('details[data-heel-fold="args"]');
     expect(await args.evaluate((d) => (d as { open: boolean }).open)).toBe(false);
     const saved = page.waitForResponse((r) => r.url().endsWith("/approvals/folds"));
+    // Full arguments sit inside the one Details fold.
+    await page.locator('details[data-heel-fold="details"] > summary').click();
     await page.getByText("Full arguments, exactly what runs").click();
     expect((await saved).status()).toBe(200);
     await page.reload();

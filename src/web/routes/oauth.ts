@@ -161,6 +161,7 @@ export function oauthRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       renderPage(c, {
         title: "Connect an app",
         viewer: viewerOf(session),
+        focus: true,
         body: connectPage(body),
         script: clientScript(session.csrfToken),
       });

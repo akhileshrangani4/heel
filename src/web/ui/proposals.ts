@@ -4,6 +4,7 @@ import { ceremonyButton } from "./ceremony.ts";
 import { formatRelative } from "./format.ts";
 import { type Html, html } from "./html.ts";
 import { badge, type FormTarget, notice, postForm, type Tone, time } from "./layout.ts";
+import { btn } from "./shadcn/button.ts";
 
 /** One pending proposal, as the Approvals list shows it. */
 export interface ProposalCard {
@@ -335,7 +336,7 @@ export function proposalPage(props: ProposalPageProps): Html {
                   })
                 : ""
             }
-            ${postForm(props.reject, {}, html`<button type="submit" class="btn btn-secondary">Reject</button>`)}
+            ${postForm(props.reject, {}, html`<button type="submit" class="${btn("outline")}">Reject</button>`)}
             <p id="proposal-passkey" class="muted">
               Adding them asks for your passkey. Nothing changes until you add them; rejecting
               changes nothing. Proposals expire ${formatRelative(props.expiresAt, props.now)}.

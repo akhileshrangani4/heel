@@ -150,3 +150,42 @@ export function wouldHaveStopped(
     .limit(5_000)
     .all();
 }
+
+/** When each named account last had a call decided, for the Connections page. */
+export function lastUsedByAccount(
+  db: HeelDb,
+  orgId: string,
+  aliases: readonly string[],
+): Map<string, Date> {
+  if (aliases.length === 0) return new Map();
+  const rows = db
+    .select({ account: auditLog.account, lastAt: sql<number | null>`max(${auditLog.at})` })
+    .from(auditLog)
+    .where(and(eq(auditLog.orgId, orgId), inArray(auditLog.account, [...aliases])))
+    .groupBy(auditLog.account)
+    .all();
+  return new Map(
+    rows.flatMap((r) =>
+      r.lastAt == null ? [] : [[r.account, new Date(Number(r.lastAt))] as const],
+    ),
+  );
+}
+
+/** Every account name in the audit rows the viewer may see, for the Activity filter. */
+export function accountsSeen(
+  db: HeelDb,
+  input: { orgId: string; ownerIds: readonly string[] | null },
+): string[] {
+  const conditions: SQL[] = [eq(auditLog.orgId, input.orgId)];
+  if (input.ownerIds !== null) {
+    if (input.ownerIds.length === 0) return [];
+    conditions.push(inArray(auditLog.ownerId, [...input.ownerIds]));
+  }
+  return db
+    .selectDistinct({ account: auditLog.account })
+    .from(auditLog)
+    .where(and(...conditions))
+    .orderBy(auditLog.account)
+    .all()
+    .map((r) => r.account);
+}
