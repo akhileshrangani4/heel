@@ -113,6 +113,20 @@ function outcomeFrom(
   return { kind: "none" };
 }
 
+/** Why a pasted Google address was refused, for the log; never the address itself. */
+function pasteRefusal(
+  pending: { userId: string } | null,
+  userId: string,
+  pasted: URL | null,
+  state: string,
+): string {
+  if (pending === null) return "no such sign-in, or it expired";
+  if (pending.userId !== userId) return "another person's sign-in";
+  if (pasted === null) return "not an address";
+  if (pasted.searchParams.get("state") !== state) return "another sign-in's address";
+  return "not this sign-in's listener";
+}
+
 function back(params: Record<string, string>): string {
   return `/connections?${new URLSearchParams(params)}`;
 }
@@ -335,6 +349,9 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       pasted.pathname === "/" &&
       pasted.searchParams.get("state") === state;
     if (!ownListener || pasted === null) {
+      // Why, without the address itself (it carries the sign-in code).
+      const reason = pasteRefusal(pending, session.userId, pasted, state);
+      deps.log.info({ by: session.userId, reason }, "Google sign-in paste refused");
       return c.redirect(
         back({
           failed: failures.add(

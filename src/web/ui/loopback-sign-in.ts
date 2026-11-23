@@ -28,23 +28,37 @@ const PASTE_SCRIPT = `
   const note = document.getElementById("paste-note");
   if (!button || !form || !input || !note) return;
   const state = form.querySelector("input[name=state]").value;
-  const looksRight = (text) => /^(https?:\\/\\/)?(127\\.0\\.0\\.1|localhost)[:/]/.test(text) && text.includes("state=" + state);
-  const manual = (message) => { note.textContent = message; input.focus(); };
+  // The loopback address anywhere in what was copied: some browsers add
+  // invisible marks or drop the scheme.
+  const find = (text) => {
+    const match = /(https?:\\/\\/)?(127\\.0\\.0\\.1|localhost):\\d+\\/?\\?[^\\s"'<>]*/i.exec(text);
+    return match ? match[0] : null;
+  };
+  const manual = (message, value) => {
+    if (value) input.value = value;
+    note.textContent = message;
+    input.focus();
+  };
   button.addEventListener("click", async () => {
     if (!navigator.clipboard || !navigator.clipboard.readText) {
       manual("Paste the address in the box below, then choose Finish signing in.");
       return;
     }
     let text = "";
-    try { text = (await navigator.clipboard.readText()).trim(); } catch {
+    try { text = await navigator.clipboard.readText(); } catch {
       manual("heel couldn't read what you copied. Paste it in the box below, then choose Finish signing in.");
       return;
     }
-    if (!looksRight(text)) {
-      manual("What you copied isn't the address of Google's last page. Copy the whole address from that tab, starting http://127.0.0.1, and try again.");
+    const address = find(text);
+    if (address === null) {
+      manual("What you copied doesn't have Google's last address in it. Copy the whole address from that tab, starting http://127.0.0.1, and try again.");
       return;
     }
-    input.value = text;
+    if (!address.includes("state=" + state)) {
+      manual("That address is from another sign-in, maybe an older Google tab. Use the Google tab this page opened, or start the sign-in again from Connections.");
+      return;
+    }
+    input.value = address;
     // Older Safari has no requestSubmit; the box is filled, so submit() is safe.
     if (form.requestSubmit) form.requestSubmit(); else form.submit();
   });

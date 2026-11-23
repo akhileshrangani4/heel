@@ -132,6 +132,27 @@ describe("Gmail with heel's built-in Google client", () => {
     expect(local).toContain('id="paste-finish"');
   });
 
+  it("Paste and finish finds the address in what was copied, scheme or not", () => {
+    const page = String(
+      loopbackSignInPage({
+        alias: "gmail-home",
+        google: "https://accounts.google.com/o/oauth2/v2/auth",
+        paste: { action: "/connections/google/paste", csrfToken: "t" },
+        state: "s",
+        remote: true,
+      }),
+    );
+    const script = /<script>([\s\S]*?)<\/script>/.exec(page)?.[1] ?? "";
+    expect(() => new Function(script)).not.toThrow();
+    const body = /const find = \(text\) => \{([\s\S]*?)\n {2}\};/.exec(page)?.[1] ?? "";
+    const find = new Function("text", body) as (text: string) => string | null;
+    expect(find("http://127.0.0.1:5555/?state=s&code=1")).toBe(
+      "http://127.0.0.1:5555/?state=s&code=1",
+    );
+    expect(find("\u200e127.0.0.1:5555/?state=s&code=1\n")).toBe("127.0.0.1:5555/?state=s&code=1");
+    expect(find("https://evil.example/?state=s")).toBeNull();
+  });
+
   it("takes a pasted address that lost its http://", async () => {
     const { h, google } = setUp();
     const owner = await h.signIn(await h.enroll());
