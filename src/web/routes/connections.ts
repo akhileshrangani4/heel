@@ -1,7 +1,11 @@
 import { randomBytes } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
 import { Hono } from "hono";
-import { GOOGLE_CALLBACK_PATH, MICROSOFT_CALLBACK_PATH } from "../../config/schema.ts";
+import {
+  GOOGLE_CALLBACK_PATH,
+  isLoopbackUrl,
+  MICROSOFT_CALLBACK_PATH,
+} from "../../config/schema.ts";
 import { CALENDAR_PROFILE, GMAIL_PROFILE, googleSignIn } from "../../definitions/google/oauth.ts";
 import { upstreamSettings } from "../../definitions/mcp/settings.ts";
 import {
@@ -227,6 +231,7 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
           google: url.toString(),
           paste: { action: GOOGLE_PASTE_PATH, csrfToken: session.csrfToken },
           state,
+          remote: !isLoopbackUrl(deps.publicUrl),
         }),
       });
     }
@@ -316,7 +321,9 @@ export function connectionRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
   app.post(GOOGLE_PASTE_PATH, signedIn, requireCsrfField(), async (c) => {
     const session = c.get("session");
     const state = (await formField(c, "state")) ?? "";
-    const address = ((await formField(c, "address")) ?? "").trim();
+    const typed = ((await formField(c, "address")) ?? "").trim();
+    // Some browsers copy the address without its scheme.
+    const address = /^https?:\/\//i.test(typed) ? typed : `http://${typed}`;
     const pending = oauth?.signIns.get(state, deps.now()) ?? null;
     const pasted = URL.parse(address);
     const ownListener =
