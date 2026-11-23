@@ -69,6 +69,19 @@ rules:
 
   # anything else is blocked: no rule matched`;
 
+/** The two settings agents usually get, before heel. */
+const OPTIONS: [string, string][] = [
+  ['ask about everything', 'safe for an hour. by the twentieth prompt you approve without reading.'],
+  ['allow everything', 'fast, until one call deletes, sends or merges something you can’t take back.'],
+];
+
+/** How heel works, in the words the flow demo uses. */
+const STEPS: [string, string][] = [
+  ['say what it’s for', 'a rules file you can read: reads run, sending email asks, deleting over 20 is blocked.'],
+  ['it calls through heel', 'heel holds the keys for github, gmail, slack, any mcp server, api or cli. the agent gets a heel token.'],
+  ['every call gets a verdict', 'it runs, it waits for your passkey on your phone, or it’s blocked before it reaches the service.'],
+];
+
 /** The quick start's commands, in order (docs/quickstart.md). */
 const QUICKSTART: ['#' | '$', string][] = [
   ['#', '# 1 · install and set up'],
@@ -156,10 +169,17 @@ export default function HomePage() {
             heel
           </h1>
           <p
-            className="rise mt-3 text-lg text-neutral-600 sm:text-xl dark:text-neutral-300"
+            className="rise mt-3 text-lg font-medium text-neutral-800 sm:text-xl dark:text-neutral-100"
             style={{ animationDelay: '120ms' }}
           >
-            access control for your ai agents
+            your agents use your accounts through heel
+          </p>
+          <p
+            className="rise mt-2 max-w-xl text-balance text-neutral-600 short:hidden dark:text-neutral-300"
+            style={{ animationDelay: '150ms' }}
+          >
+            every call is checked against what the agent is for. it runs, it waits for your passkey,
+            or it&rsquo;s blocked. the agent never holds your keys.
           </p>
           <div
             className="rise mt-6 flex flex-wrap items-center justify-center gap-3"
@@ -181,6 +201,39 @@ export default function HomePage() {
             <FlowDemo />
           </div>
         </div>
+      </section>
+
+      <section data-snap className={screen}>
+        <h2 className="text-3xl font-semibold tracking-[-0.04em] sm:text-4xl">
+          your agent needs access. you can&rsquo;t watch every call.
+        </h2>
+        <p className="mt-4 max-w-xl leading-relaxed text-neutral-600 dark:text-neutral-300">
+          without heel there are two settings, and neither works for long.
+        </p>
+        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          {OPTIONS.map(([title, body]) => (
+            <div
+              key={title}
+              className="rounded-2xl border border-dashed border-black/15 p-5 dark:border-white/15"
+            >
+              <p className="font-medium text-neutral-500 line-through decoration-red-400/70">{title}</p>
+              <p className="mt-1 text-neutral-600 dark:text-neutral-300">{body}</p>
+            </div>
+          ))}
+        </div>
+        <p className="mt-12 text-sm font-medium text-neutral-500">with heel</p>
+        <ol className="mt-3 grid gap-4 sm:grid-cols-3">
+          {STEPS.map(([title, body], i) => (
+            <li
+              key={title}
+              className="rounded-2xl border border-black/10 bg-white/70 p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)] dark:border-white/10 dark:bg-white/[0.03]"
+            >
+              <span className="font-mono text-xs text-neutral-400">0{i + 1}</span>
+              <p className="mt-2 font-semibold tracking-[-0.02em]">{title}</p>
+              <p className="mt-1 text-sm leading-relaxed text-neutral-600 dark:text-neutral-300">{body}</p>
+            </li>
+          ))}
+        </ol>
       </section>
 
       <section data-snap className={screen}>

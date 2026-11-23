@@ -196,6 +196,11 @@ const PHASES: Phase[] = [
         'twelve pages, one per task: get started, use heel, reference, about. the quickstart starts with the one line to give your agent, and every old link still works.',
         'shipped',
       ],
+      [
+        'what heel is, in two sentences',
+        'the home page says what heel does and how before anything else, names the two settings agents get without it, and shows how it works in three steps.',
+        'shipped',
+      ],
     ],
     gate: 'people set heel up on their own, without help.',
   },
