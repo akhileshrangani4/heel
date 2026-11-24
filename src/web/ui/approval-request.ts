@@ -13,17 +13,9 @@ import {
   plural,
 } from "./format.ts";
 import { flag, type Html, html, trusted } from "./html.ts";
+import { badge, notice, type PauseNotice, type Tone, time } from "./layout.ts";
 import {
-  badge,
-  type FormTarget,
-  notice,
-  type PauseNotice,
-  postForm,
-  type Tone,
-  time,
-} from "./layout.ts";
-import { btn } from "./shadcn/button.ts";
-import {
+  actionPhrase,
   argumentLines,
   clientLabel,
   type EmailPreview,
@@ -32,6 +24,8 @@ import {
   headline,
   homeDomain,
   type MergePreview,
+  middle,
+  toolPhrase,
 } from "./summary.ts";
 
 export type { EmailPreview, MergePreview } from "./summary.ts";
@@ -63,12 +57,13 @@ export interface ApprovalRequestView {
    * never what the call does: it's shown apart from heel's facts, as quoted words.
    */
   reason: string | null;
-  /** The code-mode script the call came from, as the agent wrote it (C3), or null. */
+  /** The code-mode task the call came from, as the agent wrote it (C3), or null. */
   script: ApprovalScript | null;
   /** The MCP client the agent used, as that client named itself; null when unknown. */
   client: string | null;
   /** The canonical, post-rewrite arguments: exactly what will run. */
   args: unknown;
+  /** The email a send or a draft holds; null for anything else. */
   email: EmailPreview | null;
   /** The merge view, for `github.merge`; null for anything else. */
   merge: MergePreview | null;
@@ -102,6 +97,16 @@ export const STANDING_DURATIONS = [
 /** The longest standing approval a person can pick, in days. */
 export const STANDING_LONGEST_DAYS = 30;
 
+/** Design variant for the email header: like a mail client (A), or one labelled row per field (B). */
+export type EmailLayout = "mail" | "rows";
+
+/**
+ * Design variant for approving for longer: a menu on Approve once (A), or an
+ * offer on the approved page (B, preview only: the decide route refuses a
+ * second decision on an approved request today).
+ */
+export type AllowAgain = "menu" | "after";
+
 export interface ApprovalRequestProps {
   now: Date;
   /** The request, or why it couldn't be loaded. */
@@ -112,15 +117,24 @@ export interface ApprovalRequestProps {
   onDecide: CeremonyCallback;
   /** The viewer's remembered sections for this kind of request; none by default. */
   folds?: Folds;
-  /**
-   * The script parked at this call (C2), with the form that stops it; null
-   * when none is waiting. `stopped` is true right after the viewer stopped it.
-   */
-  parked?: { stop: FormTarget } | null;
-  stopped?: boolean;
-  /** The parked script is a background one: approving starts it again at once (C6). */
+  /** The task waiting on this call runs in the background: approving starts it again at once (C6). */
   background?: boolean;
+  emailLayout?: EmailLayout;
+  allowAgain?: AllowAgain;
 }
+
+/**
+ * A menu marked `data-heel-reset` goes back to its default choices when it
+ * closes, so a choice made and abandoned never stays behind a button.
+ * Presentation only: it decides nothing. Part of the decision pages' script.
+ */
+export const MENU_RESET_SCRIPT = `
+document.addEventListener("toggle", (event) => {
+  const menu = event.target;
+  if (!(menu instanceof HTMLDetailsElement) || menu.open || !menu.hasAttribute("data-heel-reset")) return;
+  for (const input of menu.querySelectorAll("input")) input.checked = input.defaultChecked;
+}, true);
+`;
 
 /** What remembered folds are keyed by: the action, or `provider:tool` without one. */
 export function foldKind(
@@ -137,6 +151,7 @@ const STATUS_BADGE: Record<ApprovalStatus, { label: string; tone: Tone | "muted"
   executed: { label: "Ran once", tone: "info" },
 };
 
+/** The status as a badge, for the approvals list. */
 export function approvalStatusBadge(status: ApprovalStatus): Html {
   const { label, tone } = STATUS_BADGE[status];
   return badge(label, tone);
@@ -157,32 +172,29 @@ const ICONS = {
   check: svg('<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>'),
   x: svg('<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>'),
   clock: svg('<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>'),
-  pause: svg(
-    '<circle cx="12" cy="12" r="10"/><line x1="10" x2="10" y1="15" y2="9"/><line x1="14" x2="14" y1="15" y2="9"/>',
-  ),
   paperclip: svg(
     '<path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"/>',
   ),
   back: svg('<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>'),
+  steps: svg(
+    '<path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/>',
+  ),
 } as const;
 
 /** The chevron at the right of every fold's summary; CSS turns it when the fold is open. */
 const CHEV = html`<span class="chev">${trusted(ICONS.chevron)}</span>`;
 
-/** A one-line status alert with an icon, styled like the pause alert. */
-function stateAlert(tone: Tone, icon: keyof typeof ICONS, content: Html): Html {
-  const role = tone === "error" ? "alert" : "status";
-  return html`<div class="ap-state" data-tone="${tone}" role="${role}">
-    <span class="ap-state-icon">${trusted(ICONS[icon])}</span>
-    <div class="ap-state-text">${content}</div>
-  </div>`;
-}
-
 /** Email bodies longer than this show the first lines and fold the rest. */
-const BODY_LINES_SHOWN = 12;
+const BODY_LINES_SHOWN = 6;
 
 /** Sections the person opened or closed before on this kind of request (store/folds.ts). */
 export type Folds = ReadonlyMap<string, boolean>;
+
+/**
+ * The page's top-level folds share one `name`, so the browser keeps at most
+ * one of them open (exclusive `<details>`).
+ */
+const ONE_OPEN = "ap-one";
 
 /**
  * A collapsible section the page remembers per kind of request. The client
@@ -195,12 +207,73 @@ function fold(
   summary: Html,
   content: Html,
   className = "ap-fold",
+  exclusive = false,
 ): Html {
   const open = folds.get(section) ?? openByDefault;
-  return html`<details class="${className}" data-heel-fold="${section}"${flag("open", open)}>
+  return html`<details class="${className}"${exclusive ? html` name="${ONE_OPEN}"` : ""} data-heel-fold="${section}"${flag("open", open)}>
     <summary><span class="fold-label">${summary}</span>${CHEV}</summary>
     ${content}
   </details>`;
+}
+
+const cap = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
+/**
+ * The page's one sentence: what will happen, where. Built from the stored
+ * call, never from the agent's words. Long names are cut in the middle here
+ * only; the content below shows them whole.
+ */
+export function askSentence(request: ApprovalRequestView): string {
+  const place = middle(request.account);
+  const email = request.email;
+  if (email !== null) {
+    if (request.action === "email.draft") return `Save an email draft in ${place}`;
+    const everyone = [...new Set([...email.to, ...email.cc, ...email.bcc])];
+    const who = everyone.length === 1 ? middle(everyone[0] ?? "") : `${everyone.length} people`;
+    return `${cap(actionPhrase(request.action, request.tool))} to ${who} from ${place}`;
+  }
+  const said = headline(request);
+  return `${cap(said.action)} ${said.preposition} ${middle(said.place)}${said.rest}`;
+}
+
+/** A stable colour per agent name, so two agents never look alike at a glance. */
+function agentHue(name: string): number {
+  let hue = 7;
+  for (const c of name) hue = (hue * 31 + (c.codePointAt(0) ?? 0)) % 360;
+  return hue;
+}
+
+/** Expiry shows only when it's close. */
+const CLOSE_MS = 2 * 60 * 60 * 1000;
+
+/** Who is asking, named once. Everywhere else the page says "the agent". */
+function whoView(request: ApprovalRequestView, now: Date): Html {
+  const soon =
+    request.status === "pending" && request.expiresAt.getTime() - now.getTime() < CLOSE_MS;
+  return html`<div class="ap-who">
+    <span class="ap-avatar" style="--hue:${String(agentHue(request.agent))}" aria-hidden="true"
+      >${request.agent.charAt(0).toUpperCase()}</span
+    >
+    <span class="ap-agent" title="${request.agent}">${middle(request.agent)}</span>
+    ${soon ? html`<span class="ap-soon">Expires ${formatRelative(request.expiresAt, now)}</span>` : ""}
+  </div>`;
+}
+
+/** How the agent reached heel, for Technical: the MCP client it named, or the surface. */
+function viaText(request: ApprovalRequestView): string {
+  if (request.client !== null) return `${clientLabel(request.client)}, as it named itself`;
+  if (request.surface === "cli") return "heel run";
+  if (request.surface === "http") return "The HTTP proxy";
+  return "Unknown";
+}
+
+/** The agent's reason, set apart and marked as its own: heel didn't check it. */
+function reasonView(request: ApprovalRequestView): Html | "" {
+  if (request.reason === null) return "";
+  return html`<figure class="reason ap-why">
+    <figcaption>The agent says <span class="ap-unchecked">Not checked</span></figcaption>
+    <blockquote>${request.reason}</blockquote>
+  </figure>`;
 }
 
 /** Recipients by domain: every domain named, outsiders marked, every address on the page. */
@@ -210,10 +283,9 @@ function recipients(
   home: string | null,
   folds: Folds,
 ): Html {
-  if (addresses.length === 0) return html`<span class="muted">none</span>`;
   return html`<ul class="ap-domains">
     ${groupByDomain(addresses, home).map((group) => {
-      const outside = group.outside ? html` <span class="ap-outside">outside</span>` : "";
+      const outside = group.outside ? html` <span class="ap-outside">Outside</span>` : "";
       if (group.addresses.length <= 3) {
         return html`<li>
           ${group.addresses.map((a) => html`<span class="ap-chip${group.outside ? " is-outside" : ""}">${a}</span> `)}${outside}
@@ -225,9 +297,8 @@ function recipients(
           folds,
           `${field}:${group.domain}`,
           false,
-          html`<strong>${group.addresses.length} people</strong> at
-            <span class="mono">${group.domain}</span>${outside}`,
-          html`<ul class="ap-addresses mono">
+          html`<strong>${group.addresses.length} people</strong> at ${group.domain}${outside}`,
+          html`<ul class="ap-addresses">
             ${group.addresses.map((a) => html`<li>${a}</li>`)}
           </ul>`,
         )}
@@ -237,9 +308,9 @@ function recipients(
 }
 
 /**
- * The body as readable text in a plain frame. A long one shows its first
- * lines and folds the rest behind "Show all N lines"; every line is on the
- * page either way (I-57), split across two blocks that join back exactly.
+ * The body as readable text. A long one shows its first lines and folds the
+ * rest behind "Show all N lines"; every line is on the page either way
+ * (I-57), split across two blocks that join back exactly.
  */
 function mailBody(body: string, folds: Folds): Html {
   const lines = body.split("\n");
@@ -261,258 +332,230 @@ function mailBody(body: string, folds: Folds): Html {
   </div>`;
 }
 
-function emailView(email: EmailPreview, headingId: string, folds: Folds): Html {
+const row = (key: string, value: Html | string, className = "ap-row") =>
+  html`<div class="${className}"><span class="ap-key">${key}</span><div class="ap-val">${value}</div></div>`;
+
+/**
+ * The email as an email: who it goes to, then the subject and body. Empty
+ * Cc and Bcc share one line rather than a row each, so nothing is hidden.
+ */
+function emailView(
+  request: ApprovalRequestView,
+  email: EmailPreview,
+  folds: Folds,
+  layout: EmailLayout,
+): Html {
+  const id = `email-${request.id}`;
+  const draft = request.action === "email.draft";
   const home = homeDomain(email.from);
+  const empty = [email.cc.length === 0 ? "cc" : "", email.bcc.length === 0 ? "bcc" : ""].filter(
+    (f) => f !== "",
+  );
   const attachments =
     email.attachments.length === 0
       ? ""
-      : html`<div class="ap-row">
-          <span class="ap-key">Files</span>
-          <div>
-            <ul class="ap-files" aria-label="Attachments">
-              ${email.attachments.map(
-                (a) => html`<li class="ap-file">
-                  <span class="ap-file-icon">${trusted(ICONS.paperclip)}</span>
-                  <span class="ap-file-name mono">${a.name}</span>
-                  <span class="muted">${a.type} · ${formatBytes(a.size)}</span>
-                </li>`,
-              )}
-            </ul>
-            <p class="ap-files-note muted">Not opened by heel.</p>
-          </div>
-        </div>`;
+      : html`<ul class="ap-files" aria-label="Attachments, not opened by heel">
+          ${email.attachments.map(
+            (a) => html`<li class="ap-file">
+              <span class="ap-file-icon">${trusted(ICONS.paperclip)}</span>
+              <span class="ap-file-name">${a.name}</span>
+              <span class="muted">${formatBytes(a.size)}</span>
+            </li>`,
+          )}
+        </ul>`;
   const forwarded =
     email.forwarded === undefined
       ? ""
-      : html`<div class="ap-row">
-          <span class="ap-key">Forwards</span>
-          <div>
-            ${fold(
-              folds,
-              "forwarded",
-              true,
-              html`${plural(lineCount(email.forwarded.text), "line")}`,
-              html`<pre class="body">${email.forwarded.text}</pre>`,
-            )}
-            ${
-              email.forwarded.attachments.length === 0
-                ? ""
-                : html`<p class="muted">
-                    With ${email.forwarded.attachments.join(", ")} (not opened by heel)
-                  </p>`
-            }
-          </div>
+      : html`<div class="ap-forwarded">
+          ${fold(
+            folds,
+            "forwarded",
+            true,
+            html`Forwards ${plural(lineCount(email.forwarded.text), "line")}`,
+            html`<pre class="body">${email.forwarded.text}</pre>`,
+          )}
+          ${
+            email.forwarded.attachments.length === 0
+              ? ""
+              : html`<p class="muted">
+                  With ${email.forwarded.attachments.join(", ")}, not opened by heel
+                </p>`
+          }
         </div>`;
-  return html`<section class="ap-content" aria-labelledby="${headingId}">
-    <h2 id="${headingId}" class="visually-hidden">The email, exactly what will be sent</h2>
-    <div class="ap-row"><span class="ap-key">From</span><span class="mono">${email.from}</span></div>
-    <div class="ap-row"><span class="ap-key">To</span>${recipients("to", email.to, home, folds)}</div>
-    <div class="ap-row"><span class="ap-key">Cc</span>${recipients("cc", email.cc, home, folds)}</div>
-    ${email.bcc.length === 0 ? "" : html`<div class="ap-row"><span class="ap-key">Bcc</span>${recipients("bcc", email.bcc, home, folds)}</div>`}
-    <div class="ap-row"><span class="ap-key">Subject</span><strong>${email.subject}</strong></div>
-    <div class="ap-row">
-      <span class="ap-key">Body</span>
-      <div>
-        ${email.bodyFormat === "html" ? html`<p class="muted">HTML source, not rendered</p>` : ""}
-        ${mailBody(email.body, folds)}
-      </div>
-    </div>
+  return html`<section class="ap-content ap-email" data-layout="${layout}" aria-labelledby="${id}">
+    <h2 id="${id}" class="ap-content-title">${draft ? "Draft, not sent" : "Email"}</h2>
+    ${row("To", email.to.length === 0 ? html`<span class="muted">Nobody</span>` : recipients("to", email.to, home, folds))}
+    ${email.cc.length === 0 ? "" : row("Cc", recipients("cc", email.cc, home, folds))}
+    ${email.bcc.length === 0 ? "" : row("Bcc", recipients("bcc", email.bcc, home, folds))}
+    ${row("From", email.from)}
+    ${empty.length === 0 ? "" : html`<p class="ap-none">No ${empty.join(" or ")}</p>`}
+    ${row("Subject", html`<strong>${email.subject}</strong>`, "ap-row ap-subject")}
+    ${email.bodyFormat === "html" ? html`<p class="muted ap-note">HTML source, not rendered</p>` : ""}
+    ${mailBody(email.body, folds)}
     ${forwarded} ${attachments}
   </section>`;
 }
 
-function mergeView(merge: MergePreview, headingId: string): Html {
-  return html`<section class="ap-content" aria-labelledby="${headingId}">
-    <div class="ap-card-head"><h2 id="${headingId}">The merge</h2></div>
-    <div class="ap-row"><span class="ap-key">Repo</span><span class="mono">${merge.repo}</span></div>
-    <div class="ap-row"><span class="ap-key">Pull request</span><span>#${merge.number}</span></div>
-    ${merge.base === null ? "" : html`<div class="ap-row"><span class="ap-key">Into</span><span class="mono">${merge.base}</span></div>`}
-    ${merge.method === null ? "" : html`<div class="ap-row"><span class="ap-key">Method</span><span>${merge.method}</span></div>`}
-    ${
-      merge.sha === null
-        ? ""
-        : html`<div class="ap-row">
-            <span class="ap-key">Commit</span>
-            <span><span class="mono ap-sha">${merge.sha}</span>
-              <span class="muted">: GitHub refuses the merge if the branch moved past it</span></span>
-          </div>`
-    }
+function mergeView(request: ApprovalRequestView, merge: MergePreview): Html {
+  const id = `merge-${request.id}`;
+  return html`<section class="ap-content" aria-labelledby="${id}">
+    <h2 id="${id}" class="ap-content-title">Merge</h2>
+    ${row("Repo", merge.repo)}
+    ${row("Pull request", `#${merge.number}`)}
+    ${merge.base === null ? "" : row("Into", merge.base)}
+    ${merge.method === null ? "" : row("Method", merge.method)}
+    ${merge.sha === null ? "" : row("Commit", html`<span class="mono ap-sha">${merge.sha}</span>`)}
   </section>`;
 }
 
 /** An HTTP proxy request, with its body decoded: what the API will receive. */
-function httpView(http: HttpPreview, headingId: string): Html {
+function httpView(request: ApprovalRequestView, http: HttpPreview): Html {
+  const id = `http-${request.id}`;
   const query = Object.entries(http.query);
   const body =
     http.body.kind === "none"
-      ? html`<span class="muted">none</span>`
+      ? html`<span class="muted">None</span>`
       : http.body.kind === "bytes"
         ? html`<span class="muted"
             >${formatBytes(http.body.size)} of ${http.body.contentType}, not text, so not shown</span
           >`
         : html`${
             http.body.kind === "text"
-              ? html`<p class="muted">Sent as ${http.body.contentType}</p>`
+              ? html`<p class="muted ap-note">Sent as ${http.body.contentType}</p>`
               : ""
           }<pre class="body">${http.body.text}</pre>`;
-  return html`<section class="ap-content" aria-labelledby="${headingId}">
-    <div class="ap-card-head">
-      <h2 id="${headingId}">The request</h2>
-      <span class="muted">exactly what the API receives</span>
-    </div>
-    <div class="ap-row">
-      <span class="ap-key">Request</span><span class="mono">${http.method} ${http.path}</span>
-    </div>
-    ${query.map(
-      ([name, value]) =>
-        html`<div class="ap-row">
-          <span class="ap-key mono">?${name}</span
-          ><span class="mono">${Array.isArray(value) ? value.join(", ") : value}</span>
-        </div>`,
+  return html`<section class="ap-content" aria-labelledby="${id}">
+    <h2 id="${id}" class="ap-content-title">Request</h2>
+    ${row("Call", html`<span class="mono">${http.method} ${http.path}</span>`)}
+    ${query.map(([name, value]) =>
+      row(
+        `?${name}`,
+        html`<span class="mono">${Array.isArray(value) ? value.join(", ") : value}</span>`,
+      ),
     )}
-    <div class="ap-row"><span class="ap-key">Body</span><div>${body}</div></div>
+    ${row("Body", body)}
   </section>`;
 }
 
-/** Every top-level argument as a readable row, for tools without their own view. */
-function argumentsView(request: ApprovalRequestView, headingId: string): Html {
-  return html`<section class="ap-content" aria-labelledby="${headingId}">
-    <div class="ap-card-head">
-      <h2 id="${headingId}">What it will run</h2>
-      <span class="mono muted">${request.tool}</span>
-    </div>
-    ${argumentLines(request.args).map(
+/**
+ * Every top-level argument, for tools without their own view: who or what
+ * it reaches first, then its content, then the rest. Empty ones share a line.
+ */
+function argumentsView(request: ApprovalRequestView): Html {
+  const id = `what-${request.id}`;
+  const lines = argumentLines(request.args);
+  const filled = lines.filter((l) => l.empty !== true);
+  const empty = lines.filter((l) => l.empty === true).map((l) => l.name);
+  return html`<section class="ap-content ap-args-view" aria-labelledby="${id}">
+    <h2 id="${id}" class="ap-content-title">What will run</h2>
+    ${filled.map(
       (line) =>
         html`<div class="ap-row">
-          <span class="ap-key mono">${line.name}</span>
-          ${line.block ? html`<pre class="body">${line.value}</pre>` : html`<span class="mono">${line.value}</span>`}
+          <span class="ap-key">${line.name}</span>
+          ${line.block ? html`<pre class="body ap-val">${line.value}</pre>` : html`<span class="ap-val">${line.value}</span>`}
         </div>`,
+    )}
+    ${empty.length === 0 ? "" : html`<p class="ap-none">Left empty: ${empty.join(", ")}</p>`}
+  </section>`;
+}
+
+/** The exact arguments, as JSON, in the main flow under the content (I-57). */
+function rawArguments(request: ApprovalRequestView, folds: Folds): Html {
+  return fold(
+    folds,
+    "args",
+    false,
+    html`<span id="args-${request.id}">See raw arguments</span>`,
+    html`<pre class="args" tabindex="0" aria-labelledby="args-${request.id}">${formatArguments(
+      request.args,
+    )}</pre>`,
+    "ap-fold ap-args",
+    true,
+  );
+}
+
+function countsText(request: ApprovalRequestView): string {
+  return [
+    `${plural(request.items, "item")} in this call`,
+    ...request.counts.map(
+      (w) =>
+        `${plural(w.total, "item")} this ${w.per}, including this call (the rule asks over ${w.over})`,
+    ),
+  ].join("; ");
+}
+
+/** Earlier steps' decisions, in words. */
+const DONE_WORDS: Readonly<Record<string, string>> = {
+  allow: "Allowed",
+  approved: "You approved",
+  standing: "Allowed",
+  grant: "Allowed",
+  ask: "Asked you",
+  deny: "Denied",
+  paused: "Stopped",
+  error: "Failed",
+  unknown: "Unknown",
+};
+
+/** One small line near the top, only for a step of a longer task (code mode). */
+function taskRow(request: ApprovalRequestView): Html | "" {
+  const script = request.script;
+  if (script === null) return "";
+  return html`<p class="ap-taskrow">
+    <span class="ap-taskrow-icon">${trusted(ICONS.steps)}</span>
+    <span>Step ${String(script.before.length + 1)} of a longer task</span>
+    <a href="#task-${request.id}">See steps</a>
+  </p>`;
+}
+
+/**
+ * The longer task this call is a step of (code mode, C3): the steps already
+ * done, in plain words, and the agent's code in a closed fold for audit.
+ * Every step is checked by the rules on its own, whatever the code says.
+ */
+function taskView(request: ApprovalRequestView, background: boolean, folds: Folds): Html | "" {
+  const script = request.script;
+  if (script === null) return "";
+  const id = `task-${request.id}`;
+  const step = (tool: string, account: string) =>
+    html`${cap(toolPhrase(tool))}${account === request.account ? "" : html` <span class="muted">on ${account}</span>`}`;
+  return html`<section class="ap-task" id="${id}" aria-labelledby="${id}-title">
+    <h2 id="${id}-title" class="ap-content-title">Part of a longer task</h2>
+    <ol class="ap-steps">
+      ${script.before.map(
+        (c) =>
+          html`<li><span>${step(c.tool, c.account)}</span> <span class="ap-step-done">${DONE_WORDS[c.decision] ?? c.decision}</span></li>`,
+      )}
+      <li class="is-now"><span>${cap(actionPhrase(request.action, request.tool))}</span> <span class="ap-step-done">This step</span></li>
+    </ol>
+    ${
+      background && request.status === "pending"
+        ? html`<p class="ap-note">If you approve, the rest runs without asking again. Deny ends it.</p>`
+        : ""
+    }
+    ${fold(
+      folds,
+      "code",
+      false,
+      html`See the code the agent wrote`,
+      html`<pre class="body mono">${script.code}</pre>
+        ${script.truncated ? html`<p class="muted ap-note">Cut here: the code is longer than heel keeps.</p>` : ""}`,
+      "ap-fold ap-code",
+      true,
     )}
   </section>`;
 }
 
-function countsView(request: ApprovalRequestView): Html {
-  const windows = request.counts.map(
-    (w) =>
-      html`<li>
-        ${plural(w.total, "item")} this ${w.per}, including this call (the rule asks over
-        ${w.over})
-      </li>`,
-  );
-  return html`<ul>
-    <li>${plural(request.items, "item")} in this call</li>
-    ${windows}
-  </ul>`;
-}
-
-/**
- * How the agent reached heel: the MCP client it named (self-reported, so the
- * title says so), or the surface for `heel run` and the HTTP proxy, which
- * record no client.
- */
-function viaView(request: ApprovalRequestView): Html | "" {
-  if (request.client !== null) {
-    return html`<span class="muted" title="As the client named itself when it connected"
-      >via ${clientLabel(request.client)}</span
-    >`;
-  }
-  if (request.surface === "cli") return html`<span class="muted">via heel run</span>`;
-  if (request.surface === "http") return html`<span class="muted">via the HTTP proxy</span>`;
-  return "";
-}
-
-/** The agent's reason, quoted and attributed: the agent wrote it, heel didn't check it. */
-function reasonView(request: ApprovalRequestView): Html | "" {
-  if (request.reason === null) return "";
-  return html`<figure class="reason">
-    <figcaption>${request.agent} says<span class="visually-hidden"> (its own words; heel didn't check them)</span>:</figcaption>
-    <blockquote>${request.reason}</blockquote>
-  </figure>`;
-}
-
-/**
- * The script a code-mode call came from (code mode round 2, C3): what it
- * already called, then its code, as text. It's the agent's own code, shown
- * so the approver sees what else the script means to do; heel checks every
- * call in it on its own, whatever the code says.
- */
-function scriptView(
-  request: ApprovalRequestView,
-  parked: { stop: FormTarget } | null,
-  stopped: boolean,
-  background: boolean,
-): Html | "" {
-  const script = request.script;
-  if (script === null) return "";
-  // A crafted link can't claim a stop: the notice shows only once nothing is parked.
-  const stoppedNotice = stopped
-    ? notice(
-        "info",
-        html`<p>Stopped. The script won't carry on; ${request.agent} would have to start again.</p>`,
-      )
-    : "";
-  const decided = request.status !== "pending";
-  const waiting =
-    parked === null
-      ? stoppedNotice
-      : decided && background
-        ? html`<p>Approved: heel is starting the script again from this call.</p>`
-        : html`<div class="script-stop">
-          <p>
-            ${
-              decided
-                ? html`The script is still paused at this call, until ${request.agent} resumes it.
-                  Stopping it means it never carries on.`
-                : html`The script is paused at this call, waiting for you. Stopping it means it
-                  never carries on, whatever you decide here.`
-            }
-          </p>
-          ${
-            background
-              ? html`<p><strong>It's a background script: approving starts it again at once.</strong>
-                  This call runs, then the rest of the script, without ${request.agent} asking
-                  again. Denying ends it.</p>`
-              : ""
-          }
-          ${postForm(parked.stop, {}, html`<button type="submit" class="${btn("outline")}">Stop the script</button>`)}
-        </div>`;
-  const before =
-    script.before.length === 0
-      ? html`<p class="muted">This is the script's first call to your accounts.</p>`
-      : html`<p>Before this call, the script made ${script.before.length === 1 ? "1 call" : `${script.before.length} calls`}:</p>
-          <ol class="script-calls">
-            ${script.before.map(
-              (c) =>
-                html`<li><span class="mono">${c.tool}</span> on <span class="mono">${c.account}</span> <span class="muted">(${c.decision})</span></li>`,
-            )}
-          </ol>`;
-  return html`<section class="script ap-script" aria-label="The script this call comes from">
-    <h2 class="section-title">From a script</h2>
-    <p>
-      ${request.agent} sent this call from a script. If you approve, the script carries on from
-      here, and every later call in it is checked by your rules on its own.
-    </p>
-    ${before}
-    ${waiting}
-    <details class="ap-fold">
-      <summary><span class="fold-label">The script (${request.agent}'s own code; heel didn't check what it says)</span>${CHEV}</summary>
-      <pre class="mono">${script.code}</pre>
-      ${script.truncated ? html`<p class="muted">Cut here: the script is longer than heel keeps.</p>` : ""}
-    </details>
-  </section>`;
-}
-
-/** What the request's status means for the approver, in one notice. */
 const HINT_TONE: Record<HintTone, Tone> = { warn: "warn", note: "info", ok: "ok" };
-const HINT_LABEL: Record<HintTone, string> = { warn: "check", note: "note", ok: "ok" };
+const HINT_LABEL: Record<HintTone, string> = { warn: "Check", note: "Note", ok: "OK" };
 
 /** Approval adapters' advice. Shown as advice: the person still decides. */
 function hintsView(request: ApprovalRequestView): Html | "" {
   if (request.hints.length === 0) return "";
   const id = `hints-${request.id}`;
   return html`<section class="ap-hints" aria-labelledby="${id}">
-    <h2 id="${id}" class="ap-side-label">Hints</h2>
-    <p class="muted ap-hints-note">Advice from ${request.hints.map((h) => h.adapter).join(", ")}. It can't approve or deny anything: you decide.</p>
+    <h3 id="${id}" class="ap-sub">Hints</h3>
+    <p class="muted ap-note">Advice from ${request.hints.map((h) => h.adapter).join(", ")}. It can't approve or deny anything: you decide.</p>
     ${request.hints.map(({ adapter, result }) =>
       result.status === "pending"
         ? html`<p class="muted">Hints from ${adapter} are on the way. Reload in a few seconds.</p>`
@@ -530,110 +573,149 @@ function hintsView(request: ApprovalRequestView): Html | "" {
   </section>`;
 }
 
-function statusNotice(request: ApprovalRequestView, now: Date): Html {
-  const decided = request.decision;
+/** What did or didn't happen, in one short line, for the decided view. */
+function outcomeLine(request: ApprovalRequestView): string | null {
   switch (request.status) {
     case "pending":
-      // The header carries the expiry and the decision bar says what approving does.
-      return html``;
+      return null;
     case "approved":
-      return stateAlert(
-        "ok",
-        "check",
-        html`<p>
-          Approved${decided ? html` by ${decided.by} at ${time(decided.at)}` : ""}. It runs once
-          ${
-            request.script === null
-              ? "when the agent re-sends the identical call"
-              : "when the script carries on from this call"
-          }, after the rules are checked again. Unused, it expires ${time(request.expiresAt)}
-          (${formatRelative(request.expiresAt, now)}).
-        </p>`,
-      );
-    case "denied":
-      return stateAlert(
-        "error",
-        "x",
-        html`<p>
-          Denied${decided ? html` by ${decided.by} at ${time(decided.at)}` : ""}. Re-sends of
-          this call return “denied” until ${time(request.expiresAt)}.
-        </p>`,
-      );
-    case "expired":
-      return stateAlert(
-        "warn",
-        "clock",
-        html`<p>
-          Expired ${time(request.expiresAt)}. It can no longer be decided; the agent's next
-          identical call starts a new request.
-        </p>`,
-      );
+      return "It will run once.";
     case "executed":
-      return stateAlert(
-        "info",
-        "check",
-        html`<p>
-          Ran once${request.executedAt ? html` at ${time(request.executedAt)}` : ""}. Another
-          identical call is evaluated as a new call.
-        </p>`,
-      );
+      return "It ran once.";
+    case "expired":
+      return "Nobody decided in time, so it can't be approved or denied.";
+    case "denied":
+      if (request.action === "email.draft") return "No draft was saved.";
+      if (request.action === "email.send") return "No email was sent.";
+      if (request.action === "github.merge") return "Nothing was merged.";
+      return "This call didn't run.";
   }
 }
 
-function standingOptions(request: ApprovalRequestView, fieldsetId: string, locked: boolean): Html {
-  if (request.origin === "org") {
-    return html`<p class="muted">
-      An org rule asked, so this can only be approved once, by an org admin. Org asks never stand.
-    </p>`;
+const OUTCOME: Record<
+  Exclude<ApprovalStatus, "pending">,
+  { word: string; tone: Tone | "muted"; icon: keyof typeof ICONS }
+> = {
+  approved: { word: "Approved", tone: "ok", icon: "check" },
+  executed: { word: "Done", tone: "info", icon: "check" },
+  denied: { word: "Denied", tone: "error", icon: "x" },
+  expired: { word: "Expired", tone: "muted", icon: "clock" },
+};
+
+/** What happens if the same call comes again, for Technical. */
+function afterwards(request: ApprovalRequestView): string | null {
+  switch (request.status) {
+    case "pending":
+      return null;
+    case "approved":
+      return request.script === null
+        ? "It runs once, when the agent sends the same call again and your rules still ask about it. Unused, it lapses at the expiry time."
+        : "It runs once, when the task goes on from this step and your rules still ask about it. Unused, it lapses at the expiry time.";
+    case "denied":
+      return "If the agent sends the same call again before the expiry time, heel denies it without asking you.";
+    case "expired":
+      return "If the agent sends the same call again, you get a new request.";
+    case "executed":
+      return "If the agent sends the same call again, your rules decide it as a new call.";
   }
-  const durations = STANDING_DURATIONS.map(
-    (d) =>
-      html`<option value="${d.value}"${flag("selected", d.value === "1d")}>${d.label}</option>`,
-  );
-  return html`<fieldset id="${fieldsetId}"${flag("disabled", locked)}>
-    <legend>Standing approval</legend>
-    <p class="muted" id="${fieldsetId}-help">
-      Approving as standing turns this rule's ask into allow for ${request.agent} until it ends,
-      at most ${STANDING_LONGEST_DAYS} days. It lapses if the rule is edited or deleted.
-    </p>
-    <div class="choice">
-      <input type="radio" id="${fieldsetId}-exact" name="scope" value="exact_call" checked />
-      <label for="${fieldsetId}-exact">This exact call: same account, tool and arguments</label>
-    </div>
-    <div class="choice">
-      <input type="radio" id="${fieldsetId}-rule" name="scope" value="rule" />
-      <label for="${fieldsetId}-rule"
-        >Everything rule ${formatRule(request.rule)} asks about, for this agent</label
-      >
-    </div>
-    ${
-      request.runId === null
-        ? ""
-        : html`<div class="choice">
-            <input type="radio" id="${fieldsetId}-run" name="scope" value="run" />
-            <label for="${fieldsetId}-run"
-              >Everything rule ${formatRule(request.rule)} asks about, for calls naming run
-              <span class="mono">${request.runId}</span>, for at most a day. The agent names its own
-              run, so it can reuse this id until then.</label
-            >
-          </div>`
-    }
-    <div class="choice">
-      <label for="${fieldsetId}-duration">Lasts</label>
-      <select id="${fieldsetId}-duration" name="duration">
-        ${durations}
-      </select>
-    </div>
-  </fieldset>`;
+}
+
+/** A rule's name in words: `everything-else-asks` reads as ‘everything else asks’. */
+function ruleWords(rule: RuleRef): string {
+  return rule.name === null ? "An unnamed rule" : `‘${rule.name.replace(/[-_]+/g, " ")}’`;
 }
 
 /**
- * The single biggest risk in the call, as one plain line for just above the
- * decision buttons. Built only from the stored call heel will run (never the
- * agent's words), and null when nothing stands out.
+ * Approving for longer, as the options inside the menu on Approve once.
+ * The narrowest choice, this exact call, is the default; the broad one says
+ * what it covers and is marked. Ends early if the rule changes, at most 30
+ * days (the store keeps the hard cap).
+ */
+function allowAgainOptions(
+  request: ApprovalRequestView,
+  fieldsetId: string,
+  locked: boolean,
+  withOnce: boolean,
+): Html {
+  const scope = (value: string, label: Html | string, broad: boolean, checked: boolean) =>
+    html`<label class="choice${broad ? " is-broad" : ""}" for="${fieldsetId}-${value}">
+      <input type="radio" id="${fieldsetId}-${value}" name="scope" value="${value}"${flag("checked", checked)} />
+      <span>${label}${broad ? html` <span class="ap-broad">Broad</span>` : ""}</span>
+    </label>`;
+  return html`<fieldset id="${fieldsetId}" class="ap-allow"${flag("disabled", locked)}>
+    <legend>${withOnce ? "Approve" : "Allow it again without asking"}</legend>
+    ${withOnce ? scope("once", "Just this once", false, true) : ""}
+    ${scope("exact_call", withOnce ? "This exact call, and again without asking" : "This exact call", false, !withOnce)}
+    ${scope("rule", html`Any call the rule ${ruleWords(request.rule)} covers`, true, false)}
+    ${request.runId === null ? "" : scope("run", "Any call that rule covers in this run", true, false)}
+    <div class="ap-pills" role="radiogroup" aria-label="For how long">
+      ${STANDING_DURATIONS.map(
+        (d) => html`<label class="ap-pill" for="${fieldsetId}-for-${d.value}">
+          <input type="radio" id="${fieldsetId}-for-${d.value}" name="duration" value="${d.value}"${flag("checked", d.value === "1d")} />
+          <span>${d.label}</span>
+        </label>`,
+      )}
+    </div>
+    <p class="muted ap-note">Ends sooner if the rule changes; at most ${STANDING_LONGEST_DAYS} days. A run allows at most a day.</p>
+  </fieldset>`;
+}
+
+/** What an allow button says for a scope and length. */
+export function allowLabel(scope: "exact_call" | "rule" | "run", duration: string): string {
+  const length = STANDING_DURATIONS.find((d) => d.value === duration)?.label ?? duration;
+  if (scope === "exact_call") return `Allow for ${length}`;
+  if (scope === "rule") return `Allow all for ${length}`;
+  return `Allow run for ${length}`;
+}
+
+/**
+ * One allow button per choice, each with its own fixed options, so what the
+ * passkey signs is what the button says, by construction (I-56). CSS shows
+ * only the one matching the radios; the radios themselves sign nothing.
+ */
+function allowButtons(
+  request: ApprovalRequestView,
+  onDecide: CeremonyCallback,
+  helpId: string,
+  locked: boolean,
+  tone: "primary" | "secondary",
+): Html {
+  const scopes =
+    request.runId === null
+      ? (["exact_call", "rule"] as const)
+      : (["exact_call", "rule", "run"] as const);
+  const binding = { approvalId: request.id, callHash: request.callHash };
+  return html`${scopes.map((scope) =>
+    STANDING_DURATIONS.map((d) => {
+      const id = `allow-${request.id}-${scope}-${d.value}`;
+      return html`<span class="ap-allow-btn" data-scope="${scope}" data-duration="${d.value}">
+        ${ceremonyButton({
+          callback: onDecide,
+          intent: "approve-standing",
+          label: allowLabel(scope, d.value),
+          tone,
+          binding,
+          disabled: locked,
+          describedBy: helpId,
+          optionsFrom: id,
+        })}
+        <fieldset id="${id}" hidden>
+          <input type="hidden" name="scope" value="${scope}" />
+          <input type="hidden" name="duration" value="${d.value}" />
+        </fieldset>
+      </span>`;
+    }),
+  )}`;
+}
+
+/**
+ * The single biggest risk in the call, as one plain line above the content.
+ * Built only from the stored call heel will run (never the agent's words),
+ * and null when nothing stands out. A draft sends nothing, so it has none.
  */
 export function biggestRisk(request: ApprovalRequestView): string | null {
   if (request.email !== null) {
+    if (request.action === "email.draft") return null;
     const email = request.email;
     const home = homeDomain(email.from);
     const all = [...email.to, ...email.cc, ...email.bcc];
@@ -663,30 +745,40 @@ export function biggestRisk(request: ApprovalRequestView): string | null {
   return null;
 }
 
-/** The adapters' "check" hints, as one compact line beside the risk; the rest are in Details. */
-function checkHints(request: ApprovalRequestView): Html | "" {
+/** heel's risk line and the adapters' "check" hints: the page's one short note. */
+function riskView(request: ApprovalRequestView): Html | "" {
+  if (request.status !== "pending") return "";
+  const risk = biggestRisk(request);
   const checks = request.hints.flatMap(({ result }) =>
     result.status === "ok" ? result.hints.filter((h) => h.tone === "warn") : [],
   );
-  if (checks.length === 0) return "";
-  return html`<ul class="ap-check-hints" aria-label="Hints to check">
-    ${checks.map((h) => html`<li>${badge(HINT_LABEL[h.tone], HINT_TONE[h.tone])} ${h.text}</li>`)}
-  </ul>`;
+  if (risk === null && checks.length === 0) return "";
+  return html`${
+    risk === null
+      ? ""
+      : html`<p class="ap-risk" role="note"><span class="ap-risk-icon">${trusted(ICONS.alert)}</span><span><span class="ap-risk-word">Check:</span> ${risk}</span></p>`
+  }${
+    checks.length === 0
+      ? ""
+      : html`<ul class="ap-check-hints" aria-label="Hints to check">
+          ${checks.map((h) => html`<li>${badge(HINT_LABEL[h.tone], HINT_TONE[h.tone])} ${h.text}</li>`)}
+        </ul>`
+  }`;
 }
 
 /**
- * The decision: the risk line, then Deny and Approve once side by side, and
- * "Approve for longer" as a fold for the row under them. The passkey sentence
- * is read out with the buttons (aria-describedby) rather than shown.
+ * The decision: Deny and Approve once side by side, pinned to the bottom of
+ * a phone screen while the request waits. Approving for longer is a menu on
+ * Approve once (variant A): one extra step, the narrowest choice first. The
+ * passkey sentence is read out with the buttons (aria-describedby).
  */
 function decisionControls(
   request: ApprovalRequestView,
   pause: PauseNotice | null,
   onDecide: CeremonyCallback,
-): { decide: Html | ""; longer: Html | "" } {
-  if (request.status !== "pending" && request.status !== "expired") {
-    return { decide: "", longer: "" };
-  }
+  allowAgain: AllowAgain,
+): Html | "" {
+  if (request.status !== "pending" && request.status !== "expired") return "";
   // An expired request can't be decided at all (I-55). Approving in a paused
   // scope is refused (I-61); denying only tightens, so it stays open.
   const expired = request.status === "expired";
@@ -694,45 +786,33 @@ function decisionControls(
   const fieldsetId = `standing-${request.id}`;
   const helpId = `decide-help-${request.id}`;
   const binding = { approvalId: request.id, callHash: request.callHash };
-  const risk = biggestRisk(request);
-  const lockNote = expired
-    ? html`<p>
-        <strong>This request expired, so it can't be approved or denied.</strong> The agent's
-        next identical call starts a new request.
-      </p>`
-    : pause
-      ? stateAlert(
-          "warn",
-          "pause",
-          html`<p>
-            <strong
-              >Approving is unavailable while ${formatPauseScope(pause.scope, pause.target)} is
-              paused.</strong
-            >
-            Resume first; you can still deny.
-          </p>`,
-        )
-      : "";
-  // DOM order is approve once, then deny; CSS puts deny first on the bar.
-  const decide = html`<section class="ap-decide" aria-labelledby="decide-${request.id}">
+  const once = ceremonyButton({
+    callback: onDecide,
+    intent: "approve-once",
+    label: "Approve once",
+    tone: "primary",
+    binding,
+    disabled: approveLocked,
+    describedBy: helpId,
+  });
+  // One primary button that always says what it does: Approve once by default;
+  // choosing to allow it again swaps in the allow button, labelled with that
+  // choice. The menu goes back to "Just this once" when it closes.
+  const split =
+    request.origin === "org" || allowAgain !== "menu"
+      ? ""
+      : html`<span class="ap-split">
+          ${once}
+          ${allowButtons(request, onDecide, helpId, approveLocked, "primary")}
+          <details class="ap-split-menu" name="${ONE_OPEN}" data-heel-reset>
+            <summary class="ap-split-toggle" aria-label="Approve for longer">${trusted(ICONS.chevron)}</summary>
+            <div class="ap-menu">${allowAgainOptions(request, fieldsetId, approveLocked, true)}</div>
+          </details>
+        </span>`;
+  return html`<section class="ap-decide" aria-labelledby="decide-${request.id}">
     <h2 id="decide-${request.id}" class="visually-hidden">Decide</h2>
-    ${lockNote}
-    ${
-      risk === null || expired
-        ? ""
-        : html`<p class="ap-risk" role="note"><span class="ap-risk-icon">${trusted(ICONS.alert)}</span><span><span class="ap-risk-word">Check:</span> ${risk}</span></p>`
-    }
-    ${expired ? "" : checkHints(request)}
     ${actionBar({
-      yes: ceremonyButton({
-        callback: onDecide,
-        intent: "approve-once",
-        label: "Approve once",
-        tone: "primary",
-        binding,
-        disabled: approveLocked,
-        describedBy: helpId,
-      }),
+      yes: split === "" ? once : split,
       no: ceremonyButton({
         callback: onDecide,
         intent: "deny",
@@ -744,37 +824,134 @@ function decisionControls(
       }),
       helpId,
       help: "Your passkey confirms every decision. Nothing runs until you approve.",
-      dock: false,
+      dock: !expired,
     })}
-    ${request.origin === "org" ? standingOptions(request, fieldsetId, approveLocked) : ""}
+    ${
+      request.origin === "org"
+        ? html`<p class="muted ap-note">An org rule asked: only an org admin can approve it, once. Org asks never stand.</p>`
+        : ""
+    }
   </section>`;
-  const longer =
-    request.origin === "org"
-      ? ""
-      : html`<details class="ap-more">
-          <summary><span class="fold-label">Approve for longer</span>${CHEV}</summary>
-          <div class="ap-fold-body">
-            ${standingOptions(request, fieldsetId, approveLocked)}
-            <div class="actions">
-              ${ceremonyButton({
-                callback: onDecide,
-                intent: "approve-standing",
-                label: "Approve as standing",
-                tone: "secondary",
-                binding,
-                disabled: approveLocked,
-                describedBy: helpId,
-                optionsFrom: fieldsetId,
-              })}
-            </div>
-          </div>
-        </details>`;
-  return { decide, longer };
 }
 
 /**
- * The approval page body (spec: The approval page). Everything a rule could
- * match on is shown in full, and the arguments are never truncated (I-57).
+ * Variant B (preview only): after approving once, one offer to ask less next
+ * time. The decide route refuses a second decision on an approved request
+ * today, so this needs a backend change before it can ship.
+ */
+function allowAfter(request: ApprovalRequestView, onDecide: CeremonyCallback): Html {
+  const fieldsetId = `standing-${request.id}`;
+  const helpId = `decide-help-${request.id}`;
+  return html`<section class="ap-after" aria-label="Ask less next time">
+    <p class="ap-after-ask">Ask less next time?</p>
+    ${allowAgainOptions(request, fieldsetId, false, false)}
+    ${allowButtons(request, onDecide, helpId, false, "secondary")}
+    <p id="${helpId}" class="visually-hidden">Your passkey confirms it.</p>
+  </section>`;
+}
+
+const PROVIDERS: Readonly<Record<string, string>> = {
+  gmail: "Gmail",
+  outlook: "Outlook",
+  github: "GitHub",
+  "google-calendar": "Google Calendar",
+  linear: "Linear",
+  notion: "Notion",
+  slack: "Slack",
+  stripe: "Stripe",
+  http: "HTTP API",
+};
+
+/**
+ * Details: four plain rows, then Technical for everything an auditor needs
+ * (ids, tool names, counts, absolute times, the rule's file). The agent's
+ * name isn't repeated here.
+ */
+function detailsView(request: ApprovalRequestView, folds: Folds, now: Date): Html {
+  const after = afterwards(request);
+  const last =
+    request.status === "pending" || request.status === "approved"
+      ? row("Expires", cap(formatRelative(request.expiresAt, now)))
+      : request.decision !== null
+        ? row("Decided", `By ${request.decision.by}, ${formatRelative(request.decision.at, now)}`)
+        : row("Expired", cap(formatRelative(request.expiresAt, now)));
+  return fold(
+    folds,
+    "details",
+    false,
+    html`Details`,
+    html`<div class="ap-fold-body">
+      ${row("Account", `${request.account}, ${PROVIDERS[request.provider] ?? request.provider}`)}
+      ${row("What it does", cap(actionPhrase(request.action, request.tool)))}
+      ${row("Rule", `${ruleWords(request.rule)} asked you`)}
+      ${last}
+      ${hintsView(request)}
+      <details class="ap-technical">
+        <summary><span class="fold-label">Technical</span>${CHEV}</summary>
+        <dl class="facts">
+          <dt>Client</dt>
+          <dd>${viaText(request)}</dd>
+          <dt>Tool</dt>
+          <dd><span class="mono">${request.tool}</span> via ${request.surface}</dd>
+          <dt>Action</dt>
+          <dd class="mono">${request.action ?? "None"}</dd>
+          <dt>Rule</dt>
+          <dd>
+            ${formatRule(request.rule)}
+            (${request.origin === "org" ? "org rules" : "owner's rules"})
+          </dd>
+          <dt>Counts</dt>
+          <dd>${countsText(request)}</dd>
+          <dt>Run</dt>
+          <dd class="mono">${request.runId ?? "None"}</dd>
+          <dt>Requested</dt>
+          <dd>${time(request.createdAt)}</dd>
+          ${
+            request.decision === null
+              ? ""
+              : html`<dt>Decided</dt>
+                <dd>${time(request.decision.at)}</dd>`
+          }
+          ${
+            request.executedAt === null
+              ? ""
+              : html`<dt>Ran</dt>
+                <dd>${time(request.executedAt)}</dd>`
+          }
+          <dt>${request.status === "denied" ? "Denied until" : request.status === "expired" ? "Expired" : "Expires"}</dt>
+          <dd>${time(request.expiresAt)}</dd>
+          ${after === null ? "" : html`<dt>Next</dt><dd>${after}</dd>`}
+          <dt>Request</dt>
+          <dd class="mono">${request.id}</dd>
+        </dl>
+      </details>
+    </div>`,
+    "ap-fold ap-details",
+    true,
+  );
+}
+
+/** A decided request in a word and one short line. */
+function outcomeView(request: ApprovalRequestView): Html {
+  if (request.status === "pending") return html``;
+  const { word, tone, icon } = OUTCOME[request.status];
+  const line = outcomeLine(request);
+  return html`<section class="ap-outcome" data-tone="${tone}" role="status">
+    <span class="ap-outcome-icon">${trusted(ICONS[icon])}</span>
+    <div>
+      <h1 class="ap-outcome-word">${word}</h1>
+      ${line === null ? "" : html`<p class="ap-outcome-line">${line}</p>`}
+    </div>
+  </section>`;
+}
+
+/**
+ * The approval page body (spec: The approval page). Top to bottom: who is
+ * asking (named once), what will happen in one sentence, the agent's reason
+ * set apart, heel's one note, the content as it will land with its raw
+ * arguments a tap away, then Deny and Approve once, pinned on a phone. A
+ * decided request leads with its outcome in a word and a line. The
+ * arguments are on the page, in full, in every state (I-57).
  */
 export function approvalRequest(props: ApprovalRequestProps): Html {
   if (!props.load.ok) {
@@ -787,95 +964,45 @@ export function approvalRequest(props: ApprovalRequestProps): Html {
   }
   const request = props.load.request;
   const folds: Folds = props.folds ?? new Map();
-  const said = headline(request);
+  const pending = request.status === "pending";
+  const allowAgain = props.allowAgain ?? "menu";
   const view =
     request.email !== null
-      ? emailView(request.email, `email-${request.id}`, folds)
+      ? emailView(request, request.email, folds, props.emailLayout ?? "mail")
       : request.merge !== null
-        ? mergeView(request.merge, `merge-${request.id}`)
+        ? mergeView(request, request.merge)
         : request.http
-          ? httpView(request.http, `http-${request.id}`)
-          : argumentsView(request, `what-${request.id}`);
-  const pending = request.status === "pending";
-  const { decide, longer } = decisionControls(request, props.pause, props.onDecide);
-  const details = fold(
-    folds,
-    "details",
-    false,
-    html`Details`,
-    html`<div class="ap-fold-body">
-      <div class="ap-meta">
-        <span class="ap-agent">${request.agent}</span>
-        ${viaView(request)}
-        <span class="muted">on ${request.account}</span>
-        <span class="muted">${formatRelative(request.createdAt, props.now)}</span>
-      </div>
-      <h3 class="ap-sub">Rule and call details</h3>
-      <dl class="facts">
-        <dt>Agent</dt>
-        <dd>${request.agent}</dd>
-        <dt>Run</dt>
-        <dd class="mono">${request.runId ?? html`<span class="muted">none</span>`}</dd>
-        <dt>Account</dt>
-        <dd>${request.account} <span class="muted">(${request.provider})</span></dd>
-        <dt>Action</dt>
-        <dd class="mono">${request.action ?? html`<span class="muted">none</span>`}</dd>
-        <dt>Tool</dt>
-        <dd class="mono">${request.tool} <span class="muted">via ${request.surface}</span></dd>
-        <dt>Rule</dt>
-        <dd>
-          ${formatRule(request.rule)}
-          <span class="muted">(${request.origin === "org" ? "org rules" : "owner's rules"})</span>
-        </dd>
-        <dt>Counts</dt>
-        <dd>${countsView(request)}</dd>
-        <dt>Requested</dt>
-        <dd>${time(request.createdAt)}</dd>
-        <dt>Expires</dt>
-        <dd>${time(request.expiresAt)} (${formatRelative(request.expiresAt, props.now)})</dd>
-        <dt>Request</dt>
-        <dd class="mono">${request.id}</dd>
-      </dl>
-      ${hintsView(request)}
-      ${fold(
-        folds,
-        "args",
-        false,
-        html`<span id="args-${request.id}">Full arguments, exactly what runs</span>`,
-        html`<p class="muted">After heel's own rewrites. Nothing is shortened.</p>
-          <pre class="args" tabindex="0" aria-labelledby="args-${request.id}">${formatArguments(
-            request.args,
-          )}</pre>`,
-        "ap-args",
-      )}
-    </div>`,
-    "ap-details",
-  );
-  return html`<article class="ap" data-heel-fold-kind="${foldKind(request)}">
+          ? httpView(request, request.http)
+          : argumentsView(request);
+  const lock =
+    props.pause !== null && pending
+      ? notice(
+          "warn",
+          html`<p>
+            Approving is unavailable while ${formatPauseScope(props.pause.scope, props.pause.target)}
+            is paused. You can still deny.
+          </p>`,
+        )
+      : "";
+  // One h1: the ask while it waits, the outcome once it's decided or expired.
+  const title = pending
+    ? html`<h1 class="ap-title">${askSentence(request)}</h1>`
+    : html`<p class="ap-title">${askSentence(request)}</p>`;
+  const after =
+    request.status === "approved" && allowAgain === "after" && request.origin !== "org"
+      ? allowAfter(request, props.onDecide)
+      : "";
+  return html`<article class="ap${pending ? "" : " is-decided"}" data-kind="call"${pending ? html` data-dock="pinned"` : ""} data-heel-fold-kind="${foldKind(request)}">
     <nav class="ap-crumbs" aria-label="Breadcrumb">
       <a href="/approvals">${trusted(ICONS.back)}Approvals</a>
-      <span class="muted" aria-hidden="true">/</span>
-      <span aria-current="page">Request</span>
     </nav>
-    <div class="ap-layout">
-      <h1 class="ap-title">
-        ${said.agent} wants to <mark>${said.action}</mark> ${said.preposition}
-        <mark>${said.place}</mark>${said.rest}
-      </h1>
-      <aside class="ap-side" aria-label="Decision">
-        <p class="ap-status">
-          ${approvalStatusBadge(request.status)}
-          <span class="muted">${pending ? html`expires ${formatRelative(request.expiresAt, props.now)}` : html`requested ${formatRelative(request.createdAt, props.now)}`}</span>
-        </p>
-        ${reasonView(request)}
-        ${statusNotice(request, props.now)}
-        ${decide}
-        <div class="ap-folds">${longer}${details}</div>
-      </aside>
-      <div class="ap-main">
-        ${view}
-        ${scriptView(request, props.parked ?? null, props.stopped === true, props.background === true)}
-      </div>
-    </div>
+    ${outcomeView(request)} ${after}
+    ${whoView(request, props.now)} ${title} ${lock}
+    ${reasonView(request)} ${pending ? taskRow(request) : ""} ${riskView(request)}
+    ${view}
+    ${rawArguments(request, folds)}
+    ${taskView(request, props.background === true, folds)}
+    ${decisionControls(request, props.pause, props.onDecide, allowAgain)}
+    ${detailsView(request, folds, props.now)}
   </article>`;
 }

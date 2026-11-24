@@ -10,24 +10,24 @@ Waiting requests are on **Approvals**, newest first. Each row says what the agen
 
 Open a request to see what will run, in this order:
 
-- **The summary:** one sentence, the status and when it expires.
-- **The agent's note,** labelled as its own words, if it gave one.
+- **Who asks and what:** the agent's name, then one sentence such as "Send an email to 41 people from gmail-work".
+- **The agent's note,** marked as its own words, if it gave one. It's shown whole.
 - **The risk line,** when there is one, built only from the call: "Goes to 41 people outside your domain", "Merges into main".
-- **Deny** and **Approve once.** On a phone they're on screen as soon as the page opens.
-- **Approve for longer** and **Details** (agent, client, account, rule, counts and the full arguments).
-- **The content itself:** for an email every recipient, the subject, the whole body and the attachments.
+- **The content itself:** for an email every recipient, the subject, the body and the attachments. **See raw arguments** shows the exact call.
+- **Deny** and **Approve once.** On a phone they're pinned to the bottom of the screen.
+- **Details:** the account, what the call does, the rule that asked and when it expires. **Technical** inside it has the ids, tool name, counts and exact times.
 
 ![An email waiting for approval: To bob@vendor.com, subject Q3 invoice](images/approval-email.png)
 
-When the call comes from a code-mode script, the page also shows the script: the calls it made and its code. Approving lets the script carry on from that call. **Stop the script** (no passkey) ends it, whatever you decide.
+When the call is one step of a longer task (the agent's code mode), the page says which step it is and lists the steps already done. **See the code the agent wrote** shows the code.
 
 ## Decide
 
 Every decision asks for your passkey.
 
 - **Approve once:** this exact call runs once, when the agent sends it again (or straight away if it's still waiting).
-- **Approve for longer:** this call, or everything the rule asks about, runs for this agent for an hour up to 30 days. Editing the rule ends it.
-- **Deny:** the agent gets "denied".
+- **Approve for longer:** the arrow beside Approve once. Pick this exact call or, marked Broad, any call the rule covers, for an hour up to 30 days. The button then names your choice, such as "Allow all for 30 days". Editing the rule ends it.
+- **Deny:** the agent gets "denied". In a longer task, the step doesn't run; a task running in the background ends.
 
 A request nobody answers expires after 24 hours.
 

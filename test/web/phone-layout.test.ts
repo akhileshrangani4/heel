@@ -32,11 +32,17 @@ describe("pages at phone width", () => {
     }
   });
 
-  it("wraps the navigation, scrolls preformatted text, and keeps the decision bar in the page, never over it", () => {
+  it("wraps the navigation, scrolls preformatted text, and pins the decision bar without covering the page", () => {
     expect(STYLESHEET).toContain(".site nav ul{display:flex;flex-wrap:wrap;");
     expect(STYLESHEET).not.toMatch(/\.site nav\{[^}]*overflow-x/);
     expect(STYLESHEET).toContain("pre{overflow-x:auto;max-width:100%}");
-    expect(STYLESHEET).not.toMatch(/\.ap-decide\{[^}]*position:(sticky|fixed)/);
+    // Phones: the shared bar is pinned in the tab bar's place, and the page keeps room for it.
+    expect(STYLESHEET).toMatch(
+      /body\.app:has\(\.ap\[data-dock="pinned"\] \.ap-bar\[data-dock\]\)\{padding-bottom:calc\(5rem/,
+    );
+    // Only wide screens let the call page's decision stick to the bottom of the window.
+    expect(STYLESHEET).toContain("@media (min-width:56rem){.ap-decide{position:sticky");
+    expect(STYLESHEET.match(/\.ap-decide\{[^}]*position:/g)).toHaveLength(1);
   });
 });
 

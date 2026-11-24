@@ -11,6 +11,8 @@
  * the challenge it issued, never out of what this script sends.
  */
 
+import { MENU_RESET_SCRIPT } from "./approval-request.ts";
+
 /** Safe inside a `<script>`: JSON with `<` escaped, so no value can close the tag. */
 function scriptLiteral(value: unknown): string {
   return JSON.stringify(value).replace(/</g, "\\u003c");
@@ -185,6 +187,8 @@ export function clientScript(csrfToken: string | null): string {
       });
     }
   }
+
+  ${MENU_RESET_SCRIPT}
 
   window.heelCeremony = {
     signIn: ({ binding, status }) =>

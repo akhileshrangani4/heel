@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   type ApprovalRequestProps,
   type ApprovalRequestView,
+  allowLabel,
   approvalRequest,
   biggestRisk,
   STANDING_DURATIONS,
@@ -10,7 +11,9 @@ import { formatArguments } from "../../src/web/ui/format.ts";
 import {
   AGENT_PAUSE,
   APPROVED_REQUEST,
+  DENIED_DRAFT_REQUEST,
   DENIED_REQUEST,
+  DRAFT_REQUEST,
   EXECUTED_REQUEST,
   EXPIRED_REQUEST,
   GENERIC_REQUEST,
@@ -23,6 +26,8 @@ import {
   NOW,
   ORG_REQUEST,
   PENDING_REQUEST,
+  SPARSE_REQUEST,
+  TASK_REQUEST,
 } from "../../src/web/ui/preview/fixtures.ts";
 import { renderStory, STORIES } from "../../src/web/ui/preview/stories.ts";
 import { dom, text, type UiDocument, type UiElement } from "../helpers/dom.ts";
@@ -69,17 +74,25 @@ describe("ApprovalRequest", () => {
     ).toContain("Hints from jev are on the way.");
   });
 
-  it("quotes the agent's reason as its own words, as text, and shows nothing without one", () => {
+  it("quotes the agent's reason whole, marked as its words, as text, and shows nothing without one", () => {
     const reason = text(render(PENDING_REQUEST).querySelector("figure.reason"));
-    expect(reason).toContain("inbox-bot says");
-    expect(reason).toContain("Sending Bob the Q4 renewal schedule");
+    expect(reason).toContain("The agent says");
+    expect(reason).toContain("Not checked");
+    expect(reason).toContain(PENDING_REQUEST.reason);
+    const long = `${"word ".repeat(60)}END`;
+    expect(text(render({ ...PENDING_REQUEST, reason: long }).querySelector("blockquote"))).toBe(
+      long.trim(),
+    );
+    expect(text(render(DENIED_REQUEST).querySelector("figure.reason"))).toContain(
+      PENDING_REQUEST.reason,
+    );
     const marked = render({ ...PENDING_REQUEST, reason: "<b>trust me</b>" });
     expect(marked.querySelector("figure.reason b")).toBeNull();
     expect(text(marked.querySelector("figure.reason blockquote"))).toBe("<b>trust me</b>");
     expect(render({ ...PENDING_REQUEST, reason: null }).querySelector("figure.reason")).toBeNull();
   });
 
-  it("shows the script a code-mode call came from, as the agent's code, as text (C3)", () => {
+  it("shows a step of a longer task in plain words, with the agent's code folded, as text (C3)", () => {
     const doc = render({
       ...PENDING_REQUEST,
       script: {
@@ -88,32 +101,55 @@ describe("ApprovalRequest", () => {
         before: [{ account: "gmail-work", tool: "search", decision: "allow" }],
       },
     });
-    const section = doc.querySelector("section.script");
-    if (section === null) throw new Error("no script section");
-    expect(text(section)).toContain("From a script");
-    expect(text(section)).toContain("search on gmail-work (allow)");
-    expect(text(section)).toContain("heel didn't check what it says");
+    expect(text(doc.querySelector(".ap-taskrow"))).toContain("Step 2 of a longer task");
+    const section = doc.querySelector("section.ap-task");
+    if (section === null) throw new Error("no task section");
+    expect(text(section)).toContain("Part of a longer task");
+    expect(text(section)).toContain("Search Allowed");
+    expect(text(section)).toContain("See the code the agent wrote");
     expect(text(section)).toContain("<script>alert(1)</script>");
     expect(section.querySelector("script")).toBeNull();
+    expect(section.querySelector("details[data-heel-fold='code']")?.hasAttribute("open")).toBe(
+      false,
+    );
+    // One decision, no stop control, and never the word "script" on the page.
+    expect(section.querySelector("form")).toBeNull();
+    expect(text(render(TASK_REQUEST))).not.toMatch(/\bscript\b/i);
 
     const plain = render(PENDING_REQUEST);
-    expect(plain.querySelector("section.script")).toBeNull();
+    expect(plain.querySelector("section.ap-task")).toBeNull();
+    expect(plain.querySelector(".ap-taskrow")).toBeNull();
   });
 
-  it("leads with heel's own sentence, built from the call, above the agent's words", () => {
+  it("leads with who asks, named once, then heel's own sentence, built from the call", () => {
     const doc = render(PENDING_REQUEST);
-    expect(text(doc.querySelector("h1"))).toBe(
-      "inbox-bot wants to send an email from gmail-work to bob@vendor.com and 40 others at vendor.com",
-    );
+    expect(text(doc.querySelector(".ap-who"))).toBe("I inbox-bot");
+    expect(text(doc.querySelector("h1"))).toBe("Send an email to 41 people from gmail-work");
     // The agent's reason can't change the sentence.
     const lying = render({ ...PENDING_REQUEST, reason: "Replying only to Bob" });
-    expect(text(lying.querySelector("h1"))).toContain("40 others");
+    expect(text(lying.querySelector("h1"))).toContain("41 people");
     expect(text(render(MERGE_REQUEST).querySelector("h1"))).toBe(
-      "release-bot wants to merge pull request #1234 on acme/web into main",
+      "Merge pull request #1234 on acme/web into main",
     );
     expect(text(render(GENERIC_REQUEST).querySelector("h1"))).toBe(
-      "billing-bot wants to refund a Stripe payment on stripe",
+      "Refund a Stripe payment on stripe",
     );
+    expect(text(render(DRAFT_REQUEST).querySelector("h1"))).toBe("Save an email draft in personal");
+    // The name isn't repeated in the page's own words.
+    const words = text(doc).replace(text(doc.querySelector(".ap-who")), "");
+    expect(words).not.toContain("inbox-bot says");
+  });
+
+  it("cuts long names in the title only, keeping the first 12 and last 8 characters", () => {
+    const long = "eve.long-surname-for-wrapping@a-very-long-partner-domain.example";
+    const email = PENDING_REQUEST.email;
+    if (!email) throw new Error("PENDING_REQUEST fixture must carry an email preview");
+    const doc = render({ ...PENDING_REQUEST, email: { ...email, to: [long], cc: [] } });
+    expect(text(doc.querySelector("h1"))).toBe(
+      "Send an email to eve.long-sur….example from gmail-work",
+    );
+    // Whole in the email itself (I-57).
+    expect(text(doc.querySelector("section[aria-labelledby^='email-']"))).toContain(long);
   });
 
   it("names every recipient domain and marks outsiders; one odd address isn't folded away", () => {
@@ -159,13 +195,12 @@ describe("ApprovalRequest", () => {
     expect(bodyText(fresh)).toBe(LONG_BODY);
   });
 
-  it("leads with a breadcrumb back to the list, with the status at the top of the side panel", () => {
+  it("leads with a link back to the list, and shows no status badge", () => {
     const doc = render(PENDING_REQUEST);
     const crumbs = doc.querySelector("nav.ap-crumbs");
     expect(crumbs?.querySelector("a")?.getAttribute("href")).toBe("/approvals");
-    expect(text(crumbs)).toContain("Request");
-    expect(text(doc.querySelector(".ap-side .ap-status .badge"))).toBe("Pending");
-    expect(doc.querySelector(".ap-meta .badge")).toBeNull();
+    expect(text(crumbs)).toBe("Approvals");
+    expect(doc.querySelector(".ap .badge")).toBeNull();
   });
 
   it("shows a long body's first lines with Show all, and attachments as file chips", () => {
@@ -174,27 +209,60 @@ describe("ApprovalRequest", () => {
     expect(text(more)).toMatch(/^Show all \d+ lines$/);
     const chips = [...doc.querySelectorAll(".ap-files .ap-file")].map((c) => text(c));
     expect(chips.length).toBeGreaterThan(0);
-    expect(text(doc)).toContain("Not opened by heel.");
+    expect(doc.querySelector(".ap-files")?.getAttribute("aria-label")).toContain(
+      "not opened by heel",
+    );
   });
 
-  it("says which client the agent used, or heel run, and nothing when it's unknown", () => {
-    const meta = (request: ApprovalRequestView) => text(render(request).querySelector(".ap-meta"));
-    expect(meta(PENDING_REQUEST)).toContain("via Claude Code");
-    expect(meta({ ...PENDING_REQUEST, client: null, surface: "cli" })).toContain("via heel run");
-    expect(meta({ ...PENDING_REQUEST, client: null, surface: "http" })).toContain(
-      "via the HTTP proxy",
+  it("names empty cc and bcc on one line instead of a row each", () => {
+    const doc = render(DRAFT_REQUEST);
+    expect(text(doc.querySelector(".ap-none"))).toBe("No cc or bcc");
+    expect(text(render(PENDING_REQUEST).querySelector(".ap-none"))).toBe("No bcc");
+    expect(text(render(SPARSE_REQUEST).querySelector(".ap-none"))).toBe(
+      "Left empty: assignee_id, cycle_id, estimate, labels, parent_id, project_id",
     );
-    expect(meta({ ...PENDING_REQUEST, client: null, surface: "mcp" })).not.toContain("via");
+  });
+
+  it("says which client the agent used, or heel run, in Technical", () => {
+    const tech = (request: ApprovalRequestView) =>
+      text(render(request).querySelector(".ap-technical"));
+    expect(tech(PENDING_REQUEST)).toContain("Claude Code, as it named itself");
+    expect(tech({ ...PENDING_REQUEST, client: null, surface: "cli" })).toContain("heel run");
+    expect(tech({ ...PENDING_REQUEST, client: null, surface: "http" })).toContain("The HTTP proxy");
+  });
+
+  it("Details has four plain rows without the agent's name; the rest is in Technical", () => {
+    const doc = render(PENDING_REQUEST);
+    const rows = [...doc.querySelectorAll(".ap-details > .ap-fold-body > .ap-row")].map((r) =>
+      text(r),
+    );
+    expect(rows).toEqual([
+      "Accountgmail-work, Gmail",
+      "What it doesSend an email",
+      "Rule‘client sends ask’ asked you",
+      "ExpiresIn 23 h 48 min",
+    ]);
+    expect(rows.join(" ")).not.toContain("inbox-bot");
+    expect(doc.querySelector(".ap-details details.ap-technical")).not.toBeNull();
+    expect(doc.querySelector(".ap-technical details")).toBeNull();
+  });
+
+  it("keeps at most one top-level fold open: they share one name", () => {
+    const doc = render(TASK_REQUEST);
+    const names = [
+      ...doc.querySelectorAll(
+        "details[data-heel-fold='args'], details[data-heel-fold='details'], details[data-heel-fold='code'], details.ap-split-menu",
+      ),
+    ].map((d) => d.getAttribute("name"));
+    expect(names).toEqual(["ap-one", "ap-one", "ap-one", "ap-one"]);
   });
 
   it("shows an HTTP request's body decoded, so the approver reads what will be written", () => {
     const doc = render(HTTP_REQUEST);
     // The operation the account's OpenAPI file names comes after what it calls.
-    expect(text(doc.querySelector("h1"))).toBe(
-      "ops-bot wants to call PUT /items/5 (item.write) on api",
-    );
+    expect(text(doc.querySelector("h1"))).toBe("Call PUT /items/5 (item.write) on api");
     expect(text(render({ ...HTTP_REQUEST, action: null }).querySelector("h1"))).toBe(
-      "ops-bot wants to call PUT /items/5 on api",
+      "Call PUT /items/5 on api",
     );
     const card = text(doc.querySelector("section[aria-labelledby^='http-']"));
     expect(card).toContain("attacker@evil.example");
@@ -288,26 +356,12 @@ describe("ApprovalRequest", () => {
         const doc = dom(renderStory(story, "light"));
         const main = doc.querySelector("main");
         if (!main) throw new Error("no main");
-        // No form, submit control or link on the page can carry a decision. The one
-        // exception is cancelling a waiting task: it posts to the route that stops the
-        // task (never approves anything) and carries no decision fields.
-        const isStop = (form: UiElement) =>
-          /^\/approvals\/[^/]+\/stop-script$/.test(form.getAttribute("action") ?? "");
+        // No form, submit control or link on the page can carry a decision.
         for (const form of main.querySelectorAll("form")) {
-          if (isStop(form)) {
-            const names = [...form.querySelectorAll("input")].map((i) => i.getAttribute("name"));
-            expect(names).toEqual(["csrf"]);
-            continue;
-          }
           expect(form.getAttribute("action") ?? "").not.toMatch(/approv|decid|deny|resume/i);
         }
         expect(
-          [
-            ...main.querySelectorAll("input[type=submit], button[type=submit], button:not([type])"),
-          ].filter((b) => {
-            const form = b.closest("form");
-            return form === null || !isStop(form);
-          }),
+          main.querySelectorAll("input[type=submit], button[type=submit], button:not([type])"),
         ).toHaveLength(0);
         for (const a of main.querySelectorAll("a[href]")) {
           // The breadcrumb back to the list is a plain GET of the list, never a decision.
@@ -316,8 +370,6 @@ describe("ApprovalRequest", () => {
         }
         // Every decision button is a plain button that names its ceremony handler.
         for (const b of main.querySelectorAll("button")) {
-          const form = b.closest("form");
-          if (form !== null && isStop(form)) continue;
           expect(b.getAttribute("type")).toBe("button");
           expect(b.closest("form")).toBeNull();
           expect(b.getAttribute("data-heel-ceremony")).toMatch(
@@ -331,12 +383,11 @@ describe("ApprovalRequest", () => {
     it("I-56: buttons call the handler named by the onDecide prop, bound to id and call hash", () => {
       const doc = render(PENDING_REQUEST);
       const buttons = [...doc.querySelectorAll("button")];
-      // Approve once and deny sit on the bar; standing is behind "Approve for longer".
-      expect(buttons.map((b) => b.getAttribute("data-heel-ceremony"))).toEqual([
-        "approve-once",
-        "deny",
-        "approve-standing",
-      ]);
+      // Approve once, then one allow button per choice (CSS shows the chosen one), then Deny.
+      const intents = buttons.map((b) => b.getAttribute("data-heel-ceremony"));
+      expect(intents[0]).toBe("approve-once");
+      expect(intents.at(-1)).toBe("deny");
+      expect(new Set(intents.slice(1, -1))).toEqual(new Set(["approve-standing"]));
       for (const b of buttons) {
         expect(b.getAttribute("data-heel-handler")).toBe(DECIDE.handler);
         expect(b.getAttribute("data-approval-id")).toBe(PENDING_REQUEST.id);
@@ -346,73 +397,93 @@ describe("ApprovalRequest", () => {
       }
     });
 
-    it("I-56: approve-as-standing reads its options from the standing fieldset", () => {
+    it("I-56: each allow button signs exactly the scope and length its label names", () => {
       const doc = render(PENDING_REQUEST);
-      const fieldsetId = button(doc, "approve-standing")?.getAttribute("data-heel-options") ?? "";
-      expect(doc.getElementById(fieldsetId)?.tagName.toLowerCase()).toBe("fieldset");
+      const allows = [...doc.querySelectorAll("button[data-heel-ceremony='approve-standing']")];
+      expect(allows).toHaveLength(12);
+      for (const b of allows) {
+        const options = doc.getElementById(b.getAttribute("data-heel-options") ?? "");
+        expect(options?.tagName.toLowerCase()).toBe("fieldset");
+        const value = (name: string) =>
+          options?.querySelector(`input[type=hidden][name=${name}]`)?.getAttribute("value") ?? "";
+        const scope = value("scope") as "exact_call" | "rule" | "run";
+        expect(text(b)).toBe(allowLabel(scope, value("duration")));
+      }
     });
   });
 
-  it("offers 1 h, 1 day, 7 days and 30 days; exact call, rule match or this run; at most 30 days", () => {
+  it("offers 1 h, 1 day, 7 days and 30 days; just once first, then exact call, rule or run; at most 30 days", () => {
     const doc = render(PENDING_REQUEST);
-    const options = [...doc.querySelectorAll("fieldset select option")].map((o) =>
+    const menu = doc.querySelector(".ap-menu");
+    const durations = [...(menu?.querySelectorAll("input[name=duration]") ?? [])].map((o) =>
       o.getAttribute("value"),
     );
-    expect(options).toEqual(STANDING_DURATIONS.map((d) => d.value));
-    expect(options).toEqual(["1h", "1d", "7d", "30d"]);
-    const scopes = [...doc.querySelectorAll("fieldset input[type=radio]")].map((r) =>
+    expect(durations).toEqual(STANDING_DURATIONS.map((d) => d.value));
+    expect(durations).toEqual(["1h", "1d", "7d", "30d"]);
+    const scopes = [...(menu?.querySelectorAll("input[name=scope]") ?? [])].map((r) =>
       r.getAttribute("value"),
     );
-    expect(scopes).toEqual(
-      PENDING_REQUEST.runId === null ? ["exact_call", "rule"] : ["exact_call", "rule", "run"],
-    );
+    expect(scopes).toEqual(["once", "exact_call", "rule", "run"]);
     const runless = render({ ...PENDING_REQUEST, runId: null });
     expect(
-      [...runless.querySelectorAll("fieldset input[type=radio]")].map((r) =>
+      [...runless.querySelectorAll(".ap-menu input[name=scope]")].map((r) =>
         r.getAttribute("value"),
       ),
-    ).toEqual(["exact_call", "rule"]);
-    expect(doc.querySelector("fieldset input[value=exact_call]")?.hasAttribute("checked")).toBe(
-      true,
-    );
-    expect(text(doc.querySelector("fieldset"))).toContain("at most 30 days");
+    ).toEqual(["once", "exact_call", "rule"]);
+    // The narrowest choice is the default; the broad ones are marked and say what they cover.
+    expect(menu?.querySelector("input[value=once]")?.hasAttribute("checked")).toBe(true);
+    const broad = [...(menu?.querySelectorAll(".choice.is-broad") ?? [])].map((c) => text(c));
+    expect(broad[0]).toBe("Any call the rule ‘client sends ask’ covers Broad");
+    expect(text(menu)).toContain("at most 30 days");
+    expect(text(menu)).not.toMatch(/standing|rules\/|yaml/i);
   });
 
   it("org asks are approve-once only, with no standing option (Q-A7)", () => {
     const doc = render(ORG_REQUEST);
     expect(button(doc, "approve-once")).not.toBeNull();
     expect(button(doc, "approve-standing")).toBeNull();
-    expect(doc.querySelector("fieldset")).toBeNull();
+    expect(doc.querySelector(".ap-menu")).toBeNull();
     expect(text(doc)).toContain("Org asks never stand");
   });
 
   it("I-61: while paused, approving is disabled and deny stays available", () => {
     const doc = render(PENDING_REQUEST, { pause: AGENT_PAUSE });
     expect(button(doc, "approve-once")?.hasAttribute("disabled")).toBe(true);
-    expect(button(doc, "approve-standing")?.hasAttribute("disabled")).toBe(true);
-    expect(doc.querySelector("fieldset")?.hasAttribute("disabled")).toBe(true);
+    for (const b of doc.querySelectorAll("button[data-heel-ceremony='approve-standing']")) {
+      expect(b.hasAttribute("disabled")).toBe(true);
+    }
+    expect(doc.querySelector(".ap-menu fieldset")?.hasAttribute("disabled")).toBe(true);
     expect(button(doc, "deny")?.hasAttribute("disabled")).toBe(false);
     expect(text(doc)).toContain("Approving is unavailable while agent inbox-bot is paused");
   });
 
   it("I-55: an expired request shows every decision control disabled", () => {
     const doc = render(EXPIRED_REQUEST);
-    for (const intent of ["approve-once", "approve-standing", "deny"]) {
-      expect(button(doc, intent)?.hasAttribute("disabled"), intent).toBe(true);
+    for (const b of doc.querySelectorAll("button")) {
+      expect(b.hasAttribute("disabled"), b.getAttribute("data-heel-ceremony") ?? "").toBe(true);
     }
+    for (const intent of ["approve-once", "approve-standing", "deny"]) {
+      expect(button(doc, intent), intent).not.toBeNull();
+    }
+    expect(text(doc.querySelector("h1"))).toBe("Expired");
     expect(text(doc)).toContain("can't be approved or denied");
   });
 
   it.each([
-    ["approved", APPROVED_REQUEST, "runs once when the agent re-sends the identical call"],
-    ["denied", DENIED_REQUEST, "Re-sends of this call return “denied”"],
-    ["executed", EXECUTED_REQUEST, "Ran once"],
+    ["approved", APPROVED_REQUEST, "Approved", "It will run once."],
+    ["denied", DENIED_REQUEST, "Denied", "No email was sent."],
+    ["denied draft", DENIED_DRAFT_REQUEST, "Denied", "No draft was saved."],
+    ["executed", EXECUTED_REQUEST, "Done", "It ran once."],
   ] as const)(
-    "a decided (%s) request explains itself and has no decision controls",
-    (_s, request, note) => {
+    "a decided (%s) request is its outcome in a word and a line, with no decision controls",
+    (_s, request, word, line) => {
       const doc = render(request);
       expect(doc.querySelectorAll("button")).toHaveLength(0);
-      expect(text(doc)).toContain(note);
+      expect(text(doc.querySelector("h1"))).toBe(word);
+      expect(text(doc.querySelector(".ap-outcome-line"))).toBe(line);
+      // Who decided, when, and what the same call gets next are in Details, not the outcome.
+      expect(text(doc.querySelector(".ap-outcome"))).not.toMatch(/alice|UTC|again/);
+      expect(text(doc.querySelector(".ap-details"))).toContain("same call again");
     },
   );
 
@@ -430,17 +501,17 @@ describe("ApprovalRequest", () => {
     expect(doc.querySelectorAll("button")).toHaveLength(0);
   });
 
-  it("names the biggest risk from the stored call, just above the decision buttons", () => {
+  it("names the biggest risk from the stored call, just above the content", () => {
     expect(biggestRisk(PENDING_REQUEST)).toMatch(
       /^Goes to \d+ people outside your domain \(vendor\.com\)\.$/,
     );
     expect(biggestRisk(MERGE_REQUEST)).toBe("Merges into main in acme/web.");
     expect(biggestRisk(GENERIC_REQUEST)).toBeNull();
+    // A draft sends nothing.
+    expect(biggestRisk(DRAFT_REQUEST)).toBeNull();
     const doc = render(PENDING_REQUEST);
-    const risk = doc.querySelector(".ap-decide .ap-risk");
-    expect(text(risk)).toContain("outside your domain");
-    // It sits before the buttons, inside the decision section.
-    expect(doc.querySelector(".ap-decide > .ap-risk + .ap-bar")).not.toBeNull();
+    expect(text(doc.querySelector(".ap-risk"))).toContain("outside your domain");
+    expect(doc.querySelector(".ap-risk + .ap-content")).not.toBeNull();
     // The agent's reason never feeds it.
     const said = { ...PENDING_REQUEST, reason: "Goes to nobody outside" };
     expect(biggestRisk(said)).toBe(biggestRisk(PENDING_REQUEST));
