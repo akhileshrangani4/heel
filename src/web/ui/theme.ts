@@ -209,26 +209,12 @@ button:not(:disabled),[role="button"],summary,select,input[type="radio"],input[t
 .diff li[data-op="add"]{background:var(--add-bg)}
 .diff li[data-op="remove"]{background:var(--remove-bg)}
 .diff .sign{display:inline-block;width:1.25rem;font-weight:700}
-.ap-head{padding:1.25rem 1.4rem;box-shadow:0 24px 60px -32px rgb(0 0 0 / .35)}
-.ap-meta{display:flex;flex-wrap:wrap;align-items:center;gap:.25rem .75rem;font-size:.9rem;color:var(--muted)}
-.ap-meta .badge{margin-left:auto}
-.ap-agent{font-weight:600;color:var(--text)}
-.ap-title{font-size:1.45rem;line-height:1.35;margin:.7rem 0 0;letter-spacing:-.03em;font-weight:600;overflow-wrap:anywhere}
-.ap-title mark{background:var(--surface);color:inherit;border-radius:8px;padding:0 .35rem;box-shadow:inset 0 0 0 1px var(--line)}
 @media (max-width:36rem){
-  .ap-title{font-size:1.15rem}
   main{padding:1rem}
   table.data{min-width:34rem}
 }
 .req-list{list-style:none;margin:.75rem 0 2rem;padding:0;display:grid;gap:.75rem}
 .req{margin:0}
-.req .ap-meta{display:block;line-height:1.75}
-.req .ap-meta > *{display:inline-block;white-space:nowrap;margin-right:.75rem}
-.req .ap-meta .badge{float:right;margin:0 0 0 .75rem;line-height:1.5}
-.req-title{font-size:1.1rem;line-height:1.4;margin:.5rem 0 0;font-weight:600;overflow-wrap:anywhere}
-.req-title a{color:var(--text);text-decoration:none}
-.req-title a:hover{text-decoration:underline}
-.req-title mark{background:var(--surface);color:inherit;border-radius:8px;padding:0 .35rem;box-shadow:inset 0 0 0 1px var(--line)}
 .req[data-status="pending"]{border-color:var(--line)}
 .req-reason{margin:.5rem 0 0;padding-left:.75rem;border-left:2px solid var(--line)}
 .req-foot{margin:.6rem 0 0;font-size:.85rem}
