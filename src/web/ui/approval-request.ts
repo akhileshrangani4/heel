@@ -656,7 +656,7 @@ function allowAgainOptions(
         </label>`,
       )}
     </div>
-    <p class="muted ap-note">Ends sooner if the rule changes; at most ${STANDING_LONGEST_DAYS} days. A run allows at most a day.</p>
+    <p class="muted ap-note">Ends sooner if the rule changes; at most ${STANDING_LONGEST_DAYS} days${request.runId === null ? "" : "; a run, at most a day"}.</p>
   </fieldset>`;
 }
 
