@@ -429,6 +429,23 @@ body.focus main{max-width:30rem;padding:3rem 1.25rem}
 body:has(#heel-ceremony-status:not(:empty)) main{padding-bottom:10rem}
 `;
 
+/**
+ * Passkey buttons (`data-heel-ceremony`, CEREMONY_SCRIPT) keep their size in
+ * every state. Waiting and success hide the label in place and draw an icon
+ * over it, in the same box, so a button never widens, wraps or pushes its
+ * bar off screen. Unlayered, so it beats shadcn's dimmed `disabled` look
+ * while a passkey prompt is open.
+ */
+const CEREMONY_STATE_CSS = `
+button[data-heel-ceremony]{position:relative}
+.heel-btn-icon{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none}
+.heel-btn-icon:empty{display:none}
+.heel-btn-icon svg{width:1.1rem;height:1.1rem}
+button[data-heel-state="waiting"],button[data-heel-state="success"]{-webkit-text-fill-color:transparent;cursor:progress}
+button[data-heel-state="waiting"] > :not(.heel-btn-icon),button[data-heel-state="success"] > :not(.heel-btn-icon){visibility:hidden}
+button[data-heel-state="waiting"]:disabled,button[data-heel-state="success"]:disabled{opacity:1}
+`;
+
 /** The full stylesheet for every human-plane page. */
 /**
  * heel's own rules sit in the `heel` layer, under Tailwind's `utilities`, so
@@ -442,6 +459,7 @@ export const STYLESHEET = [
   `:root[data-theme="dark"]{${variables(DARK)}}`,
   `@layer heel{${[RULES, HOME_CSS, APPROVALS_CSS, CONNECTIONS_CSS, ACTIVITY_CSS, RULES_CSS, AGENTS_CSS, SETTINGS_CSS].join("\n")}}`,
   TAILWIND_CSS,
+  CEREMONY_STATE_CSS,
 ].join("\n");
 
 /** Exposed for the contrast test, which checks each pair the pages use. */
