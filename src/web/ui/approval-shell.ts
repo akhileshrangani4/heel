@@ -26,6 +26,8 @@ export interface ShellProps {
   title: Html;
   /** One line of why it matters, in heel's words. */
   why?: Html | string;
+  /** The agent's own one line of why (`quote()`), right under the title. */
+  quote?: Html | "";
   /** The status badge and one short muted line beside it; left out when it would repeat the page. */
   status?: Html | "";
   /** The agent's words, notices, the decision and the folds. */
@@ -58,6 +60,7 @@ export function approvalShell(props: ShellProps): Html {
     <div class="ap-layout">
       <header class="ap-head">
         <h1 class="ap-title">${props.title}</h1>
+        ${props.quote ?? ""}
         ${props.why ? html`<p class="ap-why">${props.why}</p>` : ""}
       </header>
       <aside class="ap-side" aria-label="Decision">
@@ -67,6 +70,43 @@ export function approvalShell(props: ShellProps): Html {
       ${main === "" ? "" : html`<div class="ap-main">${main}</div>`}
     </div>
   </article>`;
+}
+
+/** The agent's words above the fold: the first 10 words, the rest in Details. */
+export function agentLine(words: string, max = 10): string {
+  const all = words.trim().split(/\s+/);
+  return all.length <= max ? words : `${all.slice(0, max).join(" ")}…`;
+}
+
+/**
+ * The agent's own one line of why: quiet, marked as its words, never mistaken
+ * for heel's. A long one is cut to `agentLine` here; Details has it whole.
+ */
+export function quote(agent: string, words: string | null): Html | "" {
+  if (words === null) return "";
+  return html`<figure class="reason ap-quote">
+    <figcaption class="visually-hidden">${agent} says (its own words; heel didn't check them):</figcaption>
+    <blockquote>${agentLine(words)}</blockquote>
+  </figure>`;
+}
+
+/**
+ * A page fold: closed by default, and only one of a page's folds is open at
+ * a time (`name` groups them, as the browser does natively).
+ */
+export function pageFold(label: string, content: Html, className = ""): Html {
+  return html`<details class="ap-more ${className}" name="ap-page">
+    <summary><span class="fold-label">${label}</span></summary>
+    <div class="ap-fold-body">${content}</div>
+  </details>`;
+}
+
+/** The one fold inside Details: ids, absolute times, rules and tool names. */
+export function technical(content: Html): Html {
+  return html`<details class="ap-tech">
+    <summary><span class="fold-label">Technical</span></summary>
+    ${content}
+  </details>`;
 }
 
 /**

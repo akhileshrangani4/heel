@@ -31,7 +31,7 @@ export const APPROVALS_CSS = `
 .req-card .req-link{color:inherit;text-decoration:none}
 .req-card .req-link::after{content:"";position:absolute;inset:0}
 .req-card .req-link:focus-visible{outline:none}
-.req-card:focus-within{outline:3px solid var(--focus);outline-offset:-3px}
+.req-card:has(.req-link:focus-visible){outline:2px solid var(--focus);outline-offset:-2px;border-radius:12px}
 .req-card :is(a,button,summary,input):not(.req-link){position:relative;z-index:1}
 .req-group > .req-card:first-child{border-top-left-radius:14px;border-top-right-radius:14px}
 .req-group > .req-card:last-child{border-bottom-left-radius:14px;border-bottom-right-radius:14px}
@@ -123,11 +123,22 @@ export const APPROVALS_CSS = `
 .ap-key-field label{display:block;font-weight:600;font-size:.88rem;margin:0 0 .3rem}
 .ap-key-field input{display:block;width:100%;min-width:0;height:2.5rem;padding:0 .7rem;border:1px solid var(--border);border-radius:8px;background:var(--bg)}
 .ap-key-field p{margin:.35rem 0 0;font-size:.82rem}
-.ap-hint{font-size:.82rem;margin:.25rem 0 0}
-.ap-hint summary{color:var(--muted);width:fit-content}
-.ap-hint p{margin:.25rem 0 0;overflow-wrap:anywhere}
 .ap-next{margin:.6rem 0 0;font-size:.88rem;overflow-wrap:anywhere}
-/* The agent's own words: quiet and quoted, never cut (I-57). */
+/* The key's label with its "Where do I get this key?" fold on the same line. */
+.ap-key-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:.15rem .75rem;margin:0 0 .3rem}
+.ap-key-head label{margin:0}
+.ap-key-head > details > summary{color:var(--muted);font-size:.82rem;justify-content:flex-start;gap:.3rem}
+.ap-key-head > details[open]{flex-basis:100%}
+.ap-key-head > details[open] > summary{color:var(--text)}
+.ap-key-head .ap-fold-body p{margin:.25rem 0 0;overflow-wrap:anywhere}
+/* Technical: the one fold inside Details. */
+.ap-tech{margin-top:.6rem;border-top:1px solid var(--line);padding-top:.25rem}
+.ap-tech > summary{padding:.3rem 0;color:var(--muted);font-size:.82rem;justify-content:flex-start;gap:.3rem}
+.ap-tech pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.78rem}
+.ap-tech .diff li{font-size:.78rem}
+.ap summary:focus-visible{outline-offset:2px;border-radius:6px}
+.ap-head .ap-quote{margin:.4rem 0 0}
+/* The agent's own words: quiet and quoted, never cut by CSS (I-57). */
 .ap .ap-quote{margin:.6rem 0 0;padding-left:.6rem;border-left:2px solid var(--border)}
 .ap .ap-quote blockquote{display:block;margin:0;color:var(--muted);font-style:italic}
 /* A short value cut in the middle (shorten()): one line, never wrapped. */
@@ -247,9 +258,9 @@ export const APPROVALS_CSS = `
 .cov-head h2{font-size:1rem;margin:0}
 .cov-head a{font-size:.88rem;font-weight:500}
 .cov-summary{margin:0;font-weight:600;overflow-wrap:anywhere}
-.cov-more{margin-top:.35rem}
-.cov-more > summary{padding:.3rem 0;color:var(--muted);font-size:.86rem;font-weight:500;justify-content:flex-start;gap:.35rem}
-.cov-more[open] > summary{color:var(--text)}
+.cov-more{margin:0}
+.cov-more > summary{padding:.2rem 0;color:var(--text);justify-content:flex-start;gap:.4rem}
+.cov-more > summary .fold-label{flex:0 1 auto}
 .cov-change{margin:.6rem 0 0;font-size:.86rem}
 .cov-scope{margin:.2rem 0 0;font-size:.85rem}
 .cov-groups{display:grid;gap:.6rem;margin:.9rem 0 0}

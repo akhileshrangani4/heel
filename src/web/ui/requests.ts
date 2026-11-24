@@ -3,11 +3,14 @@ import type { ActionDecision, ActionOutcome, Coverage } from "../../requests/cov
 import type { AgentRequestStatus } from "../../store/schema.ts";
 import {
   actionBar,
+  agentLine,
   approvalShell,
   codeChip,
   type Dock,
+  pageFold,
+  quote,
   shorten,
-  sideFold,
+  technical,
 } from "./approval-shell.ts";
 import { ceremonyButton } from "./ceremony.ts";
 import { formatRelative } from "./format.ts";
@@ -47,25 +50,25 @@ export function requestCards(cards: readonly RequestCard[], now: Date): Html | "
         (card) => html`<li class="req req-card" data-status="pending">
           <span class="req-icon">${serviceLogo(card.provider, card.alias)}</span>
           <span class="req-body">
-            <span class="ap-meta">
-              <span class="ap-agent">${shorten(card.agent, 12, 8)}</span>
-              <span class="muted">${formatRelative(card.createdAt, now)}</span>
-            </span>
+            <span class="ap-meta"><span class="muted">${formatRelative(card.createdAt, now)}</span></span>
             <a class="req-title req-link" href="/requests/${encodeURIComponent(card.id)}"
-              >${shorten(card.agent, 12, 8)} wants to connect <mark>${card.service}</mark></a
+              >${shorten(card.agent, 12, 8)} wants to connect <mark>${shorten(card.service, 24, 12)}</mark></a
             >
-            ${
-              card.why === null
-                ? ""
-                : html`<span class="req-reason"><span class="muted">${card.agent} says:</span> ${card.why}</span>`
-            }
-            <span class="req-foot muted">Expires ${formatRelative(card.expiresAt, now)}</span>
+            ${card.why === null ? "" : html`<span class="req-reason">${agentLine(card.why)}</span>`}
+            ${soonFoot(card.expiresAt, now)}
           </span>
           <span class="req-go" aria-hidden="true">${trusted(CHEVRON_RIGHT)}</span>
         </li>`,
       )}
     </ul>
   </section>`;
+}
+
+/** A card's expiry, only when it's close (under a day). */
+export function soonFoot(expiresAt: Date, now: Date): Html | "" {
+  return expiresAt.getTime() - now.getTime() < 24 * 3_600_000
+    ? html`<span class="req-foot muted">Expires ${formatRelative(expiresAt, now)}</span>`
+    : "";
 }
 
 export interface RequestPageProps {
@@ -179,7 +182,7 @@ export function coverageSummary(coverage: Coverage): string {
 }
 
 function actionName(action: ActionDecision): Html {
-  return html`<li class="cov-action"${action.risk === null ? "" : html` data-risk`}>
+  return html`<li class="cov-action" title="${action.description}"${action.risk === null ? "" : html` data-risk`}>
     <span>${sentence(action.label)}</span>${
       action.risk === null
         ? ""
@@ -229,23 +232,9 @@ function listView(actions: readonly ActionDecision[]): Html {
   </ul>`;
 }
 
-/** Every action with its description and tool name, and the rules that decide them. */
-function coverageFolds(coverage: Coverage, id: string): Html {
+/** The rules that decide, with how many actions each decides: technical, so in Details › Technical. */
+function decidingRules(coverage: Coverage): Html {
   const a = coverage.actions;
-  const all =
-    a.kind === "opaque"
-      ? ""
-      : html`<details class="ap-fold cov-fold">
-          <summary><span class="fold-label">Show all ${String(a.actions.length)} actions</span></summary>
-          <dl class="cov-all">
-            ${a.actions.map(
-              (d) => html`<div>
-                <dt><span class="mono">${d.tool}</span> ${badge(OUTCOME[d.outcome].label, OUTCOME[d.outcome].tone)}</dt>
-                <dd>${d.description}</dd>
-              </div>`,
-            )}
-          </dl>
-        </details>`;
   const deciding = new Map<string, number>();
   if (a.kind === "opaque") deciding.set(a.rule ?? "No rule matches, so it is denied", 1);
   else {
@@ -254,55 +243,38 @@ function coverageFolds(coverage: Coverage, id: string): Html {
       deciding.set(key, (deciding.get(key) ?? 0) + 1);
     }
   }
-  return html`${all}
-    <details class="ap-fold cov-fold">
-      <summary><span class="fold-label">Show rules</span></summary>
-      <ul class="cov-rules" aria-labelledby="${id}">
-        ${[...deciding].map(
-          ([rule, n]) =>
-            html`<li><span class="mono">${rule}</span>${
-              a.kind === "opaque"
-                ? ""
-                : html` <span class="muted">decides ${runs(n, "action", "actions")}</span>`
-            }</li>`,
-        )}
-        ${coverage.rules
-          .filter((r) => r.rule.startsWith("grant "))
-          .map(
-            (r) =>
-              html`<li><span class="mono">${r.rule}</span> <span class="muted">a grant for this agent</span></li>`,
-          )}
-      </ul>
-    </details>`;
+  return html`<ul class="cov-rules">
+    ${[...deciding].map(
+      ([rule, n]) =>
+        html`<li><span class="mono">${rule}</span>${
+          a.kind === "opaque"
+            ? ""
+            : html` <span class="muted">${runs(n, "action", "actions")}</span>`
+        }</li>`,
+    )}
+    ${coverage.rules
+      .filter((r) => r.rule.startsWith("grant "))
+      .map((r) => html`<li><span class="mono">${r.rule}</span></li>`)}
+  </ul>`;
 }
 
+/** "See what it can do": the actions by outcome, risky ones flagged. One level, no folds inside. */
 /**
- * One line of what the agent could do, and everything else in one fold:
- * the actions by outcome, risky ones flagged, every action and the rules.
+ * The coverage line is itself the fold: "Reads run on their own. Everything
+ * else asks you." opens to the actions by outcome. Screen readers also hear
+ * "See what it can do". An MCP server has no actions to list: just the line.
  */
-function coverageView(props: RequestPageProps): Html {
-  const id = `cov-${props.id}`;
+function coverageFold(props: RequestPageProps): Html {
   const a = props.coverage.actions;
-  const body =
-    a.kind === "opaque"
-      ? ""
-      : props.coverageLayout === "list"
-        ? listView(a.actions)
-        : groupsView(a.actions);
-  return html`<section class="cov" aria-labelledby="${id}">
-    <p id="${id}" class="cov-summary">${coverageSummary(props.coverage)}</p>
-    ${
-      props.coverage.mode === "watch"
-        ? notice("warn", html`<p>Watch mode is on: calls run even where this says ask.</p>`)
-        : ""
-    }
-    <details class="ap-fold cov-more">
-      <summary><span class="fold-label">See what it can do</span></summary>
-      ${body}
-      ${coverageFolds(props.coverage, id)}
+  const line = coverageSummary(props.coverage);
+  if (a.kind === "opaque") return html`<p class="cov-summary">${line}</p>`;
+  return html`<details class="ap-more cov-more" name="ap-page">
+    <summary><span class="fold-label cov-summary">${line}<span class="visually-hidden"> See what it can do.</span></span></summary>
+    <div class="ap-fold-body">
+      ${props.coverageLayout === "list" ? listView(a.actions) : groupsView(a.actions)}
       <p class="cov-change"><a href="/rules">Change rules</a></p>
-    </details>
-  </section>`;
+    </div>
+  </details>`;
 }
 
 // ── The page ────────────────────────────────────────────────────────────────
@@ -315,47 +287,91 @@ function serviceTitle(props: RequestPageProps): string {
 
 /** "as `alias`", shortened when long; left out when it's just the service's own name. */
 function asAlias(props: RequestPageProps): Html | "" {
-  if (props.alias === props.provider) return "";
+  // A long alias stays out of the title; Details has it whole.
+  if (props.alias === props.provider || props.alias.length > 20) return "";
   return html` as <code class="ap-short" title="${props.alias}">${shorten(props.alias)}</code>`;
 }
 
+/**
+ * Details: at most four plain rows, then the Technical fold (ids, times, the
+ * deciding rules, tool names). The agent's name only when the title cut it.
+ */
 function detailsFold(props: RequestPageProps): Html {
-  return sideFold(
+  const a = props.coverage.actions;
+  const shortQuote = props.why !== null && agentLine(props.why) !== props.why;
+  return pageFold(
     "Details",
     html`<dl class="facts ap-facts-list">
-      <dt>Agent</dt>
-      <dd>${codeChip(props.agent, `agent-${props.id}`)}</dd>
-      <dt>Name</dt>
-      <dd>${codeChip(props.alias, `alias-${props.id}`)}</dd>
-      ${
-        props.url === null
-          ? ""
-          : html`<dt>Server</dt>
-            <dd>${codeChip(props.url, `url-${props.id}`)}</dd>`
-      }
-      ${
-        props.why === null
-          ? ""
-          : html`<dt>Why</dt>
-            <dd>${props.why}</dd>`
-      }
-      ${
-        props.decision === null
-          ? html`<dt>Expires</dt>
-            <dd>${time(props.expiresAt)}</dd>`
-          : html`<dt>Decided</dt>
-            <dd>By ${props.decision.by}, ${time(props.decision.at)}</dd>`
-      }
-      <dt>Request</dt>
-      <dd>${codeChip(props.id, `id-${props.id}`)}</dd>
-    </dl>`,
+        ${
+          shorten(props.agent, 12, 8) === props.agent
+            ? ""
+            : html`<dt>Agent</dt>
+              <dd>${codeChip(props.agent, `agent-${props.id}`)}</dd>`
+        }
+        <dt>Name</dt>
+        <dd>${codeChip(props.alias, `alias-${props.id}`)}</dd>
+        ${
+          props.url === null
+            ? ""
+            : html`<dt>Server</dt>
+              <dd>${codeChip(props.url, `url-${props.id}`)}</dd>`
+        }
+        ${
+          shortQuote
+            ? html`<dt>Why</dt>
+              <dd>${props.why}</dd>`
+            : ""
+        }
+      </dl>
+      ${technical(html`<dl class="facts ap-facts-list">
+        <dt>Request</dt>
+        <dd>${codeChip(props.id, `id-${props.id}`)}</dd>
+        <dt>Asked</dt>
+        <dd>${time(props.createdAt)}</dd>
+        ${
+          props.decision === null
+            ? html`<dt>Expires</dt>
+              <dd>${time(props.expiresAt)}</dd>`
+            : html`<dt>Decided</dt>
+              <dd>By ${props.decision.by}, ${time(props.decision.at)}</dd>`
+        }
+        <dt>Rules</dt>
+        <dd>${decidingRules(props.coverage)}</dd>
+        ${
+          a.kind === "opaque"
+            ? ""
+            : html`<dt>Tools</dt>
+              <dd class="mono">${a.actions.map((d) => d.tool).join(", ")}</dd>`
+        }
+      </dl>`)}`,
   );
+}
+
+/** One line of what the agent could do, then the page's folds side by side. */
+function coverageView(props: RequestPageProps): Html {
+  return html`<section class="cov" aria-label="What it could do">
+    ${coverageFold(props)}
+    ${
+      props.coverage.mode === "watch"
+        ? notice("warn", html`<p>Watch mode is on: calls run even where this says ask.</p>`)
+        : ""
+    }
+    <div class="ap-folds">${detailsFold(props)}</div>
+  </section>`;
 }
 
 function keyField(props: RequestPageProps): Html | "" {
   if (props.problem !== null || props.key === null) return "";
   return html`<fieldset id="request-key" class="ap-key-field">
-    <label for="request-key-input">${props.service} key</label>
+    <div class="ap-key-head">
+      <label for="request-key-input">${props.service} key</label>
+      ${pageFold(
+        "Where do I get this key?",
+        html`<p>${props.key.hint}</p>
+          <p>Only heel keeps it. The agent never sees it.</p>`,
+        "ap-hint",
+      )}
+    </div>
     <input
       id="request-key-input"
       name="key"
@@ -367,11 +383,6 @@ function keyField(props: RequestPageProps): Html | "" {
       spellcheck="false"
       required
     />
-    <details class="ap-hint">
-      <summary>Where do I get this key?</summary>
-      <p>${props.key.hint}</p>
-      <p>Only heel keeps it. ${props.agent} never sees it.</p>
-    </details>
   </fieldset>`;
 }
 
@@ -386,22 +397,6 @@ function lastStep(props: RequestPageProps): Html {
           : "Next: sign it out where it ran before."
     }
   </p>`;
-}
-
-/** The agent's own words: one line, attributed, never mistaken for heel's. Full text in Details. */
-function quote(agent: string, words: string | null): Html | "" {
-  if (words === null) return "";
-  return html`<figure class="reason ap-quote">
-    <figcaption class="visually-hidden">${agent} says (its own words; heel didn't check them):</figcaption>
-    <blockquote>${words}</blockquote>
-  </figure>`;
-}
-
-/** Expiry only when it's close. */
-function soon(expiresAt: Date, now: Date): Html | "" {
-  return expiresAt.getTime() - now.getTime() < 24 * 3_600_000
-    ? html`<span class="badge" data-tone="warn">Expires ${formatRelative(expiresAt, now)}</span>`
-    : "";
 }
 
 function pendingPage(props: RequestPageProps): Html {
@@ -421,38 +416,41 @@ function pendingPage(props: RequestPageProps): Html {
             <span class="mono">${props.setup.configKey}</span> (<a href="${props.setup.docsUrl}">how</a>).
           </p>`,
         );
-  const decide = html`<section class="ap-decide" aria-label="Decide">
-    ${keyField(props)}
-    ${actionBar({
-      yes:
-        props.problem === null
-          ? ceremonyButton({
-              callback: { handler: "approveConnection" },
-              intent: "connect",
-              label: "Connect it",
-              tone: "primary",
-              binding: { requestId: props.id, hash: props.hash },
-              describedBy: helpId,
-              ...(props.key === null ? {} : { optionsFrom: "request-key" }),
-            })
-          : "",
-      no: postForm(
-        props.reject,
-        {},
-        html`<button type="submit" class="${btn("outline")}">Reject</button>`,
-      ),
-      helpId,
-      help: "Your passkey confirms it. Nothing is connected or contacted until then.",
-    })}
-  </section>`;
+  const expiring = props.expiresAt.getTime() - props.now.getTime() < 24 * 3_600_000;
   return approvalShell({
     kind: "connection",
     crumb: "",
-    dock: props.dock ?? "inline",
+    dock: props.dock ?? "pinned",
     title: html`${shorten(props.agent, 12, 8)} wants to connect ${serviceTitle(props)}${asAlias(props)}`,
-    status: soon(props.expiresAt, props.now),
-    side: html`${quote(props.agent, props.why)}${trust}${problem}${setup}${decide}
-      <div class="ap-folds">${detailsFold(props)}</div>`,
+    quote: quote(props.agent, props.why),
+    status: expiring
+      ? html`<span class="badge" data-tone="warn">Expires ${formatRelative(props.expiresAt, props.now)}</span>`
+      : "",
+    side: html`${trust}${problem}${setup}
+      <section class="ap-decide" aria-label="Decide">
+        ${keyField(props)}
+        ${actionBar({
+          yes:
+            props.problem === null
+              ? ceremonyButton({
+                  callback: { handler: "approveConnection" },
+                  intent: "connect",
+                  label: "Connect it",
+                  tone: "primary",
+                  binding: { requestId: props.id, hash: props.hash },
+                  describedBy: helpId,
+                  ...(props.key === null ? {} : { optionsFrom: "request-key" }),
+                })
+              : "",
+          no: postForm(
+            props.reject,
+            {},
+            html`<button type="submit" class="${btn("outline")}">Reject</button>`,
+          ),
+          helpId,
+          help: "Your passkey confirms it. Nothing is connected or contacted until then.",
+        })}
+      </section>`,
     main: coverageView(props),
   });
 }
@@ -461,13 +459,14 @@ function pendingPage(props: RequestPageProps): Html {
 function connectedPage(props: RequestPageProps): Html {
   const needsSignIn = props.signIn !== null;
   const name = html`<code class="ap-short" title="${props.alias}">${shorten(props.alias)}</code>`;
+  // No "Back to Approvals" button: the link back is already at the top.
   const next = needsSignIn
-    ? postForm(
+    ? html`<div class="ap-next-action">${postForm(
         props.signIn as FormTarget,
         { alias: props.alias },
         html`<button type="submit" class="${btn()}">Sign in to ${props.service}</button>`,
-      )
-    : html`<a class="${btn("outline")}" href="/approvals">Back to Approvals</a>`;
+      )}</div>`
+    : lastStep(props);
   return approvalShell({
     kind: "connection",
     crumb: "",
@@ -482,20 +481,15 @@ function connectedPage(props: RequestPageProps): Html {
           )
         : ""
     }
-      <div class="ap-next-action">${next}</div>
-      ${needsSignIn ? "" : lastStep(props)}
-      <div class="ap-folds">${detailsFold(props)}</div>`,
+      ${next}`,
     main: coverageView(props),
   });
 }
 
-const CLOSED: Record<
-  Exclude<AgentRequestStatus, "pending" | "approved">,
-  (p: RequestPageProps) => [string, string]
-> = {
-  rejected: () => ["Rejected", "Nothing was connected."],
-  expired: () => ["Expired", "Nothing was connected."],
-  superseded: () => ["Replaced by a newer request", "Nothing was connected."],
+const CLOSED: Record<Exclude<AgentRequestStatus, "pending" | "approved">, [string, string]> = {
+  rejected: ["Rejected", "Nothing was connected."],
+  expired: ["Expired", "Nothing was connected."],
+  superseded: ["Replaced by a newer request", "Nothing was connected."],
 };
 
 /** One request: what the agent asks for, what it would let the agent do, and the controls. */
@@ -503,15 +497,13 @@ export function requestPage(props: RequestPageProps): Html {
   if (props.status === "approved") return connectedPage(props);
   const pending = props.status === "pending" && props.expiresAt > props.now;
   if (pending) return pendingPage(props);
-  const status = props.status === "pending" ? "expired" : props.status;
-  const [title, why] = CLOSED[status](props);
+  const [title, why] = CLOSED[props.status === "pending" ? "expired" : props.status];
   return approvalShell({
     kind: "connection",
     crumb: "",
     dock: "inline",
     title: html`${title}`,
     why,
-    side: html`<div class="ap-next-action"><a class="${btn("outline")}" href="/approvals">Back to Approvals</a></div>
-      <div class="ap-folds">${detailsFold(props)}</div>`,
+    side: html`<div class="ap-folds">${detailsFold(props)}</div>`,
   });
 }

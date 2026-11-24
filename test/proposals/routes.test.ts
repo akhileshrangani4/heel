@@ -205,7 +205,6 @@ describe("proposed hide entries on the approval page", () => {
     const listed = await (await h.fetch("/approvals", { as: owner })).text();
     expect(listed).toContain("a hide entry");
     const page = await (await h.fetch(`/proposals/${proposed.proposalId}`, { as: owner })).text();
-    expect(page).toContain("Hide from agents");
     expect(page).toContain("login_code");
     expect(page).toContain("Hiding only takes email away from your agents");
     expect(page).toContain("Add to the hide list");
