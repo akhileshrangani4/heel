@@ -343,6 +343,11 @@ export function activityPage(props: {
       }
     </div>
     ${
+      props.paged === true
+        ? ""
+        : html`<p class="act-live-note" id="activity-live-note" role="status" hidden>Signed out. <a href="/sign-in?next=${encodeURIComponent(activityHref(props.filter))}">Sign in</a> to see new activity.</p>`
+    }
+    ${
       props.rows.length === 0
         ? html`<div class="card req-empty">
             <p><strong>${filtered ? "Nothing matches these filters." : "No decisions yet."}</strong></p>
@@ -352,7 +357,7 @@ export function activityPage(props: {
     }
     ${scrollRegion(
       "Decisions",
-      html`<table class="data act-table" id="activity" data-latest="${String(latest)}" data-today="${dayKey(now)}" data-filter="${params({})}"${props.rows.length === 0 ? html` hidden` : ""}>
+      html`<table class="data act-table" id="activity" data-latest="${String(latest)}" data-today="${dayKey(now)}" data-filter="${params({})}"${props.paged === true ? "" : html` data-live`}${props.rows.length === 0 ? html` hidden` : ""}>
         <caption class="visually-hidden">Decisions</caption>
         <thead class="visually-hidden">
           <tr>
@@ -597,7 +602,8 @@ function agentRow(
 export const ACTIVITY_SCRIPT = `
 (() => {
   const table = document.getElementById("activity");
-  if (!table || !window.EventSource) return;
+  // An older page doesn't take live rows: they belong on the newest page.
+  if (!table || !table.hasAttribute("data-live") || !window.EventSource) return;
   const filter = table.dataset.filter;
   const source = new EventSource("/activity/stream?after=" + table.dataset.latest + (filter ? "&" + filter : ""));
   source.addEventListener("row", (event) => {
@@ -629,6 +635,19 @@ export const ACTIVITY_SCRIPT = `
     table.hidden = false;
     const empty = table.closest(".table-scroll")?.previousElementSibling;
     if (empty && empty.classList.contains("req-empty")) empty.remove();
+  });
+  // A dropped connection or the server's own 10-minute end leaves the source
+  // CONNECTING, and it resumes by itself. CLOSED means heel answered with
+  // something other than a stream: if a session check now gets 401, the
+  // session ended, so say so and offer sign-in. Rows on screen stay.
+  source.addEventListener("error", async () => {
+    if (source.readyState !== EventSource.CLOSED) return;
+    try {
+      const check = await fetch("/activity", { method: "HEAD", redirect: "manual" });
+      if (check.status !== 401) return;
+    } catch { return; }
+    const note = document.getElementById("activity-live-note");
+    if (note) note.hidden = false;
   });
 })();
 `;
