@@ -46,6 +46,7 @@ import type { Pipeline } from "../pipeline/pipeline.ts";
 import type { Definition, DefinitionRegistry, PauseStore } from "../pipeline/ports.ts";
 import { type SandboxSlots, UNLIMITED_SLOT } from "../sandbox-slots.ts";
 import { clientNameFrom } from "./client-info.ts";
+import { CONNECTED_NOTE_MS, connectedKeyNote } from "./connected.ts";
 import {
   directName,
   HEEL_ACCOUNTS,
@@ -763,16 +764,39 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     return heelAccounts(agent);
   }
 
+  /** The accounts this agent asked for that its owner connected in the last day. */
+  function justConnected(agent: AuthenticatedAgent, at: Date): Set<string> {
+    const rows = deps.db
+      .select({ accountId: agentRequests.accountId })
+      .from(agentRequests)
+      .where(
+        and(
+          eq(agentRequests.agentId, agent.agentId),
+          eq(agentRequests.status, "approved"),
+          gt(agentRequests.decidedAt, new Date(at.getTime() - CONNECTED_NOTE_MS)),
+        ),
+      )
+      .all();
+    return new Set(rows.flatMap((row) => (row.accountId === null ? [] : [row.accountId])));
+  }
+
   /** The agent's accounts and what it asked for that still waits (roadmap 2.6). Names only. */
   function heelAccounts(agent: AuthenticatedAgent): CallToolResult {
     const at = now();
+    const asked = justConnected(agent, at);
     const answer = {
-      accounts: accountsUsableBy(deps.db, agent.orgId, agent.ownerId).map((a) => ({
-        alias: a.alias,
-        // A remote MCP server's provider id carries heel's own key; the agent sees "mcp".
-        service: isMcpProvider(a.provider) ? "mcp" : a.provider,
-        status: a.status,
-      })),
+      accounts: accountsUsableBy(deps.db, agent.orgId, agent.ownerId).map((a) => {
+        // A key it asked for, now working: what the owner can do with other copies of it.
+        const next =
+          asked.has(a.id) && a.status === "active" ? connectedKeyNote(a.provider, a.alias) : null;
+        return {
+          alias: a.alias,
+          // A remote MCP server's provider id carries heel's own key; the agent sees "mcp".
+          service: isMcpProvider(a.provider) ? "mcp" : a.provider,
+          status: a.status,
+          ...(next === null ? {} : { next }),
+        };
+      }),
       waiting: {
         connections: pendingRequests(deps.db, agent.ownerId, at)
           .filter((r) => r.agentId === agent.agentId)

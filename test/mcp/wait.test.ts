@@ -6,7 +6,7 @@ import { rejectRequest } from "../../src/requests/connection.ts";
 import { decideApproval, SqliteApprovalStore } from "../../src/store/approvals.ts";
 import { SqlitePauseStore } from "../../src/store/pauses.ts";
 import { agentRequests, approvals } from "../../src/store/schema.ts";
-import { type McpHarness, mcpHarness } from "../helpers/mcp.ts";
+import { connectRequested, type McpHarness, mcpHarness } from "../helpers/mcp.ts";
 
 /**
  * Roadmap 2.12: a call that needs approval waits for the decision and
@@ -205,6 +205,24 @@ describe("a call that needs approval waits for the decision (2.12)", () => {
     rejectRequest(h.t.db, row, h.t.ownerId, new Date());
     const answer = (await held).structuredContent as { waiting: { connections: unknown[] } };
     expect(answer.waiting.connections).toEqual([]);
+  });
+
+  it("heel_accounts with wait answers once a requested key is connected, with the note for the owner", async () => {
+    const h = await mcpHarness({ owner: RULES, approvalWait: wait(5_000) });
+    const client = await h.connect("/mcp/notes");
+    await client.callTool({
+      name: "heel_request_connection",
+      arguments: { service: "github", alias: "gh", why: "issues" },
+    });
+    const held = client.callTool({ name: "heel_accounts", arguments: { wait: true } });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    connectRequested(h, "gh");
+    const answer = (await held).structuredContent as {
+      accounts: { alias: string; next?: string }[];
+      waiting: { connections: unknown[] };
+    };
+    expect(answer.waiting.connections).toEqual([]);
+    expect(answer.accounts.find((a) => a.alias === "gh")?.next).toMatch(/heel now holds/);
   });
 
   it("holds Claude Code for four minutes, and every other client under the 60 seconds it waits", () => {
