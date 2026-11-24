@@ -1,5 +1,6 @@
 import { and, count, eq } from "drizzle-orm";
 import { exportAuditPage } from "../audit/export.ts";
+import type { CodeModeHealth } from "../codemode/self-test.ts";
 import {
   type ConfiguredSignIns,
   missingSignInSetup,
@@ -84,6 +85,12 @@ export interface AdminDeps {
     list(): readonly { id: string; agentName: string; status: string; calls: number }[];
     stopAgent(agentId: string): void;
   };
+  /**
+   * Whether code mode can run, from the check heel makes as the agent plane
+   * starts (`codemode/self-test.ts`): shown by `heel status`. Null, or left
+   * out, when the agent plane isn't up.
+   */
+  codeMode?: () => CodeModeHealth | null;
   /** Started by `heel start` (it sets HEEL_BACKGROUND=1), so `heel update` may restart it. */
   background?: boolean;
   /** People sign in with an IdP (D13): they join by signing in, so `heel user add` is refused. */
@@ -195,6 +202,8 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
             .from(pushSubscriptions)
             .where(eq(pushSubscriptions.orgId, orgId))
             .get()?.n ?? 0,
+        // For `heel status`: a heel whose code mode can't run says so, not just "running".
+        codeMode: deps.codeMode?.() ?? null,
       });
     case "agent.add": {
       const ownerId = resolveOwner(db, orgId, request.params.owner);

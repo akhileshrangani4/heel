@@ -10,9 +10,11 @@ import { createAdminHandler } from "./admin/handlers.ts";
 import { startAdminServer } from "./admin/server.ts";
 import { SiemSink } from "./audit/siem.ts";
 import type { BackgroundRunner } from "./codemode/background.ts";
+import { CodemodeHost, type CodemodeHostOptions, HostedCodeWorker } from "./codemode/hosted.ts";
 import { CodemodeLanes } from "./codemode/lanes.ts";
 import { purgeExpiredParked } from "./codemode/parking.ts";
 import { SandboxedCodeWorker } from "./codemode/sandboxed.ts";
+import { type CodeModeCheck, checkCodeMode } from "./codemode/self-test.ts";
 import type { CodeWorker } from "./codemode/worker.ts";
 import { rulesPaths } from "./config/rules.ts";
 import { type ReloadOutcome, RulesHolder, watchRules } from "./config/rules-reload.ts";
@@ -428,6 +430,8 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
     // Background code-mode scripts (C6) live on the agent plane, which starts later; the admin
     // socket and the human plane reach them through this.
     let backgroundRunner: BackgroundRunner | null = null;
+    // Whether code mode can run, checked once the agent plane starts; `heel status` shows it.
+    let codeModeCheck: CodeModeCheck | null = null;
     const admin = await startAdminServer({
       path: config.adminSocketPath,
       handle: createAdminHandler({
@@ -446,6 +450,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
           list: () => backgroundRunner?.list(null) ?? [],
           stopAgent: (agentId) => backgroundRunner?.stopAgent(orgId, agentId),
         },
+        codeMode: () => codeModeCheck?.health() ?? null,
         signIns: {
           google: providerClients.google !== null || builtInGoogle !== null,
           microsoft: providerClients.microsoft !== null,
@@ -630,22 +635,39 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
       // running Monty as WebAssembly, one per agent (a lane), a few at a time.
       let codeWorker: (agentId: string) => CodeWorker;
       let closeHelper: Closer | null = null;
+      // A one-line script now, on a worker of its own, so code mode that can't run here is in the
+      // log and `heel status` before an agent finds out (codemode/self-test.ts).
+      let check: CodeModeCheck;
       if (sandbox.ok) {
         const host = sandbox.host;
         codeWorker = () => new SandboxedCodeWorker({ host, installDir: INSTALL_DIR });
+        check = checkCodeMode({
+          worker: new SandboxedCodeWorker({ host, installDir: INSTALL_DIR }),
+          log,
+        });
       } else {
-        // Making the lanes starts nothing: a helper process starts on an agent's first script.
-        const lanes = new CodemodeLanes({
+        const helper: CodemodeHostOptions = {
           installDir: INSTALL_DIR,
           onExit: (exit) =>
             log.warn(
               { code: exit.code, signal: exit.signal, detail: exit.detail },
               "code-mode helper exited; its running scripts failed",
             ),
-        });
+        };
+        // Making the lanes starts nothing: a helper process starts on an agent's first script.
+        const lanes = new CodemodeLanes(helper);
         closeHelper = () => lanes.close();
         codeWorker = (agentId) => lanes.worker(agentId);
+        // The check's helper is its own, closed once it's done: it's never an agent's lane.
+        const probe = new CodemodeHost(helper);
+        check = checkCodeMode({
+          worker: new HostedCodeWorker(probe),
+          log,
+          release: () => probe.close(),
+        });
       }
+      codeModeCheck = check;
+      closers.push(() => check.close());
       // Parked scripts whose approvals expired while heel was down go now.
       if (vault !== null) purgeExpiredParked(store.db, now());
       const mcp = createMcpSurface({

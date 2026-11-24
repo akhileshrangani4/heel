@@ -1530,6 +1530,27 @@ async function tuiCommand(args: string[], io: CliIo): Promise<number> {
   return runTui(configFrom(io, values.config));
 }
 
+/** What `heel status` says about code mode: ping's `codeMode`, from heel's startup check. */
+type CodeModeStatus = { state: string; reason?: string } | null | undefined;
+
+/** Pure: the headline's warning and the `Code mode:` line; nothing from a heel that has no check. */
+export function codeModeStatus(codeMode: CodeModeStatus): { warning: string; line: string[] } {
+  if (codeMode === null || codeMode === undefined) return { warning: "", line: [] };
+  if (codeMode.state === "broken") {
+    const reason = codeMode.reason ?? "no reason given";
+    return {
+      warning: ", but code mode can't run, so every run_code call fails",
+      line: [
+        `  Code mode: can't run: ${reason}${reason.includes("heel logs") ? "" : " (more in: heel logs)"}`,
+      ],
+    };
+  }
+  return {
+    warning: "",
+    line: [`  Code mode: ${codeMode.state === "ready" ? "ready" : "checking…"}`],
+  };
+}
+
 /** `heel status`: the same picture as the TUI's header, as plain lines. */
 async function statusCommand(args: string[], io: CliIo): Promise<number> {
   const { values, positionals } = parseOrUsage(() =>
@@ -1542,7 +1563,9 @@ async function statusCommand(args: string[], io: CliIo): Promise<number> {
     vault?: string;
     passkeys?: number;
     notifiedDevices?: number;
+    codeMode?: CodeModeStatus;
   };
+  const codeMode = codeModeStatus(ping.codeMode);
   const approvals = (await admin(config, { method: "approvals.list" })) as {
     status: string;
     summary: string;
@@ -1565,7 +1588,7 @@ async function statusCommand(args: string[], io: CliIo): Promise<number> {
   }[];
   const waiting = approvals.filter((a) => a.status === "pending");
   const lines = [
-    `heel ${ping.version ?? ""} is running${ping.vault === "unavailable" ? ", but the vault is closed (no master key)" : ""}.`,
+    `heel ${ping.version ?? ""} is running${ping.vault === "unavailable" ? ", but the vault is closed (no master key)" : codeMode.warning}.`,
     `  Passkeys:  ${ping.passkeys === 0 ? "none yet: run heel user enroll owner and open its link" : (ping.passkeys ?? "?")}`,
     `  Notified:  ${
       ping.notifiedDevices === undefined
@@ -1587,6 +1610,7 @@ async function statusCommand(args: string[], io: CliIo): Promise<number> {
     `  From agents: ${proposals.length === 0 ? "nothing" : `${proposals.length} waiting for you to decide`}`,
     ...proposals.slice(0, 5).map((p) => `    ${p.summary}\n      ${p.url}`),
     ...(proposals.length > 5 ? [`    and ${proposals.length - 5} more: heel tui`] : []),
+    ...codeMode.line,
     `  Scripts:   ${scripts.length === 0 ? "none running" : `${scripts.length} in the background (stop them on the Agents page)`}`,
     ...scripts.map(
       (s) =>
