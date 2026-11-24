@@ -451,6 +451,15 @@ export const LONG_EMAIL_REQUEST: ApprovalRequestView = {
   },
 };
 
+/** A reason of 40+ words: shown whole, never cut or folded. */
+export const LONG_REASON_REQUEST: ApprovalRequestView = {
+  ...MERGE_REQUEST,
+  id: "apr_Lrs6qN2wPx8",
+  agent: "claude-code-release-assistant-for-acme-web",
+  reason:
+    "CI passed on all three platforms, Sam approved the review an hour ago, and the billing fix in this pull request is the last item blocking tonight's release. I checked that the branch is up to date with main and that no new commits landed after the approval, so merging now keeps the release on schedule.",
+};
+
 /** A Linear issue with most fields left empty: the empty ones shouldn't take the screen. */
 export const SPARSE_REQUEST: ApprovalRequestView = {
   ...GENERIC_REQUEST,

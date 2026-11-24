@@ -1,6 +1,6 @@
 import type { ActivityRow, AgentActivity } from "../../../store/activity.ts";
 import { activityPage, agentsPage } from "../activity-page.ts";
-import { approvalRequest } from "../approval-request.ts";
+import { approvalRequest, MENU_RESET_SCRIPT } from "../approval-request.ts";
 import type { CeremonyCallback } from "../ceremony.ts";
 import { connectPage } from "../connect.ts";
 import { type ConnectionRow, connectionsPage } from "../connections.ts";
@@ -46,6 +46,7 @@ import {
   HINTS_UNAVAILABLE_REQUEST,
   HTTP_REQUEST,
   LONG_EMAIL_REQUEST,
+  LONG_REASON_REQUEST,
   MERGE_REQUEST,
   NOW,
   ORG_REQUEST,
@@ -146,6 +147,7 @@ export const PREVIEW_CEREMONY_SCRIPT = `
   };
   const names = ["decide", "resume", "signIn", "addDevice", "applyRules", "approveConnection", "connect", "enroll", "grant", "manageAccount", "manageAgent", "managePeople", "mode", "saveRules"];
   window.heelCeremony = Object.fromEntries(names.map((name) => [name, announce]));
+  ${MENU_RESET_SCRIPT}
 })();
 `;
 
@@ -181,10 +183,6 @@ const approval = (
       ...extra,
     }),
 });
-
-/** The form a waiting task's "Cancel the task" posts to, as the route builds it. */
-const STOP_TASK = { stop: form("/approvals/apr_Tsk3sTp9Lm2/stop-script") };
-
 const pending = (
   state: RequiredState,
   label: string,
@@ -310,27 +308,68 @@ export const STORIES: readonly Story[] = [
     request: DRAFT_REQUEST,
   }),
   approval("draft-denied", "The same draft, denied", { ok: true, request: DENIED_DRAFT_REQUEST }),
-  approval(
-    "task",
-    "Step 3 of a longer task (run_code), waiting",
-    { ok: true, request: TASK_REQUEST },
-    null,
-    ALICE,
-    { parked: STOP_TASK },
-  ),
+  approval("task", "Step 3 of a longer task (run_code), waiting", {
+    ok: true,
+    request: TASK_REQUEST,
+  }),
   approval(
     "task-background",
     "Step 3 of a background task, waiting",
     { ok: true, request: TASK_REQUEST },
     null,
     ALICE,
-    { parked: STOP_TASK, background: true },
+    { background: true },
   ),
   approval("long-email", "Forty-one recipients, a long subject and body", {
     ok: true,
     request: LONG_EMAIL_REQUEST,
   }),
+  // Design variant B: the email header as one labelled row per field.
+  approval(
+    "draft-rows",
+    "Variant B: the draft with one labelled row per field",
+    { ok: true, request: DRAFT_REQUEST },
+    null,
+    ALICE,
+    { emailLayout: "rows" },
+  ),
+  approval(
+    "pending-rows",
+    "Variant B: the send with one labelled row per field",
+    { ok: true, request: PENDING_REQUEST },
+    null,
+    ALICE,
+    { emailLayout: "rows" },
+  ),
   approval("sparse", "A tool call with many empty fields", { ok: true, request: SPARSE_REQUEST }),
+  approval("long-reason", "A 50-word reason and a long agent name", {
+    ok: true,
+    request: LONG_REASON_REQUEST,
+  }),
+  approval(
+    "details-open",
+    "Details open, Technical closed",
+    { ok: true, request: DRAFT_REQUEST },
+    null,
+    ALICE,
+    { folds: new Map([["details", true]]) },
+  ),
+  approval(
+    "approved-after",
+    "Variant B: approved, then one offer to ask less next time (needs a backend change)",
+    { ok: true, request: APPROVED_REQUEST },
+    null,
+    ALICE,
+    { allowAgain: "after" },
+  ),
+  approval(
+    "pending-after",
+    "Variant B: pending, Approve once only",
+    { ok: true, request: PENDING_REQUEST },
+    null,
+    ALICE,
+    { allowAgain: "after" },
+  ),
   approval(
     "org-ask",
     "Org ask: approve once only",
