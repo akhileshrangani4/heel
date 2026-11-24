@@ -386,19 +386,6 @@ function keyField(props: RequestPageProps): Html | "" {
   </fieldset>`;
 }
 
-/** The step left after connecting: take away the agent's old way in. */
-function lastStep(props: RequestPageProps): Html {
-  return html`<p class="ap-next">
-    ${
-      props.provider === "github"
-        ? html`Next: revoke its <a href="https://github.com/settings/tokens">old GitHub token</a>.`
-        : props.key !== null
-          ? "Next: revoke the key it used before."
-          : "Next: sign it out where it ran before."
-    }
-  </p>`;
-}
-
 function pendingPage(props: RequestPageProps): Html {
   const helpId = "request-passkey";
   const trust =
@@ -466,13 +453,13 @@ function connectedPage(props: RequestPageProps): Html {
         { alias: props.alias },
         html`<button type="submit" class="${btn()}">Sign in to ${props.service}</button>`,
       )}</div>`
-    : lastStep(props);
+    : "";
   return approvalShell({
     kind: "connection",
     crumb: "",
     dock: "inline",
     title: needsSignIn ? html`${name} is added` : html`${name} is connected`,
-    why: needsSignIn ? "Sign in to finish." : "",
+    why: needsSignIn ? "Sign in to finish." : "The agent can use it now.",
     side: html`${
       props.unchecked === true
         ? notice(
