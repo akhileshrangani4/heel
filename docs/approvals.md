@@ -45,6 +45,7 @@ Your phone needs heel's approval page at an HTTPS address, set before you create
    ```sh
    heel init --approve-from tailscale
    ```
+   The approval page goes on port 443 and the agent plane on 8443. If Tailscale already serves something else on one of them, heel leaves it alone, uses a free port from 7443 up, and says which.
 2. Start heel and make your passkey link:
    ```sh
    heel start

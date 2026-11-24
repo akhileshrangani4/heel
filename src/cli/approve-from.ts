@@ -49,37 +49,179 @@ export function listenPorts(configText: string | null): { agent: number; human: 
   return { agent: port("agent") ?? ports.agent, human: port("human") ?? ports.human };
 }
 
-/**
- * The tailnet ports (443, 8443) `tailscale serve status --json` shows serving
- * anything but heel's own planes there.
- */
-export function servedElsewhere(
-  statusJson: string,
-  name: string,
-  ports: { agent: number; human: number },
-): number[] {
-  let parsed: { Web?: Record<string, { Handlers?: Record<string, { Proxy?: string }> }> };
-  try {
-    parsed = JSON.parse(statusJson) as typeof parsed;
-  } catch {
-    return [];
-  }
-  const taken: number[] = [];
-  for (const [port, target] of [
-    [443, ports.human],
-    [8443, ports.agent],
-  ] as const) {
-    const handlers = parsed.Web?.[`${name}:${port}`]?.Handlers ?? {};
-    const ours = `http://127.0.0.1:${target}`;
-    if (
-      Object.entries(handlers).some(
-        ([path, h]) => path !== "/" || h.Proxy?.replace(/\/$/, "") !== ours,
-      )
-    ) {
-      taken.push(port);
+/** `public_url` and `agent_public_url` as heel.yaml has them, or null where it doesn't. */
+export function configuredAddresses(configText: string | null): {
+  approvals: string | null;
+  agents: string | null;
+} {
+  if (configText === null) return { approvals: null, agents: null };
+  const doc = parseDocument(configText);
+  const get = (key: string) => {
+    const value = doc.get(key);
+    return value === undefined || value === null ? null : String(value);
+  };
+  return { approvals: get("public_url"), agents: get("agent_public_url") };
+}
+
+/** The JSON a tailscale command printed. Its output is stdout then stderr, so a warning may follow. */
+function tailscaleJson(output: string): { ok: true; value: unknown } | { ok: false } {
+  const text = output.trim();
+  for (const json of [text, text.slice(0, text.lastIndexOf("}") + 1), text.split("\n")[0]]) {
+    if (json === undefined || json === "") continue;
+    try {
+      return { ok: true, value: JSON.parse(json) as unknown };
+    } catch {
+      // Try the next reading.
     }
   }
-  return taken;
+  return { ok: false };
+}
+
+/** The parts of `tailscale serve status --json` heel reads (Tailscale's ipn.ServeConfig). */
+interface ServeConfig {
+  TCP?: Record<
+    string,
+    { HTTPS?: boolean; HTTP?: boolean; TCPForward?: string; TerminateTLS?: string } | null
+  >;
+  Web?: Record<string, { Handlers?: Record<string, { Proxy?: string } | null> } | null>;
+  Foreground?: Record<string, ServeConfig | null>;
+}
+
+/** What a tailnet port of this machine serves: one of heel's planes, or something else. */
+export type ServedBy = "approvals" | "agents" | "other";
+
+/**
+ * Who serves each tailnet port of this machine, from `tailscale serve status
+ * --json`. A port not in the map is free. A port is heel's only when all it
+ * serves is one of heel's planes at `/`; a TCP forward, a foreground `tailscale
+ * serve`, another path or another name on it make it someone else's. Null when
+ * the output can't be read, so nothing is known to be free.
+ */
+export function servedPorts(
+  output: string,
+  name: string,
+  ports: { agent: number; human: number },
+): Map<number, ServedBy> | null {
+  const parsed = tailscaleJson(output);
+  if (!parsed.ok) return null;
+  // Nothing served at all prints `null`.
+  if (parsed.value === null) return new Map();
+  if (typeof parsed.value !== "object" || Array.isArray(parsed.value)) return null;
+  const config = parsed.value as ServeConfig;
+  const served = new Map<number, ServedBy>();
+  const mark = (port: number | null, by: ServedBy) => {
+    if (port === null || !Number.isInteger(port) || port < 1 || port > 65_535) return;
+    const before = served.get(port);
+    served.set(port, before === undefined || before === by ? by : "other");
+  };
+  const portOf = (hostPort: string) => {
+    const match = /:(\d+)$/.exec(hostPort);
+    return match?.[1] === undefined ? null : Number(match[1]);
+  };
+  for (const session of Object.values(config.Foreground ?? {})) {
+    for (const port of Object.keys(session?.TCP ?? {})) mark(Number(port), "other");
+    for (const hostPort of Object.keys(session?.Web ?? {})) mark(portOf(hostPort), "other");
+  }
+  for (const [port, handler] of Object.entries(config.TCP ?? {})) {
+    const httpsOnly =
+      handler?.HTTPS === true &&
+      handler.HTTP !== true &&
+      !handler.TCPForward &&
+      !handler.TerminateTLS;
+    if (!httpsOnly) mark(Number(port), "other");
+  }
+  for (const [hostPort, web] of Object.entries(config.Web ?? {})) {
+    const port = portOf(hostPort);
+    const handlers = Object.entries(web?.Handlers ?? {});
+    const proxy = handlers.length === 1 && handlers[0]?.[0] === "/" ? handlers[0][1]?.Proxy : null;
+    const target = proxy?.replace(/\/$/, "");
+    const plane =
+      hostPort !== `${name}:${port}`
+        ? "other"
+        : target === `http://127.0.0.1:${ports.human}`
+          ? "approvals"
+          : target === `http://127.0.0.1:${ports.agent}`
+            ? "agents"
+            : "other";
+    mark(port, plane);
+  }
+  // An HTTPS port with nothing behind it is still Tailscale's to answer.
+  for (const port of Object.keys(config.TCP ?? {})) {
+    if (!served.has(Number(port))) mark(Number(port), "other");
+  }
+  return served;
+}
+
+/** Each plane's preferred tailnet port; past those, heel tries 7443 up to 7499. */
+const PREFERRED = { approvals: 443, agents: 8443 } as const;
+const SPARE_PORTS = Array.from({ length: 57 }, (_, i) => 7443 + i);
+
+/** An HTTPS address on this machine's tailnet name; 443 needs no port. */
+function tailnetAddress(name: string, port: number): string {
+  return port === 443 ? `https://${name}` : `https://${name}:${port}`;
+}
+
+/** The tailnet port an address uses when it's on this machine's name, or null. */
+function tailnetPort(address: string | null, name: string): number | null {
+  if (address === null || !URL.canParse(address)) return null;
+  const url = new URL(address);
+  if (url.protocol !== "https:" || url.hostname !== name.toLowerCase()) return null;
+  return url.port === "" ? 443 : Number(url.port);
+}
+
+type TailnetPorts = { approvals: number; agents: number };
+
+/**
+ * The tailnet ports for heel's two planes. An address heel.yaml already has on
+ * this machine stays (a passkey is tied to it); then a port Tailscale already
+ * serves that plane on (a rerun); then 443 for approvals and 8443 for agents;
+ * then the first free port from 7443. Never a port something else serves.
+ */
+export function chooseTailnetPorts(
+  served: ReadonlyMap<number, ServedBy>,
+  configured: { approvals: number | null; agents: number | null },
+):
+  | { ok: true; ports: TailnetPorts }
+  | { ok: false; why: "none" | "taken" | "same"; plane: "approvals" | "agents"; port: number } {
+  const pick = (plane: "approvals" | "agents", not: number | null): number | null => {
+    const ours = [...served]
+      .filter(([port, by]) => by === plane && port !== not)
+      .map(([port]) => port)
+      .sort((a, b) => a - b);
+    if (ours.length > 0)
+      return ours.includes(PREFERRED[plane]) ? PREFERRED[plane] : (ours[0] ?? null);
+    return [PREFERRED[plane], ...SPARE_PORTS].find((p) => p !== not && !served.has(p)) ?? null;
+  };
+  const approvals = configured.approvals ?? pick("approvals", configured.agents);
+  if (approvals === null) return { ok: false, why: "none", plane: "approvals", port: 0 };
+  const agents = configured.agents ?? pick("agents", approvals);
+  if (agents === null) return { ok: false, why: "none", plane: "agents", port: 0 };
+  if (approvals === agents) return { ok: false, why: "same", plane: "agents", port: agents };
+  for (const [plane, port] of [
+    ["approvals", approvals],
+    ["agents", agents],
+  ] as const) {
+    const by = served.get(port);
+    if (by !== undefined && by !== plane) return { ok: false, why: "taken", plane, port };
+  }
+  return { ok: true, ports: { approvals, agents } };
+}
+
+/** The commands and heel.yaml lines that set up Tailscale for heel by hand, ready to copy. */
+export function tailscaleByHand(
+  name: string,
+  ports: { agent: number; human: number },
+  tailnet: TailnetPorts,
+  configPath: string,
+): string {
+  return [
+    "To set it up yourself, run:",
+    `  tailscale serve --bg --https=${tailnet.approvals} http://127.0.0.1:${ports.human}`,
+    `  tailscale serve --bg --https=${tailnet.agents} http://127.0.0.1:${ports.agent}`,
+    `then set these in ${configPath}, and restart heel if it's running:`,
+    `  public_url: ${tailnetAddress(name, tailnet.approvals)}`,
+    `  agent_public_url: ${tailnetAddress(name, tailnet.agents)}`,
+  ].join("\n");
 }
 
 interface TailscaleStatus {
@@ -90,14 +232,24 @@ interface TailscaleStatus {
 
 /**
  * Serves both planes on the tailnet with `tailscale serve`: the approval page
- * on https://<machine>.<tailnet>.ts.net and the agent plane on port 8443.
+ * on https://<machine>.<tailnet>.ts.net and the agent plane on port 8443. When
+ * Tailscale already serves something else on one of those ports, heel takes a
+ * free one from 7443 instead and says so in `note`; it never replaces what's
+ * there. A rerun keeps the ports heel.yaml and Tailscale already have.
  */
 export async function setUpTailscale(
   exec: ExecFn,
   ports: { agent: number; human: number },
-  /** Runs once the addresses are known and before anything changes; a problem stops it there. */
-  precheck: (addresses: PublicAddresses) => string | null = () => null,
-): Promise<SetupOutcome> {
+  options: {
+    /** Runs once the addresses are known and before anything changes; a problem stops it there. */
+    precheck?: (addresses: PublicAddresses) => string | null;
+    /** `public_url` and `agent_public_url` heel.yaml already has. */
+    configured?: { approvals: string | null; agents: string | null };
+    /** heel.yaml, named in the lines to set by hand. */
+    configPath?: string;
+  } = {},
+): Promise<SetupOutcome & { note?: string }> {
+  const configPath = options.configPath ?? "heel.yaml";
   const status = await exec("tailscale", ["status", "--json"]);
   if (status.code === 127) {
     return {
@@ -106,10 +258,11 @@ export async function setUpTailscale(
         "Tailscale isn't installed here. Install it from https://tailscale.com/download, sign in with `tailscale up`, then run this again.",
     };
   }
-  let parsed: TailscaleStatus;
-  try {
-    parsed = JSON.parse(status.output) as TailscaleStatus;
-  } catch {
+  const read = tailscaleJson(status.output);
+  const parsed = (
+    read.ok && typeof read.value === "object" ? read.value : null
+  ) as TailscaleStatus | null;
+  if (parsed === null) {
     return {
       ok: false,
       problem: `\`tailscale status\` didn't answer as expected: ${status.output.trim().slice(0, 300)}`,
@@ -136,36 +289,71 @@ export async function setUpTailscale(
         "Your tailnet doesn't have HTTPS certificates turned on, and a passkey needs HTTPS. Turn them on at https://login.tailscale.com/admin/dns (HTTPS Certificates), then run this again.",
     };
   }
-  const addresses = { approvals: `https://${name}`, agents: `https://${name}:8443` };
-  const blocked = precheck(addresses);
-  if (blocked !== null) return { ok: false, problem: blocked };
-  // Don't take over a port something else is already served on.
+  // What's served already decides the ports, so it's read before anything changes.
   const current = await exec("tailscale", ["serve", "status", "--json"]);
-  const taken = current.code === 0 ? servedElsewhere(current.output, name, ports) : [];
-  if (taken.length > 0) {
+  const served = current.code === 0 ? servedPorts(current.output, name, ports) : null;
+  if (served === null) {
+    const said = current.output.trim().slice(0, 300) || `exit ${current.code}`;
     return {
       ok: false,
-      problem: `Tailscale already serves something else on ${taken.map((p) => `port ${p}`).join(" and ")} of this machine, and heel won't replace it. See \`tailscale serve status\`; free the port (\`tailscale serve --https=<port> off\`) or set heel's addresses by hand.`,
+      problem: `heel couldn't read what Tailscale already serves here (\`tailscale serve status --json\`: ${said}), so it changed nothing. Check \`tailscale serve status\` first: if something else is on port 443 or 8443, use a free port instead, like 7443 or 7444, in both places below.\n${tailscaleByHand(name, ports, PREFERRED, configPath)}`,
     };
   }
-  for (const [port, target] of [
-    [443, ports.human],
-    [8443, ports.agent],
+  const configured = {
+    approvals: tailnetPort(options.configured?.approvals ?? null, name),
+    agents: tailnetPort(options.configured?.agents ?? null, name),
+  };
+  const chosen = chooseTailnetPorts(served, configured);
+  if (!chosen.ok) {
+    const key = chosen.plane === "approvals" ? "public_url" : "agent_public_url";
+    const moving =
+      chosen.plane === "approvals"
+        ? "a passkey only works on the address it was made on, so moving it means making your passkey again"
+        : "moving it means adding heel to your agents again";
+    return {
+      ok: false,
+      problem:
+        chosen.why === "none"
+          ? `Tailscale already serves something on ports 443, 8443 and 7443 to 7499 of this machine, so heel found no free port for ${chosen.plane}. See \`tailscale serve status\`, free a port (\`tailscale serve --https=<port> off\`), then run this again.`
+          : chosen.why === "same"
+            ? `${configPath} has public_url and agent_public_url on the same port, ${chosen.port}, and heel's two planes need a port each. Put agent_public_url on another port yourself (${moving}), then run this again.`
+            : `${configPath} has ${key} on port ${chosen.port}, but Tailscale serves something else there, and heel won't replace it. See \`tailscale serve status\`; free the port (\`tailscale serve --https=${chosen.port} off\`) and run this again. heel won't move ${key} itself: ${moving}.`,
+    };
+  }
+  const tailnet = chosen.ports;
+  const addresses = {
+    approvals: tailnetAddress(name, tailnet.approvals),
+    agents: tailnetAddress(name, tailnet.agents),
+  };
+  const blocked = options.precheck?.(addresses) ?? null;
+  if (blocked !== null) return { ok: false, problem: blocked };
+  for (const [plane, port, target] of [
+    ["approvals", tailnet.approvals, ports.human],
+    ["agents", tailnet.agents, ports.agent],
   ] as const) {
-    const served = await exec("tailscale", [
+    // Already heel's from an earlier run: nothing to change.
+    if (served.get(port) === plane) continue;
+    const set = await exec("tailscale", [
       "serve",
       "--bg",
       `--https=${port}`,
       `http://127.0.0.1:${target}`,
     ]);
-    if (served.code !== 0) {
+    if (set.code !== 0) {
       return {
         ok: false,
-        problem: `\`tailscale serve --https=${port}\` failed: ${served.output.trim().slice(0, 300)}`,
+        problem: `\`tailscale serve --https=${port}\` failed: ${set.output.trim().slice(0, 300)}\n${tailscaleByHand(name, ports, tailnet, configPath)}`,
       };
     }
   }
-  return { ok: true, addresses };
+  const taken = [PREFERRED.approvals, PREFERRED.agents].filter((p) => served.get(p) === "other");
+  const moved = tailnet.approvals !== PREFERRED.approvals || tailnet.agents !== PREFERRED.agents;
+  if (!moved || taken.length === 0) return { ok: true, addresses };
+  return {
+    ok: true,
+    addresses,
+    note: `Tailscale already serves something else on port${taken.length > 1 ? "s" : ""} ${taken.join(" and ")}, so heel used ports ${tailnet.approvals} (approvals) and ${tailnet.agents} (agents).`,
+  };
 }
 
 /**

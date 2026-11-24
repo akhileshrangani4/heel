@@ -1286,6 +1286,7 @@ async function initCommand(args: string[], io: CliIo): Promise<number> {
   const {
     addressProblem,
     agentHostnameFor,
+    configuredAddresses,
     sameParent,
     APPROVE_FROM,
     isApproveFrom,
@@ -1427,15 +1428,16 @@ async function initCommand(args: string[], io: CliIo): Promise<number> {
           `  tailscale serve --bg --https=8443 http://127.0.0.1:${ports.agent}\n`,
       );
     } else {
-      // Checked before Tailscale changes anything: heel.yaml's addresses, and a passkey it would orphan.
       const databasePath = join(home, "heel.db");
-      const set = await setUpTailscale(
-        io.exec,
-        ports,
-        (want) =>
+      const set = await setUpTailscale(io.exec, ports, {
+        // Checked before Tailscale changes anything: heel.yaml's addresses, and a passkey it would orphan.
+        precheck: (want) =>
           addressProblem(configPath, want) ??
           (values["new-address"] === true ? null : passkeyProblem(databasePath, want)),
-      );
+        // Addresses heel.yaml already has keep their ports.
+        configured: configuredAddresses(readFileSync(configPath, "utf8")),
+        configPath,
+      });
       if (!set.ok) {
         // What was done, and the problem: no next steps, so nobody enrolls on the wrong address.
         io.stdout.write(initSteps(steps));
@@ -1450,6 +1452,7 @@ async function initCommand(args: string[], io: CliIo): Promise<number> {
           return EXIT.failed;
         }
       }
+      if (set.note !== undefined) io.stderr.write(`heel: ${set.note}\n`);
     }
   }
   // Every command finds the default home on its own; only another folder needs HEEL_HOME.
