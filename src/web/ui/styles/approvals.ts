@@ -138,6 +138,10 @@ export const APPROVALS_CSS = `
 .ap .chev{flex:none;display:inline-flex;color:var(--muted);transition:transform .2s}
 .ap .chev svg{width:1rem;height:1rem}
 .ap details[open] > summary .chev{transform:rotate(180deg)}
+/* Folds without a drawn chevron get one in CSS, so every fold reads as one. */
+.ap details > summary:not(:has(.chev))::after{content:"";flex:none;width:.4rem;height:.4rem;margin:0 .2rem .2rem;border-right:1.5px solid var(--muted);border-bottom:1.5px solid var(--muted);transform:rotate(45deg);transition:transform .2s}
+.ap details[open] > summary:not(:has(.chev))::after{transform:rotate(225deg);margin-bottom:-.1rem}
+.ap-hint > summary,.ap-folds > details > summary{justify-content:flex-start;gap:.35rem}
 @media (prefers-reduced-motion:reduce){.ap .chev{transition:none}}
 .ap-folds{display:flex;flex-wrap:wrap;align-items:flex-start;gap:0 1.25rem;margin-top:.55rem}
 .ap-folds > details{flex:0 0 auto;min-width:0}
@@ -212,7 +216,7 @@ export const APPROVALS_CSS = `
 .ap-files-note{margin:.35rem 0 0;font-size:.8rem}
 /* A commit id is 40 characters with no spaces: let it wrap instead of running off a phone screen. */
 .ap-sha{overflow-wrap:anywhere;word-break:break-all}
-.ap-script{margin-top:1.2rem;padding-top:1rem;border-top:1px solid var(--line)}
+.ap-script{margin:0 0 1rem;padding:0 0 1rem;border-bottom:1px solid var(--line)}
 .ap-script h2{font-size:1rem;margin:0 0 .4rem}
 .script-done-label{margin:.6rem 0 .2rem;font-weight:500}
 .script-calls{margin:0;padding-left:1.25rem;font-size:.9rem}

@@ -284,7 +284,7 @@ function coverageView(props: RequestPageProps, connected: boolean): Html {
       <h2 id="${id}">What ${props.agent} ${connected ? "can do now" : "could do with it"}</h2>
       <a href="/rules">${connected ? "Change rules" : "Change rules first"}</a>
     </div>
-    <p class="cov-summary">${coverageSummary(props.coverage)}</p>
+    ${connected ? html`<p class="cov-summary">${coverageSummary(props.coverage)}</p>` : ""}
     ${
       everyAccount(props.coverage)
         ? html`<p class="cov-scope muted">These rules cover every account, so they apply as soon as it's connected.</p>`

@@ -285,6 +285,7 @@ export const TASK_REQUEST: ApprovalRequestView = {
   action: "email.draft",
   email: {
     ...(PENDING_REQUEST.email as NonNullable<ApprovalRequestView["email"]>),
+    from: "michael@example.com",
     to: ["michael@example.com"],
     cc: [],
     subject: "Approval-flow test",
