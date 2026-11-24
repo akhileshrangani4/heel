@@ -3,8 +3,8 @@ import type { ActionDecision, ActionOutcome, Coverage } from "../../requests/cov
 import type { AgentRequestStatus } from "../../store/schema.ts";
 import {
   actionBar,
-  agentLine,
   approvalShell,
+  cardReason,
   codeChip,
   type Dock,
   pageFold,
@@ -54,7 +54,7 @@ export function requestCards(cards: readonly RequestCard[], now: Date): Html | "
             <a class="req-title req-link" href="/requests/${encodeURIComponent(card.id)}"
               >${shorten(card.agent, 12, 8)} wants to connect <mark>${shorten(card.service, 24, 12)}</mark></a
             >
-            ${card.why === null ? "" : html`<span class="req-reason">${agentLine(card.why)}</span>`}
+            ${card.why === null ? "" : cardReason(card.why)}
             ${soonFoot(card.expiresAt, now)}
           </span>
           <span class="req-go" aria-hidden="true">${trusted(CHEVRON_RIGHT)}</span>
@@ -298,7 +298,6 @@ function asAlias(props: RequestPageProps): Html | "" {
  */
 function detailsFold(props: RequestPageProps): Html {
   const a = props.coverage.actions;
-  const shortQuote = props.why !== null && agentLine(props.why) !== props.why;
   return pageFold(
     "Details",
     html`<dl class="facts ap-facts-list">
@@ -315,12 +314,6 @@ function detailsFold(props: RequestPageProps): Html {
             ? ""
             : html`<dt>Server</dt>
               <dd>${codeChip(props.url, `url-${props.id}`)}</dd>`
-        }
-        ${
-          shortQuote
-            ? html`<dt>Why</dt>
-              <dd>${props.why}</dd>`
-            : ""
         }
       </dl>
       ${technical(html`<dl class="facts ap-facts-list">

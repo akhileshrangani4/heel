@@ -159,6 +159,16 @@ export const TAKEN_REQUEST: RequestPageProps = {
     "This heel already has an account named github. Reject this and ask the agent for another name.",
 };
 
+/** An agent reason of 40+ words: shown in full, never cut. */
+export const LONG_REASON =
+  "I want to triage the review queue every morning before standup, which means reading every open pull request across the tambo-ai organization, leaving a short comment on the ones that are stuck, and opening an issue when a check has been failing for more than a day.";
+
+export const LONG_REASON_REQUEST: RequestPageProps = {
+  ...GITHUB_REQUEST,
+  id: "req_01JD8Q5LONGWHY0000000000001",
+  why: LONG_REASON,
+};
+
 export const REQUEST_CARDS: readonly RequestCard[] = [
   {
     id: GITHUB_REQUEST.id,
@@ -166,7 +176,7 @@ export const REQUEST_CARDS: readonly RequestCard[] = [
     service: "GitHub",
     provider: "github",
     alias: "github",
-    why: GITHUB_REQUEST.why,
+    why: LONG_REASON,
     createdAt: minutes(-3),
     expiresAt: days(7),
   },

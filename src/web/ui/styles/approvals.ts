@@ -144,8 +144,9 @@ export const APPROVALS_CSS = `
 .ap summary:focus-visible{outline-offset:2px;border-radius:6px}
 .ap-head .ap-quote{margin:.4rem 0 0}
 /* The agent's own words: quiet and quoted, never cut by CSS (I-57). */
-.ap .ap-quote{margin:.6rem 0 0;padding-left:.6rem;border-left:2px solid var(--border)}
-.ap .ap-quote blockquote{display:block;margin:0;color:var(--muted);font-style:italic}
+.ap .ap-quote{margin:.6rem 0 0;padding:.1rem 0 .1rem .7rem;border-left:3px solid var(--border);font-size:.92rem;line-height:1.5;overflow-wrap:anywhere}
+.ap .ap-quote figcaption{display:block;margin:0 0 .1rem;color:var(--muted);font-size:.78rem;font-weight:500}
+.ap .ap-quote blockquote{display:block;margin:0;color:var(--text)}
 /* A short value cut in the middle (shorten()): one line, never wrapped. */
 .ap-short{background:var(--surface);border-radius:6px;padding:.05rem .35rem;box-shadow:inset 0 0 0 1px var(--line);font-size:.85em;white-space:nowrap}
 /* One security line, marked. */

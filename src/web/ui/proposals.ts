@@ -2,8 +2,8 @@ import { describeProposal } from "../../proposals/describe.ts";
 import type { RuleProposalStatus } from "../../store/schema.ts";
 import {
   actionBar,
-  agentLine,
   approvalShell,
+  cardReason,
   codeChip,
   type Dock,
   pageFold,
@@ -65,11 +65,7 @@ export function proposalCards(cards: readonly ProposalCard[], now: Date): Html |
                     }`
               }</a
             >
-            ${
-              card.reason === null || card.origin === "heel"
-                ? ""
-                : html`<span class="req-reason">${agentLine(card.reason)}</span>`
-            }
+            ${card.reason === null || card.origin === "heel" ? "" : cardReason(card.reason)}
             ${soonFoot(card.expiresAt, now)}
           </span>
           <span class="req-go" aria-hidden="true">${trusted(CHEVRON_RIGHT)}</span>
@@ -251,7 +247,6 @@ function proposalDetails(props: ProposalPageProps): Html {
     "Details",
     html`<dl class="facts ap-facts-list">
         ${place === null ? "" : html`<dt>Goes</dt><dd>${place}</dd>`}
-        ${words !== null && agentLine(words) !== words ? html`<dt>Why</dt><dd>${words}</dd>` : ""}
         ${
           shorten(props.agent, 12, 8) === props.agent
             ? ""

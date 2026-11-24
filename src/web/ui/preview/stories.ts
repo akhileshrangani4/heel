@@ -33,6 +33,8 @@ import {
   APPLIED_PROPOSAL,
   CONNECTED_REQUEST,
   GITHUB_REQUEST,
+  LONG_REASON,
+  LONG_REASON_REQUEST,
   MCP_REQUEST,
   PROPOSAL,
   PROPOSAL_CARDS,
@@ -1268,6 +1270,10 @@ export const APPROVAL_STORIES: readonly Story[] = [
     dock: "pinned",
   }),
   connection("taken", "The name is taken: only Reject", { ...TAKEN_REQUEST, dock: "pinned" }),
+  connection("long-reason", "The agent's reason runs over 40 words: shown in full", {
+    ...LONG_REASON_REQUEST,
+    dock: "pinned",
+  }),
   connection("connected", "After approving: the confirmation", CONNECTED_REQUEST),
   connection("connected-sign-in", "After approving a sign-in service", SIGN_IN_REQUEST),
   connection("rejected", "Rejected", REJECTED_REQUEST),
@@ -1277,6 +1283,11 @@ export const APPROVAL_STORIES: readonly Story[] = [
   ruleChange("pending-b", "B: one rule, bar inline", { ...PROPOSAL, dock: "inline" }),
   ruleChange("stress", "Long agent, file and rule names", { ...STRESS_PROPOSAL, dock: "pinned" }),
   ruleChange("applied", "After adding", APPLIED_PROPOSAL),
+  ruleChange("long-reason", "The agent's reason runs over 40 words: shown in full", {
+    ...PROPOSAL,
+    reason: LONG_REASON,
+    dock: "pinned",
+  }),
 
   // A step of a longer run_code task
   task("step-3", "Step 3 of a task, two steps done, waiting for your OK", {

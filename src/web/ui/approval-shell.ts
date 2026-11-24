@@ -77,22 +77,21 @@ export function approvalShell(props: ShellProps): Html {
   </article>`;
 }
 
-/** The agent's words above the fold: the first 10 words, the rest in Details. */
-export function agentLine(words: string, max = 10): string {
-  const all = words.trim().split(/\s+/);
-  return all.length <= max ? words : `${all.slice(0, max).join(" ")}…`;
-}
-
 /**
- * The agent's own one line of why: quiet, marked as its words, never mistaken
- * for heel's. A long one is cut to `agentLine` here; Details has it whole.
+ * The agent's own reason, in full: a quote block with a left rule, labelled
+ * as the agent's words so it's never mistaken for heel's. Never shortened.
  */
 export function quote(agent: string, words: string | null): Html | "" {
   if (words === null) return "";
   return html`<figure class="reason ap-quote">
-    <figcaption class="visually-hidden">${agent} says (its own words; heel didn't check them):</figcaption>
-    <blockquote>${agentLine(words)}</blockquote>
+    <figcaption>The agent says<span class="visually-hidden">, ${agent} (its own words; heel didn't check them)</span>:</figcaption>
+    <blockquote>${words}</blockquote>
   </figure>`;
+}
+
+/** The agent's reason on an Approvals card, in full and labelled. */
+export function cardReason(words: string): Html {
+  return html`<span class="req-reason"><span class="muted">The agent says:</span> ${words}</span>`;
 }
 
 /**
