@@ -109,10 +109,11 @@ const RULES = `
 .ui-select-item[aria-selected="true"] .ui-select-check{visibility:visible}
 .ui-select-item[aria-selected="true"]{font-weight:500}
 
-.ui-dialog{padding:0;border:1px solid var(--line);border-radius:14px;background:var(--bg);color:var(--text);width:min(30rem,calc(100vw - 2rem));max-height:calc(100vh - 2rem);box-shadow:0 24px 60px -20px rgb(0 0 0 / .45)}
+.ui-dialog{padding:0;border:1px solid var(--line);border-radius:14px;background:var(--bg);color:var(--text);width:min(30rem,calc(100vw - 2rem));max-height:calc(100vh - 2rem);max-height:calc(100dvh - 2rem);box-shadow:0 24px 60px -20px rgb(0 0 0 / .45)}
 .ui-dialog-wide{width:min(46rem,calc(100vw - 2rem))}
 .ui-dialog::backdrop{background:rgb(0 0 0 / .45);backdrop-filter:blur(2px)}
-.ui-dialog-panel{padding:1.25rem 1.25rem 1.4rem;overflow:auto;max-height:calc(100vh - 2rem)}
+.ui-dialog-panel{padding:1.25rem 1.25rem 1.4rem;overflow:auto;max-height:calc(100vh - 2rem - 2px);max-height:calc(100dvh - 2rem - 2px)}
+html:has(dialog.ui-dialog[open]){overflow:hidden}
 .ui-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:.25rem}
 .ui-dialog-title{font-size:1.05rem;margin:0}
 .ui-dialog-desc{margin:0 0 1rem;font-size:.88rem}
@@ -407,7 +408,6 @@ body.focus main{max-width:30rem;padding:3rem 1.25rem}
   .nav-more-panel form{margin:0;border-top:1px solid var(--line);margin-top:.25rem;padding-top:.25rem}
   .nav-more-panel .nav-icon svg{width:1.1rem;height:1.1rem}
   .subnav ul{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
-  #heel-ceremony-status:not(:empty){bottom:calc(4.8rem + env(safe-area-inset-bottom))}
 }
 .nav-count{display:inline-block;min-width:1.35rem;margin-left:.3rem;padding:0 .4rem;border-radius:999px;background:var(--accent);color:var(--accent-text);font-size:.72rem;font-weight:700;line-height:1.35rem;text-align:center;vertical-align:1px}
 @media (min-width:56rem){
@@ -425,8 +425,9 @@ body.focus main{max-width:30rem;padding:3rem 1.25rem}
   body.app > main{grid-column:2;grid-row:2;width:100%;padding:2rem 2.25rem}
 }
 [role="status"]:empty{display:none}
-#heel-ceremony-status:not(:empty){position:fixed;left:1rem;right:1rem;bottom:1rem;max-width:56rem;margin:0 auto;z-index:20;padding:.75rem 1rem;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 30px -12px rgb(0 0 0 / .35);overflow-wrap:anywhere}
+#heel-ceremony-status:not(:empty){position:fixed;left:1rem;right:1rem;bottom:calc(1rem + env(safe-area-inset-bottom));max-width:56rem;margin:0 auto;z-index:20;padding:.75rem 1rem;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 30px -12px rgb(0 0 0 / .35);overflow-wrap:anywhere}
 body:has(#heel-ceremony-status:not(:empty)) main{padding-bottom:10rem}
+@media (max-width:55.99rem){body.app #heel-ceremony-status:not(:empty){bottom:calc(4.8rem + env(safe-area-inset-bottom))}}
 `;
 
 /** The full stylesheet for every human-plane page. */
