@@ -401,10 +401,10 @@ body:has(#heel-ceremony-status:not(:empty)) main{padding-bottom:10rem}
  */
 const CEREMONY_STATE_CSS = `
 button[data-heel-ceremony]{position:relative}
-.heel-btn-icon{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none}
+.heel-btn-icon{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;color:var(--heel-btn-fg,currentColor)}
 .heel-btn-icon:empty{display:none}
 .heel-btn-icon svg{width:1.1rem;height:1.1rem}
-button[data-heel-state="waiting"],button[data-heel-state="success"]{-webkit-text-fill-color:transparent;cursor:progress}
+button[data-heel-state="waiting"],button[data-heel-state="success"]{color:transparent;transition:none;cursor:progress}
 button[data-heel-state="waiting"] > :not(.heel-btn-icon),button[data-heel-state="success"] > :not(.heel-btn-icon){visibility:hidden}
 button[data-heel-state="waiting"]:disabled,button[data-heel-state="success"]:disabled{opacity:1}
 `;
