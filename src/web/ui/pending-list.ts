@@ -1,7 +1,7 @@
 import type { RuleRef } from "../../core/call.ts";
 import type { ApprovalOrigin, ApprovalStatus } from "../../store/schema.ts";
 import { approvalStatusBadge } from "./approval-request.ts";
-import { formatPauseScope, formatRelative } from "./format.ts";
+import { formatPauseScope, formatRelative, formatShort } from "./format.ts";
 import { type Html, html, trusted } from "./html.ts";
 import { CHEVRON_RIGHT } from "./icons.ts";
 import { notice, type PauseNotice, time } from "./layout.ts";
@@ -50,7 +50,7 @@ function stateNote(row: PendingRow, now: Date): Html | "" {
   switch (row.status) {
     case "pending":
       return row.expiresAt.getTime() - now.getTime() <= EXPIRY_SHOWN_WITHIN_MS
-        ? html`<span class="req-soon">Expires ${formatRelative(row.expiresAt, now)}</span>`
+        ? html`<span class="req-soon">Expires in ${formatShort(row.expiresAt.getTime() - now.getTime())}</span>`
         : "";
     case "approved":
       return html`Runs when the agent sends it again; unused it expires
@@ -144,14 +144,19 @@ export function pendingList(props: PendingListProps): Html {
   }
   // Each section heading carries its own count, so the list needs no count line.
   return html`${heading}
-    ${SECTIONS.map((section) => {
+    ${SECTIONS.map((section, _i, all) => {
+      // With one section the page title says it; its heading stays for screen readers.
+      const only =
+        all.filter((s) =>
+          rows.some((row) => (s.statuses as readonly ApprovalStatus[]).includes(row.status)),
+        ).length === 1;
       const these = rows.filter((row) =>
         (section.statuses as readonly ApprovalStatus[]).includes(row.status),
       );
       if (these.length === 0) return "";
       const headingId = `req-${section.id}`;
       return html`<section class="req-section" aria-labelledby="${headingId}">
-        <h2 id="${headingId}" class="req-section-title">
+        <h2 id="${headingId}" class="req-section-title${only ? " visually-hidden" : ""}">
           ${section.title} <span class="req-section-count">${String(these.length)}</span>
         </h2>
         <ul class="req-group" aria-label="${section.title}">
@@ -183,7 +188,7 @@ function requestRow(row: PendingRow, now: Date, showStatus: boolean): Html {
           <mark>${said.place}</mark>${said.rest}</span
         >
         <span class="ap-meta">
-          <time class="muted" datetime="${row.createdAt.toISOString()}">${formatRelative(row.createdAt, now)}</time>
+          <time class="muted" datetime="${row.createdAt.toISOString()}" title="${formatRelative(row.createdAt, now)}">${formatShort(now.getTime() - row.createdAt.getTime())}</time>
           ${showStatus ? approvalStatusBadge(row.status) : ""}
           ${note === "" ? "" : html`<span class="req-foot muted">${note}</span>`}
         </span>

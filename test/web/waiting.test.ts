@@ -45,8 +45,8 @@ describe("the waiting count", () => {
       /class="nav-count" data-heel-count><span class="visually-hidden">, <\/span><span data-heel-count-n>1</,
     );
     expect(page).toContain(`href="/requests/${requestId}"`);
-    expect(page).toContain("asks to connect <mark>GitHub</mark>");
-    expect(page).toContain("1 connection");
+    expect(page).toContain(">Connect GitHub<");
+    expect(page).toMatch(/class="home-wait-when muted">[^<]*inbox-bot · /);
   });
 
   it("adds calls and connection requests into one number", async () => {
@@ -76,7 +76,6 @@ describe("the waiting count", () => {
     const doc = dom(
       homePage({
         now: NOW,
-        approvals: { decided: 0 },
         waiting: {
           counts: { calls: PENDING_ROWS.length, requests: 0, proposals: 0, recoveries: 0 },
           items: PENDING_ROWS.map((row) => ({

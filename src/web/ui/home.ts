@@ -1,4 +1,4 @@
-import { formatRelative } from "./format.ts";
+import { formatRelative, formatShort } from "./format.ts";
 import { type Html, html, trusted } from "./html.ts";
 import { CHEVRON_RIGHT } from "./icons.ts";
 import { badge, type Tone } from "./layout.ts";
@@ -62,8 +62,6 @@ export interface RecentRow {
 
 export interface HomeProps {
   now: Date;
-  /** Calls decided in the last day, for the quiet line on the Approvals tile. */
-  approvals: { decided: number };
   /** What waits, counted and listed; the list shows the first few. */
   waiting: { counts: WaitingSummary; items: readonly WaitingItem[] };
   agents: { total: number; active: number; expiring: number };
@@ -96,90 +94,61 @@ interface TileProps {
   href: string;
   title: string;
   big: number;
-  /** One line under the number. With `alert` it says what needs you, in words. */
-  line: string;
-  /** Tints the tile and its line when something needs you; the line carries the words. */
-  alert?: Tone;
+  /** Only when something needs you: the state, in a few words. */
+  alert?: { line: string; tone: Tone };
 }
 
-/** One stat tile: label, big number, one line; the whole tile links to its page. */
+/**
+ * One stat tile: a label and a number, and a short state only when
+ * something needs you. The whole tile links to its page.
+ */
 function tile(p: TileProps): Html {
   return html`<li>
-    <a class="home-tile" href="${p.href}"${p.alert ? html` data-alert="${p.alert}"` : ""}>
+    <a class="home-tile" href="${p.href}"${p.alert ? html` data-alert="${p.alert.tone}"` : ""}>
       <span class="home-tile-title">${p.title}</span>
       <strong class="home-tile-big">${String(p.big)}</strong>
-      <span class="home-tile-line">${p.line}</span>
+      ${p.alert ? html`<span class="home-tile-line">${p.alert.line}</span>` : ""}
     </a>
   </li>`;
-}
-
-/** "2 calls, 1 connection": what the waiting count is made of. */
-export function waitingBreakdown(c: WaitingSummary): string {
-  const parts = [
-    [c.calls, "call", "calls"],
-    [c.requests, "connection", "connections"],
-    [c.proposals, "rule change", "rule changes"],
-    [c.recoveries, "recovery link", "recovery links"],
-  ] as const;
-  return parts
-    .filter(([n]) => n > 0)
-    .map(([n, one, many]) => `${String(n)} ${plural(n, one, many)}`)
-    .join(", ");
 }
 
 export function waitingTotal(c: WaitingSummary): number {
   return c.calls + c.requests + c.proposals + c.recoveries;
 }
 
+/** The areas. The Waiting tile steps aside when Home lists what waits above it. */
 function tiles(p: HomeProps): Html {
-  const a = p.approvals;
   const g = p.agents;
   const c = p.connections;
   const r = p.rules;
   const waiting = waitingTotal(p.waiting.counts);
-  return html`<ul class="home-tiles" aria-label="Areas">
-    ${tile({
-      href: "/approvals",
-      title: "Waiting for you",
-      big: waiting,
-      line:
-        waiting > 0
-          ? waitingBreakdown(p.waiting.counts)
-          : `${String(a.decided)} decided in the last day`,
-      ...(waiting > 0 ? { alert: "warn" as const } : {}),
-    })}
-    ${tile({
+  const listed = p.waiting.items.length > 0;
+  const all = [
+    listed ? "" : tile({ href: "/approvals", title: "Waiting", big: waiting }),
+    tile({
       href: "/agents",
       title: "Agents",
       big: g.total,
-      line:
-        g.expiring > 0
-          ? `${String(g.expiring)} ${plural(g.expiring, "token expires", "tokens expire")} soon`
-          : `${String(g.active)} active this week`,
-      ...(g.expiring > 0 ? { alert: "warn" as const } : {}),
-    })}
-    ${tile({
+      ...(g.expiring > 0
+        ? { alert: { line: `${String(g.expiring)} expiring`, tone: "warn" as const } }
+        : {}),
+    }),
+    tile({
       href: "/connections",
       title: "Connections",
       big: c.total,
-      line:
-        c.needsSignIn > 0
-          ? `${String(c.needsSignIn)} ${plural(c.needsSignIn, "needs", "need")} signing in again`
-          : c.total === 0
-            ? "None connected yet"
-            : "All ready",
-      ...(c.needsSignIn > 0 ? { alert: "warn" as const } : {}),
-    })}
-    ${tile({
+      ...(c.needsSignIn > 0
+        ? { alert: { line: `${String(c.needsSignIn)} to sign in`, tone: "warn" as const } }
+        : {}),
+    }),
+    tile({
       href: "/rules",
       title: "Rules",
       big: r.count,
-      line: r.loaded
-        ? `${String(r.stopped)} ${plural(r.stopped, "call", "calls")} watch mode would stop this week`
-        : "Didn't load: every call is denied",
-      ...(r.loaded ? {} : { alert: "error" as const }),
-    })}
-  </ul>`;
+      ...(r.loaded ? {} : { alert: { line: "Didn't load", tone: "error" as const } }),
+    }),
+  ];
+  return html`<ul class="home-tiles" aria-label="Areas" data-count="${listed ? "3" : "4"}">${all}</ul>`;
 }
 
 /** lucide's check. */
@@ -191,25 +160,21 @@ function setup(p: HomeProps): Html | "" {
     {
       done: s.passkey,
       label: "Add a passkey",
-      line: "Sign in and decide with your face, fingerprint or security key.",
       href: "/devices#device-heading",
     },
     {
       done: s.notifications,
       label: "Turn on notifications",
-      line: "Hear about a request the moment an agent's call needs you.",
       href: "/devices#push-heading",
     },
     {
       done: s.account,
       label: "Connect an account",
-      line: "Gmail, Calendar, GitHub or any API your agents should reach through heel.",
       href: "/connections",
     },
     {
       done: s.agent,
       label: "Connect an agent",
-      line: "Give an agent a token so its calls go through your rules.",
       href: "/agents",
     },
   ];
@@ -231,7 +196,6 @@ function setup(p: HomeProps): Html | "" {
             <span class="home-step-mark" aria-hidden="true">${step.done ? trusted(CHECK) : ""}</span>
             <span class="home-step-text">
               <span class="home-step-label">${step.label}${step.done ? html`<span class="visually-hidden"> (done)</span>` : ""}</span>
-              <span class="home-step-line">${step.line}</span>
             </span>
             <span class="home-step-go">${trusted(CHEVRON_RIGHT)}</span>
           </a>
@@ -261,57 +225,49 @@ function week(p: HomeProps): Html {
   const label = days.map((d) => `${DAY_NAMES[d.day.getUTCDay()]} ${String(d.calls)}`).join(", ");
   if (total === 0) {
     return html`<section class="card home-week" aria-labelledby="week-heading">
-      <div class="home-week-head"><h2 id="week-heading">Calls in the last 7 days</h2></div>
+      <div class="home-week-head"><h2 id="week-heading">This week</h2></div>
       <div class="home-empty">
         <span class="home-empty-icon">${trusted(CHART_ICON)}</span>
         <p class="home-empty-title">No calls yet</p>
-        <p class="muted">Calls your agents make through heel show up here, day by day.</p>
         ${p.setup.agent ? "" : html`<a class="${btn("outline", "sm")}" href="/agents">Connect an agent</a>`}
       </div>
     </section>`;
   }
   return html`<section class="card home-week" aria-labelledby="week-heading">
     <div class="home-week-head">
-      <h2 id="week-heading">Calls in the last 7 days</h2>
+      <h2 id="week-heading">This week</h2>
       <strong class="home-week-total">${String(total)}</strong>
     </div>
-    <svg class="home-spark" viewBox="0 0 ${String(7 * w + 6 * gap)} ${String(h)}" role="img" aria-label="Calls per day: ${label}">
+    <svg class="home-spark" viewBox="0 0 ${String(7 * w + 6 * gap)} ${String(h)}" role="img" aria-label="Calls per day: ${label}. ${String(sum("allowed"))} allowed, ${String(sum("denied"))} denied, ${String(sum("asked"))} asked you.">
       ${bars}
     </svg>
     <div class="home-spark-days muted" aria-hidden="true">
       ${days.map((d) => html`<span>${DAY_NAMES[d.day.getUTCDay()]}</span>`)}
     </div>
-    <ul class="home-totals">
-      <li>${badge("Allowed", "ok")} ${String(sum("allowed"))}</li>
-      <li>${badge("Denied", "error")} ${String(sum("denied"))}</li>
-      <li>${badge("Asked", "warn")} ${String(sum("asked"))}</li>
-    </ul>
   </section>`;
 }
 
 function recent(p: HomeProps): Html {
   return html`<section class="card home-recent" aria-labelledby="recent-heading">
     <div class="home-week-head">
-      <h2 id="recent-heading">Recent</h2>
-      <a class="home-more" href="/activity">View all <span aria-hidden="true">→</span></a>
+      <h2 id="recent-heading"><a class="home-more" href="/activity">Recent <span aria-hidden="true">→</span></a></h2>
     </div>
     ${
       p.recent.length === 0
-        ? html`<p class="muted">No calls yet. They show up here as your agents work.</p>`
+        ? html`<p class="muted">No calls yet.</p>`
         : html`<ul class="home-recent-list">
-            ${p.recent.map((row) => {
+            ${p.recent.slice(0, HOME_RECENT_LIMIT).map((row) => {
               const outcome = OUTCOME[row.kind] ?? {
                 word: sentenceCase(row.kind.replaceAll("_", " ")),
                 tone: "muted" as const,
               };
               return html`<li>
                 <span class="home-recent-text"
-                  ><strong>${row.agent}</strong> wanted to ${actionPhrase(row.action, row.tool)} on
-                  <span class="mono">${row.account}</span></span
+                  ><strong>${row.agent}</strong> ${actionPhrase(row.action, row.tool)}</span
                 >
                 <span class="home-recent-meta">
                   ${badge(outcome.word, outcome.tone)}
-                  <time class="muted" datetime="${row.at.toISOString()}">${formatRelative(row.at, p.now)}</time>
+                  <time class="muted" datetime="${row.at.toISOString()}" title="${formatRelative(row.at, p.now)}">${formatShort(p.now.getTime() - row.at.getTime())}</time>
                 </span>
               </li>`;
             })}
@@ -319,6 +275,9 @@ function recent(p: HomeProps): Html {
     }
   </section>`;
 }
+
+/** How many recent decisions Home shows; Activity has the rest. */
+const HOME_RECENT_LIMIT = 3;
 
 /** How many waiting items Home lists before "View all". */
 export const HOME_WAITING_LIMIT = 5;
@@ -349,28 +308,38 @@ const changes = (n: number) => (n === 1 ? "a rule change" : `${String(n)} rule c
 /** heel's sentence for the item, the words the page it links to leads with. */
 function waitingText(item: WaitingItem): Html {
   switch (item.kind) {
-    case "call": {
-      const said = item.headline;
-      return html`${said.agent} wants to <mark>${said.action}</mark> ${said.preposition}
-        <mark>${said.place}</mark>${said.rest}`;
-    }
+    case "call":
+      return html`${sentenceCase(item.headline.action)}`;
     case "connection":
-      return html`${item.agent} asks to connect <mark>${item.service}</mark>`;
+      return html`Connect ${item.service}`;
     case "rules":
-      return item.agent === "heel"
-        ? html`heel suggests <mark>${changes(item.changes)}</mark>`
-        : html`${item.agent} proposes <mark>${changes(item.changes)}</mark>`;
+      return html`${sentenceCase(changes(item.changes))}`;
     case "recovery":
-      return html`A recovery link for <mark>${item.user}</mark> is live`;
+      return html`Recovery link`;
   }
 }
 
-/** "4 min ago", and the expiry only when it is close. */
+/** Who asked (or who it's for), as the line under the item. */
+function waitingWho(item: WaitingItem): string {
+  switch (item.kind) {
+    case "call":
+      return item.headline.agent;
+    case "connection":
+    case "rules":
+      return item.agent;
+    case "recovery":
+      return item.user;
+  }
+}
+
+/** "inbox-bot · 12m", and the expiry only when it is close. */
 function waitingWhen(item: WaitingItem, now: Date): Html {
   const ends = item.expiresAt;
   const soon = ends !== null && ends.getTime() - now.getTime() <= EXPIRY_SHOWN_WITHIN_MS;
-  return html`<time datetime="${item.at.toISOString()}">${formatRelative(item.at, now)}</time>${
-    soon ? html` · <span class="home-wait-soon">Expires ${formatRelative(ends, now)}</span>` : ""
+  return html`${waitingWho(item)} · <time datetime="${item.at.toISOString()}" title="${formatRelative(item.at, now)}">${formatShort(now.getTime() - item.at.getTime())}</time>${
+    soon && ends !== null
+      ? html` · <span class="home-wait-soon">${formatShort(ends.getTime() - now.getTime())} left</span>`
+      : ""
   }`;
 }
 
@@ -413,6 +382,6 @@ export function homePage(p: HomeProps): Html {
   return html`<div class="home">
     <h1>Home</h1>
     ${waitingList(p)} ${setup(p)} ${tiles(p)}
-    <div class="home-split">${week(p)} ${recent(p)}</div>
+    <div class="home-split">${week(p)} ${p.waiting.items.length > 0 ? "" : recent(p)}</div>
   </div>`;
 }

@@ -552,7 +552,6 @@ const RECOVERY_ITEM: WaitingItem = {
 
 const HOME_BASE: HomeProps = {
   now: NOW,
-  approvals: { decided: 4 },
   waiting: { counts: NO_WAITING, items: [] },
   agents: { total: 3, active: 2, expiring: 0 },
   connections: { total: 4, needsSignIn: 0 },
@@ -985,7 +984,6 @@ export const PAGE_STORIES: readonly Story[] = [
   pageStory("home", "fresh", "Fresh install: 1 of 4 set up, no calls yet", "Home", "home", () =>
     homePage({
       ...HOME_BASE,
-      approvals: { decided: 0 },
       agents: { total: 0, active: 0, expiring: 0 },
       connections: { total: 0, needsSignIn: 0 },
       rules: { loaded: true, count: 0, stopped: 0 },

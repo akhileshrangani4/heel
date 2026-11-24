@@ -45,7 +45,7 @@ export function waitingBanner(waiting: number): Html {
 }
 
 function bannerMarkup(waiting: number, shown: boolean): string {
-  return `<a id="heel-waiting" class="waiting-alert" href="/approvals"${shown ? "" : " hidden"}><span class="waiting-alert-icon">${BELL}</span><span class="waiting-alert-text" aria-live="polite">${thingsNeedYou(waiting)}</span><span class="waiting-alert-go">Review <span aria-hidden="true">→</span></span></a>`;
+  return `<a id="heel-waiting" class="waiting-alert" href="/approvals"${shown ? "" : " hidden"}><span class="waiting-alert-icon">${BELL}</span><span class="waiting-alert-text" aria-live="polite">${thingsNeedYou(waiting)}</span><span class="waiting-alert-go" aria-hidden="true">→</span></a>`;
 }
 
 /**

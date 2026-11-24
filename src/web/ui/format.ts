@@ -50,6 +50,18 @@ export function formatRelative(at: Date, now: Date): string {
   return delta >= 0 ? `in ${formatSpan(delta)}` : `${formatSpan(-delta)} ago`;
 }
 
+/**
+ * One unit, rounded down, for lists that only need a glance: `now`, `12m`,
+ * `3h`, `2d`. The full time is on the `<time>` element and the page itself.
+ */
+export function formatShort(ms: number): string {
+  const span = Math.max(0, ms);
+  if (span < MINUTE) return "now";
+  if (span < HOUR) return `${String(Math.floor(span / MINUTE))}m`;
+  if (span < DAY) return `${String(Math.floor(span / HOUR))}h`;
+  return `${String(Math.floor(span / DAY))}d`;
+}
+
 export function plural(n: number, noun: string): string {
   return `${n} ${noun}${n === 1 ? "" : "s"}`;
 }

@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { rulesFor } from "../../core/rules/evaluate.ts";
 import { listAgents, TOKEN_WARNING_DAYS } from "../../gateway/agents.ts";
 import { agentInventory, readActivity, wouldHaveStopped } from "../../store/activity.ts";
-import { listApprovalsFor } from "../../store/approvals.ts";
+
 import { accountsOwnedBy } from "../../store/directory.ts";
 import { pushSubscriptionsOf } from "../../store/notifications.ts";
 import { auditLog, passkeys } from "../../store/schema.ts";
@@ -95,11 +95,7 @@ export function homeRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     const now = deps.now();
     const owners = visibleOwners(session);
 
-    const approvals = listApprovalsFor(deps.db, session, now);
     const counts = waitingCounts(deps, session, now);
-    const decided = approvals.filter(
-      (r) => r.status === "approved" || r.status === "denied" || r.status === "executed",
-    ).length;
 
     const inventory = agentInventory(deps.db, {
       orgId: deps.orgId,
@@ -152,7 +148,6 @@ export function homeRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       current: "home",
       body: homePage({
         now,
-        approvals: { decided },
         waiting: { counts, items: waitingItems(deps, session, now) },
         agents: {
           total: agents.length,

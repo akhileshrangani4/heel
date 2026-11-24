@@ -17,7 +17,8 @@ export const HOME_CSS = `
 .home-tile[data-alert="warn"] .home-tile-line{color:var(--warn);font-weight:600}
 .home-tile[data-alert="error"] .home-tile-line{color:var(--danger);font-weight:600}
 @media (prefers-reduced-motion:reduce){.home-tile{transition:none}.home-tile:hover{transform:none}}
-@media (max-width:56rem){.home-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.home-tiles[data-count="3"]{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media (max-width:56rem){.home-tiles:not([data-count="3"]){grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:36rem){.home-tiles{gap:.5rem}.home-tile{padding:.75rem .8rem}.home-tile-big{font-size:1.6rem}}
 .home-wait{margin:0 0 1rem;border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
 .home-wait h2{display:flex;align-items:center;gap:.5rem}
@@ -47,7 +48,6 @@ export const HOME_CSS = `
 .home-step-text{flex:1;display:flex;flex-direction:column;min-width:0}
 .home-step-label{font-weight:600;font-size:.93rem}
 .home-steps li[data-done="yes"] .home-step-label{color:var(--muted);font-weight:500}
-.home-step-line{color:var(--muted);font-size:.82rem}
 .home-step-go{flex:none;display:inline-flex;color:var(--muted)}
 .home-step-go svg{width:1rem;height:1rem}
 .home-split{display:grid;gap:.75rem;grid-template-columns:repeat(auto-fit,minmax(18rem,1fr));align-items:start}
@@ -57,7 +57,6 @@ export const HOME_CSS = `
 .home-spark rect{fill:var(--accent)}
 .home-spark rect.empty{fill:var(--line)}
 .home-spark-days{display:grid;grid-template-columns:repeat(7,1fr);font-size:.72rem;text-align:center}
-.home-totals{list-style:none;margin:.75rem 0 0;padding:.75rem 0 0;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:.5rem 1.25rem;font-weight:600}
 .home-empty{display:flex;flex-direction:column;align-items:center;text-align:center;gap:.3rem;padding:1.5rem .5rem .75rem}
 .home-empty p{margin:0;font-size:.88rem}
 .home-empty-icon{display:inline-grid;place-items:center;width:2.4rem;height:2.4rem;border-radius:10px;background:var(--surface);color:var(--muted);margin-bottom:.25rem}
