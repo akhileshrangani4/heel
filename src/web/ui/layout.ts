@@ -171,8 +171,8 @@ export function pauseBanner(pause: PauseNotice): Html {
   return html`<div class="pause-alert" role="status">
     <span class="pause-alert-icon">${trusted(PAUSE_ICON)}</span>
     <span class="pause-alert-text"
-      ><strong>Paused: ${formatPauseScope(pause.scope, pause.target)}</strong>, since
-      ${time(pause.since)}. Calls in scope return “paused” and reach no upstream.</span
+      ><strong>On hold: ${formatPauseScope(pause.scope, pause.target)}</strong>. Nothing runs until you
+      resume.</span
     >
     <a class="pause-alert-action" href="/pause">Resume</a>
   </div>`;

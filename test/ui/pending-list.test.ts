@@ -54,6 +54,18 @@ describe("PendingList", () => {
     expect(doc.querySelector(".req-reason")).toBeNull();
   });
 
+  it("shortens a long agent or account name in the middle, keeping the full name in its title", () => {
+    const [first] = PENDING_ROWS;
+    if (first === undefined) throw new Error("no fixture");
+    const agent = "claude-code-heel-on-michaels-laptop-2";
+    const doc = render({
+      ok: true,
+      rows: [{ ...first, headline: { ...first.headline, agent } }],
+    });
+    const name = doc.querySelector(`.req-title span[title="${agent}"]`);
+    expect(text(name)).toBe("claude-code-…laptop-2");
+  });
+
   it("shows a waiting request's expiry only when it is close", () => {
     const doc = render({ ok: true, rows: PENDING_ROWS });
     const notes = [...doc.querySelectorAll(".req-soon")].map((n) => text(n));
@@ -70,10 +82,10 @@ describe("PendingList", () => {
 
   it.each([
     ["pending", PENDING_ROWS, "Needs you", "Expires in"],
-    ["approved", APPROVED_ROWS, "Approved", "Runs when the agent sends it again"],
-    ["denied", DENIED_ROWS, "Denied", "Re-sends return “denied” until"],
+    ["approved", APPROVED_ROWS, "Approved", "Runs when the agent tries again"],
+    ["denied", DENIED_ROWS, "Denied", "Denied"],
     ["expired", EXPIRED_ROWS, "Expired", "Expired"],
-    ["paused", PAUSED_ROWS, "Needs you", "Paused (agent inbox-bot): approve after resume"],
+    ["paused", PAUSED_ROWS, "Needs you", "On hold until you resume"],
   ] as const)("spells out the %s state in words", (_s, rows, badge, note) => {
     const page = text(render({ ok: true, rows }));
     expect(page).toContain(badge);

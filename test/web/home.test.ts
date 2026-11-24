@@ -56,7 +56,7 @@ describe("the Home page", () => {
     const page = await (await h.fetch("/", { as: owner })).text();
     expect(page).toContain(">This week<");
     expect(page).toMatch(/aria-label="Calls per day: [^"]* 1\. /);
-    expect(page).toContain("<strong>inbox-bot</strong> ");
+    expect(page).toContain('<strong title="inbox-bot">inbox-bot</strong> ');
     expect(page).toContain('<a class="home-more" href="/activity">Recent');
   });
 

@@ -46,7 +46,9 @@ describe("the waiting count", () => {
     );
     expect(page).toContain(`href="/requests/${requestId}"`);
     expect(page).toContain(">Connect GitHub<");
-    expect(page).toMatch(/class="home-wait-when muted">[^<]*inbox-bot · /);
+    expect(page).toMatch(
+      /class="home-wait-when muted"><span title="inbox-bot">inbox-bot<\/span> · /,
+    );
   });
 
   it("adds calls and connection requests into one number", async () => {

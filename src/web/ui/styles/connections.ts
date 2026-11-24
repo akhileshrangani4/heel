@@ -31,47 +31,60 @@ export const CONNECTIONS_CSS = `
 .conn-manage-panel h3{font-size:.92rem;margin:1rem 0 .4rem}
 .conn-empty-icon{background:var(--surface);color:var(--muted)}
 .conn-empty .btn{margin-top:.6rem}
-.connect-form{display:grid;gap:.9rem}
-.svc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(12.5rem,1fr));gap:.5rem;margin:0;padding:0;border:0;min-width:0}
-.connect-step-title{float:left;width:100%;margin:0 0 .6rem;padding:0;font-size:.88rem;font-weight:500;color:var(--muted)}
+.connect-form{display:grid;gap:.75rem}
+.connect-search{width:100%}
+.svc-grid{margin:0;padding:0;border:0;min-width:0}
+.svc-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(12.5rem,1fr));gap:.5rem}
+.svc-group{margin:.75rem 0 .4rem;font-size:.8rem;font-weight:600;color:var(--muted)}
+.svc-empty{margin:.5rem 0 0;font-size:.88rem}
+.svc-empty-mcp{padding:0;border:0;background:none;color:var(--link);font:inherit;text-decoration:underline;text-underline-offset:.2em;cursor:pointer}
 .connect-back{display:none;align-items:center;gap:.25rem;padding:.35rem .6rem .35rem .35rem;border:0;border-radius:8px;background:none;color:var(--text);font:inherit;font-size:.88rem;font-weight:500;cursor:pointer}
 .connect-back:hover{background:var(--surface)}
 .connect-back svg{width:1rem;height:1rem}
-.svc-tile{position:relative;display:flex;align-items:center;gap:.7rem;padding:.65rem .75rem;border:1px solid var(--line);border-radius:10px;background:var(--bg);cursor:pointer;transition:border-color .15s,background-color .15s}
+.svc-tile{position:relative;display:flex;align-items:center;gap:.7rem;padding:.6rem .75rem;border:1px solid var(--line);border-radius:10px;background:var(--bg);cursor:pointer;transition:border-color .15s,background-color .15s}
 .svc-tile:hover{background:var(--surface)}
 .svc-tile:has(.svc-radio:focus-visible){outline:3px solid var(--focus);outline-offset:2px}
 .svc-radio{position:absolute;opacity:0;width:1px;height:1px;margin:0}
-.svc-tile-text{display:flex;flex-direction:column;min-width:0}
-.svc-tile-name{font-weight:600;font-size:.9rem}
-.svc-tile-line{color:var(--muted);font-size:.8rem}
+.svc-tile-name{flex:1;min-width:0;font-weight:600;font-size:.9rem;overflow-wrap:anywhere}
+.svc-tile-go{display:none;flex:none;color:var(--muted)}
+.svc-tile-go svg{width:1rem;height:1rem}
+.svc-letter svg{width:1.1rem;height:1.1rem}
+/* Many services: one column of compact rows that scrolls under the search field. */
+.connect-form[data-layout="list"] .svc-scroll{max-height:max(8rem,calc(100dvh - 16rem));overflow:auto;overscroll-behavior:contain;padding:.25rem;border:1px solid var(--line);border-radius:10px}
+.connect-form[data-layout="list"] .svc-list{display:flex;flex-direction:column;gap:0}
+.connect-form[data-layout="list"] .svc-tile{padding:.4rem .5rem;border:0;border-radius:8px}
+.connect-form[data-layout="list"] .svc-tile .svc-logo{width:1.75rem;height:1.75rem;border-radius:8px}
+.connect-form[data-layout="list"] .svc-tile .svc-logo svg{width:1rem;height:1rem}
+.connect-form[data-layout="list"] .svc-tile-go{display:inline-flex}
+.connect-form[data-layout="list"] .svc-group{margin:.5rem .5rem .25rem}
+.connect-form[data-layout="list"] .svc-empty{margin:.5rem}
 .connect-fields{display:grid;gap:.75rem}
 .connect-field{display:grid;gap:.3rem}
 .connect-field label{font-weight:500;font-size:.88rem}
 .connect-field p,.connect-fields > p{margin:0;font-size:.82rem}
+.connect-field pre.args{margin:0}
 .connect-go{position:sticky;bottom:-1.4rem;z-index:1;display:grid;gap:.4rem;margin:0 -1.25rem -1.4rem;padding:.75rem 1.25rem calc(1rem + var(--safe-b));background:var(--bg);border-top:1px solid var(--line)}
 .connect-go .btn{width:100%}
 .connect-status{margin:0;font-size:.85rem;color:var(--muted)}
 @supports selector(:has(*)){
-  /* Step 1: the tiles. Step 2, once one is picked: Back, the service as a chip, and its fields. */
+  /* Step 1: search and the services. Step 2, once one is picked: Back, the service as a chip, and its fields. */
   .connect-form:not(:has(.svc-radio:checked)) .connect-fields{display:none}
+  .connect-form:has(.svc-radio:checked) :is(.connect-search,.svc-group,.svc-empty,.svc-tile-go){display:none}
   .connect-form:has(.svc-radio:checked) .svc-grid{display:flex;align-items:center;gap:.5rem}
-  .connect-form:has(.svc-radio:checked) .connect-step-title{display:none}
+  .connect-form:has(.svc-radio:checked) :is(.svc-scroll,.svc-list){display:contents}
   .connect-form:has(.svc-radio:checked) .connect-back{display:inline-flex;padding-left:.35rem}
   .connect-form:has(.svc-radio:checked) .svc-tile:not(:has(.svc-radio:checked)){display:none}
-  .connect-form:has(.svc-radio:checked) .svc-tile{padding:.3rem .7rem .3rem .35rem;border-radius:999px;gap:.45rem;background:var(--surface);cursor:default}
+  .connect-form:has(.svc-radio:checked) .svc-tile{flex:none;padding:.3rem .7rem .3rem .35rem;border:1px solid var(--line);border-radius:999px;gap:.45rem;background:var(--surface);cursor:default}
   .connect-form:has(.svc-radio:checked) .svc-tile .svc-logo{width:1.6rem;height:1.6rem;border-radius:999px}
   .connect-form:has(.svc-radio:checked) .svc-tile .svc-logo svg{width:.95rem;height:.95rem}
-  .connect-form:has(.svc-radio:checked) .svc-tile-line{display:none}
   .ui-dialog:has(.svc-radio:checked) .connect-cli{display:none}
-  .connect-form [data-for],.connect-form [data-help-for]{display:none}
+  .connect-form [data-for]{display:none}
   .connect-form:has(.svc-radio[data-need="key"]:checked) [data-for="key"],
   .connect-form:has(.svc-radio[data-need="mcp"]:checked) [data-for="mcp"],
+  .connect-form:has(.svc-radio[data-need="cli"]:checked) [data-for="cli"],
   .connect-form:has(.svc-radio[data-need="signin"]:checked) [data-for="signin"]{display:grid}
-  .connect-form:has(.svc-radio[value="github"]:checked) [data-help-for="github"],
-  .connect-form:has(.svc-radio[value="slack"]:checked) [data-help-for="slack"],
-  .connect-form:has(.svc-radio[value="linear"]:checked) [data-help-for="linear"],
-  .connect-form:has(.svc-radio[value="notion"]:checked) [data-help-for="notion"],
-  .connect-form:has(.svc-radio[value="stripe"]:checked) [data-help-for="stripe"]{display:block}
+  /* Any CLI is connected on heel's host: step 2 shows the command, with no name or Connect. */
+  .connect-form:has(.svc-radio[data-need="cli"]:checked) :is(.connect-name,.connect-go){display:none}
 }
 .connect-cli{margin-top:1rem;border-top:1px solid var(--line);padding-top:.75rem;font-size:.88rem}
 .connect-cli > summary{display:flex;align-items:center;justify-content:space-between;list-style:none;font-weight:500}
@@ -87,11 +100,10 @@ export const CONNECTIONS_CSS = `
   .conn-actions:empty{display:none}
   .conn-manage-panel{right:auto;left:0}
   .conn-page-head .btn{width:100%}
-  .svc-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:.4rem}
-  .svc-tile{gap:.5rem;padding:.5rem .55rem}
-  .svc-tile .svc-logo{width:1.75rem;height:1.75rem;border-radius:8px}
-  .svc-tile .svc-logo svg{width:1rem;height:1rem}
-  .svc-tile-name{font-size:.85rem;overflow-wrap:anywhere}
-  .svc-tile-line{display:none}
+  .connect-form[data-layout="grid"] .svc-list{grid-template-columns:repeat(2,minmax(0,1fr));gap:.4rem}
+  .connect-form[data-layout="grid"] .svc-tile{gap:.5rem;padding:.5rem .55rem}
+  .connect-form[data-layout="grid"] .svc-tile .svc-logo{width:1.75rem;height:1.75rem;border-radius:8px}
+  .connect-form[data-layout="grid"] .svc-tile .svc-logo svg{width:1rem;height:1rem}
+  .svc-tile-name{font-size:.85rem}
 }
 `;

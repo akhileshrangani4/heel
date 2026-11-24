@@ -61,6 +61,7 @@ import {
   AGENT_PAUSE,
   APPROVED_REQUEST,
   APPROVED_ROWS,
+  connectChoices,
   DENIED_DRAFT_REQUEST,
   DENIED_REQUEST,
   DENIED_ROWS,
@@ -513,6 +514,10 @@ const week = (calls: readonly number[]): DayCount[] =>
     denied: Math.round(n * 0.1),
     asked: n - Math.round(n * 0.7) - Math.round(n * 0.1),
   }));
+
+/** Stress values for middle ellipsis. */
+const LONG_AGENT = "claude-code-heel-on-michaels-work-laptop-2";
+const LONG_ALIAS = "github-tambo-ai-charming-and-heel-monorepo-fine-grained-read-only";
 
 const NO_WAITING = { calls: 0, requests: 0, proposals: 0, recoveries: 0 } as const;
 
@@ -1047,6 +1052,42 @@ export const PAGE_STORIES: readonly Story[] = [
     },
   ),
 
+  // Long values: names shortened in the middle, full value in the title.
+  waitingHome(
+    "long-values",
+    "A long agent name, a long service name and a long alias",
+    { ...NO_WAITING, calls: 1, requests: 1 },
+    [
+      {
+        ...(CALL_ITEMS[0] as WaitingItem & { kind: "call" }),
+        headline: {
+          ...(CALL_ITEMS[0] as WaitingItem & { kind: "call" }).headline,
+          agent: LONG_AGENT,
+        },
+      },
+      {
+        ...CONNECTION_ITEM,
+        agent: LONG_AGENT,
+        service: "the MCP server at notes-and-tasks.internal.example.com",
+      },
+    ],
+  ),
+  {
+    ...pending("pending", "", {
+      ok: true,
+      rows: PENDING_ROWS.map((row) => ({
+        ...row,
+        headline: { ...row.headline, agent: LONG_AGENT, place: LONG_ALIAS },
+      })),
+    }),
+    state: "long-values",
+    label: "A long agent name and a 64-character account alias",
+  },
+  connections("long-alias", "A 64-character alias", [
+    conn(LONG_ALIAS, "github"),
+    ...CONNECTIONS.slice(0, 2),
+  ]),
+
   // Approvals list, live: what the page shows when it can't stay current on its own.
   {
     ...pending("pending", "", { ok: true, rows: PENDING_ROWS }),
@@ -1136,6 +1177,41 @@ export const PAGE_STORIES: readonly Story[] = [
     CONNECTIONS,
     { kind: "none" },
     { open: true, picked: "mcp" },
+  ),
+  connections(
+    "connect-20",
+    "Step 1 with 20 services (12 made up): a list that scrolls under search",
+    CONNECTIONS,
+    { kind: "none" },
+    { open: true, choices: connectChoices(20) },
+  ),
+  connections(
+    "connect-40",
+    "Step 1 with 40 services (32 made up)",
+    CONNECTIONS,
+    { kind: "none" },
+    { open: true, choices: connectChoices(40) },
+  ),
+  connections(
+    "connect-40-search",
+    '40 services, "mail" typed: Gmail, Outlook, Mailchimp',
+    CONNECTIONS,
+    { kind: "none" },
+    { open: true, choices: connectChoices(40), query: "mail" },
+  ),
+  connections(
+    "connect-no-match",
+    "Nothing matches: one line pointing to MCP server",
+    CONNECTIONS,
+    { kind: "none" },
+    { open: true, choices: connectChoices(40), query: "quokka" },
+  ),
+  connections(
+    "connect-cli",
+    "Step 2 for Any CLI: the command to run on heel's host",
+    CONNECTIONS,
+    { kind: "none" },
+    { open: true, picked: "cli" },
   ),
   connections(
     "connect-signin",

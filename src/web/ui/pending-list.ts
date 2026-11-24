@@ -1,10 +1,10 @@
 import type { RuleRef } from "../../core/call.ts";
 import type { ApprovalOrigin, ApprovalStatus } from "../../store/schema.ts";
 import { approvalStatusBadge } from "./approval-request.ts";
-import { formatPauseScope, formatRelative, formatShort } from "./format.ts";
+import { formatRelative, formatShort, middle } from "./format.ts";
 import { type Html, html, trusted } from "./html.ts";
 import { CHEVRON_RIGHT } from "./icons.ts";
-import { notice, type PauseNotice, time } from "./layout.ts";
+import { notice, type PauseNotice } from "./layout.ts";
 import { serviceLogo } from "./logos.ts";
 import type { Headline } from "./summary.ts";
 
@@ -41,26 +41,22 @@ export interface PendingListProps {
 /** A waiting request's expiry shows only inside this window, when it is worth acting on. */
 export const EXPIRY_SHOWN_WITHIN_MS = 60 * 60_000;
 
-/** The one line under a row's title, or nothing: a waiting request far from expiry needs no note. */
+/**
+ * The one line under a row's title, or nothing. Only what the badge and
+ * the section heading don't already say: on hold, about to expire, or
+ * approved and waiting for the agent to try again.
+ */
 function stateNote(row: PendingRow, now: Date): Html | "" {
-  if (row.pausedBy) {
-    return html`Paused (${formatPauseScope(row.pausedBy.scope, row.pausedBy.target)}): approve
-    after resume`;
-  }
+  if (row.pausedBy) return html`On hold until you resume`;
   switch (row.status) {
     case "pending":
       return row.expiresAt.getTime() - now.getTime() <= EXPIRY_SHOWN_WITHIN_MS
         ? html`<span class="req-soon">Expires in ${formatShort(row.expiresAt.getTime() - now.getTime())}</span>`
         : "";
     case "approved":
-      return html`Runs when the agent sends it again; unused it expires
-        ${formatRelative(row.expiresAt, now)}`;
-    case "denied":
-      return html`Re-sends return “denied” until ${time(row.expiresAt)}`;
-    case "expired":
-      return html`Expired ${formatRelative(row.expiresAt, now)}`;
-    case "executed":
-      return html`Ran once`;
+      return html`Runs when the agent tries again`;
+    default:
+      return "";
   }
 }
 
@@ -184,8 +180,8 @@ function requestRow(row: PendingRow, now: Date, showStatus: boolean): Html {
       ${serviceIcon(row)}
       <span class="req-body">
         <span class="req-title"
-          >${said.agent} wants to <mark>${said.action}</mark> ${said.preposition}
-          <mark>${said.place}</mark>${said.rest}</span
+          ><span title="${said.agent}">${middle(said.agent)}</span> wants to <mark>${said.action}</mark> ${said.preposition}
+          <mark title="${said.place}">${middle(said.place)}</mark>${said.rest}</span
         >
         <span class="ap-meta">
           <time class="muted" datetime="${row.createdAt.toISOString()}" title="${formatRelative(row.createdAt, now)}">${formatShort(now.getTime() - row.createdAt.getTime())}</time>

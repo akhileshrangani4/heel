@@ -1,4 +1,4 @@
-import { formatRelative, formatShort } from "./format.ts";
+import { formatRelative, formatShort, middle } from "./format.ts";
 import { type Html, html, trusted } from "./html.ts";
 import { CHEVRON_RIGHT } from "./icons.ts";
 import { badge, type Tone } from "./layout.ts";
@@ -72,7 +72,6 @@ export interface HomeProps {
   recent: readonly RecentRow[];
 }
 
-const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 const sentenceCase = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** What happened, in words, for the Recent list. */
@@ -83,7 +82,7 @@ const OUTCOME: Record<string, { word: string; tone: Tone | "muted" }> = {
   deny: { word: "Denied", tone: "error" },
   approval_denied: { word: "You denied", tone: "error" },
   ask: { word: "Asked you", tone: "warn" },
-  paused: { word: "Paused", tone: "warn" },
+  paused: { word: "On hold", tone: "warn" },
   expired: { word: "Expired", tone: "muted" },
   would_allow: { word: "Would allow", tone: "muted" },
   would_deny: { word: "Would deny", tone: "warn" },
@@ -263,7 +262,7 @@ function recent(p: HomeProps): Html {
               };
               return html`<li>
                 <span class="home-recent-text"
-                  ><strong>${row.agent}</strong> ${actionPhrase(row.action, row.tool)}</span
+                  ><strong title="${row.agent}">${middle(row.agent)}</strong> ${actionPhrase(row.action, row.tool)}</span
                 >
                 <span class="home-recent-meta">
                   ${badge(outcome.word, outcome.tone)}
@@ -311,7 +310,7 @@ function waitingText(item: WaitingItem): Html {
     case "call":
       return html`${sentenceCase(item.headline.action)}`;
     case "connection":
-      return html`Connect ${item.service}`;
+      return html`Connect ${middle(item.service)}`;
     case "rules":
       return html`${sentenceCase(changes(item.changes))}`;
     case "recovery":
@@ -336,7 +335,8 @@ function waitingWho(item: WaitingItem): string {
 function waitingWhen(item: WaitingItem, now: Date): Html {
   const ends = item.expiresAt;
   const soon = ends !== null && ends.getTime() - now.getTime() <= EXPIRY_SHOWN_WITHIN_MS;
-  return html`${waitingWho(item)} · <time datetime="${item.at.toISOString()}" title="${formatRelative(item.at, now)}">${formatShort(now.getTime() - item.at.getTime())}</time>${
+  const who = waitingWho(item);
+  return html`<span title="${who}">${middle(who)}</span> · <time datetime="${item.at.toISOString()}" title="${formatRelative(item.at, now)}">${formatShort(now.getTime() - item.at.getTime())}</time>${
     soon && ends !== null
       ? html` · <span class="home-wait-soon">${formatShort(ends.getTime() - now.getTime())} left</span>`
       : ""

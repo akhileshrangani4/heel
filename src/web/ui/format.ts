@@ -62,6 +62,15 @@ export function formatShort(ms: number): string {
   return `${String(Math.floor(span / DAY))}d`;
 }
 
+/**
+ * A long name shortened in the middle, so both ends stay readable:
+ * `claude-code-h…-laptop-2`. For headings, rows and chips only; the full
+ * value goes in a `title` and on the page that shows the details.
+ */
+export function middle(value: string, head = 12, tail = 8): string {
+  return value.length <= head + tail + 1 ? value : `${value.slice(0, head)}…${value.slice(-tail)}`;
+}
+
 export function plural(n: number, noun: string): string {
   return `${n} ${noun}${n === 1 ? "" : "s"}`;
 }
