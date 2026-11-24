@@ -126,9 +126,15 @@ export const APPROVALS_CSS = `
 .ap-hint{font-size:.82rem;margin:.25rem 0 0}
 .ap-hint summary{color:var(--muted);width:fit-content}
 .ap-hint p{margin:.25rem 0 0;overflow-wrap:anywhere}
-.ap-next{margin:.9rem 0 0;padding:.75rem .85rem;border:1px solid var(--line);border-radius:10px;background:var(--surface);font-size:.88rem;overflow-wrap:anywhere}
-.ap-next h2{font-size:.9rem;margin:0 0 .25rem}
-.ap-next p{margin:0}
+.ap-next{margin:.6rem 0 0;font-size:.88rem;overflow-wrap:anywhere}
+/* The agent's own words: quiet and quoted, never cut (I-57). */
+.ap .ap-quote{margin:.6rem 0 0;padding-left:.6rem;border-left:2px solid var(--border)}
+.ap .ap-quote blockquote{display:block;margin:0;color:var(--muted);font-style:italic}
+/* A short value cut in the middle (shorten()): one line, never wrapped. */
+.ap-short{background:var(--surface);border-radius:6px;padding:.05rem .35rem;box-shadow:inset 0 0 0 1px var(--line);font-size:.85em;white-space:nowrap}
+/* One security line, marked. */
+.ap-warn{display:flex;align-items:center;gap:.45rem;margin:.6rem 0 0;padding:.4rem .65rem;border-radius:8px;background:var(--warn-bg);font-size:.85rem;font-weight:500}
+.ap-warn::before{content:"!";flex:none;display:inline-grid;place-items:center;width:1.05rem;height:1.05rem;border-radius:999px;background:var(--warn);color:var(--bg);font-size:.72rem;font-weight:700}
 .ap-facts-list{font-size:.82rem;gap:.25rem .75rem}
 
 /* Folds */
@@ -232,6 +238,7 @@ export const APPROVALS_CSS = `
 .ap-items > li{padding:.75rem 0 0;border-top:1px solid var(--line);min-width:0;overflow-wrap:anywhere}
 .ap-items > li:first-child{border-top:0;padding-top:0}
 .ap-items pre{white-space:pre-wrap;overflow-wrap:anywhere}
+.ap-items .rule-words{margin:0;font-weight:500}
 .ap-diff{margin-top:1rem;border-top:1px solid var(--line);padding-top:.5rem}
 .ap-diff > summary{padding:.35rem 0;font-weight:600;font-size:.88rem}
 
@@ -239,7 +246,11 @@ export const APPROVALS_CSS = `
 .cov-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:.25rem 1rem}
 .cov-head h2{font-size:1rem;margin:0}
 .cov-head a{font-size:.88rem;font-weight:500}
-.cov-summary{margin:.4rem 0 0;font-size:1.02rem;font-weight:600;overflow-wrap:anywhere}
+.cov-summary{margin:0;font-weight:600;overflow-wrap:anywhere}
+.cov-more{margin-top:.35rem}
+.cov-more > summary{padding:.3rem 0;color:var(--muted);font-size:.86rem;font-weight:500;justify-content:flex-start;gap:.35rem}
+.cov-more[open] > summary{color:var(--text)}
+.cov-change{margin:.6rem 0 0;font-size:.86rem}
 .cov-scope{margin:.2rem 0 0;font-size:.85rem}
 .cov-groups{display:grid;gap:.6rem;margin:.9rem 0 0}
 .cov-group{padding:.7rem .85rem;border:1px solid var(--line);border-radius:10px;min-width:0}
@@ -267,6 +278,8 @@ export const APPROVALS_CSS = `
 
 @container ap (max-width:52rem){
   .ap-layout{grid-template-columns:minmax(0,1fr);grid-template-areas:"title" "side" "main";gap:.65rem}
+  /* A rule change: read the rule before the buttons. */
+  .ap[data-kind="rules"] .ap-layout{grid-template-areas:"title" "main" "side"}
   .ap-title{font-size:1.08rem;line-height:1.45}
   .ap-title mark{padding:0 .2rem}
   .ap-side{position:static;max-height:none;overflow:visible;padding:.85rem .95rem}

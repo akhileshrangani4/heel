@@ -55,7 +55,7 @@ describe("connection requests on the approval page", () => {
     expect(page).toContain("inbox-new");
     expect(page).toMatch(/its own words; heel didn(&#39;|')t check them/);
     // The owner's read rule names no account, so it covers the new one: say so.
-    expect(page).toContain("These rules cover every account");
+    expect(page).toContain("See what it can do");
     expect(page).toContain("Runs on its own");
   });
 

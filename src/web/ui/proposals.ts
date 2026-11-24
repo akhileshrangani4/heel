@@ -1,11 +1,18 @@
 import { describeProposal } from "../../proposals/describe.ts";
 import type { RuleProposalStatus } from "../../store/schema.ts";
-import { actionBar, approvalShell, codeChip, type Dock, sideFold } from "./approval-shell.ts";
+import {
+  actionBar,
+  approvalShell,
+  codeChip,
+  type Dock,
+  shorten,
+  sideFold,
+} from "./approval-shell.ts";
 import { ceremonyButton } from "./ceremony.ts";
 import { formatRelative } from "./format.ts";
 import { type Html, html, trusted } from "./html.ts";
 import { CHEVRON_RIGHT } from "./icons.ts";
-import { badge, type FormTarget, notice, postForm, type Tone, time } from "./layout.ts";
+import { type FormTarget, notice, postForm, time } from "./layout.ts";
 import { btn } from "./shadcn/button.ts";
 
 /** One pending proposal, as the Approvals list shows it. */
@@ -21,14 +28,6 @@ export interface ProposalCard {
   createdAt: Date;
   expiresAt: Date;
 }
-
-const STATUS: Record<RuleProposalStatus, { label: string; tone: Tone | "muted" }> = {
-  pending: { label: "Rule change", tone: "warn" },
-  applied: { label: "Added", tone: "ok" },
-  rejected: { label: "Rejected", tone: "muted" },
-  superseded: { label: "Replaced", tone: "muted" },
-  expired: { label: "Expired", tone: "muted" },
-};
 
 function count(n: number): string {
   return n === 1 ? "1 rule" : `${n} rules`;
@@ -53,14 +52,14 @@ export function proposalCards(cards: readonly ProposalCard[], now: Date): Html |
           <span class="req-icon req-icon-rules">${trusted(RULES_ICON)}</span>
           <span class="req-body">
             <span class="ap-meta">
-              <span class="ap-agent">${card.origin === "heel" ? "heel" : card.agent}</span>
+              <span class="ap-agent">${card.origin === "heel" ? "heel" : shorten(card.agent, 12, 8)}</span>
               <span class="muted">${formatRelative(card.createdAt, now)}</span>
             </span>
             <a class="req-title req-link" href="/proposals/${encodeURIComponent(card.id)}"
               >${
                 card.origin === "heel"
-                  ? html`heel suggests <mark>${describeProposal(card.rules, card.hide, card.workdirs)}</mark> for ${card.agent}, from your decisions`
-                  : html`${card.agent} wants to add <mark>${describeProposal(card.rules, card.hide, card.workdirs)}</mark>${
+                  ? html`heel suggests <mark>${describeProposal(card.rules, card.hide, card.workdirs)}</mark> for ${shorten(card.agent, 12, 8)}, from your decisions`
+                  : html`${shorten(card.agent, 12, 8)} wants to add <mark>${describeProposal(card.rules, card.hide, card.workdirs)}</mark>${
                       card.rules + card.hide > 0 ? " to your rules" : " for its heel run"
                     }`
               }</a
@@ -204,42 +203,22 @@ function addLabel(props: ProposalPageProps): string {
 }
 
 /** Pure: one line of what adding it would change, in heel's words. */
-function consequence(props: ProposalPageProps): string {
-  const { effect } = props;
-  if (!effect.ok) return "It can't be added as it is.";
-  if (props.rules.length > 0) {
-    const placed = effect.placedBefore ?? null;
-    if (placed !== null) {
-      return `It goes right before ${placed.rule}, so it only decides what that rule asked you about.`;
-    }
-    return effect.existing === 0
-      ? `${props.file} has no rules yet, so these become its first.`
-      : `They go first, so they decide before your ${count(effect.existing)}.`;
-  }
-  if (props.hide.length > 0) return "Matching mail drops out of what your agents read.";
-  return `${props.agent}'s heel run could then start in, and change files in, ${props.workdirs.length === 1 ? "this folder" : "these folders"}.`;
-}
-
 function title(props: ProposalPageProps): Html {
   const what = describeProposal(props.rules.length, props.hide.length, props.workdirs.length);
-  const changesFile = props.rules.length + props.hide.length > 0;
-  const file = codeChip(props.file, `file-title-${props.id}`, false);
+  const agent = shorten(props.agent, 12, 8);
   switch (props.status) {
     case "applied":
-      return changesFile
-        ? html`Added ${what} to ${file}`
-        : html`Added ${what} for ${props.agent}'s heel run`;
+      return html`Added ${what}`;
     case "rejected":
-      return html`You rejected ${what}`;
+      return html`Rejected`;
     case "expired":
-      return html`This proposal of ${what} expired`;
+      return html`Expired`;
     case "superseded":
-      return html`A newer proposal replaced this one`;
+      return html`Replaced by a newer proposal`;
     case "pending":
-      if (props.origin === "heel") return html`heel suggests <mark>${what}</mark> for ${file}`;
-      return changesFile
-        ? html`${props.agent} wants to add <mark>${what}</mark> to ${file}`
-        : html`${props.agent} wants to add <mark>${what}</mark> for its heel run`;
+      return props.origin === "heel"
+        ? html`heel suggests <mark>${what}</mark>`
+        : html`${agent} wants to add <mark>${what}</mark>`;
   }
 }
 
@@ -247,10 +226,16 @@ function proposalDetails(props: ProposalPageProps): Html {
   return sideFold(
     "Details",
     html`<dl class="facts ap-facts-list">
+      <dt>Agent</dt>
+      <dd>${codeChip(props.agent, `agent-${props.id}`)}</dd>
       <dt>File</dt>
       <dd>${codeChip(props.file, `file-${props.id}`)}</dd>
-      <dt>Proposed</dt>
-      <dd>${time(props.createdAt)}</dd>
+      ${
+        props.reason === null || props.origin === "heel"
+          ? ""
+          : html`<dt>Why</dt>
+            <dd>${props.reason}</dd>`
+      }
       ${
         props.decision === null
           ? html`<dt>Expires</dt>
@@ -264,50 +249,37 @@ function proposalDetails(props: ProposalPageProps): Html {
   );
 }
 
+/** One proposed rule or hide entry: its words, then the agent's reason and the YAML in a fold. */
+function entry(item: { yaml: string; words: string; why: string | null }, who: string): Html {
+  return html`<li>
+    <p class="rule-words">${item.words}</p>
+    <details class="ap-fold">
+      <summary><span class="fold-label">As YAML</span></summary>
+      ${item.why === null ? "" : html`<p><span class="muted">${who}: </span>${item.why}</p>`}
+      <pre class="mono">${item.yaml}</pre>
+    </details>
+  </li>`;
+}
+
 function changesView(props: ProposalPageProps): Html {
+  const who = props.origin === "heel" ? "Why" : `${props.agent} says`;
   const rules =
     props.rules.length === 0
       ? ""
-      : html`<h2 class="ap-main-title">${props.rules.length === 1 ? "The rule" : "The rules"}</h2>
-        <ul class="ap-items" aria-label="Proposed rules">
-          ${props.rules.map(
-            (rule) => html`<li>
-              <p class="rule-words"><strong>${rule.words}</strong></p>
-              ${
-                rule.why === null
-                  ? ""
-                  : props.origin === "heel"
-                    ? html`<p><span class="muted">Why: </span>${rule.why}</p>`
-                    : html`<p><span class="muted">${props.agent} says: </span>${rule.why}</p>`
-              }
-              <details class="ap-fold">
-                <summary><span class="fold-label">As YAML</span></summary>
-                <pre class="mono">${rule.yaml}</pre>
-              </details>
-            </li>`,
-          )}
+      : html`<ul class="ap-items" aria-label="Proposed rules">
+          ${props.rules.map((rule) => entry(rule, who))}
         </ul>`;
   const hide =
     props.hide.length === 0
       ? ""
       : html`<h2 class="ap-main-title">Hide from agents</h2>
         <ul class="ap-items" aria-label="Proposed hide entries">
-          ${props.hide.map(
-            (entry) => html`<li>
-              <p class="rule-words"><strong>${entry.words}</strong></p>
-              ${entry.why === null ? "" : html`<p><span class="muted">${props.agent} says: </span>${entry.why}</p>`}
-              <details class="ap-fold">
-                <summary><span class="fold-label">As YAML</span></summary>
-                <pre class="mono">${entry.yaml}</pre>
-              </details>
-            </li>`,
-          )}
+          ${props.hide.map((item) => entry(item, who))}
         </ul>`;
   const workdirs =
     props.workdirs.length === 0
       ? ""
-      : html`<h2 class="ap-main-title">Workdirs for heel run</h2>
-        <ul class="ap-items" aria-label="Proposed workdirs">
+      : html`<ul class="ap-items" aria-label="Proposed workdirs">
           ${props.workdirs.map(
             (dir) => html`<li>
               <p>${props.agent} may run commands with heel run in <code>${dir.stored ?? dir.path}</code></p>
@@ -326,33 +298,41 @@ function changesView(props: ProposalPageProps): Html {
   const pending = props.status === "pending" && props.expiresAt > props.now;
   const changesFile = props.rules.length + props.hide.length > 0;
   const effect = props.effect;
-  const diff =
-    pending && effect.ok && changesFile
+  const folds =
+    pending && effect.ok
       ? html`<details class="ap-fold ap-diff">
-          <summary><span class="fold-label">The file after the change</span></summary>
-          ${diffLines(effect.diff)}
-        </details>`
+            <summary><span class="fold-label">Where ${props.rules.length + props.hide.length === 1 ? "it goes" : "they go"}</span></summary>
+            ${effectView(props)}
+          </details>
+          ${
+            changesFile
+              ? html`<details class="ap-fold ap-diff">
+                  <summary><span class="fold-label">The file after the change</span></summary>
+                  ${diffLines(effect.diff)}
+                </details>`
+              : ""
+          }`
       : "";
-  return html`${rules}${hide}${workdirs}${diff}`;
+  return html`${rules}${hide}${workdirs}${folds}`;
 }
 
 /** One proposal: what the agent asks for, what it would change, and the controls. */
 export function proposalPage(props: ProposalPageProps): Html {
-  const status = STATUS[props.status];
   const changesFile = props.rules.length + props.hide.length > 0;
   const pending = props.status === "pending" && props.expiresAt > props.now;
+  // The agent's one line of why: its reason, or the only rule's reason when it gave just that.
+  const said =
+    props.reason ??
+    (props.rules.length + props.hide.length === 1
+      ? ((props.rules[0] ?? props.hide[0])?.why ?? null)
+      : null);
   const reason =
-    props.origin === "heel"
-      ? html`<p class="ap-drafted muted">
-          heel drafted this from requests you decided in the last 30 days, kept to what they had
-          in common.
-        </p>`
-      : props.reason === null
-        ? ""
-        : html`<figure class="reason">
-            <figcaption>${props.agent} says<span class="visually-hidden"> (its own words; heel didn't check them)</span>:</figcaption>
-            <blockquote>${props.reason}</blockquote>
-          </figure>`;
+    props.origin === "heel" || said === null
+      ? ""
+      : html`<figure class="reason ap-quote">
+          <figcaption class="visually-hidden">${props.agent} says (its own words; heel didn't check them):</figcaption>
+          <blockquote>${said}</blockquote>
+        </figure>`;
   const helpId = "proposal-passkey";
   const decide = pending
     ? html`<section class="ap-decide" aria-label="Decide">
@@ -375,17 +355,12 @@ export function proposalPage(props: ProposalPageProps): Html {
           ),
           helpId,
           help: "Your passkey confirms it. Nothing changes until then.",
-          showHelp: true,
         })}
       </section>`
     : "";
   const done =
-    props.status === "applied"
-      ? html`<p class="ap-next-action">${
-          changesFile
-            ? html`<a class="${btn("outline")}" href="/rules/history">See the rule history</a>`
-            : html`<a class="${btn("outline")}" href="/approvals">Back to Approvals</a>`
-        }</p>`
+    props.status === "applied" && changesFile
+      ? html`<p class="ap-next-action"><a class="${btn("outline")}" href="/rules/history">See the rule history</a></p>`
       : props.status === "pending"
         ? ""
         : html`<p class="ap-next-action"><a class="${btn("outline")}" href="/approvals">Back to Approvals</a></p>`;
@@ -394,28 +369,24 @@ export function proposalPage(props: ProposalPageProps): Html {
       ? changesFile
         ? "heel is using them now."
         : `${props.agent}'s heel run can work there now.`
-      : props.status === "rejected"
-        ? "Nothing was added."
-        : pending
-          ? consequence(props)
-          : "Nothing was added.";
-  const when = pending
-    ? html`Expires ${formatRelative(props.expiresAt, props.now)}`
-    : props.decision === null
-      ? ""
-      : html`By ${props.decision.by}, ${formatRelative(props.decision.at, props.now)}`;
+      : pending
+        ? props.origin === "heel"
+          ? "heel drafted this from requests you decided."
+          : ""
+        : "Nothing was added.";
+  const expiring =
+    pending && props.expiresAt.getTime() - props.now.getTime() < 24 * 3_600_000
+      ? html`<span class="badge" data-tone="warn">Expires ${formatRelative(props.expiresAt, props.now)}</span>`
+      : "";
   return approvalShell({
     kind: "rules",
-    crumb: "Rule change",
+    crumb: "",
     dock: props.dock ?? "inline",
     title: title(props),
     why,
-    status: html`${badge(status.label, status.tone)} <span class="muted">${when}</span>`,
+    status: expiring,
     side: html`${reason}${decide}${done}
-      <div class="ap-folds">
-        ${pending && props.effect.ok ? sideFold("Where they go", effectView(props)) : ""}
-        ${proposalDetails(props)}
-      </div>`,
+      <div class="ap-folds">${proposalDetails(props)}</div>`,
     main: changesView(props),
   });
 }

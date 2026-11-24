@@ -20,14 +20,14 @@ export type Dock = "pinned" | "inline";
 
 export interface ShellProps {
   kind: "call" | "connection" | "rules";
-  /** The breadcrumb's last part: "Request", "Connection", "Rule change". */
+  /** The breadcrumb's last part ("Request"), or "" for just the link back. */
   crumb: string;
   /** What is asked, or what happened once decided: the page's one h1. */
   title: Html;
   /** One line of why it matters, in heel's words. */
   why?: Html | string;
-  /** The status badge and one short muted line beside it. */
-  status: Html;
+  /** The status badge and one short muted line beside it; left out when it would repeat the page. */
+  status?: Html | "";
   /** The agent's words, notices, the decision and the folds. */
   side: Html;
   /** The details; omitted when there are none. */
@@ -48,8 +48,12 @@ export function approvalShell(props: ShellProps): Html {
   >
     <nav class="ap-crumbs" aria-label="Breadcrumb">
       <a href="/approvals">${trusted(BACK)}Approvals</a>
-      <span class="muted" aria-hidden="true">/</span>
-      <span aria-current="page">${props.crumb}</span>
+      ${
+        props.crumb === ""
+          ? ""
+          : html`<span class="muted" aria-hidden="true">/</span>
+            <span aria-current="page">${props.crumb}</span>`
+      }
     </nav>
     <div class="ap-layout">
       <header class="ap-head">
@@ -57,12 +61,20 @@ export function approvalShell(props: ShellProps): Html {
         ${props.why ? html`<p class="ap-why">${props.why}</p>` : ""}
       </header>
       <aside class="ap-side" aria-label="Decision">
-        <p class="ap-status">${props.status}</p>
+        ${props.status ? html`<p class="ap-status">${props.status}</p>` : ""}
         ${props.side}
       </aside>
       ${main === "" ? "" : html`<div class="ap-main">${main}</div>`}
     </div>
   </article>`;
+}
+
+/**
+ * A long name, alias or host cut in the middle ("a234567890-b…f23456789"),
+ * for titles and rows. The full value is always on the page too, in Details.
+ */
+export function shorten(text: string, head = 12, tail = 8): string {
+  return text.length <= head + tail + 1 ? text : `${text.slice(0, head)}…${text.slice(-tail)}`;
 }
 
 /**

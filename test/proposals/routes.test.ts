@@ -241,7 +241,7 @@ describe("proposed workdirs on the approval page", () => {
     expect(listed).toContain("a workdir");
     expect(listed).toContain("for its heel run");
     const page = await (await h.fetch(`/proposals/${proposed.proposalId}`, { as: owner })).text();
-    expect(page).toContain("Workdirs for heel run");
+    expect(page).toContain("wants to add <mark>a workdir</mark>");
     expect(page).toContain("may run commands with heel run in");
     expect(page).toContain(project);
     expect(page).toContain("to run your test suite");

@@ -209,7 +209,7 @@ describe("the approval page in a browser", () => {
     if (!proposed.ok) throw new Error(proposed.problems.join("; "));
     await page.goto(`${origin}/approvals`);
     await page.getByRole("link", { name: /wants to add a new rule/ }).click();
-    await page.locator(".ap-items").getByText("so I can answer the vendor thread").waitFor();
+    await page.locator(".ap-quote").getByText("so I can answer the vendor thread").waitFor();
     await shot("proposal");
     await page.getByRole("button", { name: "Add these rules" }).click();
     await page.waitForURL(/\?applied/);
