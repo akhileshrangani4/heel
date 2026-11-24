@@ -101,7 +101,7 @@ describe("ApprovalRequest", () => {
         before: [{ account: "gmail-work", tool: "search", decision: "allow" }],
       },
     });
-    expect(text(doc.querySelector(".ap-taskrow"))).toContain("Step 2 of a longer task");
+    expect(text(doc.querySelector(".ap-taskrow"))).toContain("Part of a longer task: step 2");
     const section = doc.querySelector("section.ap-task");
     if (section === null) throw new Error("no task section");
     expect(text(section)).toContain("Part of a longer task");

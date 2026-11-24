@@ -503,7 +503,7 @@ function taskRow(request: ApprovalRequestView): Html | "" {
   if (script === null) return "";
   return html`<p class="ap-taskrow">
     <span class="ap-taskrow-icon">${trusted(ICONS.steps)}</span>
-    <span>Step ${String(script.before.length + 1)} of a longer task</span>
+    <span>Part of a longer task: step ${String(script.before.length + 1)}</span>
     <a href="#task-${request.id}">See steps</a>
   </p>`;
 }
@@ -520,7 +520,7 @@ function taskView(request: ApprovalRequestView, background: boolean, folds: Fold
   const step = (tool: string, account: string) =>
     html`${cap(toolPhrase(tool))}${account === request.account ? "" : html` <span class="muted">on ${account}</span>`}`;
   return html`<section class="ap-task" id="${id}" aria-labelledby="${id}-title">
-    <h2 id="${id}-title" class="ap-content-title">Part of a longer task</h2>
+    <h2 id="${id}-title" class="visually-hidden">Part of a longer task</h2>
     <ol class="ap-steps">
       ${script.before.map(
         (c) =>
