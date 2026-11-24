@@ -33,8 +33,10 @@ import {
   AGENT_PAUSE,
   APPROVED_REQUEST,
   APPROVED_ROWS,
+  DENIED_DRAFT_REQUEST,
   DENIED_REQUEST,
   DENIED_ROWS,
+  DRAFT_REQUEST,
   EXECUTED_REQUEST,
   EXPIRED_REQUEST,
   EXPIRED_ROWS,
@@ -43,6 +45,7 @@ import {
   HINTED_REQUEST,
   HINTS_UNAVAILABLE_REQUEST,
   HTTP_REQUEST,
+  LONG_EMAIL_REQUEST,
   MERGE_REQUEST,
   NOW,
   ORG_REQUEST,
@@ -53,6 +56,8 @@ import {
   PENDING_REQUEST,
   PENDING_ROWS,
   REVOKED_STANDING,
+  SPARSE_REQUEST,
+  TASK_REQUEST,
 } from "./fixtures.ts";
 import {
   BROKEN_RULES_TEXT,
@@ -158,6 +163,7 @@ const approval = (
   request: Parameters<typeof approvalRequest>[0]["load"],
   pause: PauseNotice | null = null,
   viewer: Viewer = ALICE,
+  extra: Partial<Parameters<typeof approvalRequest>[0]> = {},
 ): Story => ({
   component: "approval-request",
   state,
@@ -167,8 +173,17 @@ const approval = (
   current: "approvals",
   pause,
   body: () =>
-    approvalRequest({ now: NOW, load: request, pause, onDecide: PREVIEW_CEREMONY.decide }),
+    approvalRequest({
+      now: NOW,
+      load: request,
+      pause,
+      onDecide: PREVIEW_CEREMONY.decide,
+      ...extra,
+    }),
 });
+
+/** The form a waiting task's "Cancel the task" posts to, as the route builds it. */
+const STOP_TASK = { stop: form("/approvals/apr_Tsk3sTp9Lm2/stop-script") };
 
 const pending = (
   state: RequiredState,
@@ -290,6 +305,32 @@ export const STORIES: readonly Story[] = [
   approval("http", "An HTTP proxy write, body decoded", { ok: true, request: HTTP_REQUEST }),
   approval("error", "The request couldn't be loaded", { ok: false, message: LOAD_ERROR }),
   approval("executed", "Ran once", { ok: true, request: EXECUTED_REQUEST }),
+  approval("draft", "An email draft, as in the owner's report", {
+    ok: true,
+    request: DRAFT_REQUEST,
+  }),
+  approval("draft-denied", "The same draft, denied", { ok: true, request: DENIED_DRAFT_REQUEST }),
+  approval(
+    "task",
+    "Step 3 of a longer task (run_code), waiting",
+    { ok: true, request: TASK_REQUEST },
+    null,
+    ALICE,
+    { parked: STOP_TASK },
+  ),
+  approval(
+    "task-background",
+    "Step 3 of a background task, waiting",
+    { ok: true, request: TASK_REQUEST },
+    null,
+    ALICE,
+    { parked: STOP_TASK, background: true },
+  ),
+  approval("long-email", "Forty-one recipients, a long subject and body", {
+    ok: true,
+    request: LONG_EMAIL_REQUEST,
+  }),
+  approval("sparse", "A tool call with many empty fields", { ok: true, request: SPARSE_REQUEST }),
   approval(
     "org-ask",
     "Org ask: approve once only",
