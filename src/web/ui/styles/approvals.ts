@@ -94,21 +94,27 @@ export const APPROVALS_CSS = `
    Every approval page uses it: no on the left, yes on the right, side by side at
    every width. Slots: .ap-bar-yes, .ap-bar-no; note: .ap-bar-note. On phones,
    .ap[data-dock="pinned"] .ap-bar[data-dock] pins it to the bottom in place of the tab bar. */
-.ap-bar{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:.6rem}
-.ap-bar > span{display:flex;min-width:0}
+.ap-bar{display:flex;flex-wrap:wrap;gap:.6rem .6rem}
+.ap-bar > span{display:flex;flex:1 1 0;min-width:0}
 .ap-bar-no{order:1}
 .ap-bar-yes{order:2}
 .ap-bar form{display:flex;flex:1;margin:0;min-width:0}
-.ap-bar .btn{width:100%;flex:1;min-width:0;white-space:normal;height:auto;min-height:2.5rem}
+.ap-bar .btn{width:100%;flex:1;min-width:0;height:2.5rem;white-space:nowrap;overflow:hidden}
+/* The bar's one-line status: always holds its line (even empty), so the bar keeps one height. */
+.ap-bar .ap-bar-status,.ap-bar .ap-bar-status:empty{display:block;order:3;flex:1 0 100%;height:1.2rem;margin:-.25rem 0 0;font-size:.8rem;line-height:1.2rem;text-align:center;color:var(--muted);white-space:nowrap;overflow:hidden}
+.ap-bar .ap-bar-status[data-tone="error"]{color:var(--danger)}
+.ap-bar .ap-bar-status[data-tone="ok"]{color:var(--ok)}
 .ap-bar [data-heel-ceremony="deny"]{background:var(--bg)}
 .ap-bar-note{margin:.45rem 0 0;font-size:.8rem;text-align:center}
 @media (max-width:55.99rem){
   /* Pinned: the bar takes the tab bar's place at the bottom of a phone screen while a decision is open. */
   .ap[data-dock="pinned"] .ap-bar[data-dock]{position:fixed;left:0;right:0;bottom:0;z-index:31;padding:.75rem max(.75rem,var(--heel-safe-right,env(safe-area-inset-right))) calc(.75rem + var(--heel-safe-bottom,env(safe-area-inset-bottom))) max(.75rem,var(--heel-safe-left,env(safe-area-inset-left)));background:color-mix(in srgb,var(--bg) 94%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--line);box-shadow:0 -10px 30px -18px rgb(0 0 0 / .35)}
-  .ap[data-dock="pinned"] .ap-bar[data-dock] .btn{min-height:2.75rem}
+  .ap[data-dock="pinned"] .ap-bar[data-dock] .btn{height:2.75rem}
   body.app:has(.ap[data-dock="pinned"] .ap-bar[data-dock]) > .site nav{display:none}
-  body.app:has(.ap[data-dock="pinned"] .ap-bar[data-dock]){padding-bottom:calc(5rem + var(--heel-safe-bottom,env(safe-area-inset-bottom)))}
-  body:has(.ap[data-dock="pinned"] .ap-bar[data-dock]) #heel-ceremony-status:not(:empty){bottom:calc(5.5rem + var(--heel-safe-bottom,env(safe-area-inset-bottom)))}
+  /* With the bar pinned, a side panel holding nothing else needs no card. */
+  .ap[data-dock="pinned"] .ap-side:not(:has(input,.notice,.ap-warn,.ap-status,.ap-state,.ap-risk,.reason,details)){padding:0;border:0;background:none;box-shadow:none}
+  body.app:has(.ap[data-dock="pinned"] .ap-bar[data-dock]){padding-bottom:calc(6.5rem + var(--heel-safe-bottom,env(safe-area-inset-bottom)))}
+  body:has(.ap[data-dock="pinned"] .ap-bar[data-dock]) #heel-ceremony-status:not(:empty){bottom:calc(7rem + var(--heel-safe-bottom,env(safe-area-inset-bottom)))}
 }
 
 /* Code chips: names, URLs and ids wrap anywhere, never cut; a copy button beside them. */
@@ -123,7 +129,6 @@ export const APPROVALS_CSS = `
 .ap-key-field label{display:block;font-weight:600;font-size:.88rem;margin:0 0 .3rem}
 .ap-key-field input{display:block;width:100%;min-width:0;height:2.5rem;padding:0 .7rem;border:1px solid var(--border);border-radius:8px;background:var(--bg)}
 .ap-key-field p{margin:.35rem 0 0;font-size:.82rem}
-.ap-next{margin:.6rem 0 0;font-size:.88rem;overflow-wrap:anywhere}
 /* The key's label with its "Where do I get this key?" fold on the same line. */
 .ap-key-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:.15rem .75rem;margin:0 0 .3rem}
 .ap-key-head label{margin:0}

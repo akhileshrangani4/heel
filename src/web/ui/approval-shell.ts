@@ -63,10 +63,15 @@ export function approvalShell(props: ShellProps): Html {
         ${props.quote ?? ""}
         ${props.why ? html`<p class="ap-why">${props.why}</p>` : ""}
       </header>
-      <aside class="ap-side" aria-label="Decision">
-        ${props.status ? html`<p class="ap-status">${props.status}</p>` : ""}
-        ${props.side}
-      </aside>
+      ${
+        // No empty panel when a decided page has nothing left to do.
+        !props.status && String(props.side).trim() === ""
+          ? ""
+          : html`<aside class="ap-side" aria-label="Decision">
+              ${props.status ? html`<p class="ap-status">${props.status}</p>` : ""}
+              ${props.side}
+            </aside>`
+      }
       ${main === "" ? "" : html`<div class="ap-main">${main}</div>`}
     </div>
   </article>`;
@@ -132,9 +137,12 @@ export function actionBar(props: {
   /** Pin it to the bottom of a phone screen when the page docks (false for a locked bar). */
   dock?: boolean;
 }): Html {
-  return html`<div class="ap-bar"${flag("data-dock", props.dock ?? true)}>
+  // `data-heel-bar`: the passkey script writes this bar's progress and errors to its
+  // own one-line status slot, which always holds its line, so the bar never grows.
+  return html`<div class="ap-bar" data-heel-bar${flag("data-dock", props.dock ?? true)}>
       ${props.yes === "" ? "" : html`<span class="ap-bar-yes">${props.yes}</span>`}
       ${props.no === "" ? "" : html`<span class="ap-bar-no">${props.no}</span>`}
+      <p class="ap-bar-status" data-heel-bar-status role="status" aria-live="polite"></p>
     </div>
     <p id="${props.helpId}" class="${props.showHelp === true ? "ap-bar-note muted" : "visually-hidden"}">
       ${props.help}
