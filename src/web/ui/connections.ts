@@ -50,6 +50,8 @@ export interface ConnectionsProps {
     /** Admins name approvers (spec: Teams); owners see who they are. */
     admin?: boolean;
   };
+  /** The add-a-connection dialog open on load, optionally with a service picked (preview states). */
+  connect?: { open?: boolean; picked?: string };
 }
 
 function outcomeNotice(outcome: ConnectionsOutcome): Html | "" {
@@ -90,48 +92,120 @@ function outcomeNotice(outcome: ConnectionsOutcome): Html | "" {
   }
 }
 
-/** What can be connected from here: value, name, one line, and what it needs. */
+/**
+ * What can be connected from here: value, name, one line, what it needs,
+ * the name it gets unless you change it, and for a key service where the
+ * key comes from (only the pages we're sure of; none of heel's service
+ * definitions carries one yet).
+ */
 const SERVICE_CHOICES = [
-  { value: "github", name: "GitHub", line: "A personal access token", need: "key" },
-  { value: "gmail", name: "Gmail", line: "Sign in with Google after", need: "signin" },
+  {
+    value: "github",
+    name: "GitHub",
+    line: "A fine-grained personal access token",
+    need: "key",
+    alias: "github",
+    keyPage: "https://github.com/settings/personal-access-tokens/new",
+  },
+  {
+    value: "gmail",
+    name: "Gmail",
+    line: "Sign in with Google after",
+    need: "signin",
+    alias: "gmail",
+  },
   {
     value: "google-calendar",
     name: "Google Calendar",
     line: "Sign in with Google after",
     need: "signin",
+    alias: "calendar",
   },
-  { value: "outlook", name: "Outlook", line: "Sign in with Microsoft after", need: "signin" },
-  { value: "slack", name: "Slack", line: "A bot token", need: "key" },
-  { value: "linear", name: "Linear", line: "An API key", need: "key" },
-  { value: "notion", name: "Notion", line: "An integration token", need: "key" },
-  { value: "stripe", name: "Stripe", line: "A restricted key", need: "key" },
-  { value: "mcp", name: "MCP server", line: "Its URL; sign in after if it asks", need: "mcp" },
+  {
+    value: "outlook",
+    name: "Outlook",
+    line: "Sign in with Microsoft after",
+    need: "signin",
+    alias: "outlook",
+  },
+  {
+    value: "slack",
+    name: "Slack",
+    line: "A bot token (xoxb-…) from your Slack app",
+    need: "key",
+    alias: "slack",
+    keyPage: "https://api.slack.com/apps",
+  },
+  {
+    value: "linear",
+    name: "Linear",
+    line: "A personal API key (lin_api_…)",
+    need: "key",
+    alias: "linear",
+  },
+  {
+    value: "notion",
+    name: "Notion",
+    line: "An internal integration secret",
+    need: "key",
+    alias: "notion",
+  },
+  {
+    value: "stripe",
+    name: "Stripe",
+    line: "A restricted key (rk_…)",
+    need: "key",
+    alias: "stripe",
+    keyPage: "https://dashboard.stripe.com/apikeys",
+  },
+  {
+    value: "mcp",
+    name: "MCP server",
+    line: "Its URL; sign in after if it asks",
+    need: "mcp",
+    alias: "",
+  },
 ] as const;
 
+/** lucide's chevron-left, for Back. */
+const CHEVRON_LEFT = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>`;
+
 /**
- * The add-a-connection form, in its dialog. Services are radio tiles; which
- * fields show follows the picked tile in CSS alone (`:has`), so it needs no
- * script. A div, not a form: nothing here can ever submit, so the key can't
- * end up in a URL. The connect ceremony reads every field in it.
+ * Picking a tile fills in the name (until you type your own) and, with a
+ * mouse, focuses it. On a touch screen it doesn't focus: the keyboard would
+ * cover the Connect button. Back returns to the tiles.
  */
-function connectForm(): Html {
+const PICK_SCRIPT = `(function(form){var r=form.querySelector('.svc-radio:checked');var n=document.getElementById('connect-alias');if(!r||!n)return;if(!n.value||n.dataset.auto==='1'){n.value=r.dataset.alias||'';n.dataset.auto=n.value?'1':''}var p=form.closest('.ui-dialog-panel');if(p)p.scrollTop=0;if(matchMedia('(pointer: fine)').matches)n.focus()})(this.closest('.connect-form'))`;
+const BACK_SCRIPT = `(function(form){form.querySelectorAll('.svc-radio').forEach(function(r){r.checked=false});var t=form.querySelector('.svc-radio');if(t)t.focus()})(this.closest('.connect-form'))`;
+
+/**
+ * The add-a-connection form, in its dialog, in two steps. Step 1 is the
+ * service tiles; picking one is step 2: Back and the service as a chip, the
+ * name, the key or URL it needs, and the Connect button pinned to the
+ * bottom of the dialog. Which step shows follows the picked radio in CSS
+ * alone (`:has`); the script only fills in the name and moves focus. A
+ * div, not a form: nothing here can ever submit, so the key can't end up in
+ * a URL. The connect ceremony reads every field in it.
+ */
+function connectForm(picked: string | null): Html {
+  const chosen = SERVICE_CHOICES.find((c) => c.value === picked);
   return html`<div id="connect-form" class="connect-form">
     <input type="hidden" name="op" value="connect" />
-    <fieldset class="svc-grid">
-      <legend class="visually-hidden">Service</legend>
+    <fieldset class="svc-grid" onchange="${PICK_SCRIPT}">
+      <legend class="connect-step-title">Pick a service</legend>
+      <button type="button" class="connect-back" onclick="${BACK_SCRIPT}">${trusted(CHEVRON_LEFT)}Back</button>
       ${SERVICE_CHOICES.map(
         (c) => html`<label class="svc-tile">
-          <input type="radio" class="svc-radio" name="service" value="${c.value}" data-need="${c.need}" />
+          <input type="radio" class="svc-radio" name="service" value="${c.value}" data-need="${c.need}" data-alias="${c.alias}"${c.value === picked ? trusted(" checked") : ""} />
           ${serviceLogo(c.value, c.name)}
           <span class="svc-tile-text"><span class="svc-tile-name">${c.name}</span><span class="svc-tile-line">${c.line}</span></span>
         </label>`,
       )}
     </fieldset>
-    <p class="connect-pick muted">Pick a service to connect.</p>
-    <div class="connect-fields">
+    <div id="connect-fields" class="connect-fields">
       <div class="connect-field">
         <label for="connect-alias">Name</label>
-        <input id="connect-alias" name="alias" maxlength="64" autocomplete="off" placeholder="github-work" autocapitalize="off" autocorrect="off" spellcheck="false" />
+        <input id="connect-alias" name="alias" maxlength="64" autocomplete="off" placeholder="notes" autocapitalize="off" autocorrect="off" spellcheck="false" value="${chosen?.alias ?? ""}" oninput="this.dataset.auto=''"${chosen?.alias ? trusted(' data-auto="1"') : ""} />
         <p class="muted">How rules and tools call it.</p>
       </div>
       <div class="connect-field" data-for="mcp">
@@ -148,19 +222,28 @@ function connectForm(): Html {
       <div class="connect-field" data-for="key">
         <label for="connect-key">Key or token</label>
         <input id="connect-key" name="key" type="password" autocomplete="off" />
-        <p class="muted">It goes only to heel's vault, checked with the service first.</p>
+        ${SERVICE_CHOICES.filter((c) => c.need === "key").map(
+          (c) =>
+            html`<p class="muted" data-help-for="${c.value}">${c.line}.${
+              "keyPage" in c
+                ? html` <a href="${c.keyPage}" target="_blank" rel="noopener noreferrer">Get one</a>`
+                : ""
+            }</p>`,
+        )}
       </div>
       <p class="muted" data-for="signin">You sign in right after, on this page.</p>
-      <p id="connect-status" class="connect-status" role="status" aria-live="polite"></p>
-      ${ceremonyButton({
-        callback: { handler: "manageAccount" },
-        intent: "manage-account",
-        label: "Connect with your passkey",
-        tone: "primary",
-        binding: {},
-        optionsFrom: "connect-form",
-        statusId: "connect-status",
-      })}
+      <div class="connect-go">
+        <p id="connect-status" class="connect-status" role="status" aria-live="polite"></p>
+        ${ceremonyButton({
+          callback: { handler: "manageAccount" },
+          intent: "manage-account",
+          label: "Connect with your passkey",
+          tone: "primary",
+          binding: {},
+          optionsFrom: "connect-form",
+          statusId: "connect-status",
+        })}
+      </div>
     </div>
   </div>`;
 }
@@ -507,9 +590,9 @@ export function connectionsPage(props: ConnectionsProps): Html {
         ? dialog({
             id: "connect-another",
             title: "Add a connection",
-            description: "Pick a service, name it, and confirm with your passkey.",
             wide: true,
-            body: html`${connectForm()} ${CLI_FOLD}`,
+            ...(props.connect?.open ? { open: true } : {}),
+            body: html`${connectForm(props.connect?.picked ?? null)} ${CLI_FOLD}`,
           })
         : html`<section class="card conn-add">
             <h2>Connect from the command line</h2>
