@@ -53,7 +53,8 @@ self.addEventListener("push", (event) => {
       data: { url: data.url },
       icon: "/icon-180.png",
       badge: "/icon-180.png",
-      tag: data.url,
+      tag: data.tag || data.url,
+      renotify: false,
     }),
   );
 });

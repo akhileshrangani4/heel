@@ -32,6 +32,9 @@ import { approvalUrl, type Notice, nextAttemptAfter, proposalUrl, requestUrl } f
  * - dropped, when there's nothing left to tell: the request was decided or
  *   expired, the push subscription is gone, or the channel was turned off.
  *
+ * Each outcome is logged with the delivery's id, channel and subject, never
+ * its target or what it said.
+ *
  * Nothing here can change a request or a proposal. A notification that
  * never arrives leaves it pending and listed on the approval page.
  */
@@ -174,40 +177,38 @@ export class Notifier {
   }
 
   async #deliver(delivery: DeliveryRow): Promise<void> {
-    const { db } = this.#deps;
+    const { db, log } = this.#deps;
     const notice = this.#noticeFor(delivery);
-    if (notice === null) {
-      updateDelivery(db, delivery.id, { status: "dropped", reason: "request_settled" });
-      return;
-    }
+    if (notice === null) return this.#drop(delivery, "request_settled");
     const sender = this.#senders.get(delivery.channel);
-    if (sender === undefined) {
-      updateDelivery(db, delivery.id, { status: "dropped", reason: "channel_off" });
-      return;
-    }
+    if (sender === undefined) return this.#drop(delivery, "channel_off");
     const target = this.#targetOf(delivery);
-    if (target === null) {
-      updateDelivery(db, delivery.id, { status: "dropped", reason: "subscription_removed" });
-      return;
-    }
+    if (target === null) return this.#drop(delivery, "subscription_removed");
 
     const outcome = await sender.send(target, notice);
     switch (outcome.kind) {
       case "sent":
         updateDelivery(db, delivery.id, { status: "sent", at: this.#now() });
+        log.info(logFields(delivery), "notification sent");
         return;
       case "gone":
         if (target.channel === "web_push") removePushSubscription(db, delivery.target);
-        updateDelivery(db, delivery.id, { status: "dropped", reason: outcome.reason });
+        this.#drop(delivery, outcome.reason);
         return;
       case "retry":
-        this.#deps.log.warn(
-          { deliveryId: delivery.id, channel: delivery.channel, reason: outcome.reason },
+        log.warn(
+          { ...logFields(delivery), reason: outcome.reason },
           "notification not delivered; retrying",
         );
         this.#retry(delivery, outcome.reason);
         return;
     }
+  }
+
+  /** Stops trying a delivery that has nothing left to tell, and says why in the log. */
+  #drop(delivery: DeliveryRow, reason: string): void {
+    updateDelivery(this.#deps.db, delivery.id, { status: "dropped", reason });
+    this.#deps.log.warn({ ...logFields(delivery), reason }, "notification dropped");
   }
 
   /** What to say about the delivery's subject, or null when it no longer waits. */
@@ -226,7 +227,10 @@ export class Notifier {
         kind: "connection",
         agent: agent?.name ?? "An agent",
         service: serviceLabel(request.details),
+        reason: request.why,
         url: requestUrl(publicUrl, request.id),
+        // Asking again for the same name replaces the waiting request, and its notification.
+        tag: `connection:${request.agentId}:${request.details.alias}`,
       };
     }
     if (delivery.proposalId !== null) {
@@ -244,7 +248,11 @@ export class Notifier {
         rules: proposal.rules.length,
         hide: proposal.hide.length,
         workdirs: proposal.workdirs.length,
+        reason: proposal.reason,
         url: proposalUrl(publicUrl, proposal.id),
+        // An agent's new proposal replaces its waiting one; heel's suggestions stand alone.
+        tag:
+          proposal.origin === "agent" ? `proposal:${proposal.agentId}` : `proposal:${proposal.id}`,
       };
     }
     if (delivery.approvalId === null) return null;
@@ -254,9 +262,14 @@ export class Notifier {
     return {
       kind: "approval",
       agent: agentName,
-      what: row.call.action ?? row.tool,
+      action: row.call.action ?? null,
+      tool: row.tool,
+      method: row.call.http?.method ?? null,
       account: row.account,
+      reason: row.reason,
       url: approvalUrl(publicUrl, row.id),
+      // Repeats of the call join this request (I-51), so its id is the one thing decided.
+      tag: `approval:${row.id}`,
     };
   }
 
@@ -285,4 +298,17 @@ export class Notifier {
         : { status: "pending", attempts, nextAttemptAt: next, reason },
     );
   }
+}
+
+/** What the log says about a delivery: which one, where, and about what. Never its target. */
+function logFields(delivery: DeliveryRow): Record<string, string> {
+  const subject =
+    delivery.requestId !== null
+      ? { requestId: delivery.requestId }
+      : delivery.proposalId !== null
+        ? { proposalId: delivery.proposalId }
+        : delivery.approvalId !== null
+          ? { approvalId: delivery.approvalId }
+          : {};
+  return { deliveryId: delivery.id, channel: delivery.channel, ...subject };
 }

@@ -2,12 +2,13 @@ import { describe, expect, it } from "vitest";
 import { createAdminHandler } from "../../src/admin/handlers.ts";
 import type { ChannelSender, DeliveryTarget, SendOutcome } from "../../src/notify/channels.ts";
 import type { Notice } from "../../src/notify/message.ts";
-import { RETRY_DELAYS_MS } from "../../src/notify/message.ts";
+import { noticeText, RETRY_DELAYS_MS } from "../../src/notify/message.ts";
 import { Notifier } from "../../src/notify/notifier.ts";
 import { LOCAL_OWNER_NAME } from "../../src/store/install.ts";
 import {
   deliveriesFor,
   findPushSubscription,
+  removePushSubscription,
   savePushSubscription,
   setUserEmail,
 } from "../../src/store/notifications.ts";
@@ -43,19 +44,34 @@ function fakeSender(
   };
 }
 
-function notifierFor(h: ApprovalHarness, senders: ChannelSender[]): Notifier {
+function notifierFor(
+  h: ApprovalHarness,
+  senders: ChannelSender[],
+  log = captureLogger().logger,
+): Notifier {
   return new Notifier({
     db: h.t.db,
     orgId: h.t.orgId,
-    log: captureLogger().logger,
+    log,
     publicUrl: PUBLIC_URL,
     senders,
     now: () => h.clock.now,
   });
 }
 
+/** The log lines a captured logger wrote with this message. */
+function linesSaying(output: string, msg: string): Record<string, unknown>[] {
+  return output
+    .split("\n")
+    .filter((line) => line !== "")
+    .map((line) => JSON.parse(line) as Record<string, unknown>)
+    .filter((line) => line["msg"] === msg);
+}
+
 /** The owner with an email and one phone subscribed, and a pending send waiting on them. */
-async function ownerWithRequest(): Promise<{ h: ApprovalHarness; approvalId: string }> {
+async function ownerWithRequest(
+  reason?: string,
+): Promise<{ h: ApprovalHarness; approvalId: string }> {
   const h = approvalHarness({ owner: ASK_SENDS });
   setUserEmail(h.t.db, h.t.orgId, LOCAL_OWNER_NAME, "owner@example.com");
   savePushSubscription(h.t.db, {
@@ -66,7 +82,9 @@ async function ownerWithRequest(): Promise<{ h: ApprovalHarness; approvalId: str
     auth: "auth-secret",
     now: h.clock.now,
   });
-  const approvalId = pendingId(await h.call({ args: SEND }));
+  const approvalId = pendingId(
+    await h.call({ args: SEND, ...(reason !== undefined && { reason }) }),
+  );
   return { h, approvalId };
 }
 
@@ -106,8 +124,8 @@ describe("approval notifications", () => {
     expect(push.sent).toHaveLength(1);
   });
 
-  it("I-56: say who, what and where, and link to the page, never the call's contents", async () => {
-    const { h, approvalId } = await ownerWithRequest();
+  it("I-56: say what, where and who, with the agent's reason, and link to the page, never the call's contents", async () => {
+    const { h, approvalId } = await ownerWithRequest("Tell the vendor the numbers are in");
     const email = fakeSender("email");
     const notifier = notifierFor(h, [email]);
 
@@ -118,13 +136,24 @@ describe("approval notifications", () => {
     expect(notice).toEqual({
       kind: "approval",
       agent: "inbox-bot",
-      what: "email.send",
+      action: "email.send",
+      tool: "send",
+      method: null,
       account: "gmail-work",
+      reason: "Tell the vendor the numbers are in",
       url: `https://heel.example.com/approvals/${approvalId}`,
+      tag: `approval:${approvalId}`,
+    });
+    if (notice === undefined) throw new Error("a notice was sent");
+    expect(noticeText(notice)).toEqual({
+      title: "Send an email from gmail-work?",
+      body: "inbox-bot: Tell the vendor the numbers are in",
     });
     // The arguments (the recipient, the subject) appear nowhere in what was sent.
     // (The approval id is random and can itself contain "Q3", so it's taken out first.)
-    expect(JSON.stringify(email.sent).replaceAll(approvalId, "")).not.toMatch(/bob@vendor\.com|Q3/);
+    expect(JSON.stringify([email.sent, noticeText(notice)]).replaceAll(approvalId, "")).not.toMatch(
+      /bob@vendor\.com|Q3/,
+    );
   });
 
   it("send an org ask to the admins, not to the account's owner", async () => {
@@ -210,6 +239,77 @@ describe("approval notifications", () => {
       status: "dropped",
       lastError: "statusCode 410",
     });
+  });
+
+  it("log every delivery they drop, with why, and never where it was going", async () => {
+    const { h, approvalId } = await ownerWithRequest();
+    const log = captureLogger();
+    const retry = () => ({ kind: "retry", reason: "timeout" }) as const;
+    const first = notifierFor(
+      h,
+      [fakeSender("web_push", retry), fakeSender("email", retry), fakeSender("slack", retry)],
+      log.logger,
+    );
+    first.approvalRequested(approvalId);
+    await first.drain();
+
+    // Before the retries: the phone is turned off, and heel restarts without Slack.
+    removePushSubscription(h.t.db, PHONE);
+    const second = notifierFor(
+      h,
+      [fakeSender("web_push", retry), fakeSender("email", retry)],
+      log.logger,
+    );
+    h.clock.advance(FIRST_RETRY_MS);
+    await second.drain();
+    // Then the owner denies it before email's next try.
+    h.decide(approvalId, "deny");
+    h.clock.advance(RETRY_DELAYS_MS[1] ?? 0);
+    await second.drain();
+
+    const dropped = linesSaying(log.output(), "notification dropped");
+    expect(
+      dropped.map((line) => [line["level"], line["channel"], line["reason"], line["approvalId"]]),
+    ).toEqual(
+      expect.arrayContaining([
+        [40, "web_push", "subscription_removed", approvalId],
+        [40, "slack", "channel_off", approvalId],
+        [40, "email", "request_settled", approvalId],
+      ]),
+    );
+    expect(dropped).toHaveLength(3);
+    expect(deliveriesFor(h.t.db, approvalId).map((d) => d.status)).toEqual([
+      "dropped",
+      "dropped",
+      "dropped",
+    ]);
+    expect(log.output()).not.toMatch(/push\.example\.com|owner@example\.com|p256dh|auth-secret/);
+  });
+
+  it("log a sent delivery, and a gone one as dropped", async () => {
+    const { h, approvalId } = await ownerWithRequest("a reason that stays out of the log");
+    const log = captureLogger();
+    const notifier = notifierFor(
+      h,
+      [
+        fakeSender("web_push", () => ({ kind: "gone", reason: "statusCode 410" })),
+        fakeSender("email"),
+      ],
+      log.logger,
+    );
+    notifier.approvalRequested(approvalId);
+    await notifier.drain();
+
+    expect(
+      linesSaying(log.output(), "notification sent").map((line) => [
+        line["level"],
+        line["channel"],
+      ]),
+    ).toEqual([[30, "email"]]);
+    expect(linesSaying(log.output(), "notification dropped").map((line) => line["reason"])).toEqual(
+      ["statusCode 410"],
+    );
+    expect(log.output()).not.toMatch(/push\.example\.com|owner@example\.com|stays out|Send an/);
   });
 
   it("queue nothing for a channel heel isn't configured for, or a person with no address", async () => {

@@ -35,8 +35,12 @@ describe("the installable approval page", () => {
 
     const worker = await h.fetch("/sw.js");
     expect(worker.headers.get("content-type")).toMatch(/javascript/);
+    const script = await worker.text();
     // A tap only ever opens a page on heel's own origin.
-    expect(await worker.text()).toContain("startsWith(self.location.origin)");
+    expect(script).toContain("startsWith(self.location.origin)");
+    // A push with the tag of one already shown replaces it, quietly, instead of stacking.
+    expect(script).toContain("tag: data.tag || data.url");
+    expect(script).toContain("renotify: false");
 
     const icon = await h.fetch("/icon-180.png");
     expect(icon.headers.get("content-type")).toBe("image/png");

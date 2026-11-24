@@ -111,6 +111,8 @@ export async function mcpHarness(options: {
   learning?: { decisions: number; days: number };
   /** Holds asking calls open for their decision (2.12); answers at once without it. */
   approvalWait?: ApprovalWait;
+  /** Told of each new connection request, as `heel serve` tells its notifier. */
+  onAgentRequest?: (requestId: string) => void;
 }): Promise<McpHarness> {
   const t = testStore();
   const { logger } = captureLogger();
@@ -182,6 +184,7 @@ export async function mcpHarness(options: {
     ...(options.parking === true ? { parking: { sealer: vault } } : {}),
     ...(options.learning === undefined ? {} : { learning: { rules, threshold: options.learning } }),
     ...(options.approvalWait === undefined ? {} : { approvalWait: options.approvalWait }),
+    ...(options.onAgentRequest === undefined ? {} : { onAgentRequest: options.onAgentRequest }),
     version: "test",
   });
   const app = createAgentApp({ db: t.db, log: logger, mcp });

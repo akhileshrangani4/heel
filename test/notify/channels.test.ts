@@ -29,51 +29,83 @@ import { tempDir } from "../helpers/store.ts";
 const NOTICE: ApprovalNotice = {
   kind: "approval",
   agent: "inbox-bot",
-  what: "email.send",
+  action: "email.send",
+  tool: "send_message",
+  method: null,
   account: "gmail-work",
+  reason: null,
   url: "https://heel.example.com/approvals/apr_1",
+  tag: "approval:apr_1",
 };
 
 describe("the notice", () => {
-  it("names the agent, the action and the account, and nothing else", () => {
+  it("leads with the ask in plain words and the account, then who asked", () => {
     expect(noticeText(NOTICE)).toEqual({
-      title: "inbox-bot is asking to email.send",
-      body: "On gmail-work. Open heel to see the full call and decide.",
+      title: "Send an email from gmail-work?",
+      body: "inbox-bot is asking.",
     });
     expect(approvalUrl(new URL("https://heel.example.com/"), "apr_1")).toBe(NOTICE.url);
+    expect(noticeText({ ...NOTICE, action: "github.merge", account: "work-gh" }).title).toBe(
+      "Merge a pull request on work-gh?",
+    );
+    // An action heel has no words for reads as its tool.
+    expect(
+      noticeText({ ...NOTICE, action: null, tool: "list_issues", account: "linear" }).title,
+    ).toBe("Run list issues on linear?");
+    // A call to an API heel only knows by its paths: the path is an argument, so only the method.
+    expect(
+      noticeText({ ...NOTICE, action: null, tool: "POST /v1/customers/cus_9", method: "POST" })
+        .title,
+    ).toBe("Make a POST request on gmail-work?");
   });
 
-  it("names the agent and heel's word for the service in a connection request, not its alias or why", () => {
+  it("carries the agent's own reason on one line, cut to fit", () => {
+    expect(noticeText({ ...NOTICE, reason: "Reply to Dana about the Q3 numbers" }).body).toBe(
+      "inbox-bot: Reply to Dana about the Q3 numbers",
+    );
+    // Line breaks and bidi controls can't make the agent's words read as something else.
+    expect(noticeText({ ...NOTICE, reason: "  one\nline\u202e here " }).body).toBe(
+      "inbox-bot: one line here",
+    );
+    expect(noticeText({ ...NOTICE, reason: " \n " }).body).toBe("inbox-bot is asking.");
+    const long = noticeText({ ...NOTICE, reason: "x".repeat(500) }).body;
+    expect(long).toBe(`inbox-bot: ${"x".repeat(199)}…`);
+  });
+
+  it("asks to connect heel's word for the service, with the agent's why, never the alias", () => {
     const notice = {
       kind: "connection",
-      agent: "inbox-bot",
-      service: "Gmail",
+      agent: "claude-code-heel",
+      service: "Linear",
+      reason: "Notification test only. Please reject this request.",
       url: "https://heel.example.com/requests/req_1",
+      tag: "connection:agt_1:notify-test",
     } as const;
     expect(noticeText(notice)).toEqual({
-      title: "inbox-bot asks you to connect Gmail",
-      body: "Nothing is connected until you approve it. Open heel to see the request and decide.",
+      title: "Connect Linear?",
+      body: "claude-code-heel: Notification test only. Please reject this request.",
     });
+    expect(noticeText({ ...notice, reason: null }).body).toBe("claude-code-heel is asking.");
     expect(requestUrl(new URL("https://heel.example.com/"), "req_1")).toBe(notice.url);
   });
 
-  it("tells an owner how many rules an agent proposes, and nothing of the rules themselves", () => {
+  it("asks to add how many rules an agent proposes, and nothing of the rules themselves", () => {
     const one = {
       kind: "proposal",
       agent: "inbox-bot",
       rules: 1,
       hide: 0,
       workdirs: 0,
+      reason: "so I can review your repos",
       url: "u",
+      tag: "proposal:agt_1",
     } as const;
     expect(noticeText(one)).toEqual({
-      title: "inbox-bot proposes a new rule",
-      body: "Nothing changes until you add them. Open heel to read them and decide.",
+      title: "Add a new rule?",
+      body: "inbox-bot: so I can review your repos",
     });
-    expect(noticeText({ ...one, rules: 3 }).title).toBe("inbox-bot proposes 3 new rules");
-    expect(noticeText({ ...one, rules: 0, workdirs: 1 }).title).toBe(
-      "inbox-bot proposes a workdir",
-    );
+    expect(noticeText({ ...one, rules: 3 }).title).toBe("Add 3 new rules?");
+    expect(noticeText({ ...one, rules: 0, workdirs: 1 }).title).toBe("Add a workdir?");
     expect(proposalUrl(new URL("https://heel.example.com/"), "rpr_1")).toBe(
       "https://heel.example.com/proposals/rpr_1",
     );
@@ -108,7 +140,13 @@ describe("web push", () => {
     expect(await sender.send(TARGET, NOTICE)).toEqual({ kind: "sent" });
     const [subscription, payload, options] = calls[0] ?? [];
     expect(subscription).toEqual(TARGET.subscription);
-    expect(JSON.parse(payload ?? "")).toEqual({ ...noticeText(NOTICE), url: NOTICE.url });
+    // The tag lets a retry replace the notification already shown instead of stacking a second.
+    expect(JSON.parse(payload ?? "")).toEqual({
+      title: "Send an email from gmail-work?",
+      body: "inbox-bot is asking.",
+      url: NOTICE.url,
+      tag: "approval:apr_1",
+    });
     expect(options).toMatchObject({
       vapidDetails: { subject: "mailto:ops@example.com", publicKey: "pub", privateKey: "priv" },
       TTL: 86_400,
@@ -148,7 +186,7 @@ describe("email", () => {
     expect(mails[0]).toMatchObject({
       from: "heel <heel@example.com>",
       to: "owner@example.com",
-      subject: "inbox-bot is asking to email.send",
+      subject: "Send an email from gmail-work?",
     });
     expect(mails[0]?.["text"]).toContain(NOTICE.url);
     expect(mails[0]).not.toHaveProperty("html");
@@ -193,6 +231,19 @@ describe("Slack", () => {
     expect(slack.posted[0]).toMatchObject({ channel: "U123", unfurl_links: false });
     expect(slack.posted[0]?.["text"]).toContain(`<${NOTICE.url}|Open heel>`);
     expect(slack.posted[0]).not.toHaveProperty("blocks");
+  });
+
+  it("escapes the agent's words, so they can't make a link or a mention", async () => {
+    const slack = fakeSlack("U123");
+    const sender = slackSender({ client: slack.client });
+    const notice = { ...NOTICE, reason: "see <https://evil.example|Open heel> & <!channel>" };
+
+    await sender.send({ channel: "slack", email: "owner@example.com" }, notice);
+    expect(slack.posted[0]?.["text"]).toBe(
+      "*Send an email from gmail-work?*\n" +
+        "inbox-bot: see &lt;https://evil.example|Open heel&gt; &amp; &lt;!channel&gt; " +
+        `<${NOTICE.url}|Open heel>`,
+    );
   });
 
   it("stops when nobody in Slack has that email", async () => {
