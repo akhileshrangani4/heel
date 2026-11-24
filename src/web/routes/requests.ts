@@ -15,6 +15,7 @@ import {
   rejectRequest,
   serviceLabel,
 } from "../../requests/connection.ts";
+import { serviceActions } from "../../requests/actions.ts";
 import { coverage } from "../../requests/coverage.ts";
 import { liveGrants } from "../../store/grants.ts";
 import { modeFor } from "../../store/modes.ts";
@@ -167,6 +168,7 @@ export function requestRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
             : { by: nameOf(deps, "user", row.decidedBy), at: row.decidedAt },
         now,
         coverage: coverage(deps.rules.set, nameOf(deps, "user", row.ownerId), agent, details, {
+          actions: serviceActions(details.provider),
           grants: liveGrants(deps.db, deps.orgId, row.agentId, now).flatMap((g) => {
             try {
               return [{ id: g.id, rule: compileGrant(g.match, { id: g.id }).rule }];
