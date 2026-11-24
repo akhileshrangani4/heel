@@ -12,6 +12,7 @@ import { type Html, html } from "../html.ts";
 import {
   type FormTarget,
   type NavId,
+  type PageProps,
   type PauseNotice,
   page,
   type Theme,
@@ -124,6 +125,8 @@ export interface Story {
   pause?: PauseNotice | null;
   /** A focus page (the agent consent screen): no header or tabs. */
   focus?: boolean;
+  /** Stand-in safe-area insets, to show the installed app on a phone. */
+  safeArea?: PageProps["safeArea"];
   body: () => Html;
 }
 
@@ -452,6 +455,10 @@ const HOME_BASE: HomeProps = {
     },
   ],
 };
+
+/** Safe-area insets of a phone with a notch and home indicator, as an installed app sees them. */
+const IPHONE_PORTRAIT = { top: 47, right: 0, bottom: 34, left: 0 } as const;
+const IPHONE_LANDSCAPE = { top: 0, right: 47, bottom: 21, left: 47 } as const;
 
 const pageStory = (
   component: ComponentId,
@@ -827,6 +834,28 @@ export const PAGE_STORIES: readonly Story[] = [
   pageStory("home", "busy", "All set up, a week of calls", "Home", "home", () =>
     homePage(HOME_BASE),
   ),
+  {
+    ...pageStory(
+      "home",
+      "installed-phone",
+      "The installed app on a phone with a home indicator (insets 47 top, 34 bottom)",
+      "Home",
+      "home",
+      () => homePage(HOME_BASE),
+    ),
+    safeArea: IPHONE_PORTRAIT,
+  },
+  {
+    ...pageStory(
+      "home",
+      "installed-landscape",
+      "The installed app in landscape, notch at the side (insets 47 left and right, 21 bottom)",
+      "Home",
+      "home",
+      () => homePage(HOME_BASE),
+    ),
+    safeArea: IPHONE_LANDSCAPE,
+  },
   pageStory(
     "home",
     "needs-you",
@@ -1091,6 +1120,7 @@ export function renderStory(story: Story, theme: Theme): Html {
     viewer: story.viewer,
     ...(story.current ? { current: story.current } : {}),
     ...(story.focus ? { focus: true } : {}),
+    ...(story.safeArea ? { safeArea: story.safeArea } : {}),
     pause: story.pause ?? null,
     theme,
     body: story.body(),

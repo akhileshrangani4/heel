@@ -40,6 +40,27 @@ describe("pages at phone width", () => {
   });
 });
 
+describe("the installed app on a phone", () => {
+  it("lets the page reach the screen edges and keeps the tab bar clear of the home indicator and corners", async () => {
+    const h = humanPlaneHarness();
+    const admin = await h.signIn(await h.enroll());
+    const page = await (await h.fetch("/activity", { as: admin })).text();
+    // Without viewport-fit=cover every env(safe-area-inset-*) is 0 in the installed app.
+    expect(page).toContain('content="width=device-width, initial-scale=1, viewport-fit=cover"');
+    expect(page).toMatch(/<meta name="theme-color" media="\(prefers-color-scheme: light\)"/);
+    expect(STYLESHEET).toContain("--safe-b:env(safe-area-inset-bottom,0px)");
+    // The fixed tab bar pads by the bottom inset, and its sides clear the rounded corners.
+    expect(STYLESHEET).toMatch(
+      /\.site nav\{position:fixed;[^}]*padding:[^;}]*max\(\.75rem,var\(--safe-r\)\) calc\(\.4rem \+ var\(--safe-b\)\)/,
+    );
+    expect(STYLESHEET).toMatch(/body\.app\{padding-bottom:calc\([^)]*var\(--safe-b\)\)/);
+    expect(STYLESHEET).toMatch(
+      /#heel-ceremony-status:not\(:empty\)\{bottom:calc\([^)]*var\(--safe-b\)\)/,
+    );
+    expect(STYLESHEET).toMatch(/\.act-filter-panel\{position:fixed;[^}]*var\(--safe-b\)/);
+  });
+});
+
 describe("the top menu (1.11)", () => {
   it("shows six sections, and the section's pages as tabs", async () => {
     const h = humanPlaneHarness();
