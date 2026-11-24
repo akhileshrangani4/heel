@@ -10,7 +10,7 @@ import type { MicrosoftClient } from "../definitions/microsoft/oauth.ts";
 import type { RulesSource } from "../gateway/pipeline/pipeline.ts";
 import type { PauseStore } from "../gateway/pipeline/ports.ts";
 import type { Logger } from "../log.ts";
-import { listApprovalsFor, type SqliteApprovalStore } from "../store/approvals.ts";
+import type { SqliteApprovalStore } from "../store/approvals.ts";
 import type { HeelDb } from "../store/db.ts";
 import type { OidcClient } from "../teams/oidc.ts";
 import type { KeyCheck } from "../vault/key-check.ts";
@@ -25,6 +25,7 @@ import {
 } from "./sessions.ts";
 import { toHtmlString } from "./ui/html.ts";
 import { type PageProps, page, type Viewer } from "./ui/layout.ts";
+import { waitingVersion } from "./waiting.ts";
 
 /**
  * Plumbing every human-plane route shares: its dependencies, who is signed
@@ -128,7 +129,7 @@ export interface HumanPlaneDeps {
 
 /** What a route behind `requireSession` can read from the context. */
 export interface SignedInEnv {
-  Variables: { session: SessionView; approvalsWaiting?: number };
+  Variables: { session: SessionView; approvalsWaiting?: number; waitingVersion?: string };
 }
 
 /** The header the page script sends its CSRF token in; plain forms send a `csrf` field. */
@@ -144,9 +145,20 @@ export function renderPage(
   props: PageProps,
   status: 200 | 400 | 403 | 404 | 503 = 200,
 ): Response {
-  // requireSession counts the viewer's waiting requests once per page, for the menu.
-  const waiting = props.waiting ?? (c as Context<SignedInEnv>).get("approvalsWaiting");
-  return c.html(toHtmlString(page(waiting === undefined ? props : { ...props, waiting })), status);
+  // requireSession counts what waits for the viewer once per page, for the menu, title and banner.
+  const signedIn = c as Context<SignedInEnv>;
+  const waiting = props.waiting ?? signedIn.get("approvalsWaiting");
+  const version = signedIn.get("waitingVersion");
+  // no-cache: a page the browser or the installed app restores revalidates
+  // first, so it never shows a request as waiting after it was decided.
+  // A route that set its own (no-store, for a page showing a one-time secret) keeps it.
+  if (!c.res.headers.has("cache-control")) c.header("Cache-Control", "no-cache");
+  const full = {
+    ...props,
+    ...(waiting === undefined ? {} : { waiting }),
+    ...(version === undefined ? {} : { waitingVersion: version }),
+  };
+  return c.html(toHtmlString(page(full)), status);
 }
 
 // ── sessions ────────────────────────────────────────────────────────────────
@@ -171,11 +183,10 @@ export function requireSession(deps: HumanPlaneDeps): MiddlewareHandler<SignedIn
     }
     c.set("session", session);
     if (c.req.method === "GET") {
-      const now = deps.now();
-      c.set(
-        "approvalsWaiting",
-        listApprovalsFor(deps.db, session, now).filter((r) => r.status === "pending").length,
-      );
+      // Calls, connection requests, rule changes and recovery links: one count everywhere.
+      const { waiting, version } = waitingVersion(deps, session, deps.now());
+      c.set("approvalsWaiting", waiting);
+      c.set("waitingVersion", version);
     }
     return next();
   };

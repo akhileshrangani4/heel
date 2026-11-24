@@ -21,6 +21,7 @@ import { rulesEditorRoutes } from "./routes/rules-editor.ts";
 import { signInRoutes } from "./routes/sign-in.ts";
 import { standingRoutes } from "./routes/standing.ts";
 import { suggestionRoutes } from "./routes/suggestions.ts";
+import { waitingRoutes } from "./routes/waiting.ts";
 
 export type { HumanPlaneDeps } from "./http.ts";
 
@@ -78,6 +79,7 @@ export function createHumanApp(deps: HumanPlaneDeps): Hono {
   app.route("/", manageAccountRoutes(deps));
   app.route("/", rulesEditorRoutes(deps));
   app.route("/", activityRoutes(deps));
+  app.route("/", waitingRoutes(deps));
   app.notFound((c) => c.text("Not found.", 404));
   app.onError((error, c) => {
     deps.log.error({ err: error, path: c.req.path }, "human plane request failed");

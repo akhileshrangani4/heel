@@ -7,7 +7,14 @@ import { type ConnectionRow, connectionsPage } from "../connections.ts";
 import { addDeviceControl } from "../devices.ts";
 import { enrollPage } from "../enroll.ts";
 import { type GrantView, grantsPage } from "../grants-page.ts";
-import { type DayCount, type HomeProps, homePage } from "../home.ts";
+import {
+  type DayCount,
+  type HomeProps,
+  homePage,
+  type WaitingItem,
+  type WaitingSummary,
+  waitingTotal,
+} from "../home.ts";
 import { type Html, html } from "../html.ts";
 import {
   type FormTarget,
@@ -29,6 +36,7 @@ import { ruleHistoryPage } from "../rule-history.ts";
 import { rulesEditorPage } from "../rules-editor.ts";
 import { oidcSignIn, passkeySignIn } from "../sign-in.ts";
 import { standingApprovalList } from "../standing-approval-list.ts";
+import type { BannerMode } from "../waiting.ts";
 import { welcomePage } from "../welcome.ts";
 import {
   APPLIED_PROPOSAL,
@@ -156,6 +164,12 @@ export interface Story {
   focus?: boolean;
   /** Stand-in safe-area insets, to show the installed app on a phone. */
   safeArea?: PageProps["safeArea"];
+  /** What waits for the viewer: the menu badge, title, favicon dot and banner. */
+  waiting?: number;
+  /** The live line's state, for the stale and offline stories. */
+  liveState?: PageProps["liveState"];
+  /** Show the banner as if the count changed while the page was open. */
+  bannerForced?: boolean;
   body: () => Html;
 }
 
@@ -222,6 +236,7 @@ const pending = (
   viewer: ALICE,
   current: "approvals",
   pause,
+  waiting: load.ok ? load.rows.filter((r) => r.status === "pending").length : 0,
   body: () => pendingList({ now: NOW, load }),
 });
 
@@ -499,9 +514,46 @@ const week = (calls: readonly number[]): DayCount[] =>
     asked: n - Math.round(n * 0.7) - Math.round(n * 0.1),
   }));
 
+const NO_WAITING = { calls: 0, requests: 0, proposals: 0, recoveries: 0 } as const;
+
+/** The waiting calls, as Home lists them. */
+const CALL_ITEMS: WaitingItem[] = PENDING_ROWS.map((row) => ({
+  kind: "call",
+  href: row.href,
+  at: row.createdAt,
+  expiresAt: row.expiresAt,
+  headline: row.headline,
+  service: { action: row.action, tool: row.tool, account: row.account },
+}));
+const CONNECTION_ITEM: WaitingItem = {
+  kind: "connection",
+  href: "/requests/req_Gh7kT2",
+  at: ago(3 * 60_000),
+  expiresAt: new Date(NOW.getTime() + 23 * 3_600_000),
+  agent: "claude-code-heel",
+  service: "GitHub",
+  provider: "github",
+};
+const RULES_ITEM: WaitingItem = {
+  kind: "rules",
+  href: "/proposals/prp_R2x9",
+  at: ago(25 * 60_000),
+  expiresAt: new Date(NOW.getTime() + 6 * DAY),
+  agent: "inbox-bot",
+  changes: 2,
+};
+const RECOVERY_ITEM: WaitingItem = {
+  kind: "recovery",
+  href: "/approvals",
+  at: ago(2 * 3_600_000),
+  expiresAt: null,
+  user: "alice",
+};
+
 const HOME_BASE: HomeProps = {
   now: NOW,
-  approvals: { waiting: 0, decided: 4 },
+  approvals: { decided: 4 },
+  waiting: { counts: NO_WAITING, items: [] },
   agents: { total: 3, active: 2, expiring: 0 },
   connections: { total: 4, needsSignIn: 0 },
   rules: { loaded: true, count: 12, stopped: 2 },
@@ -571,6 +623,20 @@ const pageStory = (
   viewer,
   ...(current ? { current } : {}),
   body,
+});
+
+/** Home with things waiting: the list, the tile, and the count in the menu and title. */
+const waitingHome = (
+  state: string,
+  label: string,
+  counts: WaitingSummary,
+  items: readonly WaitingItem[],
+  extra: Partial<HomeProps> = {},
+): Story => ({
+  ...pageStory("home", state, label, "Home", "home", () =>
+    homePage({ ...HOME_BASE, ...extra, waiting: { counts, items } }),
+  ),
+  waiting: waitingTotal(counts),
 });
 
 /** A focus page story: signed in, with no header or tabs. */
@@ -783,11 +849,13 @@ const connections = (
   label: string,
   rows: readonly ConnectionRow[],
   outcome: Parameters<typeof connectionsPage>[0]["outcome"] = { kind: "none" },
+  connect?: Parameters<typeof connectionsPage>[0]["connect"],
 ) =>
   pageStory("connections", state, label, "Connections", "connections", () =>
     connectionsPage({
       rows,
       outcome,
+      ...(connect ? { connect } : {}),
       signInForm: form("/connections/sign-in"),
       now: NOW,
       manage: { csrfToken: "preview", people: ["alice", "bo"], admin: true },
@@ -917,7 +985,7 @@ export const PAGE_STORIES: readonly Story[] = [
   pageStory("home", "fresh", "Fresh install: 1 of 4 set up, no calls yet", "Home", "home", () =>
     homePage({
       ...HOME_BASE,
-      approvals: { waiting: 0, decided: 0 },
+      approvals: { decided: 0 },
       agents: { total: 0, active: 0, expiring: 0 },
       connections: { total: 0, needsSignIn: 0 },
       rules: { loaded: true, count: 0, stopped: 0 },
@@ -951,24 +1019,66 @@ export const PAGE_STORIES: readonly Story[] = [
     ),
     safeArea: IPHONE_LANDSCAPE,
   },
-  pageStory(
-    "home",
+  waitingHome(
+    "calls-waiting",
+    "Three calls waiting, one about to expire",
+    { ...NO_WAITING, calls: 3 },
+    CALL_ITEMS,
+  ),
+  waitingHome(
+    "connection-only",
+    "Only a connection request waits (it used to raise no count)",
+    { ...NO_WAITING, requests: 1 },
+    [CONNECTION_ITEM],
+  ),
+  waitingHome(
+    "all-waiting",
+    "Calls, a connection request, a rule change and a recovery link: more than Home lists",
+    { calls: 3, requests: 1, proposals: 1, recoveries: 1 },
+    [...CALL_ITEMS, CONNECTION_ITEM, RULES_ITEM, RECOVERY_ITEM],
+  ),
+  waitingHome(
     "needs-you",
     "Waiting requests, an expiring token, a sign-in, rules didn't load",
-    "Home",
-    "home",
-    () =>
-      homePage({
-        ...HOME_BASE,
-        approvals: { waiting: 3, decided: 4 },
-        agents: { total: 3, active: 2, expiring: 1 },
-        connections: { total: 4, needsSignIn: 1 },
-        rules: { loaded: false, count: 12, stopped: 0 },
-      }),
+    { ...NO_WAITING, calls: 3 },
+    CALL_ITEMS,
+    {
+      agents: { total: 3, active: 2, expiring: 1 },
+      connections: { total: 4, needsSignIn: 1 },
+      rules: { loaded: false, count: 12, stopped: 0 },
+    },
   ),
+
+  // Approvals list, live: what the page shows when it can't stay current on its own.
+  {
+    ...pending("pending", "", { ok: true, rows: PENDING_ROWS }),
+    state: "live-stale",
+    label: "The live stream is down: how fresh the list is, and Refresh",
+    liveState: "stale",
+  },
+  {
+    ...pending("pending", "", { ok: true, rows: PENDING_ROWS }),
+    state: "live-offline",
+    label: "Offline: the same line, in the warning colour",
+    liveState: "offline",
+  },
+  {
+    ...pending("pending", "", { ok: true, rows: PENDING_ROWS }),
+    state: "live-new-arrived",
+    label: "A fourth request arrived while you were typing: the banner shows, the list waits",
+    waiting: 4,
+    bannerForced: true,
+    liveState: "stale",
+  },
 
   // Activity
   activity("busy", "Today, yesterday and older, every kind of decision", ACTIVITY_ROWS),
+  {
+    ...activity("busy", "", ACTIVITY_ROWS),
+    state: "with-waiting",
+    label: "Three things wait: the banner on a page that doesn't list them",
+    waiting: 3,
+  },
   activity("filtered-empty", "A filter with no matches", [], {
     agent: "agt_ci",
     kind: "would_ask",
@@ -1008,6 +1118,34 @@ export const PAGE_STORIES: readonly Story[] = [
     alias: "gmail-work",
   }),
   connections("empty", "Nothing connected yet", []),
+  connections(
+    "connect-open",
+    "Add a connection, step 1: pick a service",
+    CONNECTIONS,
+    { kind: "none" },
+    { open: true },
+  ),
+  connections(
+    "connect-picked",
+    "Step 2 for a key service (GitHub): name, key, Connect pinned (open it short for the keyboard case)",
+    CONNECTIONS,
+    { kind: "none" },
+    { open: true, picked: "github" },
+  ),
+  connections(
+    "connect-mcp",
+    "Step 2 for an MCP server: name, URL, sign-in choice",
+    CONNECTIONS,
+    { kind: "none" },
+    { open: true, picked: "mcp" },
+  ),
+  connections(
+    "connect-signin",
+    "Step 2 for a sign-in service (Gmail): name only, you sign in after",
+    CONNECTIONS,
+    { kind: "none" },
+    { open: true, picked: "gmail" },
+  ),
 
   // Devices
   devices("none", "No device gets notifications", 0, null),
@@ -1299,14 +1437,22 @@ export function findStory(component: string, state: string): Story | undefined {
   return ALL_STORIES.find((s) => s.component === component && s.state === state);
 }
 
-/** A story as the full page the human plane would send. */
-export function renderStory(story: Story, theme: Theme): Html {
+/**
+ * A story as the full page the human plane would send. `bannerMode` picks
+ * the waiting banner's variant (`?banner=everywhere` in the harness).
+ */
+export function renderStory(story: Story, theme: Theme, bannerMode?: BannerMode): Html {
   return page({
     title: story.title,
     viewer: story.viewer,
     ...(story.current ? { current: story.current } : {}),
     ...(story.focus ? { focus: true } : {}),
     ...(story.safeArea ? { safeArea: story.safeArea } : {}),
+    ...(story.waiting === undefined ? {} : { waiting: story.waiting }),
+    ...(story.liveState ? { liveState: story.liveState } : {}),
+    ...(story.bannerForced ? { bannerForced: true } : {}),
+    ...(bannerMode ? { bannerMode } : {}),
+    liveStream: false,
     pause: story.pause ?? null,
     theme,
     body: story.body(),

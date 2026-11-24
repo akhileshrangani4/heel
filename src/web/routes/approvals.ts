@@ -67,7 +67,9 @@ const DECIDE_HANDLER = { handler: "decide" } as const;
 const REFUSED: Record<Extract<DecideResult, { ok: false }>["reason"], string> = {
   not_found: "That request no longer exists.",
   hash_mismatch: "The request changed since this page loaded. Reload it and look again.",
-  not_pending: "This request was already decided, ran, or expired.",
+  // Usually a page left open while the request was decided on another device.
+  not_pending:
+    "This was already decided, maybe on another device, or it expired. Nothing changed. Reload to see where it stands.",
   paused: "A pause covers this request. Resume first; you can still deny it.",
   not_approver: "You aren't an approver for this request.",
   org_ask_cannot_stand: "An organization ask can be approved once, never as standing.",

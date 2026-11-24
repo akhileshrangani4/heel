@@ -43,25 +43,47 @@ const MANIFEST = {
  * Shows each push as a notification, and opens heel's page for it on a tap.
  * It only opens links on heel's own origin, so a push can't send the person
  * anywhere else.
+ *
+ * A push also tells heel's open pages to check what's waiting now (the
+ * message says only "changed"; each page asks the server itself). A tap
+ * reuses an open heel window, focused and sent to the page, and opens a new
+ * one only when there is none, so stale copies don't pile up.
  */
 const SERVICE_WORKER = `
+const windows = () => self.clients.matchAll({ type: "window", includeUncontrolled: true });
 self.addEventListener("push", (event) => {
   const data = event.data ? event.data.json() : {};
   event.waitUntil(
-    self.registration.showNotification(data.title || "heel", {
-      body: data.body || "A call is waiting for you.",
-      data: { url: data.url },
-      icon: "/icon-180.png",
-      badge: "/icon-180.png",
-      tag: data.url,
-    }),
+    Promise.all([
+      self.registration.showNotification(data.title || "heel", {
+        body: data.body || "A call is waiting for you.",
+        data: { url: data.url },
+        icon: "/icon-180.png",
+        badge: "/icon-180.png",
+        tag: data.url,
+      }),
+      windows().then((list) => list.forEach((c) => c.postMessage({ type: "heel-changed" }))),
+    ]),
   );
 });
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const url = event.notification.data && event.notification.data.url;
   const target = typeof url === "string" && url.startsWith(self.location.origin) ? url : "/approvals";
-  event.waitUntil(self.clients.openWindow(target));
+  event.waitUntil(
+    windows().then(async (list) => {
+      const open = list.find((c) => c.url.startsWith(self.location.origin));
+      if (!open) return self.clients.openWindow(target);
+      const focused = await open.focus().catch(() => open);
+      if ("navigate" in focused) {
+        try {
+          if (await focused.navigate(target)) return;
+        } catch {}
+      }
+      // Not controlled by this worker yet: the page goes there itself.
+      focused.postMessage({ type: "heel-navigate", url: target });
+    }),
+  );
 });
 `;
 

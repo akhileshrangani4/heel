@@ -32,8 +32,9 @@ describe("the Home page", () => {
     const owner = await h.signIn(await h.enroll());
     h.t.db.update(accounts).set({ status: "reconnect_required" }).run();
     const page = await (await h.fetch("/", { as: owner })).text();
-    expect(page).toContain(">sign in again<");
-    expect(page).toMatch(/\d+ needs? you to sign in again/);
+    // One sentence says it; no badge repeats it.
+    expect(page).toMatch(/\d+ needs? signing in again/);
+    expect(page).toMatch(/class="home-tile" href="\/connections" data-alert="warn"/);
   });
 
   it("lists the setup steps left, linked to where they're done", async () => {
