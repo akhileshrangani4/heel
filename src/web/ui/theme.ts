@@ -183,7 +183,7 @@ ul.hints li{display:flex;align-items:baseline;gap:.6rem}
 pre{overflow-x:auto;max-width:100%}
 code,pre,.mono{font-family:ui-monospace,"Geist Mono",SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem}
 pre.args,pre.body{margin:0;padding:1rem;background:var(--surface);border:1px solid var(--line);border-radius:10px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}
-.table-scroll{overflow-x:auto;max-width:100%;border:1px solid var(--line);border-radius:14px;margin:.75rem 0;background:linear-gradient(to right,var(--bg) 30%,transparent) left/2rem 100% no-repeat local,linear-gradient(to left,var(--bg) 30%,transparent) right/2rem 100% no-repeat local,radial-gradient(farthest-side at 0 50%,rgb(0 0 0 / .18),transparent) left/.75rem 100% no-repeat scroll,radial-gradient(farthest-side at 100% 50%,rgb(0 0 0 / .18),transparent) right/.75rem 100% no-repeat scroll}
+.table-scroll{position:relative;overflow-x:auto;max-width:100%;border:1px solid var(--line);border-radius:14px;margin:.75rem 0;background:linear-gradient(to right,var(--bg) 30%,transparent) left/2rem 100% no-repeat local,linear-gradient(to left,var(--bg) 30%,transparent) right/2rem 100% no-repeat local,radial-gradient(farthest-side at 0 50%,rgb(0 0 0 / .18),transparent) left/.75rem 100% no-repeat scroll,radial-gradient(farthest-side at 100% 50%,rgb(0 0 0 / .18),transparent) right/.75rem 100% no-repeat scroll}
 .btn{font-family:inherit;line-height:1.25;border:0 solid var(--line);background-color:transparent;color:inherit;cursor:pointer}
 a.btn{text-decoration:none}
 table.data{border-collapse:collapse;margin:0;background:var(--bg)}

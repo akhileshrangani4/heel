@@ -61,6 +61,7 @@ import {
   RULES_TEXT,
   rulesFile,
 } from "./rules-fixtures.ts";
+import { SETTINGS_EDGE_STORIES } from "./settings-stories.ts";
 
 /**
  * The preview harness's stories: every component in every state the
@@ -1078,7 +1079,11 @@ export const PAGE_STORIES: readonly Story[] = [
 ];
 
 /** Every story the harness serves: components, then pages. */
-export const ALL_STORIES: readonly Story[] = [...STORIES, ...PAGE_STORIES];
+export const ALL_STORIES: readonly Story[] = [
+  ...STORIES,
+  ...PAGE_STORIES,
+  ...SETTINGS_EDGE_STORIES,
+];
 
 export function findStory(component: string, state: string): Story | undefined {
   return ALL_STORIES.find((s) => s.component === component && s.state === state);
