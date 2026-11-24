@@ -208,7 +208,7 @@ describe("the approval page in a browser", () => {
     );
     if (!proposed.ok) throw new Error(proposed.problems.join("; "));
     await page.goto(`${origin}/approvals`);
-    await page.getByRole("link", { name: /proposes a new rule/ }).click();
+    await page.getByRole("link", { name: /wants to add a new rule/ }).click();
     await page.getByText("so I can answer the vendor thread").first().waitFor();
     await shot("proposal");
     await page.getByRole("button", { name: "Add these rules" }).click();

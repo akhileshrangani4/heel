@@ -44,7 +44,7 @@ describe("proposed rules on the approval page", () => {
   it("the owner sees them on Approvals and adds them with a passkey", async () => {
     const { h, file, id } = setUp();
     const owner = await h.signIn(await h.enroll());
-    expect(await (await h.fetch("/approvals", { as: owner })).text()).toContain("proposes");
+    expect(await (await h.fetch("/approvals", { as: owner })).text()).toContain("wants to add");
     const page = await (await h.fetch(`/proposals/${id}`, { as: owner })).text();
     expect(page).toContain("so I can summarise your inbox");
     // What the rule does, in words, from the rule itself (roadmap 2.3).
@@ -156,7 +156,7 @@ describe("proposed rules on the approval page", () => {
     h.addUser("sam", "admin");
     const sam = await h.signIn(await h.enroll("sam"));
     expect((await h.fetch(`/proposals/${id}`, { as: sam })).status).toBe(404);
-    expect(await (await h.fetch("/approvals", { as: sam })).text()).not.toContain("proposes");
+    expect(await (await h.fetch("/approvals", { as: sam })).text()).not.toContain("wants to add");
     const added = await h.ceremony(
       sam,
       { url: "/proposals/challenge", body: { proposalId: id } },

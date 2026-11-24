@@ -49,14 +49,14 @@ describe("connection requests on the approval page", () => {
     const { h, id } = setUp();
     const owner = await h.signIn(await h.enroll());
     const list = await (await h.fetch("/approvals", { as: owner })).text();
-    expect(list).toContain("asks you to connect <mark>Gmail</mark>");
+    expect(list).toContain("wants to connect <mark>Gmail</mark>");
     const page = await (await h.fetch(`/requests/${id}`, { as: owner })).text();
-    expect(page).toContain("asks you to connect Gmail");
+    expect(page).toContain("wants to connect Gmail");
     expect(page).toContain("inbox-new");
     expect(page).toMatch(/its own words; heel didn(&#39;|')t check them/);
     // The owner's read rule names no account, so it covers the new one: say so.
-    expect(page).toContain("names no account, so it covers every one");
-    expect(page).toMatch(/<strong>runs<\/strong>/);
+    expect(page).toContain("These rules cover every account");
+    expect(page).toContain("Runs on its own");
   });
 
   it("connects it with a passkey, from the stored request, and only then", async () => {
@@ -214,7 +214,7 @@ describe("services that use a pasted key (2.5, part 2)", () => {
     const { h, id } = setUp({ service: "github", alias: "gh-new", why: "to read your PRs" });
     const owner = await h.signIn(await h.enroll());
     const page = await (await h.fetch(`/requests/${id}`, { as: owner })).text();
-    expect(page).toContain("asks you to connect GitHub");
+    expect(page).toContain("wants to connect GitHub");
     expect(page).toContain('name="key"');
     expect(page).toContain("gh auth token");
     expect(page).toContain('data-heel-options="request-key"');
@@ -233,7 +233,7 @@ describe("services that use a pasted key (2.5, part 2)", () => {
     expect(h.vault.get(account?.id ?? "")).toMatchObject({ type: "static" });
     expect(JSON.stringify(findRequest(h.t.db, h.t.orgId, id))).not.toContain(KEY);
     const after = await (await h.fetch(`/requests/${id}?approved`, { as: owner })).text();
-    expect(after).toContain("Connected as");
+    expect(after).toContain("is connected");
     expect(after).not.toContain(KEY);
   });
 
@@ -286,7 +286,7 @@ describe("services that use a pasted key (2.5, part 2)", () => {
     const next = ((await done.json()) as { next: string }).next;
     expect(next).toContain("unchecked");
     const after = await (await h.fetch(next, { as: owner })).text();
-    expect(after).toContain("check the key with the service, so it connected it as it is");
+    expect(after).toContain("so it connected it as it is");
   });
 
   it("won't connect without a key, and the request keeps waiting", async () => {

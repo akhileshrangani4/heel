@@ -4,6 +4,7 @@ import { canonicalHash } from "../../core/canonical.ts";
 import { resolveAll } from "../../definitions/mcp/public-only.ts";
 import { missingSignInSetup } from "../../definitions/sign-in-setup.ts";
 import { compileGrant } from "../../grants/compile.ts";
+import { serviceActions } from "../../requests/actions.ts";
 import {
   approveRequest,
   findRequest,
@@ -15,7 +16,6 @@ import {
   rejectRequest,
   serviceLabel,
 } from "../../requests/connection.ts";
-import { serviceActions } from "../../requests/actions.ts";
 import { coverage } from "../../requests/coverage.ts";
 import { liveGrants } from "../../store/grants.ts";
 import { modeFor } from "../../store/modes.ts";
@@ -101,6 +101,8 @@ export function requestCardsFor(deps: HumanPlaneDeps, session: SessionView, now:
     id: row.id,
     agent: nameOf(deps, "agent", row.agentId),
     service: serviceLabel(row.details),
+    provider: row.details.provider,
+    alias: row.details.alias,
     why: row.why,
     createdAt: row.createdAt,
     expiresAt: row.expiresAt,
