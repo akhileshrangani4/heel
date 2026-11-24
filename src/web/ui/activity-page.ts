@@ -207,17 +207,12 @@ function filterMenu(
   agents: readonly { id: string; name: string }[],
   accounts: readonly string[],
 ): Html {
-  const active = [filter.agent, filter.account, filter.kind].filter((v) => v !== undefined).length;
   const accountChoices =
     filter.account !== undefined && !accounts.includes(filter.account)
       ? [filter.account, ...accounts]
       : accounts;
   return html`<details class="act-filter">
-    <summary class="${btn("outline", "sm")}">${trusted(FILTER_ICON)}Filter${
-      active > 0
-        ? html`<span class="act-filter-count"><span class="visually-hidden">, </span>${String(active)}<span class="visually-hidden"> on</span></span>`
-        : ""
-    }</summary>
+    <summary class="${btn("outline", "sm")}">${trusted(FILTER_ICON)}Filter</summary>
     <form method="get" action="/activity" class="act-filter-panel">
       ${filter.script === undefined ? "" : html`<input type="hidden" name="script" value="${filter.script}" />`}
       <div class="act-filter-groups">
@@ -591,15 +586,47 @@ function agentRow(
 }
 
 /**
- * The live stream: puts each row the server sends under its day's heading,
- * adding "Today" (or the day) when the newest heading is another day.
+ * The Filter and Download panels: Escape or a click outside closes them (on
+ * a phone the filter sheet covers its own button), and opening one closes
+ * the other.
  */
-export const ACTIVITY_SCRIPT = `
+export const ACTIVITY_PANELS_SCRIPT = `
+(() => {
+  const panels = [...document.querySelectorAll("details.act-filter, details.audit-export")];
+  for (const panel of panels) {
+    panel.addEventListener("toggle", () => {
+      if (panel.open) for (const other of panels) if (other !== panel) other.open = false;
+    });
+  }
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    for (const panel of panels) {
+      if (!panel.open) continue;
+      panel.open = false;
+      panel.querySelector("summary").focus();
+    }
+  });
+  document.addEventListener("click", (event) => {
+    for (const panel of panels) if (panel.open && !panel.contains(event.target)) panel.open = false;
+  });
+})();
+`;
+
+/**
+ * The live stream: puts each row the server sends under its day's heading,
+ * adding "Today" (or the day, in words as the server writes it) when the
+ * newest heading is another day.
+ */
+export const ACTIVITY_SCRIPT = `${ACTIVITY_PANELS_SCRIPT}
 (() => {
   const table = document.getElementById("activity");
   if (!table || !window.EventSource) return;
   const filter = table.dataset.filter;
   const source = new EventSource("/activity/stream?after=" + table.dataset.latest + (filter ? "&" + filter : ""));
+  const dayName = (day) =>
+    day === table.dataset.today
+      ? "Today"
+      : new Date(day + "T00:00:00Z").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: "UTC" });
   source.addEventListener("row", (event) => {
     const body = table.querySelector("tbody");
     const holder = document.createElement("tbody");
@@ -615,7 +642,7 @@ export const ACTIVITY_SCRIPT = `
       const cell = document.createElement("th");
       cell.colSpan = ${String(COLUMNS)};
       cell.scope = "colgroup";
-      cell.textContent = (day === table.dataset.today ? "Today" : day) + " ";
+      cell.textContent = dayName(day) + " ";
       const count = document.createElement("span");
       count.className = "day-count";
       count.textContent = "0";

@@ -6,7 +6,6 @@ export const ACTIVITY_CSS = `
 .act-filter > summary{list-style:none}
 .act-filter > summary::-webkit-details-marker{display:none}
 .act-filter[open] > summary{background:var(--surface)}
-.act-filter-count{display:inline-block;min-width:1.15rem;padding:0 .3rem;border-radius:999px;background:var(--accent);color:var(--accent-text);font-size:.68rem;font-weight:700;line-height:1.15rem;text-align:center}
 .act-filter-panel{position:absolute;left:0;top:calc(100% + .4rem);z-index:20;width:min(40rem,calc(100vw - 2rem));padding:.5rem;border:1px solid var(--line);border-radius:12px;background:var(--bg);box-shadow:0 12px 32px -12px rgb(0 0 0 / .3)}
 .act-filter-groups{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.25rem}
 .act-filter-group{margin:0;padding:0;border:0;min-width:0;max-height:20rem;overflow-y:auto}
@@ -20,9 +19,9 @@ export const ACTIVITY_CSS = `
 .act-option:has(input:checked){font-weight:500;background:color-mix(in srgb,var(--surface) 60%,transparent)}
 .act-option:has(input:checked) .act-option-check{visibility:visible}
 .act-filter-actions{display:flex;justify-content:flex-end;gap:.5rem;margin-top:.4rem;padding-top:.5rem;border-top:1px solid var(--line)}
-.act-chip-filter{display:inline-flex;align-items:center;gap:.3rem;height:2rem;padding:0 .3rem 0 .65rem;border:1px solid var(--line);border-radius:999px;background:var(--bg);font-size:.82rem;color:var(--muted)}
-.act-chip-filter strong{color:var(--text);font-weight:500}
-.act-chip-filter a{display:inline-flex;align-items:center;justify-content:center;width:1.4rem;height:1.4rem;border-radius:999px;color:var(--muted)}
+.act-chip-filter{display:inline-flex;align-items:center;gap:.3rem;min-height:2rem;max-width:100%;padding:.15rem .3rem .15rem .65rem;border:1px solid var(--line);border-radius:1rem;background:var(--bg);font-size:.82rem;color:var(--muted)}
+.act-chip-filter strong{min-width:0;color:var(--text);font-weight:500;overflow-wrap:anywhere}
+.act-chip-filter a{flex:none;display:inline-flex;align-items:center;justify-content:center;width:1.4rem;height:1.4rem;border-radius:999px;color:var(--muted)}
 .act-chip-filter a:hover{background:var(--surface);color:var(--text)}
 .act-chip-filter svg{width:.85rem;height:.85rem}
 @media (max-width:36rem){
@@ -42,17 +41,23 @@ export const ACTIVITY_CSS = `
 .act-pages-buttons{display:flex;gap:.5rem}
 .act-pages [aria-disabled="true"]{opacity:.45;pointer-events:none}
 .table-scroll:has(> table[hidden]){display:none}
-table.act-table td{vertical-align:top}
-table.act-table tr.day{border-bottom:0}
-table.act-table tr.day:hover{background:none}
-table.act-table tr.day th{padding:1rem .85rem .35rem;color:var(--text);font-size:.88rem;font-weight:600}
-table.act-table tbody tr.day:first-child th{padding-top:.6rem}
+/*
+ * shadcn's table rules (table.data, in the later components layer) win over
+ * this layer whatever the specificity, so the few this table changes are
+ * marked important, as agents.ts does for its rows.
+ */
+table.act-table td{vertical-align:top!important}
+table.act-table tr.day{border-bottom:0!important}
+table.act-table tr.day:hover{background:none!important}
+table.act-table tr.day th{height:auto!important;padding:1rem .85rem .35rem!important;color:var(--text);font-size:.88rem;font-weight:600!important}
+table.act-table tbody tr.day:first-child th{padding-top:.6rem!important}
 .day-count{display:inline-block;min-width:1.35rem;margin-left:.35rem;padding:0 .4rem;border-radius:999px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);color:var(--muted);font-size:.72rem;font-weight:500;line-height:1.35rem;text-align:center}
 .act-kind{width:8.5rem;white-space:nowrap}
 .act-watch{display:block;font-size:.75rem;margin-top:.2rem}
 .act-sentence{margin:0;font-weight:500;overflow-wrap:anywhere}
 .act-meta{display:flex;flex-wrap:wrap;align-items:center;gap:.25rem .75rem;margin:.3rem 0 0;font-size:.85rem}
 .act-chip{display:inline-block;padding:0 .4rem;border-radius:6px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);font-size:.8rem}
+.act-meta .mono{font-size:.8rem}
 .act-reason{flex-basis:100%}
 .act-details{margin-top:.35rem;font-size:.85rem}
 .act-details summary{display:inline-flex;align-items:center;gap:.25rem;color:var(--muted);width:fit-content;list-style:none}
@@ -68,7 +73,7 @@ table.act-table tbody tr.day:first-child th{padding-top:.6rem}
   table.act-table tr{display:grid;grid-template-columns:auto 1fr;gap:.25rem .6rem;padding:.65rem .85rem;border-bottom:1px solid var(--line)}
   table.act-table tr.day{display:block;padding:0}
   table.act-table tr.day th{display:block}
-  table.act-table tr > td{padding:0;border:0}
+  table.act-table tr > td{padding:0!important;border:0}
   table.act-table .act-what{grid-column:1 / -1;grid-row:2}
   table.act-table .act-when{text-align:right;width:auto}
   table.act-table .act-kind{width:auto}

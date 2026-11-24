@@ -1,5 +1,5 @@
 import type { ActivityRow, AgentActivity } from "../../../store/activity.ts";
-import { activityPage, agentsPage } from "../activity-page.ts";
+import { ACTIVITY_PANELS_SCRIPT, activityPage, agentsPage } from "../activity-page.ts";
 import { approvalRequest } from "../approval-request.ts";
 import type { CeremonyCallback } from "../ceremony.ts";
 import { connectPage } from "../connect.ts";
@@ -125,6 +125,8 @@ export interface Story {
   /** A focus page (the agent consent screen): no header or tabs. */
   focus?: boolean;
   body: () => Html;
+  /** The page's own script beyond the ceremony stand-ins, if it needs no server. */
+  script?: string;
 }
 
 /** Preview handlers only announce what would start; none of them decides anything. */
@@ -554,8 +556,9 @@ const activity = (
   label: string,
   rows: readonly ActivityRow[],
   filter: Parameters<typeof activityPage>[0]["filter"] = {},
-) =>
-  pageStory("activity", state, label, "Activity", "activity", () =>
+  extra: Partial<Parameters<typeof activityPage>[0]> = {},
+): Story => ({
+  ...pageStory("activity", state, label, "Activity", "activity", () =>
     activityPage({
       rows,
       agents: AGENT_NAMES,
@@ -566,8 +569,42 @@ const activity = (
       hidden: null,
       suggestions: [],
       canExport: true,
+      ...extra,
     }),
-  );
+  ),
+  script: ACTIVITY_PANELS_SCRIPT,
+});
+
+const LONG_AGENT = {
+  id: "agt_long",
+  name: "quarterly-finance-reconciliation-and-vendor-followup-assistant-v2",
+};
+const LONG_ACCOUNT = "finance-shared-mailbox-for-accounts-payable@very-long-company-domain.example";
+
+/** Long names, a long rule path and reason, and a hundred rows across many days. */
+const LONG_ROWS: ActivityRow[] = [
+  audit(ago(2 * 60_000), "deny", LONG_AGENT.id, LONG_ACCOUNT, "email.send", "gmail_send", {
+    rule: {
+      name: "never-send-outside-the-company-without-asking-the-finance-lead-first",
+      file: "rules/teams/finance/accounts-payable/outbound-mail.yaml",
+      line: 1204,
+    },
+    reason:
+      "The recipient domain very-long-vendor-domain-name-for-testing-wrapping.example isn't on the allow list, so heel denied it.",
+    approvalId: "apr_7QxK2mN4pR8sVeryLongApprovalIdentifier000001",
+    scriptId: "scr_very_long_script_identifier_0001",
+  }),
+  ...Array.from({ length: 99 }, (_, i) =>
+    audit(
+      ago((i + 1) * 3 * 3_600_000),
+      (["allow", "deny", "ask", "approved", "would_deny"] as const)[i % 5] ?? "allow",
+      AGENT_NAMES[i % 3]?.id ?? "agt_inbox",
+      ["gmail-work", "github", "calendar"][i % 3] ?? "gmail-work",
+      "email.label",
+      "gmail_label",
+    ),
+  ),
+];
 
 const agentActivity = (
   agentId: string,
@@ -850,6 +887,29 @@ export const PAGE_STORIES: readonly Story[] = [
     kind: "would_ask",
   }),
   activity("empty", "No calls yet", []),
+  activity(
+    "long",
+    "A long agent name, account, rule and reason, and a hundred rows",
+    LONG_ROWS,
+    { agent: LONG_AGENT.id, account: LONG_ACCOUNT, kind: "deny" },
+    {
+      agents: [...AGENT_NAMES, LONG_AGENT],
+      accounts: ["gmail-work", "github", "calendar", LONG_ACCOUNT],
+      nextBefore: 1,
+      hidden: { matched: 12, uncertain: 3, unparseable: 1 },
+    },
+  ),
+  activity(
+    "older",
+    "An older page: Newer goes back",
+    ACTIVITY_ROWS,
+    {},
+    {
+      paged: true,
+      nextBefore: null,
+    },
+  ),
+  activity("member", "A member: no audit log download", ACTIVITY_ROWS, {}, { canExport: false }),
 
   // Agents
   agents("busy", "Agents incl. a revoked one and an expiring token", AGENTS),
@@ -1094,6 +1154,6 @@ export function renderStory(story: Story, theme: Theme): Html {
     pause: story.pause ?? null,
     theme,
     body: story.body(),
-    script: PREVIEW_CEREMONY_SCRIPT,
+    script: story.script ? `${PREVIEW_CEREMONY_SCRIPT}\n${story.script}` : PREVIEW_CEREMONY_SCRIPT,
   });
 }
