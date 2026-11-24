@@ -364,11 +364,9 @@ function lineFor(name: string, value: unknown): ArgumentLine {
  * for the one-line title; the full value is always in the content below it
  * and in the full arguments (I-57).
  */
-export function middle(value: string, max = 32): string {
-  if (value.length <= max) return value;
-  const keep = max - 1;
-  const head = Math.ceil(keep / 2);
-  return `${value.slice(0, head)}…${value.slice(value.length - (keep - head))}`;
+export function middle(value: string, head = 12, tail = 8): string {
+  if (value.length <= head + tail + 1) return value;
+  return `${value.slice(0, head)}…${value.slice(value.length - tail)}`;
 }
 
 /**

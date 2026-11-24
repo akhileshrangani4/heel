@@ -159,11 +159,12 @@ describe("mailPreviewFrom", () => {
 });
 
 describe("middle", () => {
-  it("cuts a long value in the middle for a title, and leaves a short one alone", () => {
+  it("keeps the first 12 and last 8 characters of a long value, and leaves a short one alone", () => {
     expect(middle("bob@vendor.com")).toBe("bob@vendor.com");
-    const cut = middle("eve.long-surname-for-wrapping@a-very-long-partner-domain.example", 24);
-    expect(cut).toHaveLength(24);
-    expect(cut).toBe("eve.long-sur…ain.example");
+    expect(middle("claude-code-heel")).toBe("claude-code-heel");
+    expect(middle("eve.long-surname-for-wrapping@a-very-long-partner-domain.example")).toBe(
+      "eve.long-sur….example",
+    );
   });
 });
 
