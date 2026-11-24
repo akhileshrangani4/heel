@@ -31,7 +31,13 @@ import { recoveryNotices } from "../ui/devices.ts";
 import { html } from "../ui/html.ts";
 import { type PendingRow, pendingList } from "../ui/pending-list.ts";
 import { suggestionCards } from "../ui/suggestions.ts";
-import { emailPreviewFrom, headline, httpPreviewFrom, mergePreviewFrom } from "../ui/summary.ts";
+import {
+  emailPreviewFrom,
+  headline,
+  httpPreviewFrom,
+  mailPreviewFrom,
+  mergePreviewFrom,
+} from "../ui/summary.ts";
 import { proposalCardsFor } from "./proposals.ts";
 import { requestCardsFor } from "./requests.ts";
 import { suggestionsOf } from "./suggestions.ts";
@@ -96,7 +102,7 @@ function requestView(
     client: row.client,
     args: row.call.args,
     // Built from the stored call, never from what the agent said about it.
-    email: emailPreviewFrom(row.call.action ?? null, row.call.args),
+    email: mailPreviewFrom(row.call.action ?? null, row.call.args),
     merge: mergePreviewFrom(row.call.action ?? null, row.call.args),
     http: httpPreviewFrom(row.call),
     items: row.call.items,

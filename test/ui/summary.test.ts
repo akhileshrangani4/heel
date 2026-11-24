@@ -5,7 +5,9 @@ import {
   groupByDomain,
   homeDomain,
   httpPreviewFrom,
+  mailPreviewFrom,
   mergePreviewFrom,
+  middle,
   recipientPhrase,
 } from "../../src/web/ui/summary.ts";
 
@@ -114,6 +116,54 @@ describe("argumentLines", () => {
       { name: "c", value: long, block: true },
       { name: "d", value: '{\n  "n": 1\n}', block: true },
     ]);
+  });
+
+  it("puts who or what the call reaches first, then its content, and marks empty values", () => {
+    const lines = argumentLines({
+      bcc: [],
+      body: "Hi",
+      cc: null,
+      from: "a@b.c",
+      priority: 2,
+      subject: "Q4",
+      to: ["bob@vendor.com"],
+      labels: {},
+      project: "",
+    });
+    expect(lines.map((l) => l.name)).toEqual([
+      "to",
+      "subject",
+      "body",
+      "bcc",
+      "cc",
+      "from",
+      "labels",
+      "priority",
+      "project",
+    ]);
+    expect(lines.filter((l) => l.empty).map((l) => l.name)).toEqual([
+      "bcc",
+      "cc",
+      "labels",
+      "project",
+    ]);
+  });
+});
+
+describe("mailPreviewFrom", () => {
+  it("reads a draft as the email it holds; the list's emailPreviewFrom still doesn't", () => {
+    expect(mailPreviewFrom("email.draft", SEND)).toMatchObject({ to: ["bob@vendor.com"] });
+    expect(mailPreviewFrom("email.draft", { draft_id: "r-1" })).toBeNull();
+    expect(emailPreviewFrom("email.draft", SEND)).toBeNull();
+  });
+});
+
+describe("middle", () => {
+  it("cuts a long value in the middle for a title, and leaves a short one alone", () => {
+    expect(middle("bob@vendor.com")).toBe("bob@vendor.com");
+    const cut = middle("eve.long-surname-for-wrapping@a-very-long-partner-domain.example", 24);
+    expect(cut).toHaveLength(24);
+    expect(cut).toBe("eve.long-sur…ain.example");
   });
 });
 

@@ -3,7 +3,7 @@ import type { PauseNotice } from "../layout.ts";
 import type { ActivePause } from "../pause-control.ts";
 import type { PendingRow } from "../pending-list.ts";
 import type { StandingRow } from "../standing-approval-list.ts";
-import { emailPreviewFrom, headline } from "../summary.ts";
+import { emailPreviewFrom, headline, mailPreviewFrom } from "../summary.ts";
 
 /**
  * Fixture props for the preview harness and the render tests. Every value is
@@ -390,7 +390,7 @@ export const DRAFT_REQUEST: ApprovalRequestView = {
   reason:
     "Deny-path test: save a draft to the owner's own address. The owner will deny it; nothing is sent.",
   args: DRAFT_ARGS,
-  email: emailPreviewFrom("email.draft", DRAFT_ARGS),
+  email: mailPreviewFrom("email.draft", DRAFT_ARGS),
   counts: [],
   createdAt: minutes(-1),
 };
