@@ -100,13 +100,6 @@ export const STANDING_LONGEST_DAYS = 30;
 /** Design variant for the email header: like a mail client (A), or one labelled row per field (B). */
 export type EmailLayout = "mail" | "rows";
 
-/**
- * Design variant for approving for longer: a menu on Approve once (A), or an
- * offer on the approved page (B, preview only: the decide route refuses a
- * second decision on an approved request today).
- */
-export type AllowAgain = "menu" | "after";
-
 export interface ApprovalRequestProps {
   now: Date;
   /** The request, or why it couldn't be loaded. */
@@ -120,7 +113,6 @@ export interface ApprovalRequestProps {
   /** The task waiting on this call runs in the background: approving starts it again at once (C6). */
   background?: boolean;
   emailLayout?: EmailLayout;
-  allowAgain?: AllowAgain;
 }
 
 /**
@@ -573,34 +565,23 @@ function hintsView(request: ApprovalRequestView): Html | "" {
   </section>`;
 }
 
-/** What did or didn't happen, in one short line, for the decided view. */
-function outcomeLine(request: ApprovalRequestView): string | null {
-  switch (request.status) {
-    case "pending":
-      return null;
-    case "approved":
-      return "It will run once.";
-    case "executed":
-      return "It ran once.";
-    case "expired":
-      return "Nobody decided in time, so it can't be approved or denied.";
-    case "denied":
-      if (request.action === "email.draft") return "No draft was saved.";
-      if (request.action === "email.send") return "No email was sent.";
-      if (request.action === "github.merge") return "Nothing was merged.";
-      return "This call didn't run.";
-  }
-}
-
+/** A decided request is one word, and nothing else. */
 const OUTCOME: Record<
   Exclude<ApprovalStatus, "pending">,
   { word: string; tone: Tone | "muted"; icon: keyof typeof ICONS }
 > = {
   approved: { word: "Approved", tone: "ok", icon: "check" },
-  executed: { word: "Done", tone: "info", icon: "check" },
+  executed: { word: "Ran", tone: "info", icon: "check" },
   denied: { word: "Denied", tone: "error", icon: "x" },
   expired: { word: "Expired", tone: "muted", icon: "clock" },
 };
+
+/**
+ * On a decided page the content (the email, the merge, the raw arguments,
+ * the task's steps) sits in a closed "What was asked" fold, whole (I-57).
+ * Set to false to show it open in the main flow, as a pending page does.
+ */
+const FOLD_DECIDED_CONTENT = true;
 
 /** What happens if the same call comes again, for Technical. */
 function afterwards(request: ApprovalRequestView): string | null {
@@ -635,7 +616,6 @@ function allowAgainOptions(
   request: ApprovalRequestView,
   fieldsetId: string,
   locked: boolean,
-  withOnce: boolean,
 ): Html {
   const scope = (value: string, label: Html | string, broad: boolean, checked: boolean) =>
     html`<label class="choice${broad ? " is-broad" : ""}" for="${fieldsetId}-${value}">
@@ -643,9 +623,9 @@ function allowAgainOptions(
       <span>${label}${broad ? html` <span class="ap-broad">Broad</span>` : ""}</span>
     </label>`;
   return html`<fieldset id="${fieldsetId}" class="ap-allow"${flag("disabled", locked)}>
-    <legend>${withOnce ? "Approve" : "Allow it again without asking"}</legend>
-    ${withOnce ? scope("once", "Just this once", false, true) : ""}
-    ${scope("exact_call", withOnce ? "This exact call, and again without asking" : "This exact call", false, !withOnce)}
+    <legend>Approve</legend>
+    ${scope("once", "Just this once", false, true)}
+    ${scope("exact_call", "This exact call, and again without asking", false, false)}
     ${scope("rule", html`Any call the rule ${ruleWords(request.rule)} covers`, true, false)}
     ${request.runId === null ? "" : scope("run", "Any call that rule covers in this run", true, false)}
     <div class="ap-pills" role="radiogroup" aria-label="For how long">
@@ -678,7 +658,6 @@ function allowButtons(
   onDecide: CeremonyCallback,
   helpId: string,
   locked: boolean,
-  tone: "primary" | "secondary",
 ): Html {
   const scopes =
     request.runId === null
@@ -693,7 +672,7 @@ function allowButtons(
           callback: onDecide,
           intent: "approve-standing",
           label: allowLabel(scope, d.value),
-          tone,
+          tone: "primary",
           binding,
           disabled: locked,
           describedBy: helpId,
@@ -776,13 +755,11 @@ function decisionControls(
   request: ApprovalRequestView,
   pause: PauseNotice | null,
   onDecide: CeremonyCallback,
-  allowAgain: AllowAgain,
 ): Html | "" {
-  if (request.status !== "pending" && request.status !== "expired") return "";
-  // An expired request can't be decided at all (I-55). Approving in a paused
-  // scope is refused (I-61); denying only tightens, so it stays open.
-  const expired = request.status === "expired";
-  const approveLocked = expired || pause !== null;
+  // Only a waiting request can be decided; an expired one shows no controls (I-55).
+  // Approving in a paused scope is refused (I-61); denying only tightens, so it stays open.
+  if (request.status !== "pending") return "";
+  const approveLocked = pause !== null;
   const fieldsetId = `standing-${request.id}`;
   const helpId = `decide-help-${request.id}`;
   const binding = { approvalId: request.id, callHash: request.callHash };
@@ -799,14 +776,14 @@ function decisionControls(
   // choosing to allow it again swaps in the allow button, labelled with that
   // choice. The menu goes back to "Just this once" when it closes.
   const split =
-    request.origin === "org" || allowAgain !== "menu"
+    request.origin === "org"
       ? ""
       : html`<span class="ap-split">
           ${once}
-          ${allowButtons(request, onDecide, helpId, approveLocked, "primary")}
+          ${allowButtons(request, onDecide, helpId, approveLocked)}
           <details class="ap-split-menu" name="${ONE_OPEN}" data-heel-reset>
             <summary class="ap-split-toggle" aria-label="Approve for longer">${trusted(ICONS.chevron)}</summary>
-            <div class="ap-menu">${allowAgainOptions(request, fieldsetId, approveLocked, true)}</div>
+            <div class="ap-menu">${allowAgainOptions(request, fieldsetId, approveLocked)}</div>
           </details>
         </span>`;
   return html`<section class="ap-decide" aria-labelledby="decide-${request.id}">
@@ -819,34 +796,16 @@ function decisionControls(
         label: "Deny",
         tone: "danger",
         binding,
-        disabled: expired,
         describedBy: helpId,
       }),
       helpId,
       help: "Your passkey confirms every decision. Nothing runs until you approve.",
-      dock: !expired,
     })}
     ${
       request.origin === "org"
         ? html`<p class="muted ap-note">An org rule asked: only an org admin can approve it, once. Org asks never stand.</p>`
         : ""
     }
-  </section>`;
-}
-
-/**
- * Variant B (preview only): after approving once, one offer to ask less next
- * time. The decide route refuses a second decision on an approved request
- * today, so this needs a backend change before it can ship.
- */
-function allowAfter(request: ApprovalRequestView, onDecide: CeremonyCallback): Html {
-  const fieldsetId = `standing-${request.id}`;
-  const helpId = `decide-help-${request.id}`;
-  return html`<section class="ap-after" aria-label="Ask less next time">
-    <p class="ap-after-ask">Ask less next time?</p>
-    ${allowAgainOptions(request, fieldsetId, false, false)}
-    ${allowButtons(request, onDecide, helpId, false, "secondary")}
-    <p id="${helpId}" class="visually-hidden">Your passkey confirms it.</p>
   </section>`;
 }
 
@@ -869,22 +828,32 @@ const PROVIDERS: Readonly<Record<string, string>> = {
  */
 function detailsView(request: ApprovalRequestView, folds: Folds, now: Date): Html {
   const after = afterwards(request);
-  const last =
-    request.status === "pending" || request.status === "approved"
-      ? row("Expires", cap(formatRelative(request.expiresAt, now)))
+  const account = row(
+    "Account",
+    `${request.account}, ${PROVIDERS[request.provider] ?? request.provider}`,
+  );
+  const rule = row("Rule", `${ruleWords(request.rule)} asked you`);
+  // Waiting: what it does and when it expires. Decided: who and when, and what
+  // the same call gets next. Four rows either way.
+  const decided =
+    request.status === "executed" && request.executedAt !== null
+      ? `Ran ${formatRelative(request.executedAt, now)}`
       : request.decision !== null
-        ? row("Decided", `By ${request.decision.by}, ${formatRelative(request.decision.at, now)}`)
-        : row("Expired", cap(formatRelative(request.expiresAt, now)));
+        ? `By ${request.decision.by}, ${formatRelative(request.decision.at, now)}`
+        : `Nobody, expired ${formatRelative(request.expiresAt, now)}`;
+  const rows =
+    request.status === "pending"
+      ? html`${account}
+          ${row("What it does", cap(actionPhrase(request.action, request.tool)))} ${rule}
+          ${row("Expires", cap(formatRelative(request.expiresAt, now)))}`
+      : html`${row("Decided", decided)} ${row("If sent again", after ?? "")} ${account} ${rule}`;
   return fold(
     folds,
     "details",
     false,
     html`Details`,
     html`<div class="ap-fold-body">
-      ${row("Account", `${request.account}, ${PROVIDERS[request.provider] ?? request.provider}`)}
-      ${row("What it does", cap(actionPhrase(request.action, request.tool)))}
-      ${row("Rule", `${ruleWords(request.rule)} asked you`)}
-      ${last}
+      ${rows}
       ${hintsView(request)}
       <details class="ap-technical">
         <summary><span class="fold-label">Technical</span>${CHEV}</summary>
@@ -920,7 +889,6 @@ function detailsView(request: ApprovalRequestView, folds: Folds, now: Date): Htm
           }
           <dt>${request.status === "denied" ? "Denied until" : request.status === "expired" ? "Expired" : "Expires"}</dt>
           <dd>${time(request.expiresAt)}</dd>
-          ${after === null ? "" : html`<dt>Next</dt><dd>${after}</dd>`}
           <dt>Request</dt>
           <dd class="mono">${request.id}</dd>
         </dl>
@@ -931,26 +899,54 @@ function detailsView(request: ApprovalRequestView, folds: Folds, now: Date): Htm
   );
 }
 
-/** A decided request in a word and one short line. */
+/** A decided request: one word, and nothing else. */
 function outcomeView(request: ApprovalRequestView): Html {
   if (request.status === "pending") return html``;
   const { word, tone, icon } = OUTCOME[request.status];
-  const line = outcomeLine(request);
   return html`<section class="ap-outcome" data-tone="${tone}" role="status">
     <span class="ap-outcome-icon">${trusted(ICONS[icon])}</span>
-    <div>
-      <h1 class="ap-outcome-word">${word}</h1>
-      ${line === null ? "" : html`<p class="ap-outcome-line">${line}</p>`}
-    </div>
+    <h1 class="ap-outcome-word">${word}</h1>
   </section>`;
+}
+
+/**
+ * A decided request: the word, what was asked in one sentence (the agent
+ * named once, here), the agent's words whole, the way back, then the content
+ * and Details in closed folds. Nothing can be decided here any more; an
+ * expired request can't be approved (I-55), so it shows no controls at all.
+ */
+function decidedPage(request: ApprovalRequestView, folds: Folds, now: Date, content: Html): Html {
+  const ask = askSentence(request);
+  const asked = `${middle(request.agent)} asked to ${ask.charAt(0).toLowerCase()}${ask.slice(1)}`;
+  return html`<article class="ap is-decided" data-kind="call" data-heel-fold-kind="${foldKind(request)}">
+    ${outcomeView(request)}
+    <p class="ap-title">${asked}</p>
+    ${reasonView(request)}
+    <nav class="ap-crumbs ap-back" aria-label="Breadcrumb">
+      <a href="/approvals">${trusted(ICONS.back)}Back to Approvals</a>
+    </nav>
+    ${
+      FOLD_DECIDED_CONTENT
+        ? fold(
+            folds,
+            "asked",
+            false,
+            html`What was asked`,
+            html`<div class="ap-fold-body">${content}</div>`,
+            "ap-fold ap-asked",
+            true,
+          )
+        : content
+    }
+    ${detailsView(request, folds, now)}
+  </article>`;
 }
 
 /**
  * The approval page body (spec: The approval page). Top to bottom: who is
  * asking (named once), what will happen in one sentence, the agent's reason
  * set apart, heel's one note, the content as it will land with its raw
- * arguments a tap away, then Deny and Approve once, pinned on a phone. A
- * decided request leads with its outcome in a word and a line. The
+ * arguments a tap away, then Deny and Approve once, pinned on a phone. The
  * arguments are on the page, in full, in every state (I-57).
  */
 export function approvalRequest(props: ApprovalRequestProps): Html {
@@ -965,7 +961,6 @@ export function approvalRequest(props: ApprovalRequestProps): Html {
   const request = props.load.request;
   const folds: Folds = props.folds ?? new Map();
   const pending = request.status === "pending";
-  const allowAgain = props.allowAgain ?? "menu";
   const view =
     request.email !== null
       ? emailView(request, request.email, folds, props.emailLayout ?? "mail")
@@ -974,8 +969,11 @@ export function approvalRequest(props: ApprovalRequestProps): Html {
         : request.http
           ? httpView(request, request.http)
           : argumentsView(request);
+  const content = html`${view} ${rawArguments(request, folds)}
+    ${taskView(request, props.background === true, folds)}`;
+  if (!pending) return decidedPage(request, folds, props.now, content);
   const lock =
-    props.pause !== null && pending
+    props.pause !== null
       ? notice(
           "warn",
           html`<p>
@@ -984,25 +982,15 @@ export function approvalRequest(props: ApprovalRequestProps): Html {
           </p>`,
         )
       : "";
-  // One h1: the ask while it waits, the outcome once it's decided or expired.
-  const title = pending
-    ? html`<h1 class="ap-title">${askSentence(request)}</h1>`
-    : html`<p class="ap-title">${askSentence(request)}</p>`;
-  const after =
-    request.status === "approved" && allowAgain === "after" && request.origin !== "org"
-      ? allowAfter(request, props.onDecide)
-      : "";
-  return html`<article class="ap${pending ? "" : " is-decided"}" data-kind="call"${pending ? html` data-dock="pinned"` : ""} data-heel-fold-kind="${foldKind(request)}">
+  return html`<article class="ap" data-kind="call" data-dock="pinned" data-heel-fold-kind="${foldKind(request)}">
     <nav class="ap-crumbs" aria-label="Breadcrumb">
       <a href="/approvals">${trusted(ICONS.back)}Approvals</a>
     </nav>
-    ${outcomeView(request)} ${after}
-    ${whoView(request, props.now)} ${title} ${lock}
-    ${reasonView(request)} ${pending ? taskRow(request) : ""} ${riskView(request)}
-    ${view}
-    ${rawArguments(request, folds)}
-    ${taskView(request, props.background === true, folds)}
-    ${decisionControls(request, props.pause, props.onDecide, allowAgain)}
+    ${whoView(request, props.now)}
+    <h1 class="ap-title">${askSentence(request)}</h1>
+    ${lock} ${reasonView(request)} ${taskRow(request)} ${riskView(request)}
+    ${content}
+    ${decisionControls(request, props.pause, props.onDecide)}
     ${detailsView(request, folds, props.now)}
   </article>`;
 }

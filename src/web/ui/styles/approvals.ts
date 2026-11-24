@@ -7,7 +7,7 @@ const ALLOW_BUTTON_CSS = ["exact_call", "rule", "run"]
   .flatMap((scope) =>
     ["1h", "1d", "7d", "30d"].map(
       (length) =>
-        `:is(.ap-split,.ap-after):has(input[type="radio"][name="scope"][value="${scope}"]:checked):has(input[type="radio"][name="duration"][value="${length}"]:checked) .ap-allow-btn[data-scope="${scope}"][data-duration="${length}"]{display:flex}`,
+        `.ap-split:has(input[type="radio"][name="scope"][value="${scope}"]:checked):has(input[type="radio"][name="duration"][value="${length}"]:checked) .ap-allow-btn[data-scope="${scope}"][data-duration="${length}"]{display:flex}`,
     ),
   )
   .join("\n");
@@ -160,14 +160,15 @@ export const APPROVALS_CSS = `
 /* Approve once, with a menu for approving for longer: one primary button, labelled with the choice. */
 .ap-split{position:relative;display:flex;flex:1;min-width:0}
 /* !important: shadcn's utilities sit in a later cascade layer than these rules. */
-.ap-split .btn{border-top-right-radius:0 !important;border-bottom-right-radius:0 !important}
+/* The label keeps room on both sides of the divider and stays on one line. */
+.ap-split .btn{border-top-right-radius:0 !important;border-bottom-right-radius:0 !important;padding-left:.85rem !important;padding-right:.85rem !important;white-space:nowrap !important}
 .ap-split:has(input[type="radio"][name="scope"]:not([value="once"]):checked) > [data-heel-ceremony="approve-once"]{display:none !important}
 .ap-allow-btn{display:none;flex:1;min-width:0}
 ${ALLOW_BUTTON_CSS}
-.ap-after .ap-allow-btn{margin-top:.6rem}
-.ap-after .ap-allow-btn .btn{border-radius:8px !important}
+/* An allow label is longer than "Approve once": the approve side takes 3 parts to Deny's 2. */
+.ap[data-kind="call"] .ap-bar:has(.ap-split input[type="radio"][name="scope"]:not([value="once"]):checked){grid-auto-columns:unset;grid-template-columns:minmax(0,2fr) minmax(0,3fr)}
 .ap-split-menu{flex:none;display:flex}
-.ap .ap-split-toggle{display:inline-grid;place-items:center;width:2.6rem;min-height:2.5rem;height:100%;border-radius:0 6px 6px 0;background:var(--accent);color:var(--accent-text);box-shadow:inset 1px 0 0 color-mix(in srgb,var(--accent-text) 25%,transparent)}
+.ap .ap-split-toggle{display:inline-grid;place-items:center;width:2.75rem;min-height:2.5rem;height:100%;padding:0 .7rem;border-radius:0 6px 6px 0;background:var(--accent);color:var(--accent-text);box-shadow:inset 1px 0 0 color-mix(in srgb,var(--accent-text) 25%,transparent)}
 .ap .ap-split-toggle svg{width:1rem;height:1rem;transition:transform .2s}
 .ap .ap-split-menu[open] > .ap-split-toggle svg{transform:rotate(180deg)}
 .ap-split:has(:disabled) .ap-split-toggle{opacity:.5;pointer-events:none}
@@ -186,19 +187,17 @@ fieldset.ap-allow{border:0;padding:0;margin:0;min-width:0}
 .ap-pill span{display:inline-block;padding:.3rem .75rem;border-radius:999px;box-shadow:inset 0 0 0 1px var(--line);font-size:.85rem}
 .ap-pill input:checked + span{background:var(--accent);color:var(--accent-text);box-shadow:none}
 .ap-pill input:focus-visible + span{outline:2px solid var(--focus);outline-offset:2px}
-/* Variant B: after approving once, one offer to ask less next time (preview only). */
-.ap-after{margin:0 0 1.25rem;padding:.85rem 1rem;border:1px solid var(--line);border-radius:14px;background:var(--bg)}
-.ap-after-ask{margin:0 0 .5rem;font-weight:600}
-/* A decided request: the outcome in a word and a line. */
-.ap-outcome{display:flex;gap:.75rem;align-items:flex-start;margin:.25rem 0 1.25rem}
-.ap-outcome-icon{display:inline-flex;margin-top:.2rem}
+/* A decided request: one word, then what was asked, the agent's words, the way back and two folds. */
+.ap-outcome{display:flex;gap:.65rem;align-items:center;margin:.25rem 0 .75rem}
+.ap-outcome-icon{display:inline-flex}
+.ap-back{margin:1rem 0 0}
+.ap-back a{color:var(--text);font-weight:500}
 .ap-outcome-icon svg{width:1.75rem;height:1.75rem}
 .ap-outcome[data-tone="error"] .ap-outcome-icon{color:var(--danger)}
 .ap-outcome[data-tone="ok"] .ap-outcome-icon{color:var(--ok)}
 .ap-outcome[data-tone="info"] .ap-outcome-icon{color:var(--info)}
 .ap-outcome[data-tone="muted"] .ap-outcome-icon{color:var(--muted)}
 .ap .ap-outcome-word{font-size:1.75rem;line-height:1.15;margin:0;letter-spacing:-.02em}
-.ap-outcome-line{margin:.25rem 0 0;color:var(--muted)}
 /* Focus: a ring only for the keyboard, following each element's own radius. */
 .ap :is(a,summary,input,select):focus{outline:none}
 .ap :is(a,summary,select):focus-visible{outline:2px solid var(--focus);outline-offset:2px}

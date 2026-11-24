@@ -388,7 +388,7 @@ describe("the approval page", () => {
     expect(decided).toEqual([approvalId]);
     // Once approved, the page is the outcome in a word and a line; what happens next is in Details.
     const afterPage = await (await h.fetch(`/approvals/${approvalId}`, { as: owner })).text();
-    expect(afterPage).toContain("It will run once.");
+    expect(afterPage).toMatch(/<h1 class="ap-outcome-word">Approved<\/h1>/);
     expect(afterPage).not.toContain("If you approve, the rest runs");
     expect(afterPage).toContain("when the task goes on from this step");
 

@@ -457,35 +457,38 @@ describe("ApprovalRequest", () => {
     expect(text(doc)).toContain("Approving is unavailable while agent inbox-bot is paused");
   });
 
-  it("I-55: an expired request shows every decision control disabled", () => {
+  it("I-55: an expired request can't be approved: it has no decision control at all", () => {
     const doc = render(EXPIRED_REQUEST);
-    for (const b of doc.querySelectorAll("button")) {
-      expect(b.hasAttribute("disabled"), b.getAttribute("data-heel-ceremony") ?? "").toBe(true);
-    }
-    for (const intent of ["approve-once", "approve-standing", "deny"]) {
-      expect(button(doc, intent), intent).not.toBeNull();
-    }
+    expect(doc.querySelectorAll("button")).toHaveLength(0);
+    expect(doc.querySelectorAll("[data-heel-ceremony]")).toHaveLength(0);
     expect(text(doc.querySelector("h1"))).toBe("Expired");
-    expect(text(doc)).toContain("can't be approved or denied");
   });
 
   it.each([
-    ["approved", APPROVED_REQUEST, "Approved", "It will run once."],
-    ["denied", DENIED_REQUEST, "Denied", "No email was sent."],
-    ["denied draft", DENIED_DRAFT_REQUEST, "Denied", "No draft was saved."],
-    ["executed", EXECUTED_REQUEST, "Done", "It ran once."],
-  ] as const)(
-    "a decided (%s) request is its outcome in a word and a line, with no decision controls",
-    (_s, request, word, line) => {
-      const doc = render(request);
-      expect(doc.querySelectorAll("button")).toHaveLength(0);
-      expect(text(doc.querySelector("h1"))).toBe(word);
-      expect(text(doc.querySelector(".ap-outcome-line"))).toBe(line);
-      // Who decided, when, and what the same call gets next are in Details, not the outcome.
-      expect(text(doc.querySelector(".ap-outcome"))).not.toMatch(/alice|UTC|again/);
-      expect(text(doc.querySelector(".ap-details"))).toContain("same call again");
-    },
-  );
+    ["approved", APPROVED_REQUEST, "Approved"],
+    ["denied", DENIED_REQUEST, "Denied"],
+    ["denied draft", DENIED_DRAFT_REQUEST, "Denied"],
+    ["executed", EXECUTED_REQUEST, "Ran"],
+    ["expired", EXPIRED_REQUEST, "Expired"],
+  ] as const)("a decided (%s) request is one word, then what was asked", (_s, request, word) => {
+    const doc = render(request);
+    expect(doc.querySelectorAll("button")).toHaveLength(0);
+    // The word and nothing else.
+    expect(text(doc.querySelector("h1"))).toBe(word);
+    expect(text(doc.querySelector(".ap-outcome"))).toBe(word);
+    // Then the ask in one sentence, naming the agent once, and the agent's words whole.
+    expect(text(doc.querySelector(".ap-title"))).toMatch(new RegExp(`^${request.agent} asked to `));
+    expect(text(doc.querySelector("blockquote"))).toBe(request.reason);
+    expect(doc.querySelector(".ap-back a")?.getAttribute("href")).toBe("/approvals");
+    expect(text(doc.querySelector(".ap-back"))).toBe("Back to Approvals");
+    // The content is folded but whole (I-57); who decided and what a resend gets are in Details.
+    const asked = doc.querySelector("details[data-heel-fold='asked']");
+    expect(asked?.hasAttribute("open")).toBe(false);
+    expect(JSON.parse(asked?.querySelector("pre.args")?.textContent ?? "null")).toEqual(
+      request.args,
+    );
+    expect(text(doc.querySelector(".ap-details"))).toContain("same call again");
+  });
 
   it("a load failure is an alert that says nothing was decided", () => {
     const doc = dom(

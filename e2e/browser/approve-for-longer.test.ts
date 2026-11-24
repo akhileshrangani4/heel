@@ -1,6 +1,7 @@
 import { type Browser, chromium, type Page } from "@playwright/test";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { allowLabel, STANDING_DURATIONS } from "../../src/web/ui/approval-request.ts";
+import { CEREMONY_SCRIPT } from "../../src/web/ui/ceremony.ts";
 import { toHtmlString } from "../../src/web/ui/html.ts";
 import { findStory, renderStory } from "../../src/web/ui/preview/stories.ts";
 
@@ -96,4 +97,68 @@ describe("approving for longer", () => {
       });
     await page.close();
   });
+
+  /** The visible approve button's box, and whether its label fits on one line. */
+  async function fit(page: Page) {
+    const b = page.locator(APPROVE);
+    const box = await b.boundingBox();
+    const fits = await b.evaluate(
+      (el) =>
+        (el as unknown as { scrollWidth: number; clientWidth: number }).scrollWidth <=
+        (el as unknown as { clientWidth: number }).clientWidth,
+    );
+    const bar = await page.locator(".ap-bar").boundingBox();
+    return { box, fits, bar };
+  }
+
+  const longest = [
+    ["once", ""],
+    ["rule", "30d"],
+    ["run", "30d"],
+    ["exact_call", "30d"],
+  ] as const;
+
+  it.each([360, 390].flatMap((width) => longest.map(([s, d]) => [width, s, d] as const)))(
+    "at %ipx the %s %s label fits on one line, inside the screen, with the bar's height unchanged",
+    async (width, scope, duration) => {
+      const page = await browser.newPage({ viewport: { width, height: 800 } });
+      await page.setContent(PAGE);
+      const idle = await fit(page);
+      if (scope !== "once") {
+        await page.locator(".ap-split-toggle").click();
+        await page.locator(`.ap-menu input[name=scope][value='${scope}']`).check({ force: true });
+        await page.locator(`.ap-menu input[name=duration][value='${duration}']`).check({
+          force: true,
+        });
+      }
+      const chosen = await fit(page);
+      expect(chosen.fits).toBe(true);
+      expect(chosen.box?.height).toBe(idle.box?.height);
+      expect(chosen.bar?.height).toBe(idle.bar?.height);
+      expect((chosen.box?.x ?? 0) + (chosen.box?.width ?? 0)).toBeLessThanOrEqual(width);
+      await page.close();
+    },
+  );
+
+  // The shared ceremony (design-approvals) keeps a waiting button's label in
+  // place and draws a spinner over it; until that lands here, there is no
+  // waiting state that keeps the box.
+  it.skipIf(!CEREMONY_SCRIPT.includes("heel-btn-icon"))(
+    "while waiting for the passkey, the chosen button keeps its box and its label still fits",
+    async () => {
+      const page = await browser.newPage({ viewport: { width: 360, height: 800 } });
+      await page.setContent(PAGE);
+      await page.locator(".ap-split-toggle").click();
+      await page.locator(".ap-menu input[name=scope][value='rule']").check({ force: true });
+      await page.locator(".ap-menu input[name=duration][value='30d']").check({ force: true });
+      const before = await fit(page);
+      await page.evaluate("window.heelCeremony.decide = () => new Promise(() => {})");
+      await page.locator(APPROVE).click();
+      const waiting = await fit(page);
+      expect(waiting.box).toEqual(before.box);
+      expect(waiting.bar).toEqual(before.bar);
+      expect(waiting.fits).toBe(true);
+      await page.close();
+    },
+  );
 });
