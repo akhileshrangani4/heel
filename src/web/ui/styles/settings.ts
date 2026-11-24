@@ -10,6 +10,11 @@ export const SETTINGS_CSS = `
 .ui-switch[aria-checked="true"] .ui-switch-word{color:var(--text)}
 .ui-switch:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
 @media (prefers-reduced-motion:reduce){.ui-switch-track,.ui-switch-thumb{transition:none}}
+/* Touch: at least a 44px hit area around small controls, without moving them. */
+@media (pointer:coarse){
+  .ui-switch,.seg-item,.set-menu > summary,.set-fold > summary,.pause-everything .btn,.settings-row-foot .btn{position:relative}
+  .ui-switch::after,.seg-item::after,.set-menu > summary::after,.set-fold > summary::after,.pause-everything .btn::after,.settings-row-foot .btn::after{content:"";position:absolute;top:50%;left:50%;width:max(100%,44px);height:max(100%,44px);transform:translate(-50%,-50%)}
+}
 .pause-rule{margin:0 0 1rem}
 .pause-everything{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin:0 0 1rem}
 .pause-everything.is-paused{border-color:color-mix(in srgb,var(--warn) 45%,transparent);background:var(--warn-bg)}
