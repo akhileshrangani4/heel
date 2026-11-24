@@ -264,6 +264,9 @@ export const PENDING_ROWS: readonly PendingRow[] = [
     action: "github.merge",
     tool: "pr merge",
     rule: { name: "prod-merges-ask-admin", file: "org-rules.yaml", line: 8 },
+    // Close to its expiry, so the list shows when it ends.
+    createdAt: hours(-23.8),
+    expiresAt: minutes(8),
   }),
 ];
 

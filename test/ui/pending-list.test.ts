@@ -20,7 +20,8 @@ describe("PendingList", () => {
     expect(hrefs).toEqual(PENDING_ROWS.map((r) => `/approvals/${r.id}`));
     // One link per row: the title and "Review" sit inside it, never as links of their own.
     expect(doc.querySelectorAll("a")).toHaveLength(PENDING_ROWS.length);
-    expect(text(doc.querySelector(".req-count"))).toBe("3 requests");
+    // Each section heading carries its count; there is no separate count line.
+    expect(doc.querySelector(".req-count")).toBeNull();
     expect(text(doc)).not.toContain("org-rules.yaml:8");
     expect(text(doc)).not.toContain(PENDING_ROWS[0]?.id ?? "-");
   });
@@ -38,7 +39,7 @@ describe("PendingList", () => {
     expect(doc.querySelector(".req .req-icon")?.getAttribute("data-kind")).toBe("mail");
   });
 
-  it("leads each card with heel's own sentence, the client, and the agent's reason as its words", () => {
+  it("says who, what and when: heel's sentence and how long ago, leaving the client and reason to the request page", () => {
     const [first] = PENDING_ROWS;
     if (first === undefined) throw new Error("no fixture");
     const doc = render({
@@ -48,10 +49,16 @@ describe("PendingList", () => {
     expect(text(doc.querySelector(".req-title"))).toBe(
       "inbox-bot wants to send an email from gmail-work to bob@vendor.com",
     );
-    expect(text(doc.querySelector(".ap-meta"))).toContain("via Claude Code");
-    expect(text(doc.querySelector(".req-reason"))).toBe(
-      "inbox-bot says: Sending Bob the renewal numbers.",
-    );
+    expect(text(doc.querySelector(".ap-meta"))).toBe("12 min ago");
+    expect(text(doc)).not.toContain("via Claude Code");
+    expect(doc.querySelector(".req-reason")).toBeNull();
+  });
+
+  it("shows a waiting request's expiry only when it is close", () => {
+    const doc = render({ ok: true, rows: PENDING_ROWS });
+    const notes = [...doc.querySelectorAll(".req-soon")].map((n) => text(n));
+    // Only the merge, 8 minutes from expiry; the others have most of a day left.
+    expect(notes).toEqual(["Expires in 8 min"]);
   });
 
   it("I-56: the list has no decision controls at all; deciding happens on the request page", () => {
