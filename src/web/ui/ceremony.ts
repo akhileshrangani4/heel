@@ -114,16 +114,44 @@ export function ceremonyButton(props: CeremonyButtonProps): Html {
 export const CEREMONY_SCRIPT = `
 (() => {
   const status = () => document.getElementById("heel-ceremony-status");
-  // Handlers may write the outcome later (after the passkey prompt). The message
-  // is pinned to the viewport bottom, so bring the button that started it to the
-  // middle of the screen, clear of the message.
+  // Handlers may write the outcome later (after the passkey prompt). The page-wide
+  // message is pinned to the viewport bottom, so bring the button that started it
+  // to the middle of the screen, clear of the message. A button in an action bar
+  // writes to the bar's own one-line slot instead, and nothing scrolls.
   let lastButton = null;
   const region = status();
   if (region) {
     new MutationObserver(() => {
-      if (lastButton && region.textContent) lastButton.scrollIntoView({ block: "center" });
+      if (lastButton && region.textContent && !lastButton.closest("[data-heel-bar]")) lastButton.scrollIntoView({ block: "center" });
     }).observe(region, { childList: true, characterData: true, subtree: true });
   }
+  // A one-line slot: messages longer than the slot are cut, whole in the tooltip.
+  const oneLine = (slot) => {
+    const full = slot.textContent;
+    slot.title = full;
+    const fit = Math.max(12, Math.floor(slot.clientWidth / 6.5));
+    if (full.length > fit) slot.textContent = full.slice(0, fit - 1).trimEnd() + "…";
+  };
+  // Each ceremony button is in one state: idle, waiting, success, error or
+  // cancelled. Its label never changes, so it never changes size: waiting and
+  // success draw an icon over the hidden label, in the same box.
+  const SPIN = '<svg class="heel-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>';
+  const CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+  const setState = (button, state) => {
+    button.dataset.heelState = state;
+    const busy = state === "waiting" || state === "success";
+    button.disabled = busy;
+    if (busy) button.setAttribute("aria-busy", "true");
+    else button.removeAttribute("aria-busy");
+    let icon = button.querySelector(":scope > .heel-btn-icon");
+    if (!icon) {
+      icon = document.createElement("span");
+      icon.className = "heel-btn-icon";
+      icon.setAttribute("aria-hidden", "true");
+      button.append(icon);
+    }
+    icon.innerHTML = state === "waiting" ? SPIN : state === "success" ? CHECK : "";
+  };
   document.addEventListener("click", (event) => {
     const target = event.target instanceof Element ? event.target : null;
     const button = target ? target.closest("button[data-heel-ceremony]") : null;
@@ -147,15 +175,32 @@ export const CEREMONY_SCRIPT = `
     delete binding.heelOptions;
     delete binding.heelStatus;
     const own = button.dataset.heelStatus ? document.getElementById(button.dataset.heelStatus) : null;
-    const result = handler({ intent: button.dataset.heelCeremony, binding, options, status: own || status() });
-    // While the passkey prompt is open, the button says so and can't be pressed twice.
+    const bar = button.closest("[data-heel-bar]");
+    const slot = own || (bar && bar.querySelector("[data-heel-bar-status]")) || status();
+    // The bar's slot holds one line: watch it and keep it to one line.
+    let watch = null;
+    if (slot && bar && slot !== region) {
+      watch = new MutationObserver(() => { watch.disconnect(); oneLine(slot); watch.observe(slot, { childList: true, characterData: true, subtree: true }); });
+      watch.observe(slot, { childList: true, characterData: true, subtree: true });
+    }
+    const result = handler({ intent: button.dataset.heelCeremony, binding, options, status: slot });
+    // Handlers resolve to "success", "error" or "cancelled" (client.ts, run).
     if (result && typeof result.then === "function") {
-      const label = button.innerHTML;
-      button.disabled = true;
-      button.setAttribute("aria-busy", "true");
-      button.innerHTML = '<svg class="heel-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Waiting for your passkey\u2026';
-      const restore = () => { button.disabled = false; button.removeAttribute("aria-busy"); button.innerHTML = label; };
-      result.then(restore, restore);
+      setState(button, "waiting");
+      const done = (outcome) => {
+        if (outcome === "success") {
+          // The page is moving on; if it doesn't within a few seconds, let the person try again.
+          setState(button, "success");
+          setTimeout(() => setState(button, "idle"), 4000);
+        } else {
+          setState(button, outcome === "cancelled" ? "cancelled" : "error");
+        }
+        if (slot) slot.dataset.tone = outcome === "success" ? "ok" : outcome === "cancelled" ? "muted" : "error";
+      };
+      result.then((outcome) => done(outcome || "success"), () => done("error"));
+    } else if (result === "error") {
+      setState(button, "error");
+      if (slot) slot.dataset.tone = "error";
     }
   });
   // Copy buttons (presentation only; they decide nothing): copy the text of the element they name.
