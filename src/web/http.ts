@@ -23,6 +23,7 @@ import {
   type StartedSession,
   sessionCookieName,
 } from "./sessions.ts";
+import { errorPage } from "./ui/error-page.ts";
 import { toHtmlString } from "./ui/html.ts";
 import { type PageProps, page, type Viewer } from "./ui/layout.ts";
 
@@ -149,6 +150,29 @@ export function renderPage(
   return c.html(toHtmlString(page(waiting === undefined ? props : { ...props, waiting })), status);
 }
 
+/** True for a browser page load or form post, which can show a page; false for a script's fetch. */
+export function wantsPage(c: Context): boolean {
+  return (c.req.header("accept") ?? "").includes("text/html");
+}
+
+/**
+ * A refusal or failure a person sees: a page with a way back to Home for a
+ * browser (an installed app has no back button), plain text for anything
+ * else. Status and wording are the caller's; nothing internal goes in them.
+ */
+export function errorResponse(
+  c: Context,
+  status: 403 | 404 | 500,
+  title: string,
+  message: string,
+): Response {
+  if (!wantsPage(c)) return c.text(message, status);
+  return c.html(
+    toHtmlString(page({ title, viewer: null, body: errorPage({ title, message }) })),
+    status,
+  );
+}
+
 // ── sessions ────────────────────────────────────────────────────────────────
 
 /**
@@ -161,12 +185,17 @@ export function requireSession(deps: HumanPlaneDeps): MiddlewareHandler<SignedIn
     const cookie = getCookie(c, sessionCookieName(deps.publicUrl));
     const session = cookie === undefined ? null : readSession(deps.db, cookie, deps.now());
     if (session === null || session.orgId !== deps.orgId) {
+      // A cookie that no longer opens a session: say so on the sign-in page.
+      const expired = cookie === undefined ? "" : "&expired";
       if (c.req.method === "GET") {
         // Path and query: an OAuth authorize request needs its parameters back after sign-in.
         const url = new URL(c.req.url);
         const next = encodeURIComponent(url.pathname + url.search);
-        return c.redirect(`/sign-in?next=${next}`, 303);
+        return c.redirect(`/sign-in?next=${next}${expired}`, 303);
       }
+      // A plain form post (sign out, pause, revoke) is a page load: go sign in
+      // instead of showing JSON. Nothing was done; the post isn't replayed.
+      if (wantsPage(c)) return c.redirect(`/sign-in?next=%2F${expired}`, 303);
       return c.json({ error: "signed_out" }, 401);
     }
     c.set("session", session);
@@ -257,7 +286,12 @@ export function requireCsrfField(): MiddlewareHandler<SignedInEnv> {
     const form = await c.req.parseBody();
     const submitted = typeof form["csrf"] === "string" ? form["csrf"] : undefined;
     if (!csrfMatches(c.get("session").csrfToken, submitted)) {
-      return c.text("Refused: this form is stale. Reload the page.", 403);
+      return errorResponse(
+        c,
+        403,
+        "This form is out of date",
+        "Refused: this form is stale. Go back, reload the page and try again.",
+      );
     }
     return next();
   };

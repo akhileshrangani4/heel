@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { type HumanPlaneDeps, requireSameOrigin } from "./http.ts";
+import { errorResponse, type HumanPlaneDeps, requireSameOrigin } from "./http.ts";
 import { activityRoutes } from "./routes/activity.ts";
 import { approvalRoutes } from "./routes/approvals.ts";
 import { connectionRoutes } from "./routes/connections.ts";
@@ -78,10 +78,22 @@ export function createHumanApp(deps: HumanPlaneDeps): Hono {
   app.route("/", manageAccountRoutes(deps));
   app.route("/", rulesEditorRoutes(deps));
   app.route("/", activityRoutes(deps));
-  app.notFound((c) => c.text("Not found.", 404));
+  app.notFound((c) =>
+    errorResponse(
+      c,
+      404,
+      "Page not found",
+      "Not found. The address may be mistyped or out of date.",
+    ),
+  );
   app.onError((error, c) => {
     deps.log.error({ err: error, path: c.req.path }, "human plane request failed");
-    return c.text("Something went wrong in heel. Nothing was decided.", 500);
+    return errorResponse(
+      c,
+      500,
+      "Something went wrong",
+      "Something went wrong in heel. Nothing was decided.",
+    );
   });
   return app;
 }

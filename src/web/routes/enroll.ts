@@ -41,18 +41,23 @@ export function enrollRoutes(deps: HumanPlaneDeps): Hono {
 
   app.get("/enroll/:token", (c) => {
     const enrollment = findEnrollment(deps.db, c.req.param("token"), deps.now());
-    return renderPage(c, {
-      title: "Enroll a passkey",
-      viewer: null,
-      body: enrollPage(
-        enrollment === null
-          ? { kind: "invalid" }
-          : enrollment.waitingUntil !== null
-            ? { kind: "waiting", userName: enrollment.userName, until: enrollment.waitingUntil }
-            : { kind: "open", token: c.req.param("token"), userName: enrollment.userName },
-      ),
-      script: clientScript(null),
-    });
+    return renderPage(
+      c,
+      {
+        title: "Enroll a passkey",
+        viewer: null,
+        body: enrollPage(
+          enrollment === null
+            ? { kind: "invalid" }
+            : enrollment.waitingUntil !== null
+              ? { kind: "waiting", userName: enrollment.userName, until: enrollment.waitingUntil }
+              : { kind: "open", token: c.req.param("token"), userName: enrollment.userName },
+        ),
+        script: clientScript(null),
+      },
+      // Unknown, used or expired all answer the same 404: no hint a link ever existed.
+      enrollment === null ? 404 : 200,
+    );
   });
 
   app.post("/enroll/:token/options", async (c) => {
