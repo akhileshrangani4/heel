@@ -288,12 +288,26 @@ describe("ApprovalRequest", () => {
         const doc = dom(renderStory(story, "light"));
         const main = doc.querySelector("main");
         if (!main) throw new Error("no main");
-        // No form, submit control or link on the page can carry a decision.
+        // No form, submit control or link on the page can carry a decision. The one
+        // exception is cancelling a waiting task: it posts to the route that stops the
+        // task (never approves anything) and carries no decision fields.
+        const isStop = (form: UiElement) =>
+          /^\/approvals\/[^/]+\/stop-script$/.test(form.getAttribute("action") ?? "");
         for (const form of main.querySelectorAll("form")) {
+          if (isStop(form)) {
+            const names = [...form.querySelectorAll("input")].map((i) => i.getAttribute("name"));
+            expect(names).toEqual(["csrf"]);
+            continue;
+          }
           expect(form.getAttribute("action") ?? "").not.toMatch(/approv|decid|deny|resume/i);
         }
         expect(
-          main.querySelectorAll("input[type=submit], button[type=submit], button:not([type])"),
+          [
+            ...main.querySelectorAll("input[type=submit], button[type=submit], button:not([type])"),
+          ].filter((b) => {
+            const form = b.closest("form");
+            return form === null || !isStop(form);
+          }),
         ).toHaveLength(0);
         for (const a of main.querySelectorAll("a[href]")) {
           // The breadcrumb back to the list is a plain GET of the list, never a decision.
@@ -302,6 +316,8 @@ describe("ApprovalRequest", () => {
         }
         // Every decision button is a plain button that names its ceremony handler.
         for (const b of main.querySelectorAll("button")) {
+          const form = b.closest("form");
+          if (form !== null && isStop(form)) continue;
           expect(b.getAttribute("type")).toBe("button");
           expect(b.closest("form")).toBeNull();
           expect(b.getAttribute("data-heel-ceremony")).toMatch(

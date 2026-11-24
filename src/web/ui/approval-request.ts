@@ -2,6 +2,7 @@ import type { RuleRef, Surface } from "../../core/call.ts";
 import type { ApprovalHints, HintTone } from "../../core/hints.ts";
 import type { ApprovalScript } from "../../gateway/pipeline/ports.ts";
 import type { ApprovalOrigin, ApprovalStatus } from "../../store/schema.ts";
+import { actionBar } from "./approval-shell.ts";
 import { type CeremonyCallback, ceremonyButton } from "./ceremony.ts";
 import {
   formatArguments,
@@ -722,8 +723,8 @@ function decisionControls(
         : html`<p class="ap-risk" role="note"><span class="ap-risk-icon">${trusted(ICONS.alert)}</span><span><span class="ap-risk-word">Check:</span> ${risk}</span></p>`
     }
     ${expired ? "" : checkHints(request)}
-    <div class="ap-bar">
-      ${ceremonyButton({
+    ${actionBar({
+      yes: ceremonyButton({
         callback: onDecide,
         intent: "approve-once",
         label: "Approve once",
@@ -731,8 +732,8 @@ function decisionControls(
         binding,
         disabled: approveLocked,
         describedBy: helpId,
-      })}
-      ${ceremonyButton({
+      }),
+      no: ceremonyButton({
         callback: onDecide,
         intent: "deny",
         label: "Deny",
@@ -740,11 +741,11 @@ function decisionControls(
         binding,
         disabled: expired,
         describedBy: helpId,
-      })}
-    </div>
-    <p id="${helpId}" class="visually-hidden">
-      Your passkey confirms every decision. Nothing runs until you approve.
-    </p>
+      }),
+      helpId,
+      help: "Your passkey confirms every decision. Nothing runs until you approve.",
+      dock: false,
+    })}
     ${request.origin === "org" ? standingOptions(request, fieldsetId, approveLocked) : ""}
   </section>`;
   const longer =

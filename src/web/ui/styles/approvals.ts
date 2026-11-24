@@ -42,10 +42,28 @@ export const APPROVALS_CSS = `
 .ap-crumbs a svg{width:.95rem;height:.95rem}
 .ap-crumbs [aria-current="page"]{color:var(--text);font-weight:500}
 .ap-crumbs-status{margin-left:auto}
-.ap-bar{display:grid;grid-template-columns:1fr 1fr;gap:.6rem}
-.ap-bar .btn{width:100%;flex:none}
-.ap-bar [data-heel-ceremony="deny"]{order:1;background:var(--bg)}
-.ap-bar [data-heel-ceremony="approve-once"]{order:2}
+
+/* ── Shared action bar (.ap-bar), rendered by actionBar() in approval-shell.ts ──
+   Every approval page uses it: no on the left, yes on the right, side by side at
+   every width. Slots: .ap-bar-yes, .ap-bar-no; note: .ap-bar-note. On phones,
+   .ap[data-dock="pinned"] .ap-bar[data-dock] pins it to the bottom in place of the tab bar. */
+.ap-bar{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:.6rem}
+.ap-bar > span{display:flex;min-width:0}
+.ap-bar-no{order:1}
+.ap-bar-yes{order:2}
+.ap-bar form{display:flex;flex:1;margin:0;min-width:0}
+.ap-bar .btn{width:100%;flex:1;min-width:0;white-space:normal;height:auto;min-height:2.5rem}
+.ap-bar [data-heel-ceremony="deny"]{background:var(--bg)}
+.ap-bar-note{margin:.45rem 0 0;font-size:.8rem;text-align:center}
+@media (max-width:55.99rem){
+  /* Pinned: the bar takes the tab bar's place at the bottom of a phone screen while a decision is open. */
+  .ap[data-dock="pinned"] .ap-bar[data-dock]{position:fixed;left:0;right:0;bottom:0;z-index:31;padding:.75rem max(.75rem,var(--heel-safe-right,env(safe-area-inset-right))) calc(.75rem + var(--heel-safe-bottom,env(safe-area-inset-bottom))) max(.75rem,var(--heel-safe-left,env(safe-area-inset-left)));background:color-mix(in srgb,var(--bg) 94%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--line);box-shadow:0 -10px 30px -18px rgb(0 0 0 / .35)}
+  .ap[data-dock="pinned"] .ap-bar[data-dock] .btn{min-height:2.75rem}
+  body.app:has(.ap[data-dock="pinned"] .ap-bar[data-dock]) > .site nav{display:none}
+  body.app:has(.ap[data-dock="pinned"] .ap-bar[data-dock]){padding-bottom:calc(5rem + var(--heel-safe-bottom,env(safe-area-inset-bottom)))}
+  body:has(.ap[data-dock="pinned"] .ap-bar[data-dock]) #heel-ceremony-status:not(:empty){bottom:calc(5.5rem + var(--heel-safe-bottom,env(safe-area-inset-bottom)))}
+}
+/* ── End of the shared action bar ── */
 .ap details > summary{display:flex;align-items:center;justify-content:space-between;gap:.75rem;list-style:none;cursor:pointer}
 .ap details > summary::-webkit-details-marker{display:none}
 .ap details > summary .fold-label{flex:1;min-width:0}
