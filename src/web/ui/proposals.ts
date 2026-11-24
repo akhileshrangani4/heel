@@ -256,7 +256,7 @@ function proposalDetails(props: ProposalPageProps): Html {
           ? html`<dt>Expires</dt>
             <dd>${time(props.expiresAt)}</dd>`
           : html`<dt>Decided</dt>
-            <dd>by ${props.decision.by}, ${time(props.decision.at)}</dd>`
+            <dd>By ${props.decision.by}, ${time(props.decision.at)}</dd>`
       }
       <dt>Proposal</dt>
       <dd>${codeChip(props.id, `id-${props.id}`)}</dd>
@@ -400,10 +400,10 @@ export function proposalPage(props: ProposalPageProps): Html {
           ? consequence(props)
           : "Nothing was added.";
   const when = pending
-    ? html`expires ${formatRelative(props.expiresAt, props.now)}`
+    ? html`Expires ${formatRelative(props.expiresAt, props.now)}`
     : props.decision === null
       ? ""
-      : html`by ${props.decision.by}, ${formatRelative(props.decision.at, props.now)}`;
+      : html`By ${props.decision.by}, ${formatRelative(props.decision.at, props.now)}`;
   return approvalShell({
     kind: "rules",
     crumb: "Rule change",

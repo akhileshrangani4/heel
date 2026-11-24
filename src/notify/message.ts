@@ -61,13 +61,13 @@ export interface NoticeText {
 export function noticeText(notice: Notice): NoticeText {
   if (notice.kind === "connection") {
     return {
-      title: `${notice.agent} asks you to connect ${notice.service}`,
+      title: `${notice.agent} wants to connect ${notice.service}`,
       body: "Nothing is connected until you approve it. Open heel to see the request and decide.",
     };
   }
   if (notice.kind === "proposal") {
     return {
-      title: `${notice.agent} proposes ${describeProposal(notice.rules, notice.hide, notice.workdirs)}`,
+      title: `${notice.agent} wants to add ${describeProposal(notice.rules, notice.hide, notice.workdirs)}`,
       body: "Nothing changes until you add them. Open heel to read them and decide.",
     };
   }

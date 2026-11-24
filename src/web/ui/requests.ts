@@ -117,6 +117,18 @@ const OUTCOME: Record<ActionOutcome, { label: string; tone: Tone | "muted" }> = 
   depends: { label: "Depends on the call", tone: "info" },
 };
 const ORDER: readonly ActionOutcome[] = ["ask", "allow", "depends", "deny"];
+/** The same outcomes, short, for one badge per row (variant B). */
+const SHORT: Record<ActionOutcome, string> = {
+  allow: "Runs",
+  ask: "Asks you",
+  deny: "Never runs",
+  depends: "Depends",
+};
+
+/** "merge pull request" → "Merge pull request": labels start with a capital, the rest as written. */
+function sentence(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
 
 const runs = (n: number, one: string, many: string) => (n === 1 ? `1 ${one}` : `${n} ${many}`);
 
@@ -174,10 +186,10 @@ function everyAccount(coverage: Coverage): boolean {
 
 function actionName(action: ActionDecision): Html {
   return html`<li class="cov-action"${action.risk === null ? "" : html` data-risk`}>
-    <span>${action.label}</span>${
+    <span>${sentence(action.label)}</span>${
       action.risk === null
         ? ""
-        : html` <span class="cov-risk" title="Look twice before approving">${action.risk}</span>`
+        : html` <span class="cov-risk" title="Look twice before approving">${sentence(action.risk)}</span>`
     }
   </li>`;
 }
@@ -214,10 +226,10 @@ function listView(actions: readonly ActionDecision[]): Html {
     ${sorted.map((a) => {
       const o = OUTCOME[a.outcome];
       return html`<li class="cov-row" data-outcome="${a.outcome}">
-        <span class="cov-row-name">${a.label}${
-          a.risk === null ? "" : html` <span class="cov-risk">${a.risk}</span>`
+        <span class="cov-row-name">${sentence(a.label)}${
+          a.risk === null ? "" : html` <span class="cov-risk">${sentence(a.risk)}</span>`
         }</span>
-        ${badge(a.outcome === "allow" ? "runs" : a.outcome === "ask" ? "asks you" : o.label.toLowerCase(), o.tone)}
+        ${badge(SHORT[a.outcome], o.tone)}
       </li>`;
     })}
   </ul>`;
@@ -241,10 +253,10 @@ function coverageFolds(coverage: Coverage, id: string): Html {
           </dl>
         </details>`;
   const deciding = new Map<string, number>();
-  if (a.kind === "opaque") deciding.set(a.rule ?? "no rule matches: denied", 1);
+  if (a.kind === "opaque") deciding.set(a.rule ?? "No rule matches, so it is denied", 1);
   else {
     for (const d of a.actions) {
-      const key = d.rule ?? "no rule matches: denied";
+      const key = d.rule ?? "No rule matches, so it is denied";
       deciding.set(key, (deciding.get(key) ?? 0) + 1);
     }
   }
@@ -327,7 +339,7 @@ function detailsFold(props: RequestPageProps): Html {
           ? html`<dt>Expires</dt>
             <dd>${time(props.expiresAt)}</dd>`
           : html`<dt>Decided</dt>
-            <dd>by ${props.decision.by}, ${time(props.decision.at)}</dd>`
+            <dd>By ${props.decision.by}, ${time(props.decision.at)}</dd>`
       }
       <dt>Request</dt>
       <dd>${codeChip(props.id, `id-${props.id}`)}</dd>
@@ -444,7 +456,7 @@ function pendingPage(props: RequestPageProps): Html {
     title: html`${props.agent} wants to connect ${props.service} as ${codeChip(props.alias, `alias-title-${props.id}`, false)}`,
     why: coverageSummary(props.coverage),
     status: html`${badge(STATUS.pending.label, STATUS.pending.tone)}
-      <span class="muted">expires ${formatRelative(props.expiresAt, props.now)}</span>`,
+      <span class="muted">Expires ${formatRelative(props.expiresAt, props.now)}</span>`,
     side: html`${why}${server}${problem}${setup}${decide}
       <div class="ap-folds">${detailsFold(props)}</div>`,
     main: coverageView(props, false),
@@ -457,7 +469,7 @@ function connectedPage(props: RequestPageProps): Html {
   const by =
     props.decision === null
       ? ""
-      : html`<span class="muted">by ${props.decision.by}, ${formatRelative(props.decision.at, props.now)}</span>`;
+      : html`<span class="muted">By ${props.decision.by}, ${formatRelative(props.decision.at, props.now)}</span>`;
   const next = needsSignIn
     ? postForm(
         props.signIn as FormTarget,
