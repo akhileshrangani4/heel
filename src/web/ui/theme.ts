@@ -331,7 +331,7 @@ main:has(.auth){max-width:none;padding:0}
 .signin{width:100%;max-width:25rem;margin:0;padding:1.75rem;text-align:left;background:var(--bg);border:1px solid var(--line);border-radius:16px;box-shadow:0 24px 60px -28px rgb(0 0 0 / .45)}
 .signin h1{font-size:1.35rem}
 .signin .actions{margin:1.25rem 0}
-.signin .actions .btn{width:100%;justify-content:center;text-align:center;min-height:2.85rem;border-radius:999px}
+.signin .actions .btn{width:100%;justify-content:center;text-align:center;min-height:2.85rem}
 .signin > p.muted{font-size:.88rem}
 .signin .actions{margin:.75rem 0 1rem}
 .signin-status{display:flex;gap:.5rem;align-items:flex-start;margin:.9rem 0 0;padding:.55rem .7rem;border-radius:8px;background:var(--surface);color:var(--muted);font-size:.86rem}
