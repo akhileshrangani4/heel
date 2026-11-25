@@ -143,6 +143,32 @@ describe("approving for longer", () => {
     },
   );
 
+  it("joins the menu toggle to Approve once: square inner corners, no gap", async () => {
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    await page.setContent(PAGE);
+    type Corners = { left: string[]; right: string[]; x: number; end: number };
+    // A string, not a function: this file is typed for Node, without the DOM.
+    const corners = (selector: string) =>
+      page.evaluate<Corners>(`(() => {
+        const el = document.querySelector(${JSON.stringify(selector)});
+        const css = getComputedStyle(el);
+        const box = el.getBoundingClientRect();
+        return {
+          left: [css.borderTopLeftRadius, css.borderBottomLeftRadius],
+          right: [css.borderTopRightRadius, css.borderBottomRightRadius],
+          x: box.x,
+          end: box.x + box.width,
+        };
+      })()`);
+    const approve = await corners(".ap-split [data-heel-ceremony='approve-once']");
+    const toggle = await corners(".ap-split-toggle");
+    expect(approve.right).toEqual(["0px", "0px"]);
+    expect(toggle.left).toEqual(["0px", "0px"]);
+    expect(toggle.right).not.toEqual(["0px", "0px"]);
+    expect(Math.abs(toggle.x - approve.end)).toBeLessThan(1);
+    await page.close();
+  });
+
   // The shared ceremony (design-approvals) keeps a waiting button's label in
   // place and draws a spinner over it; until that lands here, there is no
   // waiting state that keeps the box.
