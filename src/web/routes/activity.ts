@@ -23,9 +23,10 @@ import {
   viewerOf,
 } from "../http.ts";
 import { readSession, type SessionView } from "../sessions.ts";
-import { ACTIVITY_SCRIPT, activityPage, activityRow, agentsPage } from "../ui/activity-page.ts";
+import { ACTIVITY_SCRIPT, activityPage, activityRow } from "../ui/activity-page.ts";
 import { clientScript } from "../ui/client.ts";
 import { toHtmlString } from "../ui/html.ts";
+import { agentsPage } from "../ui/manage-agents.ts";
 import { suggestionCards } from "../ui/suggestions.ts";
 import { suggestionsOf } from "./suggestions.ts";
 

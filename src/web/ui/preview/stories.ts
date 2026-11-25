@@ -1,5 +1,5 @@
 import type { ActivityRow, AgentActivity } from "../../../store/activity.ts";
-import { ACTIVITY_PANELS_SCRIPT, activityPage, agentsPage } from "../activity-page.ts";
+import { ACTIVITY_PANELS_SCRIPT, activityPage } from "../activity-page.ts";
 import { approvalRequest, MENU_RESET_SCRIPT } from "../approval-request.ts";
 import type { CeremonyCallback } from "../ceremony.ts";
 import { connectPage } from "../connect.ts";
@@ -26,6 +26,7 @@ import {
   type Theme,
   type Viewer,
 } from "../layout.ts";
+import { agentsPage } from "../manage-agents.ts";
 import { type ModeRow, modesPage } from "../modes-page.ts";
 import { pauseControl } from "../pause-control.ts";
 import { pendingList } from "../pending-list.ts";

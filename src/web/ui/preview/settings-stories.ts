@@ -1,12 +1,12 @@
 import { lineDiff } from "../../../drafting/draft.ts";
 import { applyEdit, rulesCheck, textHash, viewRules } from "../../../proposals/edit.ts";
 import type { AgentActivity } from "../../../store/activity.ts";
-import { agentsPage } from "../activity-page.ts";
 import type { CeremonyCallback } from "../ceremony.ts";
 import { addDeviceControl } from "../devices.ts";
 import { type GrantView, grantsPage } from "../grants-page.ts";
 import { type Html, html } from "../html.ts";
 import type { FormTarget, NavId, Viewer } from "../layout.ts";
+import { agentsPage } from "../manage-agents.ts";
 import { type ModeRow, modesPage } from "../modes-page.ts";
 import { type ActivePause, pauseControl } from "../pause-control.ts";
 import { peoplePage } from "../people.ts";
