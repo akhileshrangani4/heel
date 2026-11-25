@@ -67,7 +67,7 @@ export const APPROVALS_CSS = `
 /* The approval shell (approval-shell.ts): one layout for calls, connections and rule changes. */
 .ap{max-width:76rem;container-type:inline-size;container-name:ap}
 .ap-crumbs{display:flex;align-items:center;gap:.5rem;margin:0 0 .6rem;font-size:.88rem}
-.ap-crumbs a{display:inline-flex;align-items:center;gap:.3rem;color:var(--muted);text-decoration:none}
+.ap-crumbs a{display:inline-flex;align-items:center;gap:.3rem;color:var(--muted);text-decoration:none;border-radius:6px}
 .ap-crumbs a:hover{color:var(--text)}
 .ap-crumbs a svg{width:.95rem;height:.95rem}
 .ap-crumbs [aria-current="page"]{color:var(--text);font-weight:500}
@@ -79,9 +79,6 @@ export const APPROVALS_CSS = `
 .ap-main{grid-area:main;min-width:0;padding:1.1rem 1.4rem 1.3rem;border:1px solid var(--line);border-radius:14px;background:var(--bg);box-shadow:0 1px 2px rgb(0 0 0 / .04)}
 .ap-side{grid-area:side;min-width:0;position:sticky;top:1.25rem;max-height:calc(100dvh - 2.5rem);overflow:auto;padding:1rem 1.1rem;border:1px solid var(--line);border-radius:14px;background:var(--bg);box-shadow:0 1px 2px rgb(0 0 0 / .04)}
 .ap-status{display:flex;flex-wrap:wrap;align-items:center;gap:.25rem .5rem;margin:0;font-size:.82rem}
-.ap .reason{margin:.7rem 0 0;padding:0;border:0;font-size:.88rem;line-height:1.45;overflow-wrap:anywhere}
-.ap .reason figcaption{display:inline;font-size:inherit;color:var(--muted)}
-.ap .reason blockquote{display:inline;margin:0}
 .ap-drafted{margin:.7rem 0 0;font-size:.85rem}
 .ap-side .ap-state,.ap-side .notice{margin:.75rem 0 0;font-size:.85rem}
 .ap-decide{margin:.8rem 0 0;padding:0;border:0;background:none;box-shadow:none}
@@ -99,7 +96,8 @@ export const APPROVALS_CSS = `
 .ap-bar-no{order:1}
 .ap-bar-yes{order:2}
 .ap-bar form{display:flex;flex:1;margin:0;min-width:0}
-.ap-bar .btn{width:100%;flex:1;min-width:0;height:2.5rem;white-space:nowrap;overflow:hidden}
+/* min and max pin the height: shadcn's h-9 sits in a later layer and would win over height alone. */
+.ap-bar .btn{width:100%;flex:1;min-width:0;height:2.5rem;min-height:2.5rem;max-height:2.5rem;white-space:nowrap;overflow:hidden}
 /* The bar's one-line status: always holds its line (even empty), so the bar keeps one height. */
 .ap-bar .ap-bar-status,.ap-bar .ap-bar-status:empty{display:block;order:3;flex:1 0 100%;height:1.2rem;margin:-.25rem 0 0;font-size:.8rem;line-height:1.2rem;text-align:center;color:var(--muted);white-space:nowrap;overflow:hidden}
 .ap-bar .ap-bar-status[data-tone="error"]{color:var(--danger)}
@@ -109,7 +107,7 @@ export const APPROVALS_CSS = `
 @media (max-width:55.99rem){
   /* Pinned: the bar takes the tab bar's place at the bottom of a phone screen while a decision is open. */
   .ap[data-dock="pinned"] .ap-bar[data-dock]{position:fixed;left:0;right:0;bottom:0;z-index:31;padding:.75rem max(.75rem,var(--heel-safe-right,env(safe-area-inset-right))) calc(.75rem + var(--heel-safe-bottom,env(safe-area-inset-bottom))) max(.75rem,var(--heel-safe-left,env(safe-area-inset-left)));background:color-mix(in srgb,var(--bg) 94%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--line);box-shadow:0 -10px 30px -18px rgb(0 0 0 / .35)}
-  .ap[data-dock="pinned"] .ap-bar[data-dock] .btn{height:2.75rem}
+  .ap[data-dock="pinned"] .ap-bar[data-dock] .btn{height:2.75rem;min-height:2.75rem;max-height:2.75rem}
   body.app:has(.ap[data-dock="pinned"] .ap-bar[data-dock]) > .site nav{display:none}
   /* With the bar pinned, a side panel holding nothing else needs no card. */
   .ap[data-dock="pinned"] .ap-side:not(:has(input,.notice,.ap-warn,.ap-status,.ap-state,.ap-risk,.reason,details)){padding:0;border:0;background:none;box-shadow:none}
@@ -162,8 +160,8 @@ export const APPROVALS_CSS = `
 .ap .chev svg{width:1rem;height:1rem}
 .ap details[open] > summary .chev{transform:rotate(180deg)}
 /* Folds without a drawn chevron get one in CSS, so every fold reads as one. */
-.ap details > summary:not(:has(.chev))::after{content:"";flex:none;width:.4rem;height:.4rem;margin:0 .2rem .2rem;border-right:1.5px solid var(--muted);border-bottom:1.5px solid var(--muted);transform:rotate(45deg);transition:transform .2s}
-.ap details[open] > summary:not(:has(.chev))::after{transform:rotate(225deg);margin-bottom:-.1rem}
+.ap details > summary:not(:has(.chev),.ap-split-toggle)::after{content:"";flex:none;width:.4rem;height:.4rem;margin:0 .2rem .2rem;border-right:1.5px solid var(--muted);border-bottom:1.5px solid var(--muted);transform:rotate(45deg);transition:transform .2s}
+.ap details[open] > summary:not(:has(.chev),.ap-split-toggle)::after{transform:rotate(225deg);margin-bottom:-.1rem}
 .ap-hint > summary,.ap-folds > details > summary{justify-content:flex-start;gap:.35rem}
 @media (prefers-reduced-motion:reduce){.ap .chev{transition:none}}
 .ap-folds{display:flex;flex-wrap:wrap;align-items:flex-start;gap:0 1.25rem;margin-top:.55rem}
@@ -175,78 +173,7 @@ export const APPROVALS_CSS = `
 .ap-more{margin:0;border:0}
 .ap-fold-body{padding:.35rem 0 .5rem;font-size:.85rem;min-width:0}
 .ap-fold-body fieldset{margin:.25rem 0 0}
-.ap-details .ap-meta{display:flex;flex-wrap:wrap;gap:.1rem .6rem;margin:0 0 .5rem;font-size:.9rem;color:var(--muted)}
 .ap-agent{font-weight:600;color:var(--text)}
-.ap-sub{font-size:.8rem;font-weight:600;color:var(--muted);margin:.6rem 0 .35rem}
-.ap-details dl.facts{grid-template-columns:auto minmax(0,1fr);gap:.25rem .75rem;font-size:.82rem}
-.ap-details .ap-hints{margin:.75rem 0 0;padding-top:.6rem;border-top:1px solid var(--line)}
-.ap-side-label{font-size:.8rem;font-weight:600;color:var(--muted);margin:0 0 .3rem}
-.ap-hints-note{font-size:.78rem;margin:0 0 .45rem}
-.ap-args{margin-top:.6rem;border-top:1px solid var(--line)}
-.ap-args > summary{padding:.5rem 0;font-weight:600;font-size:.84rem}
-.ap-args pre.args{font-size:.8rem}
-
-/* Status lines and risks */
-.ap-risk{display:flex;gap:.55rem;align-items:flex-start;margin:0 0 .6rem;padding:.6rem .8rem;border-radius:10px;background:var(--warn-bg);color:var(--text);font-size:.86rem;overflow-wrap:anywhere}
-.ap-risk-icon{flex:none;display:inline-flex;color:var(--warn);margin-top:.15rem}
-.ap-risk-icon svg{width:1rem;height:1rem}
-.ap-risk-word{color:var(--warn);font-weight:700}
-.ap-check-hints{list-style:none;margin:0 0 .6rem;padding:0;display:grid;gap:.3rem;font-size:.84rem}
-.ap-check-hints li{display:flex;align-items:baseline;gap:.45rem}
-.ap-state{display:flex;align-items:flex-start;gap:.6rem;margin:.75rem 0;padding:.6rem .85rem;border:1px solid var(--line);border-radius:10px;font-size:.9rem}
-.ap-state p{margin:0}
-.ap-state-icon{flex:none;display:inline-flex;margin-top:.15rem}
-.ap-state-icon svg{width:1.05rem;height:1.05rem}
-.ap-state-text{flex:1;min-width:0;overflow-wrap:anywhere}
-.ap-state[data-tone="ok"]{background:var(--ok-bg);border-color:color-mix(in srgb,var(--ok) 30%,transparent)}
-.ap-state[data-tone="ok"] .ap-state-icon{color:var(--ok)}
-.ap-state[data-tone="error"]{background:var(--danger-bg);border-color:color-mix(in srgb,var(--danger) 30%,transparent)}
-.ap-state[data-tone="error"] .ap-state-icon{color:var(--danger)}
-.ap-state[data-tone="warn"]{background:var(--warn-bg);border-color:color-mix(in srgb,var(--warn) 30%,transparent)}
-.ap-state[data-tone="warn"] .ap-state-icon{color:var(--warn)}
-.ap-state[data-tone="info"]{background:var(--info-bg);border-color:color-mix(in srgb,var(--info) 30%,transparent)}
-.ap-state[data-tone="info"] .ap-state-icon{color:var(--info)}
-
-/* The call itself: email, merge, HTTP request, arguments. */
-.ap-card-head{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:.25rem 1rem;margin-bottom:.25rem}
-.ap-card-head h2{font-size:1rem;margin:0}
-.ap-card-head .muted{font:.75rem ui-monospace,"Geist Mono",SFMono-Regular,Menlo,Consolas,monospace;overflow-wrap:anywhere}
-.ap-row{display:grid;grid-template-columns:minmax(5.5rem,max-content) minmax(0,1fr);gap:.75rem;padding:.6rem 0;border-top:1px solid var(--line);align-items:start}
-.ap-row > *{min-width:0;overflow-wrap:anywhere}
-.ap-card-head + .ap-row{border-top:0}
-.ap-key{color:var(--muted);font-size:.9rem;overflow-wrap:anywhere}
-.ap-row pre.body{max-height:16rem;overflow:auto}
-.ap-content .ap-row{grid-template-columns:4.5rem minmax(0,1fr);padding:.5rem 0}
-.ap-content .ap-row:first-of-type{border-top:0}
-.ap-domains,.ap-addresses{list-style:none;margin:0;padding:0;display:grid;gap:.35rem}
-.ap-addresses{margin-top:.4rem;font-size:.9rem}
-.ap-domains details > summary{justify-content:flex-start}
-.ap-domains details > summary .fold-label{flex:none}
-.ap-chip{display:inline-block;max-width:100%;background:var(--surface);border-radius:6px;padding:0 .45rem;font-family:ui-monospace,"Geist Mono",SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem;overflow-wrap:anywhere}
-.ap-chip.is-outside{box-shadow:inset 0 0 0 1px var(--warn)}
-.ap-outside{color:var(--warn);font-size:.8rem;font-weight:600}
-.ap-mail{border:1px solid var(--line);border-radius:10px;padding:.8rem .95rem;background:var(--bg)}
-.ap-mail pre.body{margin:0;padding:0;border:0;background:none;font-family:inherit;font-size:.93rem;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere;max-height:none;overflow:visible}
-.ap-row .ap-mail pre.body{max-height:none;overflow:visible}
-.ap-content .ap-mail{border:0;padding:.25rem 0 0;border-radius:0}
-.ap-mail-more > summary{justify-content:flex-start;gap:.3rem;margin-top:.5rem;padding-top:.5rem;border-top:1px dashed var(--line);color:var(--muted);font-size:.85rem;font-weight:500}
-.ap-mail-more > summary .fold-label{flex:none}
-.ap-mail-more[open] > summary{order:2}
-.ap-files{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:.4rem}
-.ap-file{display:inline-flex;align-items:center;gap:.4rem;padding:.3rem .6rem;border:1px solid var(--line);border-radius:8px;background:var(--surface);font-size:.85rem;max-width:100%;overflow-wrap:anywhere}
-.ap-file-icon{flex:none;display:inline-flex;color:var(--muted)}
-.ap-file-icon svg{width:.9rem;height:.9rem}
-.ap-files-note{margin:.35rem 0 0;font-size:.8rem}
-/* A commit id is 40 characters with no spaces: let it wrap instead of running off a phone screen. */
-.ap-sha{overflow-wrap:anywhere;word-break:break-all}
-.ap-script{margin:0 0 1rem;padding:0 0 1rem;border-bottom:1px solid var(--line)}
-.ap-script h2{font-size:1rem;margin:0 0 .4rem}
-.script-done-label{margin:.6rem 0 .2rem;font-weight:500}
-.script-calls{margin:0;padding-left:1.25rem;font-size:.9rem}
-.script-stop{margin:.75rem 0;padding:.75rem .85rem;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
-.script-stop p{margin:0 0 .5rem}
-.script-stop form{margin:0}
-.script-stop .muted{margin:.4rem 0 0;font-size:.85rem}
 
 /* Rule changes */
 .ap-main-title{font-size:1rem;margin:0 0 .5rem}
@@ -301,34 +228,34 @@ export const APPROVALS_CSS = `
   .ap-title mark{padding:0 .2rem}
   .ap-side{position:static;max-height:none;overflow:visible;padding:.85rem .95rem}
   .ap-main{padding:.9rem 1rem 1rem}
-  .ap-row,.ap-content .ap-row{grid-template-columns:minmax(0,1fr);gap:.15rem}
 }
 @media (max-width:36rem){
   main:has(.ap){padding:1rem .75rem}
 }
 
-/* ── Call approval page (approval-request.ts) ──
-   Top to bottom: who asks, the one sentence, the agent's words, one note, the content,
-   then the bar. A decided request leads with .ap-outcome. Top-level folds share one
-   name, so one is open at a time; the approve menu opens upward, over the page. */
-.ap{max-width:42rem;margin:0 auto}
-.ap-crumbs{display:flex;margin:0 0 .75rem;font-size:.88rem}
-.ap-crumbs a{display:inline-flex;align-items:center;gap:.3rem;color:var(--muted);text-decoration:none;border-radius:6px}
-.ap-crumbs a:hover{color:var(--text)}
-.ap-crumbs a svg{width:.95rem;height:.95rem}
+/* ── Call approval page (approval-request.ts), through the shell ──
+   One column and no side panel: who asks, the one sentence, the agent's words, one
+   note, the content, then the bar. A decided call's title is one word (.ap-outcome),
+   with what was asked as its one line. Top-level folds share one name, so one is open
+   at a time; the approve menu opens upward, over the page. Rules that would also match
+   the other approval pages are scoped to .ap[data-kind="call"]. */
+.ap[data-kind="call"]{max-width:42rem;margin:0 auto}
+.ap[data-kind="call"] .ap-layout{grid-template-columns:minmax(0,1fr);grid-template-areas:"title" "main";gap:0}
+.ap[data-kind="call"] .ap-main{padding:0;border:0;border-radius:0;background:none;box-shadow:none}
 .ap-who{display:flex;align-items:center;gap:.5rem;font-size:.9rem;min-width:0}
 .ap-avatar{flex:none;display:inline-grid;place-items:center;width:1.5rem;height:1.5rem;border-radius:999px;font-size:.75rem;font-weight:700;color:hsl(var(--hue) 60% 36%);background:hsl(var(--hue) 70% 50% / .16)}
 :root[data-theme="dark"] .ap-avatar{color:hsl(var(--hue) 70% 74%)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .ap-avatar{color:hsl(var(--hue) 70% 74%)}}
 .ap-who .ap-agent{font-weight:600;color:var(--text);overflow-wrap:anywhere;min-width:0}
 .ap-soon{margin-left:auto;color:var(--warn);font-size:.82rem;font-weight:500;white-space:nowrap}
-.ap .ap-title{font-size:1.35rem;line-height:1.3;margin:.4rem 0 0;letter-spacing:-.02em;font-weight:650;overflow-wrap:anywhere}
-.ap.is-decided .ap-title{font-size:1rem;font-weight:600;letter-spacing:0}
-.ap .notice{margin:.75rem 0 0}
-.ap .ap-why{margin:.9rem 0 0;padding:.55rem .85rem;border:0;border-left:3px solid color-mix(in srgb,var(--muted) 45%,transparent);background:var(--surface);border-radius:0 10px 10px 0}
-.ap-why figcaption{display:flex;align-items:center;gap:.4rem;font-size:.78rem;color:var(--muted);margin:0 0 .15rem}
+.ap[data-kind="call"] .ap-title{font-size:1.35rem;line-height:1.3;margin:.4rem 0 0;letter-spacing:-.02em;font-weight:650;overflow-wrap:anywhere}
+.ap[data-kind="call"] .ap-title:has(.ap-outcome){font-size:1.75rem;line-height:1.15;margin:.25rem 0 .75rem}
+.ap[data-kind="call"] .ap-why{margin:0;font-size:1rem;line-height:1.3;font-weight:600;color:var(--text)}
+.ap[data-kind="call"] .notice{margin:.75rem 0 0}
+.ap .ap-says{margin:.9rem 0 0;padding:.55rem .85rem;border:0;border-left:3px solid color-mix(in srgb,var(--muted) 45%,transparent);background:var(--surface);border-radius:0 10px 10px 0}
+.ap-says figcaption{display:flex;align-items:center;gap:.4rem;font-size:.78rem;color:var(--muted);margin:0 0 .15rem}
 .ap-unchecked{font-size:.7rem;padding:0 .45rem;border-radius:999px;box-shadow:inset 0 0 0 1px var(--line)}
-.ap-why blockquote{margin:0;font-size:.95rem;line-height:1.5;overflow-wrap:anywhere}
+.ap-says blockquote{margin:0;font-size:.95rem;line-height:1.5;overflow-wrap:anywhere}
 .ap-taskrow{display:flex;align-items:center;gap:.45rem;margin:.75rem 0 0;font-size:.86rem;color:var(--muted)}
 .ap-taskrow-icon{display:inline-flex}
 .ap-taskrow-icon svg{width:1rem;height:1rem}
@@ -373,17 +300,13 @@ export const APPROVALS_CSS = `
 .ap-step-done{margin-left:auto;color:var(--muted);font-size:.8rem;font-weight:400;white-space:nowrap}
 
 /* Folds: closed by default, one open at a time (shared name), Technical the only level inside Details. */
-.ap details > summary{display:flex;align-items:center;justify-content:flex-start;gap:.3rem;list-style:none;cursor:pointer;border-radius:8px}
-.ap details > summary::-webkit-details-marker{display:none}
-.ap .chev{flex:none;display:inline-flex;color:var(--muted);transition:transform .2s}
-.ap .chev svg{width:1rem;height:1rem}
-.ap details[open] > summary .chev{transform:rotate(180deg)}
-@media (prefers-reduced-motion:reduce){.ap .chev{transition:none}}
-.ap > .ap-fold,.ap-task > .ap-fold{margin:.6rem 0 0}
-.ap > .ap-fold > summary,.ap-task > .ap-fold > summary,.ap-technical > summary,.ap-mail-more > summary{padding:.3rem 0;color:var(--muted);font-size:.86rem;font-weight:500}
-.ap > .ap-fold > summary:hover,.ap-task > .ap-fold > summary:hover,.ap-technical > summary:hover{color:var(--text)}
-.ap > .ap-details{margin-top:1rem;padding-top:.5rem;border-top:1px solid var(--line)}
-.ap-fold-body{padding:.35rem 0 .25rem}
+.ap[data-kind="call"] details > summary{justify-content:flex-start;gap:.3rem;border-radius:8px}
+.ap[data-kind="call"] details > summary .fold-label{flex:0 1 auto}
+.ap[data-kind="call"] .ap-main > .ap-fold,.ap-task > .ap-fold{margin:.6rem 0 0}
+.ap[data-kind="call"] .ap-main > .ap-fold > summary,.ap-task > .ap-fold > summary,.ap-technical > summary,.ap-mail-more > summary{padding:.3rem 0;color:var(--muted);font-size:.86rem;font-weight:500}
+.ap[data-kind="call"] .ap-main > .ap-fold > summary:hover,.ap-task > .ap-fold > summary:hover,.ap-technical > summary:hover{color:var(--text)}
+.ap[data-kind="call"] .ap-main > .ap-details{margin-top:1rem;padding-top:.5rem;border-top:1px solid var(--line)}
+.ap[data-kind="call"] .ap-fold-body{padding:.35rem 0 .25rem;font-size:inherit}
 .ap-details .ap-row{grid-template-columns:6.5rem minmax(0,1fr);font-size:.88rem}
 .ap-technical{margin:.6rem 0 0}
 .ap-technical dl.facts{grid-template-columns:6.5rem minmax(0,1fr);gap:.25rem .75rem;font-size:.8rem;margin:.35rem 0 0}
@@ -392,19 +315,21 @@ export const APPROVALS_CSS = `
 .ap .ap-args pre.args{font-size:.8rem;margin-top:.35rem}
 
 /* The decision. Phones: the shared bar pins it. Wide screens: it sticks to the bottom of the window. */
-.ap-decide{margin:1rem 0 0}
-@media (min-width:56rem){.ap-decide{position:sticky;bottom:0;z-index:5;padding:.75rem 0 1rem;background:linear-gradient(to bottom,transparent,var(--page) 35%)}}
-.ap-decide > .ap-note{text-align:center}
+.ap[data-kind="call"] .ap-decide{margin:1rem 0 0}
+@media (min-width:56rem){.ap[data-kind="call"] .ap-decide{position:sticky;bottom:0;z-index:5;padding:.75rem 0 1rem;background:linear-gradient(to bottom,transparent,var(--page) 35%)}}
+.ap[data-kind="call"] .ap-decide > .ap-note{text-align:center}
 /* Approve once, with a menu for approving for longer: one primary button, labelled with the choice. */
 .ap-split{position:relative;display:flex;flex:1;min-width:0}
 /* !important: shadcn's utilities sit in a later cascade layer than these rules. */
-/* The label keeps room on both sides of the divider and stays on one line. */
-.ap-split .btn{border-top-right-radius:0 !important;border-bottom-right-radius:0 !important;padding-left:.85rem !important;padding-right:.85rem !important;white-space:nowrap !important}
+/* The label keeps room on both sides of the divider and stays on one line. The bar
+   clips its buttons; a long allow label may use this one's padding instead. */
+.ap-split .btn{border-top-right-radius:0 !important;border-bottom-right-radius:0 !important;padding-left:.85rem !important;padding-right:.85rem !important;white-space:nowrap !important;overflow:visible}
 .ap-split:has(input[type="radio"][name="scope"]:not([value="once"]):checked) > [data-heel-ceremony="approve-once"]{display:none !important}
 .ap-allow-btn{display:none;flex:1;min-width:0}
 ${ALLOW_BUTTON_CSS}
 /* An allow label is longer than "Approve once": the approve side takes 3 parts to Deny's 2. */
-.ap[data-kind="call"] .ap-bar:has(.ap-split input[type="radio"][name="scope"]:not([value="once"]):checked){grid-auto-columns:unset;grid-template-columns:minmax(0,2fr) minmax(0,3fr)}
+.ap[data-kind="call"] .ap-bar:has(.ap-split input[type="radio"][name="scope"]:not([value="once"]):checked) > .ap-bar-yes{flex-grow:3}
+.ap[data-kind="call"] .ap-bar:has(.ap-split input[type="radio"][name="scope"]:not([value="once"]):checked) > .ap-bar-no{flex-grow:2}
 .ap-split-menu{flex:none;display:flex}
 .ap .ap-split-toggle{display:inline-grid;place-items:center;width:2.75rem;min-height:2.5rem;height:100%;padding:0 .7rem;border-radius:0 6px 6px 0;background:var(--accent);color:var(--accent-text);box-shadow:inset 1px 0 0 color-mix(in srgb,var(--accent-text) 25%,transparent)}
 .ap .ap-split-toggle svg{width:1rem;height:1rem;transition:transform .2s}
@@ -425,23 +350,21 @@ fieldset.ap-allow{border:0;padding:0;margin:0;min-width:0}
 .ap-pill span{display:inline-block;padding:.3rem .75rem;border-radius:999px;box-shadow:inset 0 0 0 1px var(--line);font-size:.85rem}
 .ap-pill input:checked + span{background:var(--accent);color:var(--accent-text);box-shadow:none}
 .ap-pill input:focus-visible + span{outline:2px solid var(--focus);outline-offset:2px}
-/* A decided request: one word, then what was asked, the agent's words, the way back and two folds. */
-.ap-outcome{display:flex;gap:.65rem;align-items:center;margin:.25rem 0 .75rem}
+/* A decided call: the word with its icon is the title. */
+.ap-outcome{display:flex;gap:.65rem;align-items:center}
 .ap-outcome-icon{display:inline-flex}
-.ap-back{margin:1rem 0 0}
-.ap-back a{color:var(--text);font-weight:500}
 .ap-outcome-icon svg{width:1.75rem;height:1.75rem}
 .ap-outcome[data-tone="error"] .ap-outcome-icon{color:var(--danger)}
 .ap-outcome[data-tone="ok"] .ap-outcome-icon{color:var(--ok)}
 .ap-outcome[data-tone="info"] .ap-outcome-icon{color:var(--info)}
 .ap-outcome[data-tone="muted"] .ap-outcome-icon{color:var(--muted)}
-.ap .ap-outcome-word{font-size:1.75rem;line-height:1.15;margin:0;letter-spacing:-.02em}
 /* Focus: a ring only for the keyboard, following each element's own radius. */
-.ap :is(a,summary,input,select):focus{outline:none}
-.ap :is(a,summary,select):focus-visible{outline:2px solid var(--focus);outline-offset:2px}
-.ap input[type="radio"]:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:999px}
+.ap[data-kind="call"] :is(a,summary,input,select):focus{outline:none}
+.ap[data-kind="call"] :is(a,summary,select):focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.ap[data-kind="call"] input[type="radio"]:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:999px}
 @media (max-width:36rem){
-  .ap .ap-title{font-size:1.2rem}
+  .ap[data-kind="call"] .ap-title{font-size:1.2rem}
+  .ap[data-kind="call"] .ap-title:has(.ap-outcome){font-size:1.75rem}
   .ap-content,.ap-task{padding:.75rem .85rem}
 }
 `;

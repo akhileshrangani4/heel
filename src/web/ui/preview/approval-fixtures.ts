@@ -2,14 +2,14 @@ import { compileRulesText } from "../../../config/rules.ts";
 import { serviceActions } from "../../../requests/actions.ts";
 import { coverage } from "../../../requests/coverage.ts";
 import type { ConnectionRequestDetails } from "../../../store/schema.ts";
-import type { ApprovalRequestView } from "../approval-request.ts";
 import type { FormTarget } from "../layout.ts";
 import type { ProposalCard, ProposalPageProps } from "../proposals.ts";
 import type { RequestCard, RequestPageProps } from "../requests.ts";
-import { NOW, PENDING_REQUEST } from "./fixtures.ts";
+import { NOW } from "./fixtures.ts";
 
 /**
- * Fixtures for connection requests, rule changes and multi-step tasks.
+ * Fixtures for connection requests and rule changes (the call page's are in
+ * fixtures.ts).
  * Coverage is computed by heel's own `coverage()` from a real rules file and
  * the service's real tool list, so the preview shows what the page would.
  */
@@ -163,7 +163,7 @@ export const TAKEN_REQUEST: RequestPageProps = {
 export const LONG_REASON =
   "I want to triage the review queue every morning before standup, which means reading every open pull request across the tambo-ai organization, leaving a short comment on the ones that are stuck, and opening an issue when a check has been failing for more than a day.";
 
-export const LONG_REASON_REQUEST: RequestPageProps = {
+export const LONG_REASON_CONNECTION: RequestPageProps = {
   ...GITHUB_REQUEST,
   id: "req_01JD8Q5LONGWHY0000000000001",
   why: LONG_REASON,
@@ -283,37 +283,3 @@ export const PROPOSAL_CARDS: readonly ProposalCard[] = [
     expiresAt: days(6),
   },
 ];
-
-/** A run_code task at step 3, after two steps that ran. */
-export const TASK_REQUEST: ApprovalRequestView = {
-  ...PENDING_REQUEST,
-  id: "apr_Task3kP9xVb3",
-  agent: "claude-code-heel",
-  account: "personal",
-  reason: "Approval-flow test: save a draft addressed to the owner's own address. Nothing is sent.",
-  tool: "create_draft",
-  action: "email.draft",
-  email: {
-    ...(PENDING_REQUEST.email as NonNullable<ApprovalRequestView["email"]>),
-    from: "michael@example.com",
-    to: ["michael@example.com"],
-    cc: [],
-    subject: "Approval-flow test",
-    body: "Testing heel's approval flow. Nothing is sent.",
-    attachments: [],
-  },
-  args: {
-    from: "michael@example.com",
-    to: ["michael@example.com"],
-    subject: "Approval-flow test",
-    body: "Testing heel's approval flow. Nothing is sent.",
-  },
-  script: {
-    code: 'import personal\nme = personal.list_send_as()[0]\nhits = personal.search(query="from:me newer_than:1d")\npersonal.create_draft(from_=me, to=[me], subject="Approval-flow test", body="Testing heel\'s approval flow. Nothing is sent.")',
-    truncated: false,
-    before: [
-      { account: "personal", tool: "list_send_as", decision: "allow" },
-      { account: "personal", tool: "search", decision: "allow" },
-    ],
-  },
-};

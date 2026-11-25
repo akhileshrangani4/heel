@@ -29,10 +29,13 @@ async function visibleApprove(page: Page): Promise<{ intent: string; label: stri
   };
 }
 
-/** Press it and read what the ceremony was asked to sign. */
+/**
+ * Press it and read what the ceremony was asked to sign: the action bar's own
+ * status line, whole (the line itself may be cut to fit; its title never is).
+ */
 async function press(page: Page): Promise<string> {
   await page.locator(APPROVE).click();
-  return (await page.locator("#heel-ceremony-status").textContent()) ?? "";
+  return (await page.locator(".ap-bar [data-heel-bar-status]").getAttribute("title")) ?? "";
 }
 
 describe("approving for longer", () => {

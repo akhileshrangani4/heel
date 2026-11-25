@@ -34,7 +34,7 @@ import {
   CONNECTED_REQUEST,
   GITHUB_REQUEST,
   LONG_REASON,
-  LONG_REASON_REQUEST,
+  LONG_REASON_CONNECTION,
   MCP_REQUEST,
   PROPOSAL,
   PROPOSAL_CARDS,
@@ -45,7 +45,6 @@ import {
   STRESS_PROPOSAL,
   STRESS_REQUEST,
   TAKEN_REQUEST,
-  TASK_REQUEST,
 } from "./approval-fixtures.ts";
 import {
   ACTIVE_PAUSES,
@@ -1207,46 +1206,7 @@ const ruleChange = (
     OWNER,
   );
 
-const task = (
-  state: string,
-  label: string,
-  extra: Partial<Parameters<typeof approvalRequest>[0]>,
-): Story =>
-  pageStory(
-    "approval-task",
-    state,
-    label,
-    "Approval request",
-    "approvals",
-    () =>
-      approvalRequest({
-        now: NOW,
-        load: { ok: true, request: TASK_REQUEST },
-        pause: null,
-        onDecide: PREVIEW_CEREMONY.decide,
-        dock: "pinned",
-        ...extra,
-      }),
-    OWNER,
-  );
-
 export const APPROVAL_STORIES: readonly Story[] = [
-  // Call approvals, with the action bar pinned on phones (variant A).
-  {
-    ...approval("pending-pinned", "A: action bar pinned to the bottom on phones", {
-      ok: true,
-      request: PENDING_REQUEST,
-    }),
-    body: () =>
-      approvalRequest({
-        now: NOW,
-        load: { ok: true, request: PENDING_REQUEST },
-        pause: null,
-        onDecide: PREVIEW_CEREMONY.decide,
-        dock: "pinned",
-      }),
-  },
-
   // Connection requests
   connection("pending", "A: GitHub key, bar pinned on phones, actions grouped by outcome", {
     ...GITHUB_REQUEST,
@@ -1271,7 +1231,7 @@ export const APPROVAL_STORIES: readonly Story[] = [
   }),
   connection("taken", "The name is taken: only Reject", { ...TAKEN_REQUEST, dock: "pinned" }),
   connection("long-reason", "The agent's reason runs over 40 words: shown in full", {
-    ...LONG_REASON_REQUEST,
+    ...LONG_REASON_CONNECTION,
     dock: "pinned",
   }),
   connection("connected", "After approving: the confirmation", CONNECTED_REQUEST),
@@ -1288,16 +1248,6 @@ export const APPROVAL_STORIES: readonly Story[] = [
     reason: LONG_REASON,
     dock: "pinned",
   }),
-
-  // A step of a longer run_code task
-  task("step-3", "Step 3 of a task, two steps done, waiting for your OK", {
-    parked: { stop: { action: "/approvals/apr_Task3kP9xVb3/stop-script", csrfToken: "preview" } },
-  }),
-  task("background", "A background task: it keeps running after you approve", {
-    parked: { stop: { action: "/approvals/apr_Task3kP9xVb3/stop-script", csrfToken: "preview" } },
-    background: true,
-  }),
-  task("cancelled", "Right after Cancel the task", { parked: null, stopped: true }),
 
   // The Approvals list with every kind waiting
   pageStory(

@@ -38,10 +38,12 @@ describe("pages at phone width", () => {
     expect(STYLESHEET).toContain("pre{overflow-x:auto;max-width:100%}");
     // Phones: the shared bar is pinned in the tab bar's place, and the page keeps room for it.
     expect(STYLESHEET).toMatch(
-      /body\.app:has\(\.ap\[data-dock="pinned"\] \.ap-bar\[data-dock\]\)\{padding-bottom:calc\(5rem/,
+      /body\.app:has\(\.ap\[data-dock="pinned"\] \.ap-bar\[data-dock\]\)\{padding-bottom:calc\(6\.5rem/,
     );
     // Only wide screens let the call page's decision stick to the bottom of the window.
-    expect(STYLESHEET).toContain("@media (min-width:56rem){.ap-decide{position:sticky");
+    expect(STYLESHEET).toContain(
+      '@media (min-width:56rem){.ap[data-kind="call"] .ap-decide{position:sticky',
+    );
     expect(STYLESHEET.match(/\.ap-decide\{[^}]*position:/g)).toHaveLength(1);
   });
 });

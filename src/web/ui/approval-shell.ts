@@ -1,5 +1,6 @@
 import { flag, type Html, html, trusted } from "./html.ts";
 import { btn } from "./shadcn/button.ts";
+import { middle } from "./summary.ts";
 
 /**
  * One layout for every approval page: call approvals, connection requests
@@ -12,6 +13,8 @@ import { btn } from "./shadcn/button.ts";
  * - Phones: title, side panel, details, in that order. With `dock: "pinned"`
  *   the bar is pinned to the bottom of the screen and takes the tab bar's
  *   place while a decision is open; with `"inline"` it stays in the panel.
+ * - A call (`kind: "call"`) has no side panel: it reads top to bottom in one
+ *   column, the content first and the bar after it (styles/approvals.ts).
  *
  * Presentation only: what the bar's buttons do is the caller's (I-56).
  */
@@ -22,6 +25,8 @@ export interface ShellProps {
   kind: "call" | "connection" | "rules";
   /** The breadcrumb's last part ("Request"), or "" for just the link back. */
   crumb: string;
+  /** One short line above the title, such as who is asking. */
+  lead?: Html | "";
   /** What is asked, or what happened once decided: the page's one h1. */
   title: Html;
   /** One line of why it matters, in heel's words. */
@@ -59,6 +64,7 @@ export function approvalShell(props: ShellProps): Html {
     </nav>
     <div class="ap-layout">
       <header class="ap-head">
+        ${props.lead ?? ""}
         <h1 class="ap-title">${props.title}</h1>
         ${props.quote ?? ""}
         ${props.why ? html`<p class="ap-why">${props.why}</p>` : ""}
@@ -116,10 +122,9 @@ export function technical(content: Html): Html {
 /**
  * A long name, alias or host cut in the middle ("a234567890-b…f23456789"),
  * for titles and rows. The full value is always on the page too, in Details.
+ * The same cut as the call page's `middle()`: the first 12 and last 8 characters.
  */
-export function shorten(text: string, head = 12, tail = 8): string {
-  return text.length <= head + tail + 1 ? text : `${text.slice(0, head)}…${text.slice(-tail)}`;
-}
+export const shorten = middle;
 
 /**
  * The one action bar: no on the left, yes on the right, side by side at

@@ -2,7 +2,7 @@ import type { RuleRef, Surface } from "../../core/call.ts";
 import type { ApprovalHints, HintTone } from "../../core/hints.ts";
 import type { ApprovalScript } from "../../gateway/pipeline/ports.ts";
 import type { ApprovalOrigin, ApprovalStatus } from "../../store/schema.ts";
-import { actionBar } from "./approval-shell.ts";
+import { actionBar, approvalShell, type Dock } from "./approval-shell.ts";
 import { type CeremonyCallback, ceremonyButton } from "./ceremony.ts";
 import {
   formatArguments,
@@ -113,6 +113,8 @@ export interface ApprovalRequestProps {
   /** The task waiting on this call runs in the background: approving starts it again at once (C6). */
   background?: boolean;
   emailLayout?: EmailLayout;
+  /** Phones: pin the action bar to the bottom of the screen (the default), or keep it in the page. */
+  dock?: Dock;
 }
 
 /**
@@ -167,7 +169,6 @@ const ICONS = {
   paperclip: svg(
     '<path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"/>',
   ),
-  back: svg('<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>'),
   steps: svg(
     '<path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/>',
   ),
@@ -262,7 +263,7 @@ function viaText(request: ApprovalRequestView): string {
 /** The agent's reason, set apart and marked as its own: heel didn't check it. */
 function reasonView(request: ApprovalRequestView): Html | "" {
   if (request.reason === null) return "";
-  return html`<figure class="reason ap-why">
+  return html`<figure class="reason ap-says">
     <figcaption>The agent says <span class="ap-unchecked">Not checked</span></figcaption>
     <blockquote>${request.reason}</blockquote>
   </figure>`;
@@ -532,7 +533,7 @@ function taskView(request: ApprovalRequestView, background: boolean, folds: Fold
       html`See the code the agent wrote`,
       html`<pre class="body mono">${script.code}</pre>
         ${script.truncated ? html`<p class="muted ap-note">Cut here: the code is longer than heel keeps.</p>` : ""}`,
-      "ap-fold ap-code",
+      "ap-fold ap-code-fold",
       true,
     )}
   </section>`;
@@ -899,47 +900,48 @@ function detailsView(request: ApprovalRequestView, folds: Folds, now: Date): Htm
   );
 }
 
-/** A decided request: one word, and nothing else. */
-function outcomeView(request: ApprovalRequestView): Html {
+/** A decided request's title: one word, and nothing else. */
+function outcomeTitle(request: ApprovalRequestView): Html {
   if (request.status === "pending") return html``;
   const { word, tone, icon } = OUTCOME[request.status];
-  return html`<section class="ap-outcome" data-tone="${tone}" role="status">
-    <span class="ap-outcome-icon">${trusted(ICONS[icon])}</span>
-    <h1 class="ap-outcome-word">${word}</h1>
-  </section>`;
+  return html`<span class="ap-outcome" data-tone="${tone}"
+    ><span class="ap-outcome-icon">${trusted(ICONS[icon])}</span>${word}</span
+  >`;
 }
 
 /**
  * A decided request: the word, what was asked in one sentence (the agent
- * named once, here), the agent's words whole, the way back, then the content
- * and Details in closed folds. Nothing can be decided here any more; an
- * expired request can't be approved (I-55), so it shows no controls at all.
+ * named once, here), the agent's words whole, then the content and Details
+ * in closed folds. The link back to the list is the shell's, at the top.
+ * Nothing can be decided here any more; an expired request can't be
+ * approved (I-55), so it shows no controls at all.
  */
 function decidedPage(request: ApprovalRequestView, folds: Folds, now: Date, content: Html): Html {
   const ask = askSentence(request);
-  const asked = `${middle(request.agent)} asked to ${ask.charAt(0).toLowerCase()}${ask.slice(1)}`;
-  return html`<article class="ap is-decided" data-kind="call" data-heel-fold-kind="${foldKind(request)}">
-    ${outcomeView(request)}
-    <p class="ap-title">${asked}</p>
-    ${reasonView(request)}
-    <nav class="ap-crumbs ap-back" aria-label="Breadcrumb">
-      <a href="/approvals">${trusted(ICONS.back)}Back to Approvals</a>
-    </nav>
-    ${
-      FOLD_DECIDED_CONTENT
-        ? fold(
-            folds,
-            "asked",
-            false,
-            html`What was asked`,
-            html`<div class="ap-fold-body">${content}</div>`,
-            "ap-fold ap-asked",
-            true,
-          )
-        : content
-    }
-    ${detailsView(request, folds, now)}
-  </article>`;
+  return approvalShell({
+    kind: "call",
+    crumb: "",
+    dock: "inline",
+    foldKind: foldKind(request),
+    title: outcomeTitle(request),
+    why: `${middle(request.agent)} asked to ${ask.charAt(0).toLowerCase()}${ask.slice(1)}`,
+    side: html``,
+    main: html`${reasonView(request)}
+      ${
+        FOLD_DECIDED_CONTENT
+          ? fold(
+              folds,
+              "asked",
+              false,
+              html`What was asked`,
+              html`<div class="ap-fold-body">${content}</div>`,
+              "ap-fold ap-asked",
+              true,
+            )
+          : content
+      }
+      ${detailsView(request, folds, now)}`,
+  });
 }
 
 /**
@@ -982,15 +984,18 @@ export function approvalRequest(props: ApprovalRequestProps): Html {
           </p>`,
         )
       : "";
-  return html`<article class="ap" data-kind="call" data-dock="pinned" data-heel-fold-kind="${foldKind(request)}">
-    <nav class="ap-crumbs" aria-label="Breadcrumb">
-      <a href="/approvals">${trusted(ICONS.back)}Approvals</a>
-    </nav>
-    ${whoView(request, props.now)}
-    <h1 class="ap-title">${askSentence(request)}</h1>
-    ${lock} ${reasonView(request)} ${taskRow(request)} ${riskView(request)}
-    ${content}
-    ${decisionControls(request, props.pause, props.onDecide)}
-    ${detailsView(request, folds, props.now)}
-  </article>`;
+  // One column, no side panel: the content, then the decision under it.
+  return approvalShell({
+    kind: "call",
+    crumb: "",
+    dock: props.dock ?? "pinned",
+    foldKind: foldKind(request),
+    lead: whoView(request, props.now),
+    title: html`${askSentence(request)}`,
+    side: html``,
+    main: html`${lock} ${reasonView(request)} ${taskRow(request)} ${riskView(request)}
+      ${content}
+      ${decisionControls(request, props.pause, props.onDecide)}
+      ${detailsView(request, folds, props.now)}`,
+  });
 }
