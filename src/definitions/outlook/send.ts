@@ -14,7 +14,7 @@ import {
   unique,
 } from "../mail/compose.ts";
 import { draftEnvelope } from "../mail/mime.ts";
-import type { Preparation } from "../mail/tool.ts";
+import type { Preparation } from "../tool-table.ts";
 import { OutlookError, type OutlookMessage, OutlookNotFoundError } from "./client.ts";
 import { messageBody, type OutlookMailbox, plainRecipients } from "./messages.ts";
 import { OutlookId, type OutlookTool, outlookTool } from "./tool.ts";

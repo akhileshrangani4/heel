@@ -1,4 +1,5 @@
 import { parseArgs } from "node:util";
+import { RUN_ID_ENV } from "../core/run-id.ts";
 import type { CliIo } from "./common.ts";
 import { parseOrUsage, UsageError } from "./common.ts";
 
@@ -54,7 +55,7 @@ export async function runCommand(args: string[], io: CliIo, deps: RunDeps): Prom
   if (base === undefined || !/^https?:$/.test(URL.parse(base)?.protocol ?? "")) {
     throw new UsageError("HEEL_URL isn't an http:// or https:// URL");
   }
-  const runId = io.env["HEEL_RUN_ID"];
+  const runId = io.env[RUN_ID_ENV];
   const body = {
     argv,
     cwd: deps.cwd(),

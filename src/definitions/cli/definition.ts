@@ -86,7 +86,6 @@ export const CliArgsSchema = z.strictObject({
   /** Absolute; the route resolves it before the pipeline sees it. */
   cwd: z.string().startsWith("/"),
 });
-export type CliArgs = z.output<typeof CliArgsSchema>;
 
 /**
  * The arguments as heel runs them: what the agent sent, plus `base` on a

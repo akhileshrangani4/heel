@@ -9,8 +9,6 @@ import type { FetchFn } from "../sign-in.ts";
 
 import { GITHUB_API, GitHubNotFoundError } from "./client.ts";
 
-export { GITHUB_API };
-
 export class GitHubLookupError extends Error {
   override readonly name = "GitHubLookupError";
 }

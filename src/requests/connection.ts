@@ -218,18 +218,6 @@ export function pendingRequests(db: HeelDb, ownerId: string, now: Date): Request
     .all();
 }
 
-/** How many requests an owner has waiting; for the Approvals count. */
-export function pendingRequestCount(db: HeelDb, ownerId: string, now: Date): number {
-  expireRequests(db, now);
-  return (
-    db
-      .select({ n: count() })
-      .from(agentRequests)
-      .where(and(eq(agentRequests.ownerId, ownerId), eq(agentRequests.status, "pending")))
-      .get()?.n ?? 0
-  );
-}
-
 /** Every waiting request in the org with its agent's and owner's names, newest first. */
 export function orgPendingRequests(
   db: HeelDb,

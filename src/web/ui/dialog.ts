@@ -19,11 +19,9 @@ export function dialog(props: {
   body: Html;
   /** Wider for grids (the service picker). */
   wide?: boolean;
-  /** Open on load, e.g. after a form error so the person sees it. */
-  open?: boolean;
 }): Html {
   const titleId = `${props.id}-title`;
-  return html`<dialog id="${props.id}" class="ui-dialog${props.wide ? " ui-dialog-wide" : ""}" aria-labelledby="${titleId}"${props.open ? html` data-open-on-load` : ""} onclick="if (event.target === this) this.close()">
+  return html`<dialog id="${props.id}" class="ui-dialog${props.wide ? " ui-dialog-wide" : ""}" aria-labelledby="${titleId}" onclick="if (event.target === this) this.close()">
     <div class="ui-dialog-panel">
       <div class="ui-dialog-head">
         <h2 id="${titleId}" class="ui-dialog-title">${props.title}</h2>
@@ -34,6 +32,3 @@ export function dialog(props: {
     </div>
   </dialog>`;
 }
-
-/** Opens any dialog marked to open on load (a form came back with an error). */
-export const DIALOG_SCRIPT = `document.querySelectorAll("dialog[data-open-on-load]").forEach((d) => { if (!d.open) d.showModal(); });`;

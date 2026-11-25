@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { Address, unique } from "../mail/compose.ts";
-import type { Preparation } from "../mail/tool.ts";
 import { GRAPH_API_BASE } from "../microsoft/oauth.ts";
+import type { Preparation } from "../tool-table.ts";
 import type { GraphEvent } from "./client.ts";
 import type { OutlookMailbox } from "./messages.ts";
 import { OutlookId, type OutlookTool, outlookTool } from "./tool.ts";
