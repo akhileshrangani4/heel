@@ -36,10 +36,6 @@ export function storedMode(db: HeelDb | HeelTx, orgId: string, ownerId: string):
   );
 }
 
-export function listModes(db: HeelDb, orgId: string) {
-  return db.select().from(modes).where(eq(modes.orgId, orgId)).all();
-}
-
 /** Sets a row's mode and records the switch; `from` is the row's stored mode, `enforce` when unset. */
 export function setMode(
   db: HeelDb,
