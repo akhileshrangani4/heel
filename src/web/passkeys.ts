@@ -49,10 +49,6 @@ export function hashEnrollmentToken(token: string): string {
   return createHash("sha256").update(token, "utf8").digest("hex");
 }
 
-export function enrollmentPath(token: string): string {
-  return `/enroll/${token}`;
-}
-
 export interface Enrollment {
   url: string;
   expiresAt: Date;
@@ -152,7 +148,7 @@ export function createEnrollment(
       .run();
   });
   return {
-    url: new URL(enrollmentPath(token), input.publicUrl).href,
+    url: new URL(`/enroll/${token}`, input.publicUrl).href,
     expiresAt,
     activeFrom: notBefore,
   };

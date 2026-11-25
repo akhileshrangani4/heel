@@ -104,11 +104,9 @@ export function pauseNoticeFor(db: HeelDb, call: Call): PauseNotice | null {
   });
   const scope = broadestScope(rows.map((row) => row.scope));
   const row = rows.find((r) => r.scope === scope);
-  return row === undefined ? null : noticeOf(db, row);
-}
-
-export function noticeOf(db: HeelDb, row: PauseRow): PauseNotice {
-  return { scope: row.scope, target: pauseTargetName(db, row), since: row.pausedAt };
+  return row === undefined
+    ? null
+    : { scope: row.scope, target: pauseTargetName(db, row), since: row.pausedAt };
 }
 
 export function mayPause(db: HeelDb, session: SessionView, key: PauseKey): boolean {
