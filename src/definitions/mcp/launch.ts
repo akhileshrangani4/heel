@@ -7,8 +7,8 @@ import { stdioSandboxSpec } from "./settings.ts";
 import type { StdioLauncher } from "./upstream.ts";
 
 /**
- * How heel starts a local (stdio) MCP server (spec: Upstream MCP servers,
- * N-8): in the sandbox, in a work directory of its own under heel's home and
+ * How heel starts a local (stdio) MCP server: in the
+ * sandbox, in a work directory of its own under heel's home and
  * nothing else of heel's, with the credential handled as `stdioSandboxSpec`
  * says. Refused egress, and requests heel's proxy refused to add the
  * credential to, are logged against the account.

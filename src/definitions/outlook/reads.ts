@@ -12,7 +12,7 @@ import {
 import { OutlookId, type OutlookTool, outlookTool } from "./tool.ts";
 
 /**
- * Outlook's read tools (D9b), the same as Gmail's: results are rebuilt from
+ * Outlook's read tools, the same as Gmail's: results are rebuilt from
  * the visible messages with one `hidden: { count }` placeholder (I-40,
  * I-41), and a by-id read of a hidden message is refused like a missing one
  * (I-42).

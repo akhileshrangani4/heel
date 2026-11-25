@@ -17,11 +17,11 @@ export interface ConnectionRow {
   signsIn: boolean;
   /** It signs in through an OAuth client heel.yaml doesn't have yet. */
   setup: SignInSetup | null;
-  /** It holds an API key (not a sign-in), which can be replaced here (2.9). */
+  /** It holds an API key (not a sign-in), which can be replaced here. */
   holdsKey?: boolean;
   /** When heel last decided a call on it, from the audit log; null if never. */
   lastUsedAt?: Date | null;
-  /** Who else may use it, and who decides its asks (D13b), by name. */
+  /** Who else may use it, and who decides its asks, by name. */
   sharing?: {
     sharedWith: readonly { user?: string; group?: string }[];
     approvers: readonly { user?: string; group?: string; repo?: string }[];
@@ -40,14 +40,14 @@ export interface ConnectionsProps {
   signInForm: FormTarget;
   /** For "last used 3 h ago"; defaults to the time of rendering. */
   now?: Date;
-  /** Connecting, replacing a key and removing from here (2.9). */
+  /** Connecting, replacing a key and removing from here. */
   manage?: {
     csrfToken: string;
     /** Everyone else on this heel, by name: who an account can be shared with. */
     people?: readonly string[];
     /** People sign in with an IdP, so its groups can be named. */
     groups?: boolean;
-    /** Admins name approvers (spec: Teams); owners see who they are. */
+    /** Admins name approvers; owners see who they are. */
     admin?: boolean;
   };
 }
@@ -183,7 +183,7 @@ function principalName(p: { user?: string; group?: string }): string {
   return p.user ?? `the ${p.group ?? "?"} group`;
 }
 
-/** Who else may use an account, and who decides its asks (D13b). */
+/** Who else may use an account, and who decides its asks. */
 function sharingControls(row: ConnectionRow, manage: Manage, key: string): Html {
   const people = manage.people ?? [];
   const sharing = row.sharing ?? { sharedWith: [], approvers: [] };
@@ -444,8 +444,8 @@ function lastUsed(row: ConnectionRow, now: Date): Html {
 }
 
 /**
- * The accounts a person owns, and sign-in for the ones whose server wants it
- * (D5c). Signing in happens on the server's own page; heel keeps the tokens
+ * The accounts a person owns, and sign-in for the ones whose server wants it.
+ * Signing in happens on the server's own page; heel keeps the tokens
  * in its vault and never shows them.
  */
 export function connectionsPage(props: ConnectionsProps): Html {

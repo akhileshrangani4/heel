@@ -2,8 +2,7 @@ import type { AuditKind } from "../core/audit.ts";
 import type { PauseScope, RuleRef, Surface } from "../core/call.ts";
 
 /**
- * The audit log's one external line format (spec: Teams, "Audit"). `heel
- * audit export` and the SIEM sink both emit exactly these bytes, so a
+ * The audit log's one external line format. `heel audit export` and the SIEM sink both emit exactly these bytes, so a
  * downstream parser never sees two dialects of the same row.
  */
 

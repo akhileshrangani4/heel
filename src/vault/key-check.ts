@@ -7,7 +7,7 @@ import { StripeClient } from "../definitions/stripe/client.ts";
 import { CredentialRejectedError } from "../gateway/pipeline/ports.ts";
 
 /**
- * Checks a pasted key before heel stores it (roadmap test finding T12): one
+ * Checks a pasted key before heel stores it: one
  * cheap read that every key of that kind may make. In the setup dry run heel
  * marked four placeholder keys Connected, and the agent only found out on
  * its first call.

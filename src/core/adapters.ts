@@ -1,6 +1,6 @@
 /**
- * Decision adapters: pluggable checks that run beside the rules engine
- * (the adapter chain from the Nov 17 design discussion). Pure: the gateway
+ * Decision adapters: pluggable checks that run beside the rules engine.
+ * Pure: the gateway
  * runs the adapters and this module decides what their answers mean.
  *
  * An adapter can only tighten. It answers `pass` or `deny`, never `allow`,

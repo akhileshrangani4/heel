@@ -3,7 +3,7 @@ import type { FetchFn } from "../sign-in.ts";
 export const GITHUB_API = "https://api.github.com";
 
 /**
- * GitHub's REST API with the account's token (D11). Reads that come back
+ * GitHub's REST API with the account's token. Reads that come back
  * 404 are `GitHubNotFoundError`, so a missing target is denied like a hidden
  * one. A write GitHub answered with a 4xx is `GitHubWriteRefused`: nothing
  * happened. A 5xx, or no answer, leaves the outcome unknown; heel never

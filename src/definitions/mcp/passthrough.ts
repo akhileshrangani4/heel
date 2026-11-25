@@ -7,7 +7,7 @@ import type { UpstreamPool } from "./upstream.ts";
 
 /**
  * The definition for an MCP passthrough account: someone else's MCP server
- * behind heel (spec: Endpoints and tools, "Passthrough tools").
+ * behind heel.
  *
  * heel knows nothing about these tools, so a call keeps its raw tool name
  * and arguments, gets no `action`, and is never `kind: read` (I-20): rules

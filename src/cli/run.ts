@@ -3,14 +3,14 @@ import type { CliIo } from "./common.ts";
 import { parseOrUsage, UsageError } from "./common.ts";
 
 /**
- * `heel run [--account <alias>] [--reason <text>] [--json] -- <cmd> [args...]` (D8b; spec: CLI
- * runner, "Client and topology"). Runs on the agent's side with only the
- * agent's token: it posts the command line and the current directory to
- * heel's `/run` and never runs anything itself.
+ * `heel run [--account <alias>] [--reason <text>] [--json] -- <cmd> [args...]`.
+ * Runs on the agent's side with only the agent's token: it posts the command
+ * line and the current directory to heel's `/run` and never runs anything
+ * itself.
  *
  * When the command ran, its output is written out and its own exit code
  * returned. When it didn't, one line `heel: {"status":...}` goes to stderr
- * and the exit code says why (spec: "Exit codes"): 75 pending or busy (too
+ * and the exit code says why: 75 pending or busy (too
  * many commands and scripts running; send it again later), 77 denied or
  * expired, 69 paused, 70 a heel error, a sandbox limit or no sandbox, 64 a
  * usage error, here or in the request heel refused. With

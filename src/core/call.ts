@@ -1,8 +1,6 @@
 /**
- * The normalized call every surface produces before any rule sees it (spec:
- * Call model and normalization). Rules, counts, approvals and audit only ever
- * see this record. The pipeline that builds it lands in D3; D1 defines the
- * shape so the store and audit log agree on it from the first migration.
+ * The normalized call every surface produces before any rule sees it.
+ * Rules, counts, approvals and audit only ever see this record.
  */
 export type Surface = "mcp" | "code" | "http" | "cli";
 
@@ -42,7 +40,7 @@ export const PROVIDER_FIELDS = [
 export type ProviderField = (typeof PROVIDER_FIELDS)[number];
 export type ProviderFields = Partial<Record<ProviderField, string | number | boolean>>;
 
-/** What rules see of an HTTP proxy request (spec: HTTP proxy, "What rules see"). */
+/** What rules see of an HTTP proxy request. */
 export interface HttpFields {
   method: string;
   /** The literal request path. */
@@ -62,23 +60,20 @@ export interface HttpFields {
 }
 
 export interface Call {
-  // who
   /** Single org per install in v1. */
   orgId: string;
   /** From the heel token, never from the request body. */
   agentId: string;
-  /** The user who owns the agent. */
   ownerId: string;
   /** Agent-supplied; scoped per agent. */
   runId?: string;
   /**
    * The code-mode script the call came from, heel's own id for it, kept
    * across a park and resume, so Activity can show a script's calls
-   * together (C3). Never part of the call hash or any rule.
+   * together. Never part of the call hash or any rule.
    */
   scriptId?: string;
 
-  // what
   surface: Surface;
   /** Alias, e.g. "gmail-work"; HTTP and CLI use the connected alias. */
   account: string;
@@ -107,8 +102,7 @@ export interface Call {
   http?: HttpFields;
   /**
    * What a built-in definition derives about the resource a call touches,
-   * for rules to name (D12b; spec: "Calendar, Slack, Linear, Notion,
-   * Stripe"). Only built-in definitions set these (I-20).
+   * for rules to name. Only built-in definitions set these (I-20).
    */
   fields?: ProviderFields;
   /** The tool creates something that outlives revocation (I-70). */
@@ -123,7 +117,7 @@ export interface RuleRef {
 }
 
 /**
- * What a pause covers (spec: Pause). `owner` pauses every agent a person
+ * What a pause covers. `owner` pauses every agent a person
  * owns, so a member can stop all of their agents in one tap; like every
  * pause, it can only stop calls.
  */

@@ -8,7 +8,7 @@ import { newId } from "./ids.ts";
 import { agents, ruleChanges, ruleFileSnapshots, ruleProposals, users } from "./schema.ts";
 
 /**
- * The history of the rules files (roadmap 2.4). A change heel makes from a
+ * The history of the rules files. A change heel makes from a
  * proposal is recorded with who proposed it and who added it. Any other
  * change (an editor, git, a script) is noticed on the next reload, by
  * comparing each file with what heel last saw, and recorded as made outside
@@ -136,7 +136,7 @@ export function recordProposalChange(
   saveSnapshot(db, change.file, change.after, change.now);
 }
 
-/** Records a change made in the web app's rules editor (2.9), and remembers the new text. */
+/** Records a change made in the web app's rules editor, and remembers the new text. */
 export function recordWebChange(
   db: HeelDb,
   change: { orgId: string; userId: string; file: string; before: string; after: string; now: Date },

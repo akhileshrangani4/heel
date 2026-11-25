@@ -107,9 +107,22 @@ export const SELECT_SCRIPT = `
     const place = () => {
       list.classList.remove("is-up");
       const box = trigger.getBoundingClientRect();
-      const below = window.innerHeight - box.bottom;
+      // The room inside whatever clips the popover: the viewport, or a scrolling
+      // ancestor such as a dialog's panel.
+      let top = 0;
+      let bottom = window.innerHeight;
+      for (let el = wrap.parentElement; el && el !== document.body; el = el.parentElement) {
+        const style = getComputedStyle(el);
+        if (style.overflowY !== "visible" || style.overflowX !== "visible") {
+          const clip = el.getBoundingClientRect();
+          top = Math.max(top, clip.top);
+          bottom = Math.min(bottom, clip.bottom);
+        }
+      }
+      const below = bottom - box.bottom;
+      const above = box.top - top;
       const height = Math.min(list.scrollHeight, 288);
-      if (below < height + 12 && box.top > below) list.classList.add("is-up");
+      if (below < height + 12 && above > below) list.classList.add("is-up");
     };
     const close = (refocus) => {
       if (list.hidden) return;

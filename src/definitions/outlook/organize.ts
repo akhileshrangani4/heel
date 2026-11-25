@@ -7,18 +7,17 @@ import type { OutlookMailbox } from "./messages.ts";
 import { OutlookId, type OutlookTool, outlookTool } from "./tool.ts";
 
 /**
- * Outlook's tools that move, delete, categorize and filter mail (D9b; spec:
- * Email, "Gmail and Outlook").
+ * Outlook's tools that move, delete, categorize and filter mail.
  *
  * - `email.remove` is a delete, or a move into Deleted Items, Junk, Archive
  *   or Recoverable Items, any folder inside them, or a hidden folder. heel
- *   resolves the destination's folder chain by id, never by display name
- *   (research §7, gap 5), and moves to the id it resolved. Any other move,
+ *   resolves the destination's folder chain by id, never by display name,
+ *   and moves to the id it resolved. Any other move,
  *   and categories, are `email.label`.
  * - Moves into Sent Items, Drafts or Outbox are refused: Sent Items decides
  *   which mail counts as the mailbox's own.
  * - `items` counts messages, and a batch holding any hidden or missing id is
- *   refused whole (I-42, Q-H3).
+ *   refused whole (I-42).
  * - heel never offers `permanentDelete`.
  * - An inbox rule is `email.filter`, whatever it does to future mail. One
  *   that forwards or redirects is `email.send` and persistence, with its
@@ -271,8 +270,8 @@ const createRule = outlookTool({
     };
     const rule = { displayName: args.name, sequence: 1, isEnabled: true, conditions, actions };
     const outbound = [...forwardTo, ...redirectTo] as string[];
-    // A rule is `email.filter`, whatever it does to future mail, as in the
-    // spec and for Gmail; one that sends mail out is `email.send` too.
+    // A rule is `email.filter`, whatever it does to future mail, as for
+    // Gmail; one that sends mail out is `email.send` too.
     return {
       args: { rule },
       ...(outbound.length > 0

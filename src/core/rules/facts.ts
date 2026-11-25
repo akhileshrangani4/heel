@@ -4,7 +4,7 @@ import type { Call, CliFields, HttpFields, ProviderField, ProviderFields } from 
  * What a rule can see of one call: the normalized Call minus what rules never
  * match on (org, owner and agent ids, targets), plus the agent's name. Count
  * events store these too, so a count condition can re-check them against
- * history (spec: Counts and state checks).
+ * history.
  */
 export interface RuleFacts {
   /** The agent's name, as rules write it. */
@@ -21,7 +21,7 @@ export interface RuleFacts {
   calendar?: string;
   cli?: CliFields;
   http?: HttpFields;
-  /** Provider fields a built-in definition derived (D12b). */
+  /** Provider fields a built-in definition derived. */
   fields?: ProviderFields;
   /** Expanded item count; 1 when unknown. */
   items: number;
@@ -156,8 +156,7 @@ function optionalSingle(value: unknown): FieldValue {
 
 /**
  * Walks a dotted path. Stepping through an array visits every element, so
- * `args.messages.id` reads each message's id (spec: "A path into an array
- * checks every element"); an array at the end of the path is a list too.
+ * `args.messages.id` reads each message's id; an array at the end of the path is a list too.
  * Only own properties of plain objects are read, so `args.constructor`
  * finds nothing.
  */

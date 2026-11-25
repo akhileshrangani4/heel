@@ -1,7 +1,6 @@
 /**
- * The pure rules of approval requests and standing approvals (spec:
- * Approvals, standing approvals and pause). The store applies them; nothing
- * here reads a clock or a database.
+ * The pure rules of approval requests and standing approvals. The store
+ * applies them; nothing here reads a clock or a database.
  */
 
 const MINUTE_MS = 60_000;
@@ -9,9 +8,9 @@ const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
 
 export interface ApprovalTtls {
-  /** A pending request expires this long after it was created (Q-A4: 24 h). */
+  /** A pending request expires this long after it was created. */
   pendingMs: number;
-  /** An approval the agent hasn't used expires this long after the decision (Q-A4: 1 h). */
+  /** An approval the agent hasn't used expires this long after the decision. */
   approvedMs: number;
 }
 
@@ -33,7 +32,7 @@ export type ApprovalStatusView = StoredApprovalState["status"];
  * Pure: a request's status at `now`. Expiry is lazy: a pending or approved
  * request past its deadline is expired whether or not a row update has
  * caught up yet (I-55). A denied request keeps reading `denied`; its
- * deadline only bounds how long it blocks re-sends (Q-A5).
+ * deadline only bounds how long it blocks re-sends.
  */
 export function statusAt(row: StoredApprovalState, now: Date): ApprovalStatusView {
   if ((row.status === "pending" || row.status === "approved") && row.expiresAt <= now) {
@@ -43,8 +42,7 @@ export function statusAt(row: StoredApprovalState, now: Date): ApprovalStatusVie
 }
 
 /**
- * How a stored request answers an identical call at `now` (spec: Pending,
- * joining and checking back):
+ * How a stored request answers an identical call at `now`:
  * - `govern`: it decides the call (join, execute, denied or expired);
  * - `settle_expired`: it ran out unused; report `expired` once and record it;
  * - `none`: it no longer governs, so the call is evaluated as new.
@@ -62,7 +60,7 @@ export function governingOutcome(row: StoredApprovalState, now: Date): Governing
         ? { kind: "settle_expired" }
         : { kind: "govern", status: row.status };
     case "denied":
-      // Re-sends inside the original pending TTL return `denied` with the same id (Q-A5).
+      // Re-sends inside the original pending TTL return `denied` with the same id.
       return row.expiresAt > now ? { kind: "govern", status: "denied" } : { kind: "none" };
     case "expired":
     case "executed":
@@ -70,9 +68,7 @@ export function governingOutcome(row: StoredApprovalState, now: Date): Governing
   }
 }
 
-// ── standing approvals ──────────────────────────────────────────────────────
-
-/** The durations an approver may pick (Q-A6); the hard cap is 90 days. */
+/** The durations an approver may pick; the hard cap is 90 days. */
 export const STANDING_DURATIONS = {
   "1h": HOUR_MS,
   "1d": DAY_MS,
@@ -88,7 +84,7 @@ export function isStandingDuration(value: unknown): value is StandingDuration {
 
 export interface StoredStanding {
   agentId: string;
-  /** The account and repo it was granted on; null on rows from before sharing (D13b). */
+  /** The account and repo it was granted on; null on rows from before sharing. */
   account: string | null;
   repo: string | null;
   scope: "exact_call" | "rule" | "run";
@@ -121,9 +117,8 @@ export function standingState(
 /**
  * Pure: whether a live standing approval covers a call that matched its
  * parent rule and would ask. It is scoped to one agent, and to the account
- * and repo it was granted on, since its approver may decide for no others
- * (D13b); `exact_call` also needs the same account, tool and arguments
- * (Q-A6).
+ * and repo it was granted on, since its approver may decide for no others;
+ * `exact_call` also needs the same account, tool and arguments.
  */
 export function standingCovers(
   row: Pick<
@@ -150,13 +145,11 @@ export function standingCovers(
     case "exact_call":
       return row.callHash === call.callHash();
     case "run":
-      // A4: everything this rule asks about, in this one run of this agent.
+      // Everything this rule asks about, in this one run of this agent.
       // A call without a run id is never in a run.
       return row.runId !== null && call.runId !== undefined && row.runId === call.runId;
   }
 }
-
-// ── deciding ────────────────────────────────────────────────────────────────
 
 export type DecisionIntent = "approve" | "deny";
 
@@ -168,9 +161,9 @@ export type DecisionRefusal =
   | "paused"
   /** Only the account's approvers decide its requests; org asks go to admins. */
   | "not_approver"
-  /** Q-A7: an org ask is approved once and never stands. */
+  /** An org ask is approved once and never stands. */
   | "org_ask_cannot_stand"
-  /** A4: "this run" needs a request that came with a run id. */
+  /** "This run" needs a request that came with a run id. */
   | "no_run";
 
 export interface DecisionInput {

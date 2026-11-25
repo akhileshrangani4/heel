@@ -17,7 +17,7 @@ import {
 const AGENT_GONE =
   "the agent's access was revoked or expired while the script ran; the script was stopped";
 
-/** How many of a script's parallel calls heel runs at once (C4). */
+/** How many of a script's parallel calls heel runs at once. */
 export const MAX_PARALLEL = 8;
 /**
  * The most of one parallel result, and of one batch, heel hands back, as
@@ -28,7 +28,7 @@ export const MAX_FUTURE_RESULT_CHARS = 4 * 1024 * 1024;
 export const MAX_FUTURE_BATCH_CHARS = 12 * 1024 * 1024;
 
 /**
- * Runs one code-mode script (D6a; spec: Code mode). Each host call in the
+ * Runs one code-mode script. Each host call in the
  * script goes through the full decision pipeline as its own call, with
  * `surface: "code"`, so a loop of 500 single deletes meets the same counts
  * and limits as one 500-item batch (I-27). How the script goes on depends on
@@ -44,7 +44,7 @@ export const MAX_FUTURE_BATCH_CHARS = 12 * 1024 * 1024;
  *   carries a `resume` id: `run_code({ resume })` restores it at that call,
  *   which then runs through the pipeline again, so the approval decides it.
  *   Without parking, or when it can't be saved, the script ends there and
- *   the agent sends the rest as a new script (code mode round 2, C2);
+ *   the agent sends the rest as a new script;
  * - paused: the script is stopped for good and never resumed (I-62);
  * - an upstream error: a `RuntimeError` at the call;
  * - an unknown outcome, or a call that ran but whose result heel withheld:
@@ -90,11 +90,11 @@ export interface RunScriptInput {
   parking?: { db: HeelDb; sealer: Sealer; now: () => Date };
   /** A parked script to resume instead of running `code`. */
   resume?: ClaimedScript;
-  /** The script's id, when the caller already gave it one (a background script's, C6). */
+  /** The script's id, when the caller already gave it one (a background script's). */
   scriptId?: string;
   /**
    * Whether the agent may still act, asked before each call: a script can
-   * outlive the request that started it (C6). False stops the script there.
+   * outlive the request that started it. False stops the script there.
    */
   stillLive?: () => boolean;
   /**
@@ -325,7 +325,7 @@ export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
       return finish({ status: "error", error: "this parked script was already resumed" });
     }
   }
-  // Calls made as futures (`_async` twins, C4), by Monty's call id. They run when the script
+  // Calls made as futures (`_async` twins), by Monty's call id. They run when the script
   // next waits: Monty then lists every unresolved one, awaited or not, as a JavaScript promise
   // starts when it's made. One made just before the script ends, with no wait after, never runs.
   const futures = new Map<
@@ -394,7 +394,7 @@ export async function runScript(input: RunScriptInput): Promise<ScriptResult> {
       ...(input.runId === undefined ? {} : { runId: input.runId }),
       ...(input.reason === undefined ? {} : { reason: input.reason }),
       scriptId,
-      // The approver sees the script and what it already called (C3).
+      // The approver sees the script and what it already called.
       script: approvalScript(code, [...(input.resume?.calls.slice(0, -1) ?? []), ...calls]),
     });
     const record = (decision: CallRecord["decision"]) =>
