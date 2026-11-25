@@ -1,6 +1,12 @@
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
-import { CodemodeHost, HostedCodeWorker } from "../../src/codemode/hosted.ts";
+import {
+  CodemodeHost,
+  type HelperExit,
+  HostedCodeWorker,
+  helperStoppedError,
+  startupReason,
+} from "../../src/codemode/hosted.ts";
 import { runScript } from "../../src/codemode/run.ts";
 import { accountModule } from "../../src/codemode/stubs.ts";
 import type { Pipeline } from "../../src/gateway/pipeline/pipeline.ts";
@@ -23,6 +29,25 @@ const RULE = { name: null, file: "rules/owner.yaml", line: 1 };
 
 const host = new CodemodeHost({ installDir: INSTALL_DIR });
 afterAll(() => host.close());
+
+const LIMITS = {
+  maxCalls: 200,
+  maxSeconds: 10,
+  maxMemory: 256 * 1024 * 1024,
+  maxStdout: 1_000_000,
+};
+
+/** A helper that is a few lines of Node instead of heel's, with no sandbox around it. */
+class FakeHelper extends CodemodeHost {
+  readonly #program: string;
+  constructor(program: string, exits: HelperExit[]) {
+    super({ installDir: INSTALL_DIR, seatbelt: false, onExit: (exit) => exits.push(exit) });
+    this.#program = program;
+  }
+  override command(): { file: string; args: string[] } {
+    return { file: process.execPath, args: ["-e", this.#program] };
+  }
+}
 
 function pipeline(onCall: (tool: string) => void = () => {}): Pipeline {
   return {
@@ -160,6 +185,7 @@ describe("the code-mode helper", () => {
       }),
     );
     expect(dying.status).toBe("error");
+    expect(dying.error).toBe("the code-mode helper stopped; heel's log says why (heel logs)");
     expect(calls).toEqual(["ok"]);
     const next = await run(`import acct\nacct.ok()\nprint("fine")`);
     expect(next).toMatchObject({ status: "completed" });
@@ -249,8 +275,93 @@ describe("the code-mode helper", () => {
     expect(result.stdout).toContain("too large");
   }, 60_000);
 
+  it("tells the script why a helper that couldn't start stopped, from its stderr", async () => {
+    // Node's own words when the sandbox keeps it from its OpenSSL config.
+    const stderr =
+      "/opt/homebrew/bin/node: OpenSSL configuration error:\n" +
+      "80:error:80000001:system library:BIO_new_file:Operation not permitted:crypto/bio/bss_file.c:73:calling fopen(/opt/homebrew/etc/openssl@4/openssl.cnf, rb)\n\n";
+    const exits: HelperExit[] = [];
+    const dead = new FakeHelper(
+      `process.stderr.write(${JSON.stringify(stderr)}, () => process.exit(1));`,
+      exits,
+    );
+    try {
+      const step = await new HostedCodeWorker(dead).start("1 + 1", [], LIMITS, () => {});
+      expect(step).toEqual({
+        kind: "failed",
+        error:
+          "the code-mode helper couldn't start: /opt/homebrew/bin/node: OpenSSL configuration error: " +
+          "80:error:80000001:system library:BIO_new_file:Operation not permitted:crypto/bio/bss_file.c:73:" +
+          "calling fopen(/opt/homebrew/etc/openssl@4/openssl.cnf, rb) (more in heel's log: heel logs)",
+      });
+      expect(exits[0]?.detail).toContain("OpenSSL configuration error");
+    } finally {
+      await dead.close();
+    }
+  }, 20_000);
+
+  it("keeps what a helper wrote to stderr after it answered out of the script's error, in the log only", async () => {
+    const exits: HelperExit[] = [];
+    // Answers the script once, then writes something private to stderr and dies.
+    const answered = new FakeHelper(
+      `process.stdin.once("data", (line) => {
+        const id = JSON.parse(String(line).split("\\n")[0]).id;
+        process.stdout.write(JSON.stringify({ id, type: "stdout", text: "hi" }) + "\\n", () =>
+          process.stderr.write("password=hunter2\\n", () => process.exit(1)));
+      });`,
+      exits,
+    );
+    try {
+      let printed = "";
+      const step = await new HostedCodeWorker(answered).start("1 + 1", [], LIMITS, (text) => {
+        printed += text;
+      });
+      expect(printed).toBe("hi");
+      expect(step).toEqual({
+        kind: "failed",
+        error: "the code-mode helper stopped; heel's log says why (heel logs)",
+      });
+      expect(JSON.stringify(step)).not.toContain("hunter2");
+      expect(exits[0]?.detail).toContain("password=hunter2");
+    } finally {
+      await answered.close();
+    }
+  }, 20_000);
+
   it("won't widen what the helper may read when heel's path holds a wildcard", () => {
     const starred = new CodemodeHost({ installDir: "/opt/he*el" });
     expect(() => starred.args()).toThrow(/\*/);
+  });
+});
+
+describe("why a helper stopped, as the script hears it", () => {
+  it("is the line Node wrote, with the line after it when the first ends in a colon", () => {
+    expect(startupReason("node: bad option: --nope\n")).toBe("node: bad option: --nope");
+    expect(
+      startupReason("\n  node: OpenSSL configuration error:\n  80:error:fopen(/x, rb)\n\n"),
+    ).toBe("node: OpenSSL configuration error: 80:error:fopen(/x, rb)");
+    expect(startupReason("spawn /usr/bin/sandbox-exec ENOENT")).toBe(
+      "spawn /usr/bin/sandbox-exec ENOENT",
+    );
+  });
+
+  it("is cut short, and nothing when the helper wrote nothing", () => {
+    const long = startupReason(`node: ${"x".repeat(1000)}\nsecond line`);
+    expect(long?.length).toBe(300);
+    expect(long?.endsWith("…")).toBe(true);
+    expect(startupReason("")).toBeNull();
+    expect(startupReason("\n \n")).toBeNull();
+  });
+
+  it("carries stderr only from a helper that never answered; after that, it points to the log", () => {
+    expect(helperStoppedError(false, "node: bad option: --nope")).toBe(
+      "the code-mode helper couldn't start: node: bad option: --nope (more in heel's log: heel logs)",
+    );
+    expect(helperStoppedError(true, "token=abc123")).toBe(
+      "the code-mode helper stopped; heel's log says why (heel logs)",
+    );
+    expect(helperStoppedError(false, "")).toBe(
+      "the code-mode helper stopped; heel's log says why (heel logs)",
+    );
   });
 });

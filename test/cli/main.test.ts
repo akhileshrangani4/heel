@@ -4,7 +4,15 @@ import { existsSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, onTestFinished } from "vitest";
 import { formatTable } from "../../src/cli/common.ts";
-import { addToClient, agentMcpUrl, type CliIo, EXIT, main, usageFor } from "../../src/cli/main.ts";
+import {
+  addToClient,
+  agentMcpUrl,
+  type CliIo,
+  codeModeStatus,
+  EXIT,
+  main,
+  usageFor,
+} from "../../src/cli/main.ts";
 import { loadConfig, resolveConfigSource } from "../../src/config/load.ts";
 import { createLogger } from "../../src/log.ts";
 import { startHeel } from "../../src/serve.ts";
@@ -68,6 +76,36 @@ async function serveIn(
   if (heel.planes.agent.state !== "listening") throw new Error(heel.planes.agent.reason);
   return { agentUrl: heel.planes.agent.url };
 }
+
+describe("heel status on code mode", () => {
+  it("says heel runs but code mode can't, with the reason, when the startup check failed", () => {
+    expect(
+      codeModeStatus({
+        state: "broken",
+        reason:
+          "the code-mode helper couldn't start: node: OpenSSL configuration error: x (more in heel's log: heel logs)",
+      }),
+    ).toEqual({
+      warning: ", but code mode can't run, so every run_code call fails",
+      line: [
+        "  Code mode: can't run: the code-mode helper couldn't start: node: OpenSSL configuration error: x (more in heel's log: heel logs)",
+      ],
+    });
+    expect(codeModeStatus({ state: "broken", reason: "the sandbox didn't start" }).line).toEqual([
+      "  Code mode: can't run: the sandbox didn't start (more in: heel logs)",
+    ]);
+  });
+
+  it("says ready or checking, and nothing for a heel with no agent plane", () => {
+    expect(codeModeStatus({ state: "ready" })).toEqual({
+      warning: "",
+      line: ["  Code mode: ready"],
+    });
+    expect(codeModeStatus({ state: "checking" }).line).toEqual(["  Code mode: checking…"]);
+    expect(codeModeStatus(null)).toEqual({ warning: "", line: [] });
+    expect(codeModeStatus(undefined)).toEqual({ warning: "", line: [] });
+  });
+});
 
 describe("agentMcpUrl", () => {
   it("builds the MCP URL from the agent listen address, on the direct tools until code mode", () => {
@@ -195,6 +233,7 @@ describe("heel CLI", () => {
     await serveIn(home);
     const status = await run(["status"], { HEEL_HOME: home });
     expect(status.stdout).toContain("Passkeys:  none yet: run heel user enroll owner");
+    expect(status.stdout).toMatch(/ {2}Code mode: (checking…|ready)\n/);
     const calls: string[][] = [];
     const exec: NonNullable<CliIo["exec"]> = async (command, args) => {
       calls.push([command, ...args]);
