@@ -1,5 +1,5 @@
 /**
- * The setup prompt (roadmap 2.6). heel is agent first: on a machine without
+ * The setup prompt. heel is agent first: on a machine without
  * heel, one prompt has an agent install it, set it up, get its owner to make
  * a passkey, connect itself, and then put the owner's services behind heel.
  * The owner does two things by hand, make the passkey and reload the agent's

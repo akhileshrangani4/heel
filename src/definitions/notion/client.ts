@@ -2,8 +2,8 @@ import { CredentialRejectedError } from "../../gateway/pipeline/ports.ts";
 import type { FetchFn } from "../sign-in.ts";
 
 /**
- * Notion's REST API with the account's integration token (D12b;
- * https://developers.notion.com/reference). heel pins the API version it
+ * Notion's REST API with the account's integration token
+ * (https://developers.notion.com/reference). heel pins the API version it
  * was written against, `Notion-Version: 2026-03-11`.
  *
  * Error answers (https://developers.notion.com/reference/status-codes): a 404

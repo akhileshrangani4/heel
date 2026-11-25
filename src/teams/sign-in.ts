@@ -6,8 +6,8 @@ import { oidcSignIns, sessions, users } from "../store/schema.ts";
 import type { OidcIdentity, PendingSignIn } from "./oidc.ts";
 
 /**
- * What heel keeps between sending a person to the IdP and their return
- * (D13b; spec: Teams, "Sign-in"), and who they are once back.
+ * What heel keeps between sending a person to the IdP and their return,
+ * and who they are once back.
  *
  * - A pending sign-in is stored under the hash of a random cookie set on the
  *   browser that started it, so the callback completes only in that browser,

@@ -14,7 +14,7 @@ import type { RuleFacts } from "./facts.ts";
 import { DECISIONS } from "./schema.ts";
 
 /**
- * `heel rules test cases.yaml` (spec: Rules, "Loading, testing and reload"):
+ * `heel rules test cases.yaml`:
  * offline cases run against the pure evaluator with no provider access.
  * State-check results and prior counts come from the case. Pure.
  */
@@ -38,7 +38,6 @@ const CaseCallFields = z.strictObject({
     .partialRecord(z.enum(PROVIDER_FIELDS), z.union([z.string(), z.number(), z.boolean()]))
     .optional(),
   items: count.default(1),
-  /** The run id the agent sent. */
   run: z.string().min(1).optional(),
   args: z.unknown().optional(),
   persistence: z.boolean().optional(),

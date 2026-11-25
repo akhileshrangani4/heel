@@ -1,7 +1,6 @@
 /**
- * `classifyLooksLike`: the `looks_like` detector's one entry point (spec:
- * Hiding, `looks_like`). D10b calls it from the hide path; it changes no
- * rules and reads no files.
+ * `classifyLooksLike`: the `looks_like` detector's one entry point. It
+ * changes no rules and reads no files.
  *
  * Order, per requested category:
  * 1. Patterns, tuned for recall. A hit is `match`.
@@ -27,7 +26,7 @@ import {
   type LooksLikeResult,
 } from "./types.ts";
 
-/** Spec: a classifier that takes longer than 200 ms hides the message. */
+/** A classifier that takes longer than 200 ms hides the message. */
 export const LOOKS_LIKE_BUDGET_MS = 200;
 
 export interface ClassifyLooksLikeOptions {

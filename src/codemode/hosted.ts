@@ -132,7 +132,6 @@ export class CodemodeHost {
     return this.#child?.pid ?? null;
   }
 
-  /** Whether the helper runs inside Seatbelt. */
   get seatbelt(): boolean {
     return this.#seatbelt;
   }

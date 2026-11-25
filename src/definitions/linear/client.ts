@@ -2,8 +2,8 @@ import { CredentialRejectedError } from "../../gateway/pipeline/ports.ts";
 import type { FetchFn } from "../sign-in.ts";
 
 /**
- * Linear's GraphQL API with the account's credential (D12b;
- * https://linear.app/developers/graphql). A personal API key (`lin_api_...`)
+ * Linear's GraphQL API with the account's credential
+ * (https://linear.app/developers/graphql). A personal API key (`lin_api_...`)
  * is sent as `Authorization: <key>`, an OAuth access token as
  * `Authorization: Bearer <token>`.
  *

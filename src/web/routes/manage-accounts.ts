@@ -31,7 +31,7 @@ import type { SessionView } from "../sessions.ts";
 import { typedName } from "../typed-name.ts";
 
 /**
- * Accounts from the web app (roadmap 2.9), as `heel connect`, `heel account
+ * Accounts from the web app, as `heel connect`, `heel account
  * set` and `heel account remove` do them on the host. Connecting one and
  * replacing its key ask for a passkey; removing one is a plain form, since it
  * only takes access away. People manage the accounts they own.
@@ -40,9 +40,9 @@ import { typedName } from "../typed-name.ts";
  * to the vault and nowhere else: not the challenge, a log line, or a redirect.
  * A key the service turns down is never stored.
  *
- * Sharing an account and naming its approvers (D13b, as `heel account share`
+ * Sharing an account and naming its approvers (as `heel account share`
  * and `heel account approvers`) also ask for a passkey: both give someone
- * else a say. Owners share; only admins name approvers (spec: Teams), so a
+ * else a say. Owners share; only admins name approvers, so a
  * member can't remove the reviewer an admin put on their account. Unsharing
  * only takes access away, so it's a plain form.
  */
@@ -187,7 +187,7 @@ export function manageAccountRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       return { binding: { op, account: account.id, kind, principal: person.id } };
     }
     if (op === "approvers") {
-      // Admins assign approvers (spec: Teams): an owner can't clear the reviewer set on their account.
+      // Admins assign approvers: an owner can't clear the reviewer set on their account.
       if (session.role !== "admin")
         return { problem: "Only an admin names an account's approvers." };
       const account = owned(session, alias);

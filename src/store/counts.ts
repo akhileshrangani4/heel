@@ -11,7 +11,7 @@ import type { HeelDb, HeelTx } from "./db.ts";
 import { countEvents } from "./schema.ts";
 
 /**
- * Count events (spec: Counts and state checks, "Item counts"). Every call
+ * Count events. Every call
  * heel lets run writes one row in its decision transaction: rule-allowed
  * calls, approved re-runs and watch-mode pass-throughs. Rows are never
  * refunded, so a batch that half-succeeded still counts in full.

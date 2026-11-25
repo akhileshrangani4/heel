@@ -3,7 +3,7 @@ import { and, eq, gt, isNull } from "drizzle-orm";
 import type { HeelDb } from "../store/db.ts";
 import { type SessionMethod, sessions, type UserRole, users } from "../store/schema.ts";
 
-/** Sessions last at most 12 h (spec: Teams). */
+/** Sessions last at most 12 h. */
 export const SESSION_TTL_MS = 12 * 60 * 60_000;
 
 /** The signed-in person, as human-plane routes see them. */
@@ -24,7 +24,7 @@ export function hashSessionCookie(value: string): string {
 
 /**
  * Pure: the cookie name. `__Host-` pins the cookie to this exact origin and
- * path `/`, which browsers allow only on `https://` (spec: Listeners).
+ * path `/`, which browsers allow only on `https://`.
  */
 export function sessionCookieName(publicUrl: URL): string {
   return publicUrl.protocol === "https:" ? "__Host-heel_session" : "heel_session";

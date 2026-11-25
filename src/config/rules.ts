@@ -20,8 +20,7 @@ import {
 } from "./yaml.ts";
 
 /**
- * Finds, parses, validates and compiles the rules files (spec: Rules, "Files
- * and layers"): `$HEEL_HOME/org-rules.yaml` and one
+ * Finds, parses, validates and compiles the rules files: `$HEEL_HOME/org-rules.yaml` and one
  * `$HEEL_HOME/rules/<user>.yaml` per user. Either may be absent: no org file
  * means no org rules, and a user without a file has no rules of their own,
  * so their agents' calls fall through to the default deny.
@@ -269,7 +268,6 @@ function ownerEntries(dir: string, errors: YamlIssue[]): OwnerEntry[] {
   return entries;
 }
 
-/** A rules file exists but can't be read. */
 class RulesReadError extends Error {
   readonly issue: YamlIssue;
 

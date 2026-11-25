@@ -4,7 +4,7 @@ import { YamlValidationError } from "../config/yaml.ts";
 import { hasErrnoCode } from "../util/errno.ts";
 import type { KeyCheck } from "../vault/key-check.ts";
 
-/** Exit codes, from sysexits(3) as the spec uses for `heel run`. */
+/** Exit codes, from sysexits(3). */
 export const EXIT = {
   ok: 0,
   /** heel answered and refused the request, or a `heel rules test` case failed. */
@@ -37,8 +37,8 @@ export interface CliIo {
 }
 
 /**
- * Checks a pasted key with its service before `heel connect` stores it
- * (roadmap T12). Only the `heel` binary passes one, so tests never reach a
+ * Checks a pasted key with its service before `heel connect` stores it.
+ * Only the `heel` binary passes one, so tests never reach a
  * real API; when absent, keys are stored unchecked.
  */
 export type CheckKeyFn = (provider: string, key: string) => Promise<KeyCheck>;

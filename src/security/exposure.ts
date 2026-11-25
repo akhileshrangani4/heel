@@ -29,7 +29,7 @@ export interface ExposureFacts {
    * the ports is decided by `docker run -p`, which heel can't see.
    */
   container: boolean;
-  /** heel runs a Cloudflare tunnel (2.7): both planes are on the public internet. */
+  /** heel runs a Cloudflare tunnel: both planes are on the public internet. */
   publicTunnel?: boolean;
 }
 

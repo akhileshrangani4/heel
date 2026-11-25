@@ -46,7 +46,7 @@ export interface ApprovalRequestView {
   id: string;
   callHash: string;
   status: ApprovalStatus;
-  /** `org` asks are approved once by an org admin and never stand (Q-A7). */
+  /** `org` asks are approved once by an org admin and never stand. */
   origin: ApprovalOrigin;
   agent: string;
   runId: string | null;
@@ -62,7 +62,7 @@ export interface ApprovalRequestView {
    * never what the call does: it's shown apart from heel's facts, as quoted words.
    */
   reason: string | null;
-  /** The code-mode script the call came from, as the agent wrote it (C3), or null. */
+  /** The code-mode script the call came from, as the agent wrote it, or null. */
   script: ApprovalScript | null;
   /** The MCP client the agent used, as that client named itself; null when unknown. */
   client: string | null;
@@ -76,7 +76,7 @@ export interface ApprovalRequestView {
   items: number;
   counts: readonly CountWindow[];
   createdAt: Date;
-  /** Pending: 24 h after creation. Approved: 1 h after the decision (Q-A4). */
+  /** Pending: 24 h after creation. Approved: 1 h after the decision. */
   expiresAt: Date;
   decision: { by: string; at: Date } | null;
   executedAt: Date | null;
@@ -89,7 +89,7 @@ export interface ApprovalRequestView {
 
 /**
  * Standing approval lengths offered to the approver. The longest one is what
- * the page and the docs promise; the store's 90-day hard cap (Q-A6) is a
+ * the page and the docs promise; the store's 90-day hard cap is a
  * backstop above it, never an option.
  */
 export const STANDING_DURATIONS = [
@@ -112,12 +112,12 @@ export interface ApprovalRequestProps {
   /** The viewer's remembered sections for this kind of request; none by default. */
   folds?: Folds;
   /**
-   * The script parked at this call (C2), with the form that stops it; null
+   * The script parked at this call, with the form that stops it; null
    * when none is waiting. `stopped` is true right after the viewer stopped it.
    */
   parked?: { stop: FormTarget } | null;
   stopped?: boolean;
-  /** The parked script is a background one: approving starts it again at once (C6). */
+  /** The parked script is a background one: approving starts it again at once. */
   background?: boolean;
 }
 
@@ -430,7 +430,7 @@ function reasonView(request: ApprovalRequestView): Html | "" {
 }
 
 /**
- * The script a code-mode call came from (code mode round 2, C3): what it
+ * The script a code-mode call came from: what it
  * already called, then its code, as text. It's the agent's own code, shown
  * so the approver sees what else the script means to do; heel checks every
  * call in it on its own, whatever the code says.
@@ -772,7 +772,7 @@ function decisionControls(
 }
 
 /**
- * The approval page body (spec: The approval page). Everything a rule could
+ * The approval page body. Everything a rule could
  * match on is shown in full, and the arguments are never truncated (I-57).
  */
 export function approvalRequest(props: ApprovalRequestProps): Html {

@@ -14,7 +14,7 @@ export interface Viewer {
   csrfToken: string;
 }
 
-/** A pause that covers what the page shows (spec: Pause). */
+/** A pause that covers what the page shows. */
 export interface PauseNotice {
   scope: PauseScope;
   /** The agent, account or provider paused; null for a global pause. */

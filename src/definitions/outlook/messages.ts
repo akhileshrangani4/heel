@@ -71,7 +71,7 @@ export function messageBody(message: OutlookMessage): OutlookBody {
   };
 }
 
-/** Folders a move into takes mail out of view (spec: Email, `email.remove`). */
+/** Folders a move into takes mail out of view (`email.remove`). */
 export const REMOVAL_FOLDERS = [
   "deleteditems",
   "junkemail",

@@ -2,8 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { isLoopbackUrl } from "../config/schema.ts";
 
 /**
- * The checks an OAuth exchange has to pass (A2: MCP authorization for cloud
- * connectors). Pure. heel is the authorization server for its own agent
+ * The checks an OAuth exchange has to pass. Pure. heel is the authorization server for its own agent
  * plane, and every client is public, so PKCE with S256 is required on every
  * code (OAuth 2.1).
  */

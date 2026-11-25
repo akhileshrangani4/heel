@@ -102,9 +102,8 @@ function googleStep(props: LoopbackSignInProps): Html {
 }
 
 /**
- * Signing a Gmail or Calendar account in with heel's built-in Google client
- * (roadmap 1.14). Google sends the browser back to a loopback address on
- * heel's host. On that machine the sign-in finishes by itself; anywhere
+ * Signing a Gmail or Calendar account in with heel's built-in Google client.
+ * Google sends the browser back to a loopback address on heel's host. On that machine the sign-in finishes by itself; anywhere
  * else the address can't load, and the person copies it back here.
  */
 export function loopbackSignInPage(props: LoopbackSignInProps): Html {

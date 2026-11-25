@@ -39,9 +39,9 @@ export interface PauseControlProps {
         canPauseAll: boolean;
       }
     | { ok: false; message: string };
-  /** Pausing posts a plain form: one tap, no passkey, because it can only stop calls (Q-N5). */
+  /** Pausing posts a plain form: one tap, no passkey, because it can only stop calls. */
   pauseForm: FormTarget;
-  /** Resuming starts the passkey ceremony (Q-N5). */
+  /** Resuming starts the passkey ceremony. */
   onResume: CeremonyCallback;
 }
 
@@ -66,7 +66,7 @@ function pauseSwitch(form: FormTarget, scope: PauseScope, target: string | null)
   );
 }
 
-/** Paused: a switch that starts the resume passkey ceremony (Q-N5), or a note when it isn't theirs. */
+/** Paused: a switch that starts the resume passkey ceremony, or a note when it isn't theirs. */
 function resumeSwitch(pause: ActivePause, onResume: CeremonyCallback): Html {
   const what = formatPauseScope(pause.scope, pause.target);
   if (pause.canResume === false) {
@@ -126,7 +126,7 @@ function outcomeNotice(outcome: PauseOutcome): Html | "" {
 
 /**
  * Pause is one tap on a signed-in page; resume needs a fresh passkey
- * assertion (Q-N5). The asymmetry is deliberate: pausing can only stop calls.
+ * assertion. The asymmetry is deliberate: pausing can only stop calls.
  */
 export function pauseControl(props: PauseControlProps): Html {
   const heading = html`<h1>Pause</h1>

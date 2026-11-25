@@ -69,8 +69,7 @@ import {
 } from "./ports.ts";
 
 /**
- * The single decision pipeline every surface calls (spec: Call model,
- * "Pipeline order"). The surface has already authenticated the agent token
+ * The single decision pipeline every surface calls. The surface has already authenticated the agent token
  * (step 1); `run` takes it from there:
  *
  * 2. account and pause: the account must exist and be usable by the agent's
@@ -95,10 +94,10 @@ import {
  */
 
 export interface PipelineTimeouts {
-  /** Each state lookup (`all_in_thread`, `checks`): 5 s (spec: Fail-closed). */
+  /** Each state lookup (`all_in_thread`, `checks`): 5 s. */
   stateCheckMs: number;
   /**
-   * Each upstream exchange: the call itself (60 s, spec: Fail-closed), and
+   * Each upstream exchange: the call itself (60 s), and
    * the provider reads normalizing and hiding need, which talk to the same
    * upstream.
    */
@@ -126,20 +125,20 @@ export interface PipelineDeps {
   approvals: ApprovalStore;
   log: Logger;
   /**
-   * Where a store failure that denied a call is raised (spec: Fail-closed,
-   * "SQLite read or write fails"). A throw is logged; the call stays denied.
+   * Where a store failure that denied a call is raised. A throw is logged;
+   * the call stays denied.
    */
   alerts: AdminAlerts;
   /**
-   * `heel serve --watch`: the mode is `shadow` wherever no mode is stored
-   * (A3). A stored mode, set on the human plane, takes precedence.
+   * `heel serve --watch`: the mode is `shadow` wherever no mode is stored.
+   * A stored mode, set on the human plane, takes precedence.
    */
   watch: boolean;
   now?: () => Date;
   timeouts?: Partial<PipelineTimeouts>;
   /**
    * Called once a new pending request has committed (never for a repeat
-   * that joins one, I-51). D4b notifies approvers from here; a throw is
+   * that joins one, I-51). Approvers are notified from here; a throw is
    * logged and the request stays pending.
    */
   onApprovalRequested?: (approvalId: string) => void;
@@ -379,7 +378,7 @@ class DecisionPipeline implements Pipeline {
 
     this.#trace("account");
     const account = findAccount(db, agent.orgId, request.account);
-    // An agent may use an account only if its owner may (spec: Teams, "Who may use an account").
+    // An agent may use an account only if its owner may.
     if (account === null || !mayUseAccount(db, account, agent.ownerId)) {
       return this.#deny(call, identityHash, "account_unavailable");
     }
@@ -708,9 +707,9 @@ class DecisionPipeline implements Pipeline {
         }
         this.#trace("decide");
         // Read once per call, beside the pause check, so a switch applies
-        // from the next call on (A3).
+        // from the next call on.
         const fallback = this.#deps.watch ? "shadow" : "enforce";
-        // On a shared account (D13b), the account owner's rollout mode counts too, strictest wins:
+        // On a shared account, the account owner's rollout mode counts too, strictest wins:
         // a sharee in shadow or record mode can't make the owner's account run unchecked.
         const accountOwner = findAccount(tx, call.orgId, call.account)?.ownerId ?? call.ownerId;
         const mode = strictest(
@@ -722,7 +721,7 @@ class DecisionPipeline implements Pipeline {
           ],
           fallback,
         );
-        // Live intent grants for this agent (A4b), compiled once each. A grant stands in for an
+        // Live intent grants for this agent, compiled once each. A grant stands in for an
         // approval, so on someone else's account it counts only when its signer approves that account.
         const approvers =
           accountOwner === call.ownerId
@@ -801,7 +800,7 @@ class DecisionPipeline implements Pipeline {
           governing?.status === "denied"
         ) {
           // A person denied this exact call. A standing approval or an intent
-          // grant doesn't overrule them while the denial lasts (Q-A5).
+          // grant doesn't overrule them while the denial lasts.
           return this.#deniedByPerson(tx, input, verdict.rule, governing.id, at);
         }
         if (
@@ -856,7 +855,7 @@ class DecisionPipeline implements Pipeline {
     return { kind: "execute", via: { kind: "approval", rule: rule.ref, approvalId } };
   }
 
-  /** A person denied this exact call, and its deny window hasn't ended (Q-A5). */
+  /** A person denied this exact call, and its deny window hasn't ended. */
   #deniedByPerson(
     tx: HeelTx,
     input: DecideInput,
@@ -874,7 +873,7 @@ class DecisionPipeline implements Pipeline {
   }
 
   /**
-   * An ask, given the request that governs this call hash (spec: Approvals).
+   * An ask, given the request that governs this call hash.
    * An approval satisfies only an ask from the rule that created it; when a
    * different ask now matches first, the call needs a new request.
    */

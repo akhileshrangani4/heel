@@ -36,7 +36,7 @@ export function plural(n: number, noun: string): string {
   return `${n} ${noun}${n === 1 ? "" : "s"}`;
 }
 
-/** Attachment sizes as the approval page lists them (Q-N4). */
+/** Attachment sizes as the approval page lists them. */
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return plural(bytes, "byte");
   const units = ["KB", "MB", "GB"] as const;

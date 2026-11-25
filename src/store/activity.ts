@@ -4,7 +4,7 @@ import type { HeelDb } from "./db.ts";
 import { agents, auditLog, users } from "./schema.ts";
 
 /**
- * What the observability views read from the audit log (A5): the newest
+ * What the observability views read from the audit log: the newest
  * rows with filters, a per-agent inventory, and the shadow/record rows that
  * rule suggestions are drawn from. Read-only.
  */

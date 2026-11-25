@@ -13,7 +13,7 @@ import type { Pipeline } from "./pipeline/pipeline.ts";
 import type { PipelineResult } from "./pipeline/ports.ts";
 
 /**
- * The HTTP proxy surface (D7a; spec: HTTP proxy):
+ * The HTTP proxy surface:
  * `<METHOD> /http/<account>/<path>?<query>` with the agent's heel token.
  *
  * - The target can't change, and the path rules see is the path sent. The
@@ -131,7 +131,6 @@ function queryOf(url: URL): Record<string, string | string[]> {
   return out;
 }
 
-/** The HTTP response for a pipeline outcome. */
 function respond(c: Context, result: PipelineResult): Response {
   switch (result.status) {
     case "allowed": {
@@ -262,7 +261,7 @@ export async function handleHttpProxy(
 }
 
 /**
- * A built-in provider's REST path (D7b): mapped to heel's native tool, run
+ * A built-in provider's REST path: mapped to heel's native tool, run
  * through the pipeline as that tool, answered with the tool's result as JSON.
  * A path heel has no mapping for, or a body that isn't the JSON it expects,
  * is refused as unsupported.

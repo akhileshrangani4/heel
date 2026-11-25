@@ -28,7 +28,7 @@ export type Layer = "org" | "owner";
 
 /**
  * The state checks heel has, and the only actions and providers each can
- * run on (spec: Counts and state checks). Naming one anywhere else is a load
+ * run on. Naming one anywhere else is a load
  * error (I-23).
  */
 export const STATE_CHECKS = {
@@ -56,7 +56,7 @@ export interface CompiledRule {
   /** The rule's `then`, renamed so a compiled rule is never mistaken for a thenable. */
   decision: Decision;
   watch: boolean;
-  /** The rule's `match` as written: heel's suggestions (2.10) carry the asking rule's conditions. */
+  /** The rule's `match` as written: heel's suggestions carry the asking rule's conditions. */
   match: Readonly<Record<string, unknown>>;
   /** The plain conditions, ANDed. */
   conditions: readonly Condition<FieldRef>[];
@@ -93,7 +93,7 @@ export interface CompiledRulesFile {
   layer: Layer;
   rules: readonly CompiledRule[];
   hide: readonly CompiledHideEntry[];
-  /** sha256 of the hide entries as written; hidden-id verdict caches key on it (Q-H2). */
+  /** sha256 of the hide entries as written; hidden-id verdict caches key on it. */
   hideHash: string;
 }
 
@@ -456,7 +456,7 @@ function duplicateNames(rules: readonly RuleInput[]): RuleIssue[] {
 /**
  * Warnings for `heel rules check`. A `per: run` limit does nothing for calls
  * without a run id (I-26), so the README pairs each with an hourly limit on
- * the same action below it (Q-C2).
+ * the same action below it.
  */
 function lintRules(rules: readonly CompiledRule[], inputs: readonly RuleInput[]): RuleIssue[] {
   const warnings: RuleIssue[] = [];

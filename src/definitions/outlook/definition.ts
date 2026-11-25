@@ -13,7 +13,7 @@ import { allInThread, SEND_TOOLS } from "./send.ts";
 import type { OutlookTool } from "./tool.ts";
 
 /**
- * The Outlook definition (D9b): heel's own tools on Microsoft Graph, with
+ * The Outlook definition: heel's own tools on Microsoft Graph, with
  * the account's credential. Each tool is one row in `reads.ts`, `send.ts`
  * or `organize.ts`; `mailDefinition` routes a call to its row.
  *
