@@ -27,6 +27,23 @@ describe("error pages", () => {
     expect(script.headers.get("content-type")).toContain("text/plain");
   });
 
+  it("says what wasn't found for a request, a proposal and an approval the viewer can't open", async () => {
+    const h = humanPlaneHarness();
+    const owner = await h.signIn(await h.enroll());
+    const pages = {
+      "/requests/req_none": "<p>There's no request with that id for you.</p>",
+      "/proposals/rp_none": "<p>There's no proposal with that id for your rules.</p>",
+      "/approvals/apr_none": "<p>There's no request with that id that you can decide.</p>",
+    };
+    for (const [path, message] of Object.entries(pages)) {
+      const page = await h.fetch(path, { as: owner });
+      expect(page.status).toBe(404);
+      const body = await page.text();
+      expect(body).toContain("<title>Not found");
+      expect(body).toMatch(new RegExp(`<h1>Not found</h1>\\s*${message}`));
+    }
+  });
+
   it("refuses a stale form with a page, and still refuses it", async () => {
     const h = humanPlaneHarness();
     const admin = await h.signIn(await h.enroll());
