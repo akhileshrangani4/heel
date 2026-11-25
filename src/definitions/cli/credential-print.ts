@@ -1,7 +1,6 @@
 /**
- * Commands that print a credential (spec: CLI runner, "Hard denies: print
- * credentials", I-31). D8b refuses these before rules run, so no rule, not
- * even a broad allow, can let one through.
+ * Commands that print a credential (I-31). heel refuses these before rules
+ * run, so no rule, not even a broad allow, can let one through.
  *
  * Detection runs on the parsed command, never on the raw argv, so flag order,
  * `--flag=value` vs `--flag value`, shorthand clusters and aliases all resolve
@@ -27,7 +26,7 @@ export interface CredentialPrintForm {
 }
 
 /**
- * Every form in the spec's table, plus the kubectl commands that return a
+ * Every credential-printing form, plus the kubectl commands that return a
  * whole Secret object the same way `get` does (`edit`, `apply
  * view-last-applied`, and `set env --resolve`, which resolves Secret values).
  */

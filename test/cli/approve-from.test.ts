@@ -1,7 +1,12 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { listenPorts, setUpTailscale, writeAddresses } from "../../src/cli/approve-from.ts";
+import {
+  listenPorts,
+  servedPorts,
+  setUpTailscale,
+  writeAddresses,
+} from "../../src/cli/approve-from.ts";
 import { type CliIo, EXIT, main } from "../../src/cli/main.ts";
 import { openStore } from "../../src/store/db.ts";
 import { ensureInstall, ensureLocalOwner } from "../../src/store/install.ts";
@@ -18,22 +23,72 @@ const RUNNING = JSON.stringify({
   CertDomains: ["heel-box.tail1234.ts.net"],
 });
 
+const NAME = "heel-box.tail1234.ts.net";
+
+type Served = { TCP?: Record<string, unknown>; Web?: Record<string, unknown> };
+
+/** Tailnet ports proxied to local targets, as `tailscale serve status --json` shows them. */
+function serving(...entries: [port: number, target: string][]): Served {
+  const config: Required<Served> = { TCP: {}, Web: {} };
+  for (const [port, target] of entries) {
+    config.TCP[port] = { HTTPS: true };
+    config.Web[`${NAME}:${port}`] = { Handlers: { "/": { Proxy: target } } };
+  }
+  return config;
+}
+
+/**
+ * A fake `tailscale` that keeps its serve config: `serve --bg` adds to it and
+ * `serve status --json` shows it, so a second run sees what the first one did.
+ * A string for `served` is printed as is.
+ */
 function fakeTailscale(
   status: { code: number; output: string } = { code: 0, output: RUNNING },
-  served = "{}",
+  served: Served | string = {},
+  serveFails = "",
 ) {
   const calls: string[][] = [];
+  const state: Served = typeof served === "string" ? {} : structuredClone(served);
   const exec: NonNullable<CliIo["exec"]> = async (command, args) => {
     calls.push([command, ...args]);
     if (args[0] === "status") return status;
-    if (args[1] === "status") return { code: 0, output: served };
-    return { code: 0, output: "" };
+    if (args[1] === "status") {
+      return { code: 0, output: typeof served === "string" ? served : JSON.stringify(state) };
+    }
+    const port = /^--https=(\d+)$/.exec(args[2] ?? "")?.[1];
+    if (args[1] === "--bg" && port !== undefined && args[3] !== undefined) {
+      if (serveFails !== "") return { code: 1, output: serveFails };
+      const entry = serving([Number(port), args[3]]);
+      state.TCP = { ...state.TCP, ...entry.TCP };
+      state.Web = { ...state.Web, ...entry.Web };
+      return { code: 0, output: "" };
+    }
+    return { code: 1, output: `fake tailscale: unexpected ${args.join(" ")}` };
   };
-  return { exec, calls };
+  return { exec, calls, state };
+}
+
+/** The `tailscale serve --bg` commands a run made. */
+const serveCalls = (calls: string[][]) => calls.filter((c) => c.includes("--bg"));
+
+/** Something that isn't heel, served on these tailnet ports. */
+const otherService = (...ports: number[]) =>
+  serving(...ports.map((p): [number, string] => [p, "http://127.0.0.1:8123"]));
+
+function initIo(home: string, exec: NonNullable<CliIo["exec"]>) {
+  const out = { stdout: "", stderr: "" };
+  const io: CliIo = {
+    env: { HEEL_HOME: home },
+    stdin: (async function* () {})(),
+    stdout: { write: (t) => (out.stdout += t) },
+    stderr: { write: (t) => (out.stderr += t) },
+    exec,
+  };
+  return { io, out };
 }
 
 describe("approving over Tailscale (2.7)", () => {
-  it("serves both planes on the tailnet and gives their addresses", async () => {
+  it("serves both planes on 443 and 8443 when they're free", async () => {
     const { exec, calls } = fakeTailscale();
     const set = await setUpTailscale(exec, { agent: 7300, human: 7301 });
     expect(set).toEqual({
@@ -121,31 +176,181 @@ describe("approving over Tailscale (2.7)", () => {
     expect(await main(["init", "--yes", "--approve-from", "pigeon"], io)).toBe(EXIT.usage);
   });
 
-  it("changes nothing in Tailscale when heel.yaml or another service is in the way", async () => {
-    const other = JSON.stringify({
-      Web: {
-        "heel-box.tail1234.ts.net:443": { Handlers: { "/": { Proxy: "http://127.0.0.1:8123" } } },
-      },
-    });
-    const busy = fakeTailscale(undefined, other);
+  it("heel init moves past a taken 443, says which ports it used, and reruns unchanged", async () => {
+    const home = join(tempDir("heel-init-ts-"), "home");
+    const tailscale = fakeTailscale(undefined, otherService(443, 8443));
+    const { io, out } = initIo(home, tailscale.exec);
+    expect(await main(["init", "--yes", "--approve-from", "tailscale"], io)).toBe(EXIT.ok);
+    expect(out.stderr).toBe(
+      "heel: Tailscale already serves something else on ports 443 and 8443, so heel used ports 7443 (approvals) and 7444 (agents).\n",
+    );
+    expect(out.stdout).toContain(`Approve at https://${NAME}:7443`);
+    expect(out.stdout).toContain(`https://${NAME}:7444/mcp`);
+    const yaml = readFileSync(join(home, "heel.yaml"), "utf8");
+    expect(yaml).toContain(`public_url: https://${NAME}:7443`);
+    expect(yaml).toContain(`agent_public_url: https://${NAME}:7444`);
+    expect(tailscale.state.Web?.[`${NAME}:443`]).toEqual(otherService(443).Web?.[`${NAME}:443`]);
+
+    tailscale.calls.length = 0;
+    expect(await main(["init", "--yes", "--approve-from", "tailscale"], io)).toBe(EXIT.ok);
+    expect(serveCalls(tailscale.calls)).toEqual([]);
+    expect(readFileSync(join(home, "heel.yaml"), "utf8")).toBe(yaml);
+  });
+
+  it("heel init reruns on 443 and 8443 without serving again", async () => {
+    const home = join(tempDir("heel-init-ts-"), "home");
+    const tailscale = fakeTailscale();
+    const { io, out } = initIo(home, tailscale.exec);
+    expect(await main(["init", "--yes", "--approve-from", "tailscale"], io)).toBe(EXIT.ok);
+    expect(serveCalls(tailscale.calls)).toHaveLength(2);
+    const yaml = readFileSync(join(home, "heel.yaml"), "utf8");
+    tailscale.calls.length = 0;
+    expect(await main(["init", "--yes", "--approve-from", "tailscale"], io)).toBe(EXIT.ok);
+    expect(serveCalls(tailscale.calls)).toEqual([]);
+    expect(out.stderr).toBe("");
+    expect(readFileSync(join(home, "heel.yaml"), "utf8")).toBe(yaml);
+  });
+
+  it("moves to a free port when another service has 443, and never touches it", async () => {
+    const busy = fakeTailscale(undefined, otherService(443));
     const set = await setUpTailscale(busy.exec, { agent: 7300, human: 7301 });
-    expect(set.ok ? "" : set.problem).toMatch(/already serves something else on port 443/);
-    expect(busy.calls.some((c) => c.includes("--bg"))).toBe(false);
-    // heel's own handlers from an earlier run are fine.
-    const ours = JSON.stringify({
-      Web: {
-        "heel-box.tail1234.ts.net:443": { Handlers: { "/": { Proxy: "http://127.0.0.1:7301" } } },
-        "heel-box.tail1234.ts.net:8443": { Handlers: { "/": { Proxy: "http://127.0.0.1:7300" } } },
-      },
+    expect(set).toEqual({
+      ok: true,
+      addresses: { approvals: `https://${NAME}:7443`, agents: `https://${NAME}:8443` },
+      note: "Tailscale already serves something else on port 443, so heel used ports 7443 (approvals) and 8443 (agents).",
     });
+    expect(serveCalls(busy.calls)).toEqual([
+      ["tailscale", "serve", "--bg", "--https=7443", "http://127.0.0.1:7301"],
+      ["tailscale", "serve", "--bg", "--https=8443", "http://127.0.0.1:7300"],
+    ]);
+    expect(busy.state.Web?.[`${NAME}:443`]).toEqual(otherService(443).Web?.[`${NAME}:443`]);
+
+    // Both taken: the ports from the setup note.
+    const both = await setUpTailscale(fakeTailscale(undefined, otherService(443, 8443)).exec, {
+      agent: 7300,
+      human: 7301,
+    });
+    expect(both).toMatchObject({
+      ok: true,
+      addresses: { approvals: `https://${NAME}:7443`, agents: `https://${NAME}:7444` },
+      note: "Tailscale already serves something else on ports 443 and 8443, so heel used ports 7443 (approvals) and 7444 (agents).",
+    });
+  });
+
+  it("counts TCP forwards, foreground serves, other paths and other names as taken", async () => {
+    const ports = { agent: 7300, human: 7301 };
+    const served = (config: unknown) => servedPorts(JSON.stringify(config), NAME, ports);
+    expect(served({ TCP: { "443": { TCPForward: "127.0.0.1:22" } } })?.get(443)).toBe("other");
+    expect(served({ Foreground: { abc: serving([443, "http://127.0.0.1:7301"]) } })?.get(443)).toBe(
+      "other",
+    );
     expect(
-      (await setUpTailscale(fakeTailscale(undefined, ours).exec, { agent: 7300, human: 7301 })).ok,
-    ).toBe(true);
+      served({
+        TCP: { "443": { HTTPS: true } },
+        Web: {
+          [`${NAME}:443`]: {
+            Handlers: { "/": { Proxy: "http://127.0.0.1:7301" }, "/x": { Proxy: "http://a" } },
+          },
+        },
+      })?.get(443),
+    ).toBe("other");
+    expect(served(serving([443, "http://127.0.0.1:7301/"]))?.get(443)).toBe("approvals");
+    expect(
+      served({
+        Web: {
+          "old-name.tail1234.ts.net:443": { Handlers: { "/": { Proxy: "http://127.0.0.1:7301" } } },
+        },
+      })?.get(443),
+    ).toBe("other");
+    expect(served({ TCP: { "443": { HTTPS: true } } })?.get(443)).toBe("other");
+    // Nothing served prints `null`, and a version warning may follow the JSON.
+    expect(servedPorts("null\n", NAME, ports)).toEqual(new Map());
+    expect(
+      servedPorts(
+        `${JSON.stringify(serving([8443, "http://127.0.0.1:7300"]))}\nWarning: client version "1.90.1" != tailscaled server version "1.88.0"`,
+        NAME,
+        ports,
+      ),
+    ).toEqual(new Map([[8443, "agents"]]));
+    expect(servedPorts("not json", NAME, ports)).toBeNull();
+  });
+
+  it("reruns without changing anything once heel is served, even on moved ports", async () => {
+    const ours = serving([443, "http://127.0.0.1:7301"], [8443, "http://127.0.0.1:7300"]);
+    const again = fakeTailscale(undefined, ours);
+    expect(await setUpTailscale(again.exec, { agent: 7300, human: 7301 })).toEqual({
+      ok: true,
+      addresses: { approvals: `https://${NAME}`, agents: `https://${NAME}:8443` },
+    });
+    expect(serveCalls(again.calls)).toEqual([]);
+
+    // A first run moved heel to 7443 and 7444; the rerun finds it there.
+    const moved = fakeTailscale(undefined, otherService(443, 8443));
+    const first = await setUpTailscale(moved.exec, { agent: 7300, human: 7301 });
+    moved.calls.length = 0;
+    expect(await setUpTailscale(moved.exec, { agent: 7300, human: 7301 })).toEqual(first);
+    expect(serveCalls(moved.calls)).toEqual([]);
+
+    // heel.yaml's address keeps its port, even once 443 is free again: a passkey is tied to it.
+    const freed = fakeTailscale(undefined, {});
+    const kept = await setUpTailscale(
+      freed.exec,
+      { agent: 7300, human: 7301 },
+      { configured: { approvals: `https://${NAME}:7443`, agents: `https://${NAME}:7444` } },
+    );
+    expect(kept).toEqual({
+      ok: true,
+      addresses: { approvals: `https://${NAME}:7443`, agents: `https://${NAME}:7444` },
+    });
+    expect(serveCalls(freed.calls).map((c) => c[3])).toEqual(["--https=7443", "--https=7444"]);
+  });
+
+  it("changes nothing and says exactly what to run when it can't pick ports safely", async () => {
+    const ports = { agent: 7300, human: 7301 };
+    // It can't see what's served.
+    const blind = fakeTailscale(undefined, "permission denied");
+    const unread = await setUpTailscale(blind.exec, ports, { configPath: "/h/heel.yaml" });
+    expect(unread.ok ? "" : unread.problem).toContain(
+      [
+        "To set it up yourself, run:",
+        "  tailscale serve --bg --https=443 http://127.0.0.1:7301",
+        "  tailscale serve --bg --https=8443 http://127.0.0.1:7300",
+        "then set these in /h/heel.yaml, and restart heel if it's running:",
+        `  public_url: https://${NAME}`,
+        `  agent_public_url: https://${NAME}:8443`,
+      ].join("\n"),
+    );
+    expect(unread.ok ? "" : unread.problem).toMatch(/couldn't read.*permission denied/);
+    expect(serveCalls(blind.calls)).toEqual([]);
+
+    // heel.yaml has the approval page on 443, and something else holds it now.
+    const pinned = fakeTailscale(undefined, otherService(443));
+    const stuck = await setUpTailscale(pinned.exec, ports, {
+      configured: { approvals: `https://${NAME}/`, agents: null },
+      configPath: "/h/heel.yaml",
+    });
+    expect(stuck.ok ? "" : stuck.problem).toMatch(
+      /\/h\/heel\.yaml has public_url on port 443, but Tailscale serves something else there.*tailscale serve --https=443 off.*passkey/,
+    );
+    expect(serveCalls(pinned.calls)).toEqual([]);
+
+    // Tailscale refuses to serve: the commands to run by hand, on the ports heel picked.
+    const refused = fakeTailscale(
+      undefined,
+      otherService(443),
+      "Access denied: serve config denied",
+    );
+    const denied = await setUpTailscale(refused.exec, ports);
+    expect(denied.ok ? "" : denied.problem).toContain("Access denied");
+    expect(denied.ok ? "" : denied.problem).toContain(
+      "  tailscale serve --bg --https=7443 http://127.0.0.1:7301",
+    );
+    expect(denied.ok ? "" : denied.problem).toContain(`  public_url: https://${NAME}:7443`);
 
     const blocked = fakeTailscale();
-    const refused = await setUpTailscale(blocked.exec, { agent: 7300, human: 7301 }, () => "no");
-    expect(refused).toEqual({ ok: false, problem: "no" });
-    expect(blocked.calls.some((c) => c[1] === "serve")).toBe(false);
+    const no = await setUpTailscale(blocked.exec, ports, { precheck: () => "no" });
+    expect(no).toEqual({ ok: false, problem: "no" });
+    expect(serveCalls(blocked.calls)).toEqual([]);
   });
 
   it("treats the same address with a trailing slash as the same, and keeps a user's comment", () => {
@@ -191,7 +396,7 @@ describe("approving over Tailscale (2.7)", () => {
     ).toBe(EXIT.failed);
     expect(stderr).toMatch(/already has a passkey made for localhost.*--new-address/);
     expect(stdout).not.toContain("Next:");
-    expect(tailscale.calls.some((c) => c[1] === "serve")).toBe(false);
+    expect(serveCalls(tailscale.calls)).toEqual([]);
     expect(await main(["init", "--yes", "--approve-from", "tailscale", "--new-address"], io)).toBe(
       EXIT.ok,
     );

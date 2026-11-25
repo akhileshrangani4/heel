@@ -94,4 +94,50 @@ describe("the Activity and Agents pages", () => {
     expect(text).toContain("event: row");
     expect(text).toContain("id: ");
   });
+
+  it("streams live rows only on the newest page, not on an older one", async () => {
+    const h = humanPlaneHarness({ owner: DENY_SENDS });
+    const admin = await h.signIn(await h.enroll());
+    await h.call({ args: SEND });
+    const newest = await (await h.fetch("/activity", { as: admin })).text();
+    expect(newest).toMatch(/<table [^>]*id="activity"[^>]* data-live/);
+    expect(newest).toContain('id="activity-live-note"');
+    const older = await (await h.fetch("/activity?before=999999", { as: admin })).text();
+    expect(older).toMatch(/<table [^>]*id="activity"/);
+    expect(older).not.toMatch(/<table [^>]*id="activity"[^>]* data-live/);
+    expect(older).not.toContain('id="activity-live-note"');
+  });
+
+  it("ends the stream once its session ends, and the page's session check then gets 401", async () => {
+    const h = humanPlaneHarness({ owner: DENY_SENDS });
+    const admin = await h.signIn(await h.enroll());
+    const response = await h.fetch("/activity/stream?after=0", { as: admin });
+    const reader = response.body?.getReader();
+    // Sign out elsewhere: the open stream sends no more rows and closes.
+    expect((await h.fetch("/sign-out", signOut(admin.csrf, admin.cookie))).status).toBe(303);
+    await h.call({ args: SEND });
+    let text = "";
+    for (;;) {
+      const chunk = await reader?.read();
+      if (chunk === undefined || chunk.done) break;
+      text += new TextDecoder().decode(chunk.value);
+    }
+    expect(text).not.toContain("event: row");
+    // What the page asks when its stream closes for good.
+    expect((await h.fetch("/activity", { method: "HEAD", as: admin })).status).toBe(401);
+    const page = await (
+      await h.fetch("/activity", { as: await h.signIn(admin.authenticator) })
+    ).text();
+    expect(page).toMatch(
+      /<p class="act-live-note" id="activity-live-note" role="status" hidden>Signed out\./,
+    );
+  });
 });
+
+function signOut(csrf: string, cookie: string): RequestInit {
+  return {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded", cookie },
+    body: `csrf=${encodeURIComponent(csrf)}`,
+  };
+}

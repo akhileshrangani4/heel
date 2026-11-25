@@ -1,7 +1,7 @@
 /**
  * Turns a raw message into the text the detector reads: HTML stripped,
  * Unicode normalized, the body cut to its first 4 KB, and the body's URLs
- * listed (spec: Hiding, `looks_like` step 2).
+ * listed.
  *
  * Every pass here is linear in the input. The HTML is attacker-controlled
  * mail, so the stripper is a hand-written scanner rather than regexes that
@@ -9,7 +9,7 @@
  */
 import type { LooksLikeMessage, Unreadable } from "./types.ts";
 
-/** The classifier reads at most this much plain-text body (spec: first 4 KB). */
+/** The classifier reads at most this much plain-text body. */
 export const BODY_PREFIX_CHARS = 4096;
 /** HTML beyond this is ignored, as body text beyond 4 KB is. */
 export const HTML_INPUT_CAP = 256 * 1024;

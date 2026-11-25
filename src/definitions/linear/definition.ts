@@ -9,8 +9,7 @@ import type { FetchFn } from "../sign-in.ts";
 import { LinearClient, LinearNotFoundError, LinearRefused } from "./client.ts";
 
 /**
- * The Linear definition (D12b; spec: "Calendar, Slack, Linear, Notion,
- * Stripe"): heel's own tools on Linear's GraphQL API
+ * The Linear definition: heel's own tools on Linear's GraphQL API
  * (https://linear.app/developers/graphql), connected with
  * `heel connect linear --credential-stdin` (a personal API key or an OAuth
  * access token).

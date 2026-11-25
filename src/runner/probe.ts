@@ -1,6 +1,6 @@
 /**
- * The boot probe (spec: Risks, "User namespaces are restricted on Ubuntu
- * 24.04 and later and under Docker seccomp"). `heel serve` calls it once; if
+ * The boot probe: user namespaces are restricted on Ubuntu 24.04 and later
+ * and under Docker seccomp. `heel serve` calls it once; if
  * it fails, `/run` and code mode refuse every call and the reason is logged,
  * while MCP and HTTP keep working.
  *

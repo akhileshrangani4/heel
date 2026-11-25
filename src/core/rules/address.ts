@@ -1,8 +1,7 @@
 import { domainToASCII } from "node:url";
 
 /**
- * Address and domain normalization (spec: Rules, "Address and domain
- * normalization"). Applied to rule operands when a file loads and to call
+ * Address and domain normalization. Applied to rule operands when a file loads and to call
  * values before any check, so both sides compare in one form:
  *
  * - only the addr-spec is kept, lower-cased; `user+tag@x.com` stays as written;
@@ -99,7 +98,6 @@ export function splitAddressList(text: string): string[] {
   return parts;
 }
 
-/** The domain part of a normalized address. */
 export function domainOf(address: string): string {
   return address.slice(address.lastIndexOf("@") + 1);
 }

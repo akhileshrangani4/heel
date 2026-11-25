@@ -13,7 +13,7 @@ import type { GmailTool } from "./tool.ts";
 
 /**
  * The Gmail definition: heel's own tools, calling the Gmail API with the
- * account's credential (spec: Email, "Gmail and Outlook"). Each tool is one
+ * account's credential. Each tool is one
  * row in `reads.ts`, `send.ts` or `organize.ts`; `mailDefinition` routes a
  * call to its row. Gmail refusing a write is an upstream error with a known
  * outcome; a write that never got an answer is left unknown.

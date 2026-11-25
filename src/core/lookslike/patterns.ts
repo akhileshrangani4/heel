@@ -1,10 +1,10 @@
 /**
- * Recall-first patterns for `looks_like` (spec: Hiding, `looks_like` step 1).
+ * Recall-first patterns for `looks_like`.
  * A hit hides the message, so these lean towards hiding: the cost of a false
  * positive is a hidden ordinary message, the cost of a miss is a leaked
  * account takeover.
  *
- * The keyword sets follow the research survey (MCP research §6): the code
+ * The keyword sets follow the research survey: the code
  * keywords of MessAuto (MIT) and the auth words of parse-otp-message, reset
  * and magic-link phrasing, a code token near a keyword, URL heuristics, and
  * WICG origin-bound one-time-code lines. otphelper (AGPL-3.0) informed the
@@ -45,9 +45,6 @@ export function matchLooksLikePatterns(message: PreparedMessage): PatternHits {
   return hits;
 }
 
-// ---------------------------------------------------------------------------
-// Phrases
-
 const RESET_PHRASES: readonly RegExp[] = [
   /\breset (?:your |the |a |my )?(?:account )?password\b/,
   /\bpassword[- ]?(?:reset|recovery|change request)\b/,
@@ -81,9 +78,6 @@ function anyPhrase(phrases: readonly RegExp[]): (input: PatternInput) => boolean
   return (input) => phrases.some((re) => re.test(input.lower));
 }
 
-// ---------------------------------------------------------------------------
-// Dates
-
 const MONTH = "(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\\.?";
 const YEAR = "(?:19|20)\\d{2}";
 const DATE_EXPRESSIONS = new RegExp(
@@ -109,9 +103,6 @@ const DATE_EXPRESSIONS = new RegExp(
 export function maskDates(text: string): string {
   return text.replace(DATE_EXPRESSIONS, (date) => " ".repeat(date.length));
 }
-
-// ---------------------------------------------------------------------------
-// Codes near keywords
 
 /** Keywords that name a code used to sign in or prove identity. */
 const LOGIN_CODE_KEYWORD =
@@ -177,9 +168,6 @@ export function isCodeToken(token: string): boolean {
   if (/^[A-Z]{6,10}$/.test(token)) return true;
   return /^[A-Z0-9]{3,5}(?:-[A-Z0-9]{3,5}){1,3}$/.test(token) && /[A-Z]/.test(token);
 }
-
-// ---------------------------------------------------------------------------
-// URLs
 
 const URL_RESET = /(?:reset|passw(?:or)?d|recover|forgot)/;
 const URL_MAGIC = /(?:magic|otp|one-?time|onetime)/;
@@ -278,12 +266,8 @@ const urlTokenParamWithContext = urlTest(
     AUTH_CONTEXT.test(input.lower),
 );
 
-// ---------------------------------------------------------------------------
 // WICG origin-bound one-time codes: a line "@example.com #123456".
-
 const WICG_LINE = /(?:^|\n)[ \t]*@(?:[a-z0-9-]+\.)+[a-z]{2,}[ \t]+#[a-z0-9-]{4,}/;
-
-// ---------------------------------------------------------------------------
 
 /** Order matters only for which id is reported; any hit hides. */
 export const PATTERNS: readonly PatternDef[] = [

@@ -2,7 +2,7 @@ import { CredentialRejectedError } from "../../gateway/pipeline/ports.ts";
 import type { FetchFn } from "../sign-in.ts";
 
 /**
- * The Slack Web API with the account's token (D12b). Every method answers
+ * The Slack Web API with the account's token. Every method answers
  * HTTP 200 with `{ ok: false, error }` when it refuses
  * (https://docs.slack.dev/apis/web-api/#responses). On a write, only the
  * errors listed in `NOTHING_HAPPENED` count as a refusal; Slack documents

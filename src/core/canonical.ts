@@ -2,8 +2,7 @@ import { createHash } from "node:crypto";
 
 /**
  * RFC 8785 JSON Canonicalization Scheme (JCS) for the JSON values heel hashes:
- * rule content (standing approvals bind to it) and, from D3, the canonical
- * call hash. Object keys are sorted by UTF-16 code units and numbers use the
+ * rule content (standing approvals bind to it) and the canonical call hash. Object keys are sorted by UTF-16 code units and numbers use the
  * ECMAScript serialization, which is what `JSON.stringify` already produces
  * for finite numbers and strings.
  *

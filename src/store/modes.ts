@@ -4,7 +4,7 @@ import type { HeelDb, HeelTx } from "./db.ts";
 import { modeChanges, modes } from "./schema.ts";
 
 /**
- * Rollout modes in SQLite (A3). The org default is the row with an empty
+ * Rollout modes in SQLite. The org default is the row with an empty
  * `owner_id`; an owner may also have their own row. The pipeline reads the
  * mode once per call, inside its decision transaction, so a switch applies
  * from the next call on. Every switch is recorded in `mode_changes`.
@@ -36,7 +36,6 @@ export function storedMode(db: HeelDb | HeelTx, orgId: string, ownerId: string):
   );
 }
 
-/** Every stored row of an org. */
 export function listModes(db: HeelDb, orgId: string) {
   return db.select().from(modes).where(eq(modes.orgId, orgId)).all();
 }

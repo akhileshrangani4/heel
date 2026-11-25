@@ -2,8 +2,8 @@ import { parse } from "yaml";
 import { type HideMapping, HideMappingError, parseHideMapping } from "./hide-map.ts";
 
 /**
- * The parts of an OpenAPI 3.0 or 3.1 file heel uses for an HTTP account
- * (D7a; spec: HTTP proxy, "Other APIs"): each operation's method and path
+ * The parts of an OpenAPI 3.0 or 3.1 file heel uses for an HTTP account:
+ * each operation's method and path
  * template, its `operationId`, and the `x-heel-action` and `x-heel-kind`
  * extensions that name what it does. Everything else in the file is
  * ignored. Pure.
@@ -30,7 +30,7 @@ export interface Operation {
   action?: string;
   /** From `x-heel-kind`. Only an explicit `read` makes a call `kind: read` (I-20). */
   kind?: "read" | "write";
-  /** From `x-heel-hide`: where email-shaped items are in the response (D7b). */
+  /** From `x-heel-hide`: where email-shaped items are in the response. */
   hide?: HideMapping;
 }
 

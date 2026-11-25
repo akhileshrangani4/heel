@@ -16,7 +16,7 @@ export type EnrollProps =
   | { kind: "waiting"; userName: string; until: Date };
 
 /**
- * The page a one-time enrollment link opens (spec: Q-N2). It registers a
+ * The page a one-time enrollment link opens. It registers a
  * passkey for the person the link was made for. Enrollment never starts
  * from the human plane: only `heel user enroll` on the host makes a link.
  */

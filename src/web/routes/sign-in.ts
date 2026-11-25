@@ -20,7 +20,7 @@ import { oidcSignIn, passkeySignIn, type SignInNotice } from "../ui/sign-in.ts";
 /**
  * Passkey sign-in (single-user installs, and every decision on team
  * installs). Signing in only lets a person see requests: every approve,
- * deny and resume asks for the passkey again (spec: The approval page).
+ * deny and resume asks for the passkey again.
  *
  * The flow:
  * - `GET /sign-in` renders the page with a one-time challenge id. The

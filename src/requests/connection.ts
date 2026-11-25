@@ -6,7 +6,7 @@ import { newId } from "../store/ids.ts";
 import { agentRequests, agents, type ConnectionRequestDetails, users } from "../store/schema.ts";
 
 /**
- * Connection requests (roadmap 2.5): an agent asks its owner to connect an
+ * Connection requests: an agent asks its owner to connect an
  * account, and the owner does it, with a passkey, on heel's page.
  *
  * - The agent can ask only for what needs no secret from it: a built-in
@@ -32,7 +32,7 @@ const MAX_WHY_CHARS = 200;
 
 /** Built-in services people sign in to on heel's page. */
 export const SIGN_IN_SERVICES = ["gmail", "google-calendar", "outlook"] as const;
-/** Built-in services that use a key the owner pastes on heel's page (2.5, part 2). */
+/** Built-in services that use a key the owner pastes on heel's page. */
 export const KEY_SERVICES = ["github", "slack", "linear", "notion", "stripe"] as const;
 /** What an agent may ask for: no secret ever passes through the agent. */
 export const REQUESTABLE_SERVICES = [...SIGN_IN_SERVICES, ...KEY_SERVICES] as const;
@@ -52,8 +52,12 @@ export const KEY_HINTS: Readonly<Record<(typeof KEY_SERVICES)[number], string>> 
   stripe: "A restricted key (rk_…) with only what the agent needs.",
 };
 
-/** Same rule as `heel connect`: a letter first, then lower-case letters, digits or '-'. */
-const ALIAS = /^[a-z][a-z0-9-]{0,63}$/;
+/**
+ * Same characters as `heel connect` (a letter first, then lower-case letters,
+ * digits or '-'), but at most 32 long: an alias the agent picks shows in
+ * headings, chips and push titles. The owner can still choose up to 64.
+ */
+const ALIAS = /^[a-z][a-z0-9-]{0,31}$/;
 
 /** What `heel_request_connection` takes. */
 export const RequestConnectionInput = z
@@ -61,7 +65,7 @@ export const RequestConnectionInput = z
     service: z.enum([...REQUESTABLE_SERVICES, "mcp"]),
     alias: z
       .string()
-      .regex(ALIAS, "1–64 lower-case letters, digits or '-', starting with a letter"),
+      .regex(ALIAS, "1–32 lower-case letters, digits or '-', starting with a letter"),
     url: z.string().max(2_048).optional(),
     /** For `mcp`: whether the server wants OAuth sign-in. Defaults to yes. */
     oauth: z.boolean().optional(),

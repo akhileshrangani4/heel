@@ -17,12 +17,12 @@ import { enrollPage } from "../ui/enroll.ts";
 import { welcomePage } from "../ui/welcome.ts";
 
 /**
- * One-time enrollment links (spec: Q-N2). `heel user enroll <user>` on the
+ * One-time enrollment links. `heel user enroll <user>` on the
  * host prints `/enroll/<token>`; the token is the only thing that lets this
  * page register a passkey, it works once, and it lasts 15 minutes. No
  * session is needed. Making the passkey proves the person holds it, so heel
  * signs them in and shows the welcome page, where they turn on notifications
- * for this device (roadmap 2.7). With team sign-in (OIDC) they sign in there.
+ * for this device. With team sign-in (OIDC) they sign in there.
  *
  * - `GET /enroll/:token` shows the page.
  * - `POST /enroll/:token/options` returns WebAuthn creation options.
@@ -95,7 +95,7 @@ export function enrollRoutes(deps: HumanPlaneDeps): Hono {
     return c.json({ ok: true, next: "/welcome" });
   });
 
-  // Right after enrolling (2.7): turn on notifications for this device, then go to Approvals.
+  // Right after enrolling: turn on notifications for this device, then go to Approvals.
   const signedIn = new Hono<SignedInEnv>();
   signedIn.get("/welcome", requireSession(deps), (c) => {
     const session = c.get("session");

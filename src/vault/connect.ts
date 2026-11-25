@@ -19,18 +19,15 @@ import type { CredentialPayload, Vault } from "./vault.ts";
 
 /**
  * The skeleton behind `heel connect`: it registers an account alias and,
- * when given one, stores a static credential in the vault. OAuth consent
- * flows and the HTTP and CLI passthroughs arrive with the deliverables that
- * define those providers.
+ * when given one, stores a static credential in the vault.
  *
  * An MCP passthrough account (`heel connect mcp --as notes --url …`) points
- * at someone else's MCP server. Its provider is `mcp:<alias>` (spec: Call
- * model), its URL lives in `settings`, and its credential is optional: an
+ * at someone else's MCP server. Its provider is `mcp:<alias>`, its URL lives in `settings`, and its credential is optional: an
  * upstream that needs no token is usable as soon as it's connected.
  */
 
 /**
- * The eight built-in providers (spec: Built-in providers). Outlook covers
+ * The eight built-in providers. Outlook covers
  * both mail and calendar.
  */
 export const BUILT_IN_PROVIDERS = [
@@ -64,10 +61,10 @@ export function isValidAlias(alias: string): boolean {
   return ALIAS.test(alias);
 }
 
-/** What `heel connect` calls an HTTP account (D7a). */
+/** What `heel connect` calls an HTTP account. */
 export const HTTP_PASSTHROUGH = "http";
 
-/** The provider an HTTP account is stored under (spec: Call model). */
+/** The provider an HTTP account is stored under. */
 export function httpProvider(alias: string): string {
   return `${HTTP_PASSTHROUGH}:${alias}`;
 }
@@ -131,10 +128,10 @@ function httpAccountSettings(input: ConnectInput): Record<string, unknown> {
   return { transport: "http", baseUrl: http.baseUrl, auth, operations };
 }
 
-/** What `heel connect` calls a CLI account (D8b). */
+/** What `heel connect` calls a CLI account. */
 export const CLI_PASSTHROUGH = "cli";
 
-/** The provider a CLI account is stored under (spec: Call model, `cli:<name>`). */
+/** The provider a CLI account is stored under, `cli:<name>`. */
 export function cliProvider(command: string): string {
   return `${CLI_PASSTHROUGH}:${command}`;
 }
@@ -266,7 +263,7 @@ function checkCredentialEnv(name: string, npm: boolean): void {
 /** What `heel connect` calls an MCP passthrough account. */
 export const MCP_PASSTHROUGH = "mcp";
 
-/** The provider an MCP passthrough account is stored under (spec: Call model). */
+/** The provider an MCP passthrough account is stored under. */
 export function mcpProvider(alias: string): string {
   return `${MCP_PASSTHROUGH}:${alias}`;
 }
@@ -611,9 +608,9 @@ export interface ConnectInput {
   credential?: CredentialPayload;
   /** For `mcp`: the upstream server's URL (a remote server). */
   url?: string;
-  /** For `http` (D7a): the base URL, `--auth`, and the OpenAPI file's text. */
+  /** For `http`: the base URL, `--auth`, and the OpenAPI file's text. */
   http?: { baseUrl: string; auth: string; openapi: string };
-  /** For `cli` (D8b): the command name, the binary heel runs, extra egress, and where the credential goes. */
+  /** For `cli`: the command name, the binary heel runs, extra egress, and where the credential goes. */
   cli?: {
     command: string;
     bin: string;
@@ -626,7 +623,7 @@ export interface ConnectInput {
     /** `env` to give the CLI the credential itself (`--credential-delivery env`). */
     credentialDelivery?: CredentialDeliveryChoice | null | undefined;
   };
-  /** For a remote `mcp` server that wants OAuth sign-in (D5c). */
+  /** For a remote `mcp` server that wants OAuth sign-in. */
   oauth?: boolean;
   /** For a remote `mcp` server an agent asked for: contacted only on public https hosts. */
   publicOnly?: boolean;

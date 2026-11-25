@@ -1,8 +1,7 @@
 import type { HideCandidate } from "../../core/hide.ts";
 
 /**
- * `x-heel-hide` on an OpenAPI operation (D7b; spec: HTTP proxy, "Hiding on
- * an OpenAPI account"): where the email-shaped items are in the operation's
+ * `x-heel-hide` on an OpenAPI operation: where the email-shaped items are in the operation's
  * JSON response, and where each item keeps its `from`, `to`, `subject`,
  * `labels` and body. Paths are a small, strict JSONPath subset:
  *

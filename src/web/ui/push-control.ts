@@ -4,8 +4,8 @@ import { btn } from "./shadcn/button.ts";
 import { switchFace } from "./switch.ts";
 
 /**
- * Turns approval notifications on or off for the device the page is open on
- * (spec: Notifications): one switch, which the page script (client.ts) turns
+ * Turns approval notifications on or off for the device the page is open on:
+ * one switch, which the page script (client.ts) turns
  * on when this browser is already subscribed. A plain button, not a passkey ceremony: getting notified can't
  * decide anything. The script explains when the browser can't receive push,
  * such as an iPhone browser tab, where heel has to be added to the Home

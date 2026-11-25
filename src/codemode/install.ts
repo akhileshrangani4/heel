@@ -17,7 +17,6 @@ function resolvedDependency(): string | null {
   }
 }
 
-/** True when `path` is `dir` or below it. */
 function within(dir: string, path: string): boolean {
   const rel = relative(dir, path);
   return rel === "" || (rel !== ".." && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));

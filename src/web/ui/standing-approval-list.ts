@@ -83,9 +83,8 @@ function stateDetail(row: StandingRow, now: Date): Html {
 }
 
 /**
- * Standing approvals live in the store, never in YAML (spec: Standing
- * approvals). Each can only turn its parent rule's ask into allow; a deny
- * above it still wins.
+ * Standing approvals live in the store, never in YAML. Each can only turn
+ * its parent rule's ask into allow; a deny above it still wins.
  */
 export function standingApprovalList(props: StandingApprovalListProps): Html {
   const heading = html`<h1>Standing approvals</h1>

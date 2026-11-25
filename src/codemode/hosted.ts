@@ -106,8 +106,43 @@ const INSTALL_PARTS = ["bin", "src", "dist", "node_modules", "package.json"] as 
 const timerMs = (ms: number) => Math.min(Math.max(0, ms), MAX_TIMER_MS);
 /** How long a closing heel waits for the helper to exit before killing it. */
 const CLOSE_GRACE_MS = 2000;
+/** The most of a helper's startup error a script's error carries. */
+const MAX_REASON = 300;
 
 const failed = (error: string): WireStep => ({ kind: "failed", error });
+
+/**
+ * Pure: why a helper that never got going stopped, from its stderr, for the
+ * error every script on it gets. Node's own startup errors are one line, or
+ * a heading ending in a colon and then the line that says what failed
+ * ("OpenSSL configuration error:", then the file it couldn't open). Cut to
+ * `MAX_REASON` characters; null when there's nothing to say.
+ */
+export function startupReason(stderr: string): string | null {
+  const lines = stderr
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "");
+  const [first, second] = lines;
+  if (first === undefined) return null;
+  const reason = first.endsWith(":") && second !== undefined ? `${first} ${second}` : first;
+  return reason.length > MAX_REASON ? `${reason.slice(0, MAX_REASON - 1)}…` : reason;
+}
+
+/**
+ * Pure: the error a script gets when its helper stopped. A helper that
+ * stopped before it wrote heel anything didn't get going: its stderr is the
+ * error Node or heel's code hit on the way up, and it can't hold a
+ * credential, since the helper runs with an empty environment and never
+ * gets one. So the reason goes with the error. Once the helper has answered,
+ * its stderr could hold what scripts were doing, so that stays in heel's log.
+ */
+export function helperStoppedError(answered: boolean, detail: string): string {
+  const reason = answered ? null : startupReason(detail);
+  return reason === null
+    ? "the code-mode helper stopped; heel's log says why (heel logs)"
+    : `the code-mode helper couldn't start: ${reason} (more in heel's log: heel logs)`;
+}
 
 export class CodemodeHost {
   readonly #installDir: string;
@@ -132,7 +167,6 @@ export class CodemodeHost {
     return this.#child?.pid ?? null;
   }
 
-  /** Whether the helper runs inside Seatbelt. */
   get seatbelt(): boolean {
     return this.#seatbelt;
   }
@@ -191,6 +225,8 @@ export class CodemodeHost {
     });
     this.#child = child;
     let stderr = "";
+    // Whether the helper has sent heel anything: until then, it hasn't started.
+    let answered = false;
     child.stderr?.setEncoding("utf8");
     child.stderr?.on("data", (text: string) => {
       stderr = (stderr + text).slice(-STDERR_TAIL);
@@ -199,24 +235,28 @@ export class CodemodeHost {
     // A line heel can't read, or one past the protocol's longest, means the helper is broken
     // (or broken into): it goes, and every script on it fails.
     const broken = () => this.#kill(child);
-    child.stdout?.on(
-      "data",
-      lineReader((raw) => this.#receive(raw, broken), {
-        maxLine: MAX_LINE + 1024,
-        onOverflow: broken,
-      }),
-    );
+    const read = lineReader((raw) => this.#receive(raw, broken), {
+      maxLine: MAX_LINE + 1024,
+      onOverflow: broken,
+    });
+    child.stdout?.on("data", (chunk: Buffer) => {
+      answered = true;
+      read(chunk);
+    });
     const onExit = (code: number | null, signal: NodeJS.Signals | null, error?: Error) => {
       if (this.#child !== child) return;
       this.#child = null;
-      this.#onExit?.({ code, signal, detail: error?.message ?? stderr.trim() });
+      const detail = error?.message ?? stderr.trim();
+      this.#onExit?.({ code, signal, detail });
       // Every script it ran is over, and so are their workers.
+      const why = helperStoppedError(answered, detail);
       for (const [id, script] of [...this.#scripts]) {
-        this.#endWith(id, "the code-mode helper stopped");
+        this.#endWith(id, why);
         script.workerGone?.();
       }
     };
-    child.on("exit", (code, signal) => onExit(code, signal));
+    // `close`, not `exit`: by then heel has read all the helper wrote, stdout and stderr.
+    child.on("close", (code, signal) => onExit(code, signal));
     child.on("error", (error) => onExit(null, null, error));
     return child;
   }
