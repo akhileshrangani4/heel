@@ -408,7 +408,6 @@ body.focus main{max-width:30rem;padding:3rem 1.25rem}
   .nav-more-panel form{margin:0;border-top:1px solid var(--line);margin-top:.25rem;padding-top:.25rem}
   .nav-more-panel .nav-icon svg{width:1.1rem;height:1.1rem}
   .subnav ul{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
-  #heel-ceremony-status:not(:empty){bottom:calc(5.2rem + var(--safe-b));left:calc(1rem + var(--safe-l));right:calc(1rem + var(--safe-r))}
 }
 .nav-count{display:inline-block;min-width:1.35rem;margin-left:.3rem;padding:0 .4rem;border-radius:999px;background:var(--accent);color:var(--accent-text);font-size:.72rem;font-weight:700;line-height:1.35rem;text-align:center;vertical-align:1px}
 @media (min-width:56rem){
@@ -428,6 +427,7 @@ body.focus main{max-width:30rem;padding:3rem 1.25rem}
 [role="status"]:empty{display:none}
 #heel-ceremony-status:not(:empty){position:fixed;left:1rem;right:1rem;bottom:calc(1rem + var(--safe-b));max-width:56rem;margin:0 auto;z-index:20;padding:.75rem 1rem;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 30px -12px rgb(0 0 0 / .35);overflow-wrap:anywhere}
 body:has(#heel-ceremony-status:not(:empty)) main{padding-bottom:10rem}
+@media (max-width:55.99rem){body.app #heel-ceremony-status:not(:empty){bottom:calc(4.8rem + var(--safe-b));left:calc(1rem + var(--safe-l));right:calc(1rem + var(--safe-r))}}
 `;
 
 /**
