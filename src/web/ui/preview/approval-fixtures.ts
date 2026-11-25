@@ -155,8 +155,7 @@ export const REJECTED_REQUEST: RequestPageProps = {
 
 export const TAKEN_REQUEST: RequestPageProps = {
   ...GITHUB_REQUEST,
-  problem:
-    "This heel already has an account named github. Reject this and ask the agent for another name.",
+  problem: "This heel already has an account named github.",
 };
 
 /** An agent reason of 40+ words: shown in full, never cut. */

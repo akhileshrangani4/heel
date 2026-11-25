@@ -343,14 +343,6 @@ export function proposalPage(props: ProposalPageProps): Html {
       : props.status === "pending"
         ? ""
         : "";
-  const why =
-    props.status === "applied"
-      ? changesFile
-        ? "heel is using them now."
-        : `${props.agent}'s heel run can work there now.`
-      : pending
-        ? ""
-        : "Nothing was added.";
   const expiring =
     pending && props.expiresAt.getTime() - props.now.getTime() < 24 * 3_600_000
       ? html`<span class="badge" data-tone="warn">Expires ${formatRelative(props.expiresAt, props.now)}</span>`
@@ -361,7 +353,6 @@ export function proposalPage(props: ProposalPageProps): Html {
     dock: props.dock ?? "pinned",
     title: title(props),
     quote: pending ? quote(props.agent, said(props)) : "",
-    why,
     status: expiring,
     side: html`${decide}${done}`,
     main: changesView(props),

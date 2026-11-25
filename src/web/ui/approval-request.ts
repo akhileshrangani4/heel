@@ -804,7 +804,7 @@ function decisionControls(
     })}
     ${
       request.origin === "org"
-        ? html`<p class="muted ap-note">An org rule asked: only an org admin can approve it, once. Org asks never stand.</p>`
+        ? html`<p class="muted ap-note">An org rule asked: only an org admin can approve it, once.</p>`
         : ""
     }
   </section>`;

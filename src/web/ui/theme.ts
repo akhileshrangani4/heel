@@ -323,16 +323,9 @@ body.focus main{max-width:30rem;padding:3rem 1.25rem}
 .consent-title{text-align:center;font-size:1.4rem;margin:0 0 .4rem}
 .consent-sub{text-align:center;margin:0 0 1.25rem;color:var(--muted);font-size:.92rem}
 .consent-sub strong{color:var(--text)}
-.consent-facts{list-style:none;margin:0 0 1rem;padding:.25rem 1rem;border:1px solid var(--line);border-radius:12px;background:var(--bg)}
-.consent-facts li{display:flex;gap:.7rem;align-items:flex-start;padding:.7rem 0;font-size:.9rem}
-.consent-facts li + li{border-top:1px solid var(--line)}
-.consent-fact-icon{flex:none;display:inline-flex;color:var(--muted);margin-top:.1rem}
-.consent-fact-icon svg{width:1.05rem;height:1.05rem}
 .consent-actions{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-top:.25rem}
 .consent-actions .btn{width:100%}
 @media (max-width:26rem){.consent-actions{grid-template-columns:1fr}.consent-actions [data-heel-ceremony]{order:-1}}
-.consent-return{text-align:center;font-size:.82rem;margin:.75rem 0 0}
-.consent-return strong{color:var(--text)}
 .consent-invalid{align-items:center;text-align:center}
 .welcome{max-width:40rem;margin:0 auto}
 .welcome-head{display:flex;flex-direction:column;align-items:center;text-align:center;gap:.3rem;margin:1rem 0 1.5rem}

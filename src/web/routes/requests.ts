@@ -89,7 +89,7 @@ function problemOf(deps: HumanPlaneDeps, row: RequestRow): string | null {
     .get();
   return taken === undefined
     ? null
-    : `This heel already has an account named ${row.details.alias}. Reject this and ask the agent for another name.`;
+    : `This heel already has an account named ${row.details.alias}.`;
 }
 
 /** Waiting requests for the Approvals page. */
