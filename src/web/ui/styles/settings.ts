@@ -20,6 +20,7 @@ export const SETTINGS_CSS = `
 .pause-row-text .muted{font-size:.82rem}
 .pause-row-control{display:inline-flex;align-items:center;gap:.6rem;flex-wrap:wrap}
 .pause-row-note{font-size:.8rem}
+.pause-row-text time{white-space:nowrap}
 .settings-card{margin:0 0 1rem;padding:1rem 1.15rem;border:1px solid var(--line);border-radius:14px;background:var(--bg);box-shadow:0 1px 2px rgb(0 0 0 / .04)}
 .settings-row{display:flex;align-items:center;justify-content:space-between;gap:.75rem 1.5rem}
 .settings-row-text{min-width:0;flex:1}
@@ -34,13 +35,14 @@ export const SETTINGS_CSS = `
 .set-head{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap}
 .set-head > div{min-width:0;flex:1}
 .set-head .btn{margin-top:.35rem}
-.person-table td,.person-table th{vertical-align:middle}
+.person-table td,.person-table th{vertical-align:middle!important}
+table.person-table .person-name,table.person-table .person-meta{white-space:normal!important;overflow-wrap:anywhere}
 .person-meta{font-size:.85rem}
 .person-manage{width:3rem;text-align:right}
 .set-menu{position:relative;display:inline-block}
 .set-menu > summary{list-style:none}
 .set-menu > summary::-webkit-details-marker{display:none}
-.set-menu-panel{position:absolute;right:0;top:calc(100% + .4rem);z-index:5;width:min(24rem,calc(100vw - 2rem));padding:1rem;border:1px solid var(--line);border-radius:12px;background:var(--bg);box-shadow:0 12px 32px -12px rgb(0 0 0 / .3);text-align:left;white-space:normal}
+.set-menu-panel{position:absolute;right:0;top:calc(100% + .4rem);z-index:5;width:min(24rem,calc(100vw - 3rem));padding:1rem;border:1px solid var(--line);border-radius:12px;background:var(--bg);box-shadow:0 12px 32px -12px rgb(0 0 0 / .3);text-align:left;white-space:normal}
 .set-menu-title{margin:0 0 .5rem;font-weight:600}
 .set-menu-panel .stack-form,.set-menu-panel .form{margin:.5rem 0 0}
 .table-scroll:has(.set-menu[open]){overflow:visible}
@@ -48,8 +50,8 @@ export const SETTINGS_CSS = `
   table.person-table{min-width:0}
   table.person-table thead{display:none}
   table.person-table,table.person-table tbody{display:block}
-  table.person-table tr{display:grid;grid-template-columns:1fr auto;gap:.2rem .75rem;padding:.7rem .85rem;border-bottom:1px solid var(--line)}
-  table.person-table tr > *{padding:0;border:0}
+  table.person-table tr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.2rem .75rem;padding:.7rem .85rem;border-bottom:1px solid var(--line)}
+  table.person-table tr > *{padding:0!important;border:0;height:auto!important}
   table.person-table .person-role{grid-column:1}
   table.person-table .person-meta{grid-column:1 / -1}
   table.person-table .person-manage{grid-row:1;grid-column:2}
@@ -70,4 +72,13 @@ button.seg-item:hover{color:var(--text);background:color-mix(in srgb,var(--bg) 6
 .seg-note{display:block;margin-top:.3rem;font-size:.8rem}
 .mode-switch{white-space:nowrap}
 .mode-means{display:block;margin-top:.3rem;font-size:.84rem}
+@media (max-width:36rem){
+  table.modes-table{min-width:0}
+  table.modes-table thead{display:none}
+  table.modes-table,table.modes-table tbody{display:block}
+  table.modes-table tr{display:grid;grid-template-columns:minmax(0,1fr);gap:.5rem;padding:.75rem .85rem;border-bottom:1px solid var(--line)}
+  table.modes-table tr:last-child{border-bottom:0}
+  table.modes-table tr > *{padding:0!important;border:0;height:auto!important;white-space:normal!important;overflow-wrap:anywhere}
+  table.modes-table .badge{white-space:normal}
+}
 `;

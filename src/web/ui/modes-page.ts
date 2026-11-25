@@ -140,8 +140,8 @@ export function modesPage(props: {
     ${props.outcome.kind === "switched" ? switchedNotice(props.outcome, props.rows) : ""}
     ${scrollRegion(
       "Modes",
-      html`<table class="data">
-      <caption>Modes</caption>
+      html`<table class="data modes-table">
+      <caption class="visually-hidden">Modes</caption>
       <thead>
         <tr>
           <th scope="col">Who</th>
