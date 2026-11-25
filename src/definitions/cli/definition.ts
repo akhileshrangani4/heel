@@ -26,6 +26,7 @@ import {
 import type { SandboxProcess, SandboxRunOptions } from "../../runner/run.ts";
 import type { AccountRecord } from "../../store/directory.ts";
 import type { Vault } from "../../vault/vault.ts";
+import { accountToken } from "../api-deps.ts";
 import { CredentialDeliveryRefused, deliveryRefusedMessage } from "../credential-delivery.ts";
 import { GitHubApi } from "../github/api.ts";
 import { isMergeAction, isWorkflowPath } from "../github/definition.ts";
@@ -162,7 +163,7 @@ export function cliDefinition(account: AccountRecord, deps: CliDeps): Definition
   // kubectl reads its credential from a file the command can be pointed at (see `cliAccountSettings`).
   if (settings.command === "kubectl") return null;
   const sandbox = deps.sandbox;
-  const credential = async () => (await deps.vault.accessToken(account.id)).reveal();
+  const credential = () => accountToken(deps, account);
 
   /** `gh pr merge`, pinned to the pull request's current head. */
   async function pinMerge(

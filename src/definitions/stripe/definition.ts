@@ -2,8 +2,7 @@ import type { Tool } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import type { Definition } from "../../gateway/pipeline/ports.ts";
 import type { AccountRecord } from "../../store/directory.ts";
-import type { Vault } from "../../vault/vault.ts";
-import type { FetchFn } from "../sign-in.ts";
+import { type ApiDeps, accountToken } from "../api-deps.ts";
 import {
   listedTools,
   NotFoundError,
@@ -39,11 +38,6 @@ import { StripeClient } from "./client.ts";
  * POST /v1/refunds, POST /v1/payment_intents, POST /v1/customers/{id},
  * POST /v1/subscriptions/{id}.
  */
-
-export interface StripeDeps {
-  vault: Vault;
-  fetch: FetchFn;
-}
 
 interface Box {
   client: StripeClient;
@@ -316,8 +310,8 @@ const TOOLS: Record<string, StripeTool> = {
 
 export const STRIPE_TOOLS: readonly Tool[] = listedTools(TOOLS);
 
-export function stripeDefinition(account: AccountRecord, deps: StripeDeps): Definition {
-  const token = async () => (await deps.vault.accessToken(account.id)).reveal();
+export function stripeDefinition(account: AccountRecord, deps: ApiDeps): Definition {
+  const token = () => accountToken(deps, account);
   return toolTableDefinition({
     tools: TOOLS,
     listed: STRIPE_TOOLS,

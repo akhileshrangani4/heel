@@ -2,9 +2,8 @@ import type { Tool } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import type { Definition } from "../../gateway/pipeline/ports.ts";
 import type { AccountRecord } from "../../store/directory.ts";
-import type { Vault } from "../../vault/vault.ts";
+import { type ApiDeps, accountToken } from "../api-deps.ts";
 import { githubRest } from "../http/rest.ts";
-import type { FetchFn } from "../sign-in.ts";
 import { listedTools, type ToolRow, toolRow, toolTableDefinition } from "../tool-table.ts";
 import { GitHubApi } from "./api.ts";
 import { GitHubClient } from "./client.ts";
@@ -30,11 +29,6 @@ import { GitHubClient } from "./client.ts";
  *   for webhooks, deploy keys, collaborators, or Actions secrets and
  *   variables.
  */
-
-export interface GitHubDeps {
-  vault: Vault;
-  fetch: FetchFn;
-}
 
 interface Box {
   client: GitHubClient;
@@ -513,8 +507,8 @@ function rawPathProblem(
   );
 }
 
-export function githubDefinition(account: AccountRecord, deps: GitHubDeps): Definition {
-  const token = async () => (await deps.vault.accessToken(account.id)).reveal();
+export function githubDefinition(account: AccountRecord, deps: ApiDeps): Definition {
+  const token = () => accountToken(deps, account);
   const box: Box = {
     client: new GitHubClient(deps.fetch, token),
     api: new GitHubApi(token, deps.fetch),

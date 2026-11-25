@@ -2,8 +2,7 @@ import type { Tool } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { type Definition, UpstreamError } from "../../gateway/pipeline/ports.ts";
 import type { AccountRecord } from "../../store/directory.ts";
-import type { Vault } from "../../vault/vault.ts";
-import type { FetchFn } from "../sign-in.ts";
+import { type ApiDeps, accountToken } from "../api-deps.ts";
 import { listedTools, type ToolRow, toolRow, toolTableDefinition } from "../tool-table.ts";
 import { NotionClient } from "./client.ts";
 
@@ -32,11 +31,6 @@ import { NotionClient } from "./client.ts";
  * Endpoints: POST /v1/search, GET /v1/pages/{id}, GET /v1/blocks/{id},
  * GET and PATCH /v1/blocks/{id}/children, POST /v1/pages, PATCH /v1/pages/{id}.
  */
-
-export interface NotionDeps {
-  vault: Vault;
-  fetch: FetchFn;
-}
 
 interface Box {
   client: NotionClient;
@@ -272,8 +266,8 @@ const TOOLS: Record<string, NotionTool> = {
 
 export const NOTION_TOOLS: readonly Tool[] = listedTools(TOOLS);
 
-export function notionDefinition(account: AccountRecord, deps: NotionDeps): Definition {
-  const token = async () => (await deps.vault.accessToken(account.id)).reveal();
+export function notionDefinition(account: AccountRecord, deps: ApiDeps): Definition {
+  const token = () => accountToken(deps, account);
   return toolTableDefinition({
     tools: TOOLS,
     listed: NOTION_TOOLS,

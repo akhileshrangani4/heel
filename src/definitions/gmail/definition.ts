@@ -1,8 +1,7 @@
 import type { Tool } from "@modelcontextprotocol/server";
 import type { Definition } from "../../gateway/pipeline/ports.ts";
 import type { AccountRecord } from "../../store/directory.ts";
-import type { Vault } from "../../vault/vault.ts";
-import type { FetchFn } from "../google/oauth.ts";
+import { type ApiDeps, accountToken } from "../api-deps.ts";
 import { listedTools, toolTableDefinition } from "../tool-table.ts";
 import { GmailClient } from "./client.ts";
 import { Mailbox } from "./mailbox.ts";
@@ -19,20 +18,13 @@ import type { GmailTool } from "./tool.ts";
  * outcome; a write that never got an answer is left unknown.
  */
 
-export interface GmailDeps {
-  vault: Vault;
-  fetch: FetchFn;
-}
-
 const TOOLS: Record<string, GmailTool> = { ...READ_TOOLS, ...SEND_TOOLS, ...ORGANIZE_TOOLS };
 
 /** The tools as MCP lists them. */
 export const GMAIL_TOOLS: readonly Tool[] = listedTools(TOOLS);
 
-export function gmailDefinition(account: AccountRecord, deps: GmailDeps): Definition {
-  const mailbox = new Mailbox(
-    new GmailClient(deps.fetch, async () => (await deps.vault.accessToken(account.id)).reveal()),
-  );
+export function gmailDefinition(account: AccountRecord, deps: ApiDeps): Definition {
+  const mailbox = new Mailbox(new GmailClient(deps.fetch, () => accountToken(deps, account)));
   return toolTableDefinition({
     tools: TOOLS,
     listed: GMAIL_TOOLS,
