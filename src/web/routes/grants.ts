@@ -8,12 +8,15 @@ import {
   formField,
   type HumanPlaneDeps,
   jsonBody,
+  passkeyChallenge,
+  passkeyFailed,
   renderPage,
   requireCsrfField,
   requireCsrfHeader,
   requireSession,
   type SignedInEnv,
   stringField,
+  verifiedBinding,
   viewerOf,
 } from "../http.ts";
 import type { SessionView } from "../sessions.ts";
@@ -134,32 +137,16 @@ export function grantRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       if (error instanceof GrantError) return c.json({ ok: false, message: error.message }, 400);
       throw error;
     }
-    const issued = await deps.passkeys.assertionOptions({
-      orgId: deps.orgId,
-      purpose: "grant",
-      userId: session.userId,
-      // The canonical form is what is signed and stored, so what runs is what was signed.
-      binding: { agent, task, match: canonical, duration },
-      now: deps.now(),
-    });
-    if (!issued.ok) return c.json({ ok: false, message: "You have no passkey enrolled." }, 400);
-    return c.json(issued);
+    // The canonical form is what is signed and stored, so what runs is what was signed.
+    return passkeyChallenge(c, deps, "grant", { agent, task, match: canonical, duration });
   });
 
   app.post("/grants/confirm", signedIn, csrf, async (c) => {
     const session = c.get("session");
-    const body = await jsonBody(c);
-    const verified = await deps.passkeys.verifyAssertion({
-      orgId: deps.orgId,
-      purpose: "grant",
-      userId: session.userId,
-      challengeId: stringField(body, "challengeId") ?? "",
-      response: body?.["response"],
-      now: deps.now(),
-    });
-    if (!verified.ok) return c.json({ ok: false, message: "The passkey check didn't pass." }, 401);
+    const binding = await verifiedBinding(c, deps, "grant");
+    if (binding === null) return passkeyFailed(c);
     // What to grant comes from the signed challenge, never from this body.
-    const { agent, task, match, duration } = verified.binding;
+    const { agent, task, match, duration } = binding;
     if (
       typeof agent !== "string" ||
       typeof task !== "string" ||

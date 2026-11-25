@@ -7,12 +7,15 @@ import {
   formField,
   type HumanPlaneDeps,
   jsonBody,
+  passkeyChallenge,
+  passkeyFailed,
   renderPage,
   requireCsrfField,
   requireCsrfHeader,
   requireSession,
   type SignedInEnv,
   stringField,
+  verifiedBinding,
   viewerOf,
 } from "../http.ts";
 import type { SessionView } from "../sessions.ts";
@@ -123,31 +126,15 @@ export function modeRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     if (!isAdmin(session) || !known(ownerId) || !isMode(mode) || mode === "enforce") {
       return c.json({ ok: false, message: "That switch isn't yours to make." }, 403);
     }
-    const issued = await deps.passkeys.assertionOptions({
-      orgId: deps.orgId,
-      purpose: "mode",
-      userId: session.userId,
-      binding: { owner: ownerId, mode },
-      now: deps.now(),
-    });
-    if (!issued.ok) return c.json({ ok: false, message: "You have no passkey enrolled." }, 400);
-    return c.json(issued);
+    return passkeyChallenge(c, deps, "mode", { owner: ownerId, mode });
   });
 
   app.post("/modes/confirm", signedIn, csrf, async (c) => {
     const session = c.get("session");
-    const body = await jsonBody(c);
-    const verified = await deps.passkeys.verifyAssertion({
-      orgId: deps.orgId,
-      purpose: "mode",
-      userId: session.userId,
-      challengeId: stringField(body, "challengeId") ?? "",
-      response: body?.["response"],
-      now: deps.now(),
-    });
-    if (!verified.ok) return c.json({ ok: false, message: "The passkey check didn't pass." }, 401);
+    const binding = await verifiedBinding(c, deps, "mode");
+    if (binding === null) return passkeyFailed(c);
     // What to switch comes from the signed challenge, never from this body.
-    const { owner, mode } = verified.binding;
+    const { owner, mode } = binding;
     if (
       !isAdmin(session) ||
       typeof owner !== "string" ||

@@ -8,11 +8,14 @@ import { users } from "../../store/schema.ts";
 import {
   type HumanPlaneDeps,
   jsonBody,
+  passkeyChallenge,
+  passkeyFailed,
   renderPage,
   requireCsrfHeader,
   requireSession,
   type SignedInEnv,
   stringField,
+  verifiedBinding,
   viewerOf,
 } from "../http.ts";
 import { createEnrollment, EnrollmentError } from "../passkeys.ts";
@@ -161,30 +164,14 @@ export function peopleRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     const session = c.get("session");
     const intent = intentOf(session, await jsonBody(c));
     if ("problem" in intent) return c.json({ ok: false, message: intent.problem }, 400);
-    const issued = await deps.passkeys.assertionOptions({
-      orgId: deps.orgId,
-      purpose: "people",
-      userId: session.userId,
-      binding: intent.binding,
-      now: deps.now(),
-    });
-    if (!issued.ok) return c.json({ ok: false, message: "You have no passkey enrolled." }, 400);
-    return c.json(issued);
+    return passkeyChallenge(c, deps, "people", intent.binding);
   });
 
   app.post("/people/confirm", signedIn, requireCsrfHeader(), async (c) => {
     const session = c.get("session");
-    const body = await jsonBody(c);
-    const verified = await deps.passkeys.verifyAssertion({
-      orgId: deps.orgId,
-      purpose: "people",
-      userId: session.userId,
-      challengeId: stringField(body, "challengeId") ?? "",
-      response: body?.["response"],
-      now: deps.now(),
-    });
-    if (!verified.ok) return c.json({ ok: false, message: "The passkey check didn't pass." }, 401);
-    const { op, name, user, email } = verified.binding;
+    const binding = await verifiedBinding(c, deps, "people");
+    if (binding === null) return passkeyFailed(c);
+    const { op, name, user, email } = binding;
     // Checked again now: a role can change between the prompt and the tap.
     const admin = session.role === "admin";
     const refused = c.json({ ok: false, message: "That change isn't yours to make." }, 409);

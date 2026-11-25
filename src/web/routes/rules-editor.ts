@@ -19,12 +19,15 @@ import {
   formField,
   type HumanPlaneDeps,
   jsonBody,
+  passkeyChallenge,
+  passkeyFailed,
   renderPage,
   requireCsrfField,
   requireCsrfHeader,
   requireSession,
   type SignedInEnv,
   stringField,
+  verifiedBinding,
   viewerOf,
 } from "../http.ts";
 import type { SessionView } from "../sessions.ts";
@@ -177,30 +180,19 @@ export function rulesEditorRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
         409,
       );
     }
-    const issued = await deps.passkeys.assertionOptions({
-      orgId: deps.orgId,
-      purpose: "rules",
-      userId: session.userId,
-      binding: { edit: "file", before: textHash(file.text), after: textHash(text) },
-      now: deps.now(),
+    return passkeyChallenge(c, deps, "rules", {
+      edit: "file",
+      before: textHash(file.text),
+      after: textHash(text),
     });
-    if (!issued.ok) return c.json({ ok: false, message: "You have no passkey enrolled." }, 400);
-    return c.json(issued);
   });
 
   app.post("/rules/confirm", signedIn, requireCsrfHeader(), async (c) => {
     const session = c.get("session");
     const body = await jsonBody(c);
-    const verified = await deps.passkeys.verifyAssertion({
-      orgId: deps.orgId,
-      purpose: "rules",
-      userId: session.userId,
-      challengeId: stringField(body, "challengeId") ?? "",
-      response: body?.["response"],
-      now: deps.now(),
-    });
-    if (!verified.ok) return c.json({ ok: false, message: "The passkey check didn't pass." }, 401);
-    const { edit, before, after } = verified.binding;
+    const binding = await verifiedBinding(c, deps, "rules");
+    if (binding === null) return passkeyFailed(c);
+    const { edit, before, after } = binding;
     const file = fileOf(session);
     const text = stringField(body, "text") ?? "";
     // Only the signed change, to the signed file: the text must hash to what was signed.

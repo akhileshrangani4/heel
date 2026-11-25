@@ -16,12 +16,15 @@ import {
   formField,
   type HumanPlaneDeps,
   jsonBody,
+  passkeyChallenge,
+  passkeyFailed,
   renderPage,
   requireCsrfField,
   requireCsrfHeader,
   requireSession,
   type SignedInEnv,
   stringField,
+  verifiedBinding,
   viewerOf,
 } from "../http.ts";
 import type { SessionView } from "../sessions.ts";
@@ -145,31 +148,15 @@ export function manageAgentRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     const session = c.get("session");
     const intent = intentOf(session, await jsonBody(c));
     if ("problem" in intent) return c.json({ ok: false, message: intent.problem }, 400);
-    const issued = await deps.passkeys.assertionOptions({
-      orgId: deps.orgId,
-      purpose: "manage",
-      userId: session.userId,
-      binding: intent.binding,
-      now: deps.now(),
-    });
-    if (!issued.ok) return c.json({ ok: false, message: "You have no passkey enrolled." }, 400);
-    return c.json(issued);
+    return passkeyChallenge(c, deps, "manage", intent.binding);
   });
 
   app.post("/agents/manage/confirm", signedIn, requireCsrfHeader(), async (c) => {
     const session = c.get("session");
-    const body = await jsonBody(c);
-    const verified = await deps.passkeys.verifyAssertion({
-      orgId: deps.orgId,
-      purpose: "manage",
-      userId: session.userId,
-      challengeId: stringField(body, "challengeId") ?? "",
-      response: body?.["response"],
-      now: deps.now(),
-    });
-    if (!verified.ok) return c.json({ ok: false, message: "The passkey check didn't pass." }, 401);
+    const binding = await verifiedBinding(c, deps, "manage");
+    if (binding === null) return passkeyFailed(c);
     // What to do comes from the signed challenge, never from this body.
-    const { op, name, days, path } = verified.binding;
+    const { op, name, days, path } = binding;
     const now = deps.now();
     const expires = days === "never" ? null : Number(days);
     try {

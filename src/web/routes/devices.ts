@@ -3,13 +3,14 @@ import { pushSubscriptionsOf } from "../../store/notifications.ts";
 import {
   formField,
   type HumanPlaneDeps,
-  jsonBody,
+  passkeyChallenge,
+  passkeyFailed,
   renderPage,
   requireCsrfField,
   requireCsrfHeader,
   requireSession,
   type SignedInEnv,
-  stringField,
+  verifiedBinding,
   viewerOf,
 } from "../http.ts";
 import { cancelEnrollment, createEnrollment, pendingRecoveries } from "../passkeys.ts";
@@ -56,32 +57,14 @@ export function deviceRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
 
   app.post("/devices/challenge", signedIn, requireCsrfHeader(), async (c) => {
     const session = c.get("session");
-    const issued = await deps.passkeys.assertionOptions({
-      orgId: deps.orgId,
-      purpose: "add_device",
-      userId: session.userId,
-      binding: { userId: session.userId },
-      now: deps.now(),
-    });
-    if (!issued.ok) return c.json({ ok: false, message: "You have no passkey enrolled." }, 400);
-    return c.json(issued);
+    return passkeyChallenge(c, deps, "add_device", { userId: session.userId });
   });
 
   app.post("/devices/confirm", signedIn, requireCsrfHeader(), async (c) => {
     const session = c.get("session");
-    const body = await jsonBody(c);
     const now = deps.now();
-    const verified = await deps.passkeys.verifyAssertion({
-      orgId: deps.orgId,
-      purpose: "add_device",
-      userId: session.userId,
-      challengeId: stringField(body, "challengeId") ?? "",
-      response: body?.["response"],
-      now,
-    });
-    if (!verified.ok || verified.binding["userId"] !== session.userId) {
-      return c.json({ ok: false, message: "The passkey check didn't pass." }, 401);
-    }
+    const binding = await verifiedBinding(c, deps, "add_device", now);
+    if (binding === null || binding["userId"] !== session.userId) return passkeyFailed(c);
     const link = createEnrollment(deps.db, {
       orgId: deps.orgId,
       userName: session.userName,
