@@ -50,6 +50,27 @@ export function formatRelative(at: Date, now: Date): string {
   return delta >= 0 ? `in ${formatSpan(delta)}` : `${formatSpan(-delta)} ago`;
 }
 
+/**
+ * One unit, rounded down, for lists that only need a glance: `now`, `12m`,
+ * `3h`, `2d`. The full time is on the `<time>` element and the page itself.
+ */
+export function formatShort(ms: number): string {
+  const span = Math.max(0, ms);
+  if (span < MINUTE) return "now";
+  if (span < HOUR) return `${String(Math.floor(span / MINUTE))}m`;
+  if (span < DAY) return `${String(Math.floor(span / HOUR))}h`;
+  return `${String(Math.floor(span / DAY))}d`;
+}
+
+/**
+ * A long name shortened in the middle, so both ends stay readable:
+ * `claude-code-h…-laptop-2`. For headings, rows and chips only; the full
+ * value goes in a `title` and on the page that shows the details.
+ */
+export function middle(value: string, head = 12, tail = 8): string {
+  return value.length <= head + tail + 1 ? value : `${value.slice(0, head)}…${value.slice(-tail)}`;
+}
+
 export function plural(n: number, noun: string): string {
   return `${n} ${noun}${n === 1 ? "" : "s"}`;
 }

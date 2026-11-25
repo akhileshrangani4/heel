@@ -2,6 +2,7 @@ import type { ApprovalRequestView } from "../approval-request.ts";
 import type { PauseNotice } from "../layout.ts";
 import type { ActivePause } from "../pause-control.ts";
 import type { PendingRow } from "../pending-list.ts";
+import { type ServiceChoice, serviceChoices } from "../service-choices.ts";
 import type { StandingRow } from "../standing-approval-list.ts";
 import { emailPreviewFrom, headline, mailPreviewFrom } from "../summary.ts";
 
@@ -264,6 +265,9 @@ export const PENDING_ROWS: readonly PendingRow[] = [
     action: "github.merge",
     tool: "pr merge",
     rule: { name: "prod-merges-ask-admin", file: "org-rules.yaml", line: 8 },
+    // Close to its expiry, so the list shows when it ends.
+    createdAt: hours(-23.8),
+    expiresAt: minutes(8),
   }),
 ];
 
@@ -485,3 +489,51 @@ export const SPARSE_REQUEST: ApprovalRequestView = {
     title: "Export to PDF crashes on Windows 11",
   },
 };
+
+/** Made-up services, to show the connect dialog with more than heel has today. Preview only. */
+const MORE_SERVICES = [
+  "Airtable",
+  "Asana",
+  "Bitbucket",
+  "Box",
+  "Calendly",
+  "ClickUp",
+  "Confluence",
+  "Discord",
+  "Dropbox",
+  "Figma",
+  "GitLab",
+  "Google Drive",
+  "HubSpot",
+  "Intercom",
+  "Jira",
+  "Mailchimp",
+  "Microsoft Teams",
+  "Monday",
+  "PagerDuty",
+  "Pipedrive",
+  "QuickBooks",
+  "Salesforce",
+  "Sentry",
+  "Shopify",
+  "Todoist",
+  "Trello",
+  "Twilio",
+  "Vercel",
+  "Zendesk",
+  "Zoom",
+  "Xero",
+  "Webflow",
+];
+
+/** heel's services plus made-up ones, `total` in all, in the dialog's alphabetical order. */
+export function connectChoices(total: number): ServiceChoice[] {
+  const real = serviceChoices();
+  const fake = MORE_SERVICES.slice(0, Math.max(0, total - real.length)).map(
+    (name): ServiceChoice => {
+      const value = name.toLowerCase().replaceAll(" ", "-");
+      return { value, name, need: "key", alias: value, help: "An API key" };
+    },
+  );
+  return [...real, ...fake].sort((a, b) => a.name.localeCompare(b.name));
+}

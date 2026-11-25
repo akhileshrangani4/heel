@@ -66,6 +66,11 @@ describe("the installed app on a phone", () => {
       /#heel-ceremony-status:not\(:empty\)\{bottom:calc\([^)]*var\(--safe-b\)\)/,
     );
     expect(STYLESHEET).toMatch(/\.act-filter-panel\{position:fixed;[^}]*var\(--safe-b\)/);
+    // A pinned approval bar takes the tab bar's place, with the same insets.
+    expect(STYLESHEET).toMatch(
+      /\.ap\[data-dock="pinned"\] \.ap-bar\[data-dock\]\{position:fixed;[^}]*padding:\.75rem max\(\.75rem,var\(--safe-r\)\) calc\(\.75rem \+ var\(--safe-b\)\) max\(\.75rem,var\(--safe-l\)\)/,
+    );
+    expect(STYLESHEET).not.toContain("--heel-safe-");
   });
 });
 

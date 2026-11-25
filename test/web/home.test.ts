@@ -24,7 +24,7 @@ describe("the Home page", () => {
     }
     // Nothing waits and the harness accounts are all active: no tile is flagged.
     expect(page).not.toMatch(/class="home-tile" href="[^"]*" data-alert=/);
-    expect(page).toContain("All ready");
+    expect(page).not.toContain('class="home-tile-line"');
   });
 
   it("counts an account that needs signing in again", async () => {
@@ -32,8 +32,9 @@ describe("the Home page", () => {
     const owner = await h.signIn(await h.enroll());
     h.t.db.update(accounts).set({ status: "reconnect_required" }).run();
     const page = await (await h.fetch("/", { as: owner })).text();
-    expect(page).toContain(">sign in again<");
-    expect(page).toMatch(/\d+ needs? you to sign in again/);
+    // One sentence says it; no badge repeats it.
+    expect(page).toMatch(/class="home-tile-line">\d+ to sign in</);
+    expect(page).toMatch(/class="home-tile" href="\/connections" data-alert="warn"/);
   });
 
   it("lists the setup steps left, linked to where they're done", async () => {
@@ -53,10 +54,10 @@ describe("the Home page", () => {
     const owner = await h.signIn(await h.enroll());
     await h.call();
     const page = await (await h.fetch("/", { as: owner })).text();
-    expect(page).toContain("Calls in the last 7 days");
-    expect(page).toMatch(/aria-label="Calls per day: [^"]* 1"/);
-    expect(page).toContain("<strong>inbox-bot</strong> wanted to");
-    expect(page).toContain('<a class="home-more" href="/activity">View all');
+    expect(page).toContain(">This week<");
+    expect(page).toMatch(/aria-label="Calls per day: [^"]* 1\. /);
+    expect(page).toContain('<strong title="inbox-bot">inbox-bot</strong> ');
+    expect(page).toContain('<a class="home-more" href="/activity">Recent');
   });
 
   it("shows an empty state instead of an empty chart before any call", async () => {

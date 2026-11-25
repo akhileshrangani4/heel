@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { rulesFor } from "../../core/rules/evaluate.ts";
 import { listAgents, TOKEN_WARNING_DAYS } from "../../gateway/agents.ts";
 import { agentInventory, readActivity, wouldHaveStopped } from "../../store/activity.ts";
-import { listApprovalsFor } from "../../store/approvals.ts";
+
 import { accountsOwnedBy } from "../../store/directory.ts";
 import { pushSubscriptionsOf } from "../../store/notifications.ts";
 import { auditLog, passkeys } from "../../store/schema.ts";
@@ -16,6 +16,7 @@ import {
 } from "../http.ts";
 import type { SessionView } from "../sessions.ts";
 import { type DayCount, homePage, type RecentRow } from "../ui/home.ts";
+import { waitingCounts, waitingItems } from "../waiting.ts";
 
 /**
  * `GET /`: the Home dashboard. What needs you across Approvals, Agents,
@@ -94,11 +95,7 @@ export function homeRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     const now = deps.now();
     const owners = visibleOwners(session);
 
-    const approvals = listApprovalsFor(deps.db, session, now);
-    const waiting = approvals.filter((r) => r.status === "pending").length;
-    const decided = approvals.filter(
-      (r) => r.status === "approved" || r.status === "denied" || r.status === "executed",
-    ).length;
+    const counts = waitingCounts(deps, session, now);
 
     const inventory = agentInventory(deps.db, {
       orgId: deps.orgId,
@@ -151,7 +148,7 @@ export function homeRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       current: "home",
       body: homePage({
         now,
-        approvals: { waiting, decided },
+        waiting: { counts, items: waitingItems(deps, session, now) },
         agents: {
           total: agents.length,
           active: agents.filter((a) => a.lastCallAt !== null).length,

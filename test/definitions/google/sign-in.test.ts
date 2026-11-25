@@ -177,7 +177,7 @@ describe("Connections without providers.google", () => {
 
     for (const alias of ["gmail-home", "cal-home"]) {
       const row = rowOf(page, alias);
-      expect(row).toContain("Needs your Google OAuth client");
+      expect(row).toContain("Needs Google sign-in set up");
       expect(row).toContain("<code>providers.google</code>");
       expect(row).toContain('href="https://useheel.dev/docs/connect#google-sign-in"');
       expect(row).not.toContain("Set up with <code>heel connect</code>");

@@ -40,11 +40,16 @@ export const APPROVALS_CSS = `
 .req-body{min-width:0;display:flex;flex-direction:column}
 .req .ap-meta{display:flex;flex-wrap:wrap;align-items:center;gap:.1rem .6rem;font-size:.85rem;line-height:1.5}
 .req .ap-meta > *{margin:0;min-width:0;overflow-wrap:anywhere}
+.req .ap-meta > .req-foot{white-space:normal;overflow-wrap:anywhere}
+.req-row .req-title{margin:0}
+.req-row .req-title + .ap-meta{margin-top:.2rem}
+.req-soon{color:var(--warn);font-weight:600}
 .req .ap-meta .badge{margin:0}
 .req-title{display:block;font-size:1.02rem;line-height:1.4;margin:.2rem 0 0;font-weight:600;overflow-wrap:anywhere}
 .req-title mark{background:var(--surface);color:inherit;border-radius:8px;padding:0 .35rem;box-shadow:inset 0 0 0 1px var(--line)}
 .req-reason{display:block;margin:.35rem 0 0;padding-left:.75rem;border-left:2px solid var(--line);font-size:.9rem;overflow-wrap:anywhere}
 .req-foot{display:block;margin:.3rem 0 0;font-size:.82rem;overflow-wrap:anywhere}
+.req .ap-meta > .req-foot{margin:0}
 .req-review{opacity:0;font-size:.82rem;font-weight:500;padding:.3rem .75rem;border-radius:8px;border:1px solid var(--line);background:var(--bg);white-space:nowrap;transition:opacity .15s}
 .req-row:hover .req-review,.req-row:focus-visible .req-review{opacity:1}
 .req-icon{display:inline-flex;flex:none}
@@ -106,13 +111,13 @@ export const APPROVALS_CSS = `
 .ap-bar-note{margin:.45rem 0 0;font-size:.8rem;text-align:center}
 @media (max-width:55.99rem){
   /* Pinned: the bar takes the tab bar's place at the bottom of a phone screen while a decision is open. */
-  .ap[data-dock="pinned"] .ap-bar[data-dock]{position:fixed;left:0;right:0;bottom:0;z-index:31;padding:.75rem max(.75rem,var(--heel-safe-right,env(safe-area-inset-right))) calc(.75rem + var(--heel-safe-bottom,env(safe-area-inset-bottom))) max(.75rem,var(--heel-safe-left,env(safe-area-inset-left)));background:color-mix(in srgb,var(--bg) 94%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--line);box-shadow:0 -10px 30px -18px rgb(0 0 0 / .35)}
+  .ap[data-dock="pinned"] .ap-bar[data-dock]{position:fixed;left:0;right:0;bottom:0;z-index:31;padding:.75rem max(.75rem,var(--safe-r)) calc(.75rem + var(--safe-b)) max(.75rem,var(--safe-l));background:color-mix(in srgb,var(--bg) 94%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--line);box-shadow:0 -10px 30px -18px rgb(0 0 0 / .35)}
   .ap[data-dock="pinned"] .ap-bar[data-dock] .btn{height:2.75rem;min-height:2.75rem;max-height:2.75rem}
   body.app:has(.ap[data-dock="pinned"] .ap-bar[data-dock]) > .site nav{display:none}
   /* With the bar pinned, a side panel holding nothing else needs no card. */
   .ap[data-dock="pinned"] .ap-side:not(:has(input,.notice,.ap-warn,.ap-status,.ap-state,.ap-risk,.reason,details)){padding:0;border:0;background:none;box-shadow:none}
-  body.app:has(.ap[data-dock="pinned"] .ap-bar[data-dock]){padding-bottom:calc(6.5rem + var(--heel-safe-bottom,env(safe-area-inset-bottom)))}
-  body:has(.ap[data-dock="pinned"] .ap-bar[data-dock]) #heel-ceremony-status:not(:empty){bottom:calc(7rem + var(--heel-safe-bottom,env(safe-area-inset-bottom)))}
+  body.app:has(.ap[data-dock="pinned"] .ap-bar[data-dock]){padding-bottom:calc(6.5rem + var(--safe-b))}
+  body:has(.ap[data-dock="pinned"] .ap-bar[data-dock]) #heel-ceremony-status:not(:empty){bottom:calc(7rem + var(--safe-b))}
 }
 
 /* Code chips: names, URLs and ids wrap anywhere, never cut; a copy button beside them. */
