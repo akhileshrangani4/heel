@@ -1448,6 +1448,16 @@ const ruleChange = (
   );
 
 export const APPROVAL_STORIES: readonly Story[] = [
+  // A call in the installed app: the pinned bar clears the home indicator.
+  {
+    ...approval(
+      "installed-phone",
+      "The installed app on a phone with a home indicator (insets 47 top, 34 bottom)",
+      { ok: true, request: PENDING_REQUEST },
+    ),
+    safeArea: IPHONE_PORTRAIT,
+  },
+
   // Connection requests
   connection("pending", "A: GitHub key, bar pinned on phones, actions grouped by outcome", {
     ...GITHUB_REQUEST,

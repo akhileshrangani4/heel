@@ -111,13 +111,13 @@ export const APPROVALS_CSS = `
 .ap-bar-note{margin:.45rem 0 0;font-size:.8rem;text-align:center}
 @media (max-width:55.99rem){
   /* Pinned: the bar takes the tab bar's place at the bottom of a phone screen while a decision is open. */
-  .ap[data-dock="pinned"] .ap-bar[data-dock]{position:fixed;left:0;right:0;bottom:0;z-index:31;padding:.75rem max(.75rem,var(--heel-safe-right,env(safe-area-inset-right))) calc(.75rem + var(--heel-safe-bottom,env(safe-area-inset-bottom))) max(.75rem,var(--heel-safe-left,env(safe-area-inset-left)));background:color-mix(in srgb,var(--bg) 94%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--line);box-shadow:0 -10px 30px -18px rgb(0 0 0 / .35)}
+  .ap[data-dock="pinned"] .ap-bar[data-dock]{position:fixed;left:0;right:0;bottom:0;z-index:31;padding:.75rem max(.75rem,var(--safe-r)) calc(.75rem + var(--safe-b)) max(.75rem,var(--safe-l));background:color-mix(in srgb,var(--bg) 94%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--line);box-shadow:0 -10px 30px -18px rgb(0 0 0 / .35)}
   .ap[data-dock="pinned"] .ap-bar[data-dock] .btn{height:2.75rem;min-height:2.75rem;max-height:2.75rem}
   body.app:has(.ap[data-dock="pinned"] .ap-bar[data-dock]) > .site nav{display:none}
   /* With the bar pinned, a side panel holding nothing else needs no card. */
   .ap[data-dock="pinned"] .ap-side:not(:has(input,.notice,.ap-warn,.ap-status,.ap-state,.ap-risk,.reason,details)){padding:0;border:0;background:none;box-shadow:none}
-  body.app:has(.ap[data-dock="pinned"] .ap-bar[data-dock]){padding-bottom:calc(6.5rem + var(--heel-safe-bottom,env(safe-area-inset-bottom)))}
-  body:has(.ap[data-dock="pinned"] .ap-bar[data-dock]) #heel-ceremony-status:not(:empty){bottom:calc(7rem + var(--heel-safe-bottom,env(safe-area-inset-bottom)))}
+  body.app:has(.ap[data-dock="pinned"] .ap-bar[data-dock]){padding-bottom:calc(6.5rem + var(--safe-b))}
+  body:has(.ap[data-dock="pinned"] .ap-bar[data-dock]) #heel-ceremony-status:not(:empty){bottom:calc(7rem + var(--safe-b))}
 }
 
 /* Code chips: names, URLs and ids wrap anywhere, never cut; a copy button beside them. */
