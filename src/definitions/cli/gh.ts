@@ -1,6 +1,6 @@
 /**
- * `gh` command lines → the fields rules see (spec: CLI runner, "Parsing known
- * CLIs"). The verb comes from cobra's own resolution against the generated
+ * `gh` command lines → the fields rules see. The verb comes from cobra's own
+ * resolution against the generated
  * table, so flags before the verb (`gh -R o/r pr merge`) and aliases (`gh pr
  * co`) resolve as gh would; config aliases and extensions aren't in the table
  * and come back unparseable.

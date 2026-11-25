@@ -50,7 +50,7 @@ const WORKDIR_HINT =
   "earlier one that's still waiting, so include anything from it you still need.";
 
 /**
- * The definition for a CLI account (D8b; spec: CLI runner): `heel run`
+ * The definition for a CLI account: `heel run`
  * sends a command line and the directory it runs in; heel normalizes it,
  * the rules decide, and an allowed command runs under bubblewrap with the
  * account's credential, which the agent never sees.
@@ -65,8 +65,8 @@ const WORKDIR_HINT =
  * - Network goes only through heel's egress proxy, to the account's hosts.
  * - `gh` never holds its token: `GH_TOKEN` is an inert placeholder, and
  *   heel's egress proxy puts the real token in the `Authorization` header of
- *   requests to GitHub's own hosts that the account's egress allows (spec:
- *   CLI runner, "Credential delivery"). Another CLI with credential hosts
+ *   requests to GitHub's own hosts that the account's egress allows. Another
+ *   CLI with credential hosts
  *   gets the same: a placeholder in its credential variable (and, for npm,
  *   in the user config heel writes), the credential added on the wire.
  * - A CLI whose credential would go into its environment, without the
@@ -74,7 +74,7 @@ const WORKDIR_HINT =
  *   (`credential_delivery`), with the fix in the answer.
  * - Only the `/run` surface reaches it; an MCP call naming the account is
  *   refused.
- * - `gh pr merge` (D11) is pinned: heel reads the pull request's head
+ * - `gh pr merge` is pinned: heel reads the pull request's head
  *   commit and adds `--match-head-commit <sha>`, so GitHub refuses the merge
  *   if the head moves after the decision. `checks: passing` is read on that
  *   same commit, and fails when `--admin` or `--auto` would skip checks. A
@@ -86,7 +86,6 @@ export const CliArgsSchema = z.strictObject({
   /** Absolute; the route resolves it before the pipeline sees it. */
   cwd: z.string().startsWith("/"),
 });
-export type CliArgs = z.output<typeof CliArgsSchema>;
 
 /**
  * The arguments as heel runs them: what the agent sent, plus `base` on a
@@ -117,7 +116,7 @@ export interface CliDeps {
   start: StartSandboxed;
   /** The agent's work roots, as stored. */
   workRoots(agentId: string): readonly string[];
-  /** For the GitHub reads `gh pr merge` needs (D11). */
+  /** For the GitHub reads `gh pr merge` needs. */
   fetch: FetchFn;
   /**
    * Whether a pause now covers this call's agent, owner, account or provider.
@@ -158,14 +157,14 @@ async function collect(stream: NodeJS.ReadableStream): Promise<string> {
 
 export function cliDefinition(account: AccountRecord, deps: CliDeps): Definition | null {
   const settings = cliSettings(account.settings);
-  // Without the sandbox there's no definition, so every command is denied (spec: Fail-closed behavior).
+  // Without the sandbox there's no definition, so every command is denied.
   if (settings === null || deps.sandbox === null) return null;
   // kubectl reads its credential from a file the command can be pointed at (see `cliAccountSettings`).
   if (settings.command === "kubectl") return null;
   const sandbox = deps.sandbox;
   const credential = async () => (await deps.vault.accessToken(account.id)).reveal();
 
-  /** `gh pr merge`, pinned to the pull request's current head (D11). */
+  /** `gh pr merge`, pinned to the pull request's current head. */
   async function pinMerge(
     normalized: ReturnType<typeof normalizeCliArgv>,
     argv: readonly string[],

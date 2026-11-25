@@ -109,7 +109,7 @@ describe("what the Modes page says", () => {
     expect(page).toContain("Watch: Calls your rules would deny");
     // record is stored, but shown as Watch: one name.
     expect(page).not.toMatch(/\b(shadow|record)\b/);
-    expect(page).toContain("Switch to Enforce");
+    expect(page).toContain("Switch Everyone (org default) to Enforce");
   });
 
   it("doesn't claim a switch the stored mode doesn't show", async () => {
@@ -161,8 +161,8 @@ describe("what the Modes page says", () => {
       ),
     );
     expect(page).toContain("Watch (from --watch)");
-    expect(page).toContain("Switch to Enforce");
-    expect(page).not.toContain("Switch to Watch");
+    expect(page).toContain("Switch Everyone (org default) to Enforce");
+    expect(page).not.toContain("Switch Everyone (org default) to Watch");
     expect(page).toContain("heel was started with --watch");
   });
 });

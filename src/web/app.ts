@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { type HumanPlaneDeps, requireSameOrigin } from "./http.ts";
+import { errorResponse, type HumanPlaneDeps, requireSameOrigin } from "./http.ts";
 import { activityRoutes } from "./routes/activity.ts";
 import { approvalRoutes } from "./routes/approvals.ts";
 import { connectionRoutes } from "./routes/connections.ts";
@@ -25,7 +25,7 @@ import { suggestionRoutes } from "./routes/suggestions.ts";
 export type { HumanPlaneDeps } from "./http.ts";
 
 /**
- * The human plane (spec: Listeners): where people sign in with a passkey,
+ * The human plane: where people sign in with a passkey,
  * read and decide approval requests, pause and resume, and revoke standing
  * approvals. Agent tokens are never accepted here (I-58): every route uses
  * a passkey session, a one-time enrollment link, or nothing at all.
@@ -35,7 +35,7 @@ export type { HumanPlaneDeps } from "./http.ts";
  */
 export function createHumanApp(deps: HumanPlaneDeps): Hono {
   const app = new Hono();
-  // On every response (red-team round 3): no page can be framed by another
+  // On every response: no page can be framed by another
   // site (clickjacking a passkey button) or keep a handle on a popup of it,
   // no <base> or plugin injection, no
   // content sniffing, and approval ids in URLs don't leak through Referer.
@@ -78,10 +78,22 @@ export function createHumanApp(deps: HumanPlaneDeps): Hono {
   app.route("/", manageAccountRoutes(deps));
   app.route("/", rulesEditorRoutes(deps));
   app.route("/", activityRoutes(deps));
-  app.notFound((c) => c.text("Not found.", 404));
+  app.notFound((c) =>
+    errorResponse(
+      c,
+      404,
+      "Page not found",
+      "Not found. The address may be mistyped or out of date.",
+    ),
+  );
   app.onError((error, c) => {
     deps.log.error({ err: error, path: c.req.path }, "human plane request failed");
-    return c.text("Something went wrong in heel. Nothing was decided.", 500);
+    return errorResponse(
+      c,
+      500,
+      "Something went wrong",
+      "Something went wrong in heel. Nothing was decided.",
+    );
   });
   return app;
 }

@@ -23,6 +23,7 @@ import {
   type StartedSession,
   sessionCookieName,
 } from "./sessions.ts";
+import { errorPage } from "./ui/error-page.ts";
 import { toHtmlString } from "./ui/html.ts";
 import { type PageProps, page, type Viewer } from "./ui/layout.ts";
 
@@ -56,29 +57,29 @@ export interface HumanPlaneDeps {
   rules: RulesSource;
   /** The configured approval adapters' names, so the page can say hints are on the way. */
   hintAdapters?: readonly string[];
-  /** When heel suggests rules from what people decide (2.10); absent or null turns suggestions off. */
+  /** When heel suggests rules from what people decide; absent or null turns suggestions off. */
   learning?: LearningThreshold | null;
   /** The VAPID public key devices subscribe to approval notifications with. */
   vapidPublicKey: string;
-  /** The agent plane's public URL when OAuth for connectors is on (A2); null when off. */
+  /** The agent plane's public URL when OAuth for connectors is on; null when off. */
   agentPublicUrl: URL | null;
-  /** After an account's key changes or it goes: a running local MCP server for it restarts (2.9). */
+  /** After an account's key changes or it goes: a running local MCP server for it restarts. */
   onAccountConfigured?: (accountId: string) => void;
-  /** The MCP address a new agent is given, as `heel agent add` prints it (2.9). */
+  /** The MCP address a new agent is given, as `heel agent add` prints it. */
   agentMcpUrl?: string;
   /**
-   * Sign-in to remote MCP servers that want OAuth (D5c). Null when the vault
+   * Sign-in to remote MCP servers that want OAuth. Null when the vault
    * is closed, since the tokens would have nowhere to go.
    */
   upstreamOAuth: { signIns: UpstreamSignIns; vault: Vault; fetch?: FetchLike } | null;
   /**
-   * Checks a key the owner pasted with its service before heel stores it
-   * (roadmap T12). heel's own server passes one; when absent, keys are stored
-   * unchecked, so tests never reach a real API.
+   * Checks a key the owner pasted with its service before heel stores it.
+   * heel's own server passes one; when absent, keys are stored unchecked, so
+   * tests never reach a real API.
    */
   checkKey?: (provider: string, key: string) => Promise<KeyCheck>;
   /**
-   * Background code-mode scripts (C6): told when an approval's decision has
+   * Background code-mode scripts: told when an approval's decision has
    * committed, so a script parked on it resumes or ends; and the running and
    * parked scripts the owner may see and stop. Absent without code mode.
    */
@@ -93,35 +94,35 @@ export interface HumanPlaneDeps {
   };
   /**
    * The operator's own OAuth clients, for signing in built-in mail accounts:
-   * Google for Gmail (D9a-1), Microsoft for Outlook (D9b). Each is null when
+   * Google for Gmail, Microsoft for Outlook. Each is null when
    * heel.yaml doesn't configure it. Sign-ins share `upstreamOAuth`'s state
    * store, vault and fetch.
    */
   providerClients: { google: GoogleClient | null; microsoft: MicrosoftClient | null };
   /**
-   * heel's own Google client (roadmap 1.14), used when `providerClients.google`
+   * heel's own Google client, used when `providerClients.google`
    * is null: Gmail and Calendar then sign in through a loopback redirect on
    * heel's host, with a paste-back for browsers elsewhere. Null in a build
    * without one; absent in tests that don't need it.
    */
   builtInGoogle?: BuiltInGoogleClient | null;
   /**
-   * Team sign-in (D13b): the IdP's client, discovered on first use, and the
+   * Team sign-in: the IdP's client, discovered on first use, and the
    * name the sign-in page shows. Null on single-user installs.
    */
   oidc?: { client: () => Promise<OidcClient>; name: string } | null;
   /**
-   * The owner rules files, for adding the rules an agent proposed (roadmap
-   * 2.1), and a reload so they take effect at once. Absent where heel has no
-   * rules files of its own to write, which turns adding off.
+   * The owner rules files, for adding the rules an agent proposed, and a
+   * reload so they take effect at once. Absent where heel has no rules files
+   * of its own to write, which turns adding off.
    */
   /** `reload` says whether every rules file loaded, so what was just saved is in force. */
   ruleFiles?: { paths: RulesPaths; reload: () => boolean | void };
-  /** `heel serve --watch`: rows with no stored mode behave as shadow (A3). */
+  /** `heel serve --watch`: rows with no stored mode behave as shadow. */
   watchFallback: boolean;
   /** Resolves a host name to its addresses; tests pass a fake. Defaults to DNS. */
   resolveHost?: (host: string) => Promise<readonly string[]>;
-  /** Messages hidden from agents since heel started, by reason (A5, I-44); absent in tests. */
+  /** Messages hidden from agents since heel started, by reason (I-44); absent in tests. */
   hiddenCounts?: () => Readonly<Record<string, number>>;
   now: () => Date;
 }
@@ -149,7 +150,28 @@ export function renderPage(
   return c.html(toHtmlString(page(waiting === undefined ? props : { ...props, waiting })), status);
 }
 
-// ── sessions ────────────────────────────────────────────────────────────────
+/** True for a browser page load or form post, which can show a page; false for a script's fetch. */
+export function wantsPage(c: Context): boolean {
+  return (c.req.header("accept") ?? "").includes("text/html");
+}
+
+/**
+ * A refusal or failure a person sees: a page with a way back to Home for a
+ * browser (an installed app has no back button), plain text for anything
+ * else. Status and wording are the caller's; nothing internal goes in them.
+ */
+export function errorResponse(
+  c: Context,
+  status: 403 | 404 | 500,
+  title: string,
+  message: string,
+): Response {
+  if (!wantsPage(c)) return c.text(message, status);
+  return c.html(
+    toHtmlString(page({ title, viewer: null, body: errorPage({ title, message }) })),
+    status,
+  );
+}
 
 /**
  * Lets a request through only with a live session. A page request without
@@ -161,12 +183,17 @@ export function requireSession(deps: HumanPlaneDeps): MiddlewareHandler<SignedIn
     const cookie = getCookie(c, sessionCookieName(deps.publicUrl));
     const session = cookie === undefined ? null : readSession(deps.db, cookie, deps.now());
     if (session === null || session.orgId !== deps.orgId) {
+      // A cookie that no longer opens a session: say so on the sign-in page.
+      const expired = cookie === undefined ? "" : "&expired";
       if (c.req.method === "GET") {
         // Path and query: an OAuth authorize request needs its parameters back after sign-in.
         const url = new URL(c.req.url);
         const next = encodeURIComponent(url.pathname + url.search);
-        return c.redirect(`/sign-in?next=${next}`, 303);
+        return c.redirect(`/sign-in?next=${next}${expired}`, 303);
       }
+      // A plain form post (sign out, pause, revoke) is a page load: go sign in
+      // instead of showing JSON. Nothing was done; the post isn't replayed.
+      if (wantsPage(c)) return c.redirect(`/sign-in?next=%2F${expired}`, 303);
       return c.json({ error: "signed_out" }, 401);
     }
     c.set("session", session);
@@ -207,8 +234,6 @@ export function clearSessionCookie(c: Context, deps: HumanPlaneDeps): void {
     secure: deps.publicUrl.protocol === "https:",
   });
 }
-
-// ── checks on every state-changing request ──────────────────────────────────
 
 /**
  * Refuses a POST that didn't come from heel's own pages. Browsers send
@@ -257,7 +282,12 @@ export function requireCsrfField(): MiddlewareHandler<SignedInEnv> {
     const form = await c.req.parseBody();
     const submitted = typeof form["csrf"] === "string" ? form["csrf"] : undefined;
     if (!csrfMatches(c.get("session").csrfToken, submitted)) {
-      return c.text("Refused: this form is stale. Reload the page.", 403);
+      return errorResponse(
+        c,
+        403,
+        "This form is out of date",
+        "Refused: this form is stale. Go back, reload the page and try again.",
+      );
     }
     return next();
   };

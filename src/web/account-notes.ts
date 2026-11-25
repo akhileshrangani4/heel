@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import type { HumanPlaneDeps } from "./http.ts";
 
 /**
- * What an account change from the web app did (2.9), held server-side for
+ * What an account change from the web app did, held server-side for
  * the page it lands on: a link carries only an opaque id, so a crafted one
  * can't make the Connections page claim a key was replaced or an account
  * removed. A note is read once, by the person it's for, within ten minutes.

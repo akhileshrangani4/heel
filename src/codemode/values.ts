@@ -1,5 +1,5 @@
 /**
- * Python values as they leave Monty, turned into plain JSON values (D6b).
+ * Python values as they leave Monty, turned into plain JSON values.
  * Monty hands dicts over as `Map`s, which `JSON.stringify` would silently
  * turn into `{}`, so what a rule checked would differ from what the script
  * wrote. Pure.

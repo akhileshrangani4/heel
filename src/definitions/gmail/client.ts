@@ -2,8 +2,8 @@ import { z } from "zod";
 import { type FetchFn, GMAIL_API_BASE } from "../google/oauth.ts";
 
 /**
- * The few Gmail API reads heel needs (Gmail API v1 reference, rev 20261106;
- * research §2.1). Every method takes the call's signal. GETs are retried
+ * The few Gmail API reads heel needs (Gmail API v1 reference, rev 20261106).
+ * Every method takes the call's signal. GETs are retried
  * once on 429 and 5xx; heel never retries a POST, since a send that timed
  * out may have gone.
  *

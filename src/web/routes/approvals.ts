@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { parkedFor, stopParked } from "../../codemode/parking.ts";
+import { stopParked } from "../../codemode/parking.ts";
 import {
   type ApprovalRecord,
   approverIds,
@@ -31,13 +31,19 @@ import { recoveryNotices } from "../ui/devices.ts";
 import { html } from "../ui/html.ts";
 import { type PendingRow, pendingList } from "../ui/pending-list.ts";
 import { suggestionCards } from "../ui/suggestions.ts";
-import { emailPreviewFrom, headline, httpPreviewFrom, mergePreviewFrom } from "../ui/summary.ts";
+import {
+  emailPreviewFrom,
+  headline,
+  httpPreviewFrom,
+  mailPreviewFrom,
+  mergePreviewFrom,
+} from "../ui/summary.ts";
 import { proposalCardsFor } from "./proposals.ts";
 import { requestCardsFor } from "./requests.ts";
 import { suggestionsOf } from "./suggestions.ts";
 
 /**
- * The approval page (spec: The approval page). A person sees every request
+ * The approval page. A person sees every request
  * they may decide, and decides one with a fresh passkey assertion:
  *
  * - `GET /approvals` lists requests waiting on, or recently decided by, them.
@@ -96,7 +102,7 @@ function requestView(
     client: row.client,
     args: row.call.args,
     // Built from the stored call, never from what the agent said about it.
-    email: emailPreviewFrom(row.call.action ?? null, row.call.args),
+    email: mailPreviewFrom(row.call.action ?? null, row.call.args),
     merge: mergePreviewFrom(row.call.action ?? null, row.call.args),
     http: httpPreviewFrom(row.call),
     items: row.call.items,
@@ -245,16 +251,6 @@ export function approvalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
         pause,
         onDecide: DECIDE_HANDLER,
         folds: foldsFor(deps.db, session.userId, foldKind(view)),
-        parked:
-          parkedFor(deps.db, deps.orgId, record.row.id, now) === null
-            ? null
-            : {
-                stop: {
-                  action: `/approvals/${encodeURIComponent(record.row.id)}/stop-script`,
-                  csrfToken: session.csrfToken,
-                },
-              },
-        stopped: "script-stopped" in c.req.query(),
         background: deps.background?.waitsOn(record.row.id) === true,
       })}`,
       script: clientScript(session.csrfToken),
@@ -284,7 +280,7 @@ export function approvalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       return c.text(REFUSED.not_found, 404);
     }
     const stopped = stopParked(deps.db, deps.orgId, record.row.id);
-    // A background script waiting on it ends too, so its agent's one slot frees up (C6).
+    // A background script waiting on it ends too, so its agent's one slot frees up.
     deps.background?.stopWaitingOn(record.row.id);
     if (stopped > 0) {
       deps.log.info({ approval: record.row.id, by: session.userId }, "parked script stopped");
@@ -345,7 +341,7 @@ export function approvalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       now,
     });
     if (!result.ok) return c.json({ ok: false, message: REFUSED[result.reason] }, 409);
-    // After the decision has committed: a background script parked on it resumes or ends (C6).
+    // After the decision has committed: a background script parked on it resumes or ends.
     const resumesScript = deps.background?.waitsOn(decision.approvalId) === true;
     deps.background?.approvalDecided(decision.approvalId);
     deps.log.info(
@@ -361,10 +357,10 @@ export function approvalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       message:
         result.status === "approved"
           ? resumesScript
-            ? "Approved. The background script carries on now, from this call."
+            ? "Approved. The task goes on from this step."
             : "Approved. It runs now if the agent is still waiting, or when it sends the call again."
           : resumesScript
-            ? "Denied. The background script waiting on it has ended."
+            ? "Denied. The task has ended."
             : "Denied.",
       next: `/approvals/${encodeURIComponent(decision.approvalId)}`,
     });

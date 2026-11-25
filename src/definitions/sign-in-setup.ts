@@ -7,7 +7,6 @@
  * what to set and where the steps are.
  */
 
-/** heel's published docs. */
 export const DOCS_URL = "https://useheel.dev/docs";
 
 export interface SignInSetup {
@@ -15,7 +14,6 @@ export interface SignInSetup {
   label: string;
   /** The heel.yaml key that configures it. */
   configKey: string;
-  /** Where the steps are. */
   docsUrl: string;
 }
 

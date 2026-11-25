@@ -4,7 +4,7 @@ import { YamlValidationError } from "../config/yaml.ts";
 import type { CompiledRule } from "../core/rules/compile.ts";
 
 /**
- * Intent grants (A4b; Nov 17 decision 3): the owner states a task, and a
+ * Intent grants: the owner states a task, and a
  * person signs, once, a narrow set of allows for one agent that the rules
  * engine then enforces. A model may draft the `match` from the task's text
  * (see `GrantProposer`), but it never decides a live call: the grant is

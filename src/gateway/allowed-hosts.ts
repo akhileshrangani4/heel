@@ -17,7 +17,6 @@ import type { MiddlewareHandler } from "hono";
 
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
-/** Pure: whether heel serves this hostname. */
 export function isServedHost(hostname: string, extra: ReadonlySet<string>): boolean {
   return LOOPBACK.has(hostname) || extra.has(hostname);
 }

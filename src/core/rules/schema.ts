@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * The rules file schema (spec: Rules). The README's examples are the grammar;
+ * The rules file schema. The README's examples are the grammar;
  * this adds what they leave out. One schema serves `org-rules.yaml` and every
  * `rules/<user>.yaml`: `{ rules: Rule[], hide?: HideEntry[] }`.
  *
@@ -55,7 +55,7 @@ export const KindCondition = condition(
 ).meta({ id: "KindCondition" });
 
 /**
- * Provider fields (D12b), each typed, so a rule value of the wrong type is a
+ * Provider fields, each typed, so a rule value of the wrong type is a
  * load error rather than a condition that silently never matches.
  */
 const textOf = (value: z.ZodType<string, string>, what: string, id: string) =>
@@ -234,7 +234,7 @@ const fixedMatchKeys = {
   subcommand: TextCondition.optional(),
   argv: TextListCondition.optional(),
   persistence: BooleanCondition.optional(),
-  // Provider fields (D12b): set by built-in definitions only.
+  // Provider fields: set by built-in definitions only.
   channel: ChannelCondition.optional(),
   external: BooleanCondition.optional(),
   team: TeamCondition.optional(),
@@ -293,7 +293,7 @@ export const HideEmail = z
     description: "Keys in one entry are ANDed; a message matching any entry is hidden.",
   });
 
-/** v1 hides email only (spec: Hiding, Q-H4). */
+/** v1 hides email only. */
 export const HideEntry = z.strictObject({ email: HideEmail }).meta({ id: "HideEntry" });
 
 export const RulesFile = z

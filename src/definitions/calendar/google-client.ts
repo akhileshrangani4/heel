@@ -5,7 +5,7 @@ import { CALENDAR_API_BASE, type FetchFn } from "../google/oauth.ts";
  * The Google Calendar API v3 calls heel needs. GETs retry once on 429 and
  * 5xx; writes are sent once and never retried.
  *
- * P-5, the reference each call was written against
+ * The reference each call was written against
  * (https://developers.google.com/workspace/calendar/api/v3/reference):
  * - events.list: `.../events/list`. singleEvents with orderBy=startTime;
  *   pages can be short while nextPageToken is set.

@@ -16,7 +16,7 @@ import { TAILWIND_CSS } from "./styles/tailwind.ts";
 
 /**
  * Light: a warm off-white page with white cards, near-black ink, and status
- * colours on soft tints (roadmap 1.11). `bg` is a card's background; `page`
+ * colours on soft tints. `bg` is a card's background; `page`
  * is behind the cards. `line` is a quiet divider; `border` outlines inputs
  * and must stay visible (3:1).
  */
@@ -109,10 +109,11 @@ const RULES = `
 .ui-select-item[aria-selected="true"] .ui-select-check{visibility:visible}
 .ui-select-item[aria-selected="true"]{font-weight:500}
 
-.ui-dialog{padding:0;border:1px solid var(--line);border-radius:14px;background:var(--bg);color:var(--text);width:min(30rem,calc(100vw - 2rem));max-height:calc(100vh - 2rem);box-shadow:0 24px 60px -20px rgb(0 0 0 / .45)}
+.ui-dialog{padding:0;border:1px solid var(--line);border-radius:14px;background:var(--bg);color:var(--text);width:min(30rem,calc(100vw - 2rem));max-height:calc(100vh - 2rem);max-height:calc(100dvh - 2rem);box-shadow:0 24px 60px -20px rgb(0 0 0 / .45)}
 .ui-dialog-wide{width:min(46rem,calc(100vw - 2rem))}
 .ui-dialog::backdrop{background:rgb(0 0 0 / .45);backdrop-filter:blur(2px)}
-.ui-dialog-panel{padding:1.25rem 1.25rem 1.4rem;overflow:auto;max-height:calc(100vh - 2rem)}
+.ui-dialog-panel{padding:1.25rem 1.25rem 1.4rem;overflow:auto;max-height:calc(100vh - 2rem - 2px);max-height:calc(100dvh - 2rem - 2px)}
+html:has(dialog.ui-dialog[open]){overflow:hidden}
 .ui-dialog-head{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:.25rem}
 .ui-dialog-title{font-size:1.05rem;margin:0}
 .ui-dialog-desc{margin:0 0 1rem;font-size:.88rem}
@@ -174,7 +175,8 @@ p{margin:.5rem 0}
 .badge[data-tone="muted"]{color:var(--muted)}
 dl.facts{display:grid;grid-template-columns:minmax(8rem,max-content) 1fr;gap:.35rem 1.5rem;margin:0}
 dl.facts dt{color:var(--muted);font-weight:600}
-dl.facts dd{margin:0;overflow-wrap:anywhere}
+dl.facts dd{margin:0;overflow-wrap:anywhere;min-width:0}
+@media (max-width:36rem){dl.facts{grid-template-columns:minmax(0,1fr);gap:.1rem}dl.facts dd + dt{margin-top:.5rem}}
 figure.reason{margin:1rem 0;padding:.25rem 0 .25rem 1rem;border-left:3px solid var(--border)}
 figure.reason figcaption{color:var(--muted);font-size:.9rem}
 figure.reason blockquote{margin:.25rem 0 0;overflow-wrap:anywhere}
@@ -183,7 +185,7 @@ ul.hints li{display:flex;align-items:baseline;gap:.6rem}
 pre{overflow-x:auto;max-width:100%}
 code,pre,.mono{font-family:ui-monospace,"Geist Mono",SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem}
 pre.args,pre.body{margin:0;padding:1rem;background:var(--surface);border:1px solid var(--line);border-radius:10px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}
-.table-scroll{overflow-x:auto;max-width:100%;border:1px solid var(--line);border-radius:14px;margin:.75rem 0;background:linear-gradient(to right,var(--bg) 30%,transparent) left/2rem 100% no-repeat local,linear-gradient(to left,var(--bg) 30%,transparent) right/2rem 100% no-repeat local,radial-gradient(farthest-side at 0 50%,rgb(0 0 0 / .18),transparent) left/.75rem 100% no-repeat scroll,radial-gradient(farthest-side at 100% 50%,rgb(0 0 0 / .18),transparent) right/.75rem 100% no-repeat scroll}
+.table-scroll{position:relative;overflow-x:auto;max-width:100%;border:1px solid var(--line);border-radius:14px;margin:.75rem 0;background:linear-gradient(to right,var(--bg) 30%,transparent) left/2rem 100% no-repeat local,linear-gradient(to left,var(--bg) 30%,transparent) right/2rem 100% no-repeat local,radial-gradient(farthest-side at 0 50%,rgb(0 0 0 / .18),transparent) left/.75rem 100% no-repeat scroll,radial-gradient(farthest-side at 100% 50%,rgb(0 0 0 / .18),transparent) right/.75rem 100% no-repeat scroll}
 .btn{font-family:inherit;line-height:1.25;border:0 solid var(--line);background-color:transparent;color:inherit;cursor:pointer}
 a.btn{text-decoration:none}
 table.data{border-collapse:collapse;margin:0;background:var(--bg)}
@@ -192,7 +194,7 @@ select,textarea,input{font:inherit;color:var(--text)}
 form.filters{display:flex;flex-wrap:wrap;gap:.5rem .75rem;align-items:center;margin:1rem 0;padding:.75rem;background:var(--bg);border:1px solid var(--line);border-radius:16px}
 form.filters label{color:var(--muted);font-size:.88rem}
 .actions{display:flex;flex-wrap:wrap;gap:.75rem;align-items:center;margin:1rem 0}
-fieldset{border:1px solid var(--line);border-radius:10px;padding:.75rem 1rem;margin:1rem 0}
+fieldset{border:1px solid var(--line);border-radius:10px;padding:.75rem 1rem;margin:1rem 0;min-width:0}
 legend{font-weight:600;padding:0 .25rem}
 label{cursor:pointer}
 button:not(:disabled),[role="button"],summary,select,input[type="radio"],input[type="checkbox"],input[type="submit"]{cursor:pointer}
@@ -208,52 +210,14 @@ button:not(:disabled),[role="button"],summary,select,input[type="radio"],input[t
 .diff li[data-op="add"]{background:var(--add-bg)}
 .diff li[data-op="remove"]{background:var(--remove-bg)}
 .diff .sign{display:inline-block;width:1.25rem;font-weight:700}
-.ap{max-width:44rem;margin:0 auto}
-.ap .card{background:var(--bg);border-radius:16px;margin:.75rem 0}
 .ap-head{padding:1.25rem 1.4rem;box-shadow:0 24px 60px -32px rgb(0 0 0 / .35)}
 .ap-meta{display:flex;flex-wrap:wrap;align-items:center;gap:.25rem .75rem;font-size:.9rem;color:var(--muted)}
 .ap-meta .badge{margin-left:auto}
 .ap-agent{font-weight:600;color:var(--text)}
 .ap-title{font-size:1.45rem;line-height:1.35;margin:.7rem 0 0;letter-spacing:-.03em;font-weight:600;overflow-wrap:anywhere}
 .ap-title mark{background:var(--surface);color:inherit;border-radius:8px;padding:0 .35rem;box-shadow:inset 0 0 0 1px var(--line)}
-.ap .reason{margin:.9rem 0 0}
-.ap-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:.5rem;list-style:none;margin:1rem 0 0;padding:0}
-.ap-fact{background:var(--surface);border-radius:10px;padding:.55rem .75rem;display:flex;flex-direction:column;min-width:0}
-.ap-fact span{color:var(--muted);font:.72rem/1.6 ui-monospace,"Geist Mono",SFMono-Regular,Menlo,Consolas,monospace}
-.ap-fact strong{font-weight:600;font-size:.95rem;overflow-wrap:anywhere}
-.ap-card-head{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;margin-bottom:.25rem}
-.ap-card-head h2{font-size:1rem;margin:0}
-.ap-card-head .muted{font:.75rem ui-monospace,"Geist Mono",SFMono-Regular,Menlo,Consolas,monospace}
-.ap-row{display:grid;grid-template-columns:minmax(5.5rem,max-content) minmax(0,1fr);gap:.75rem;padding:.6rem 0;border-top:1px solid var(--line);align-items:start}
-.ap-card-head + .ap-row{border-top:0}
-.ap-key{color:var(--muted);font-size:.9rem;overflow-wrap:anywhere}
-.ap-row pre.body{max-height:16rem;overflow:auto}
-.ap-domains,.ap-addresses{list-style:none;margin:0;padding:0;display:grid;gap:.35rem}
-.ap-addresses{margin-top:.4rem;font-size:.9rem}
-.ap-chip{display:inline-block;background:var(--surface);border-radius:6px;padding:0 .45rem;font-family:ui-monospace,"Geist Mono",SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem;overflow-wrap:anywhere}
-.ap-chip.is-outside{box-shadow:inset 0 0 0 1px var(--warn)}
-.ap-outside{color:var(--warn);font-size:.8rem;font-weight:600}
-.ap-fold summary,.ap-details summary,.ap-more summary{cursor:pointer}
-.ap-details details + details{border-top:1px solid var(--line);margin-top:.75rem;padding-top:.75rem}
-.ap-details summary{font-weight:600}
-.ap-details dl.facts{margin-top:.75rem}
-.ap-details pre.args{margin-top:.5rem}
-.ap-decide{margin:.75rem 0;padding:.75rem;background:var(--bg);border:1px solid var(--line);border-radius:16px;box-shadow:0 1px 2px rgb(0 0 0 / .04)}
-.ap-bar{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem .75rem}
-.ap-bar [data-heel-ceremony="deny"]{order:-1;background:transparent;color:var(--danger)}
-.ap-bar [data-heel-ceremony="approve-once"]{order:2}
-.ap-note{flex:1;margin:0;color:var(--muted);font-size:.85rem;text-align:center;min-width:10rem}
-.ap-more{margin-top:.5rem}
-.ap-more summary{color:var(--muted);font-size:.9rem}
-.ap-more fieldset{margin:.75rem 0 0}
 @media (max-width:36rem){
-  main:has(.ap){padding:1rem .75rem}
   .ap-title{font-size:1.15rem}
-  .ap-row{grid-template-columns:1fr;gap:.25rem}
-  .ap-bar .btn{flex:1}
-  .ap-note{order:3;flex-basis:100%;font-size:.8rem}
-  .ap-decide{padding:.5rem .6rem;margin-bottom:.5rem}
-  .ap-more{margin-top:.25rem}
   main{padding:1rem}
   table.data{min-width:34rem}
 }
@@ -331,7 +295,7 @@ main:has(.auth){max-width:none;padding:0}
 .signin{width:100%;max-width:25rem;margin:0;padding:1.75rem;text-align:left;background:var(--bg);border:1px solid var(--line);border-radius:16px;box-shadow:0 24px 60px -28px rgb(0 0 0 / .45)}
 .signin h1{font-size:1.35rem}
 .signin .actions{margin:1.25rem 0}
-.signin .actions .btn{width:100%;justify-content:center;text-align:center;min-height:2.85rem;border-radius:999px}
+.signin .actions .btn{width:100%;justify-content:center;text-align:center;min-height:2.85rem}
 .signin > p.muted{font-size:.88rem}
 .signin .actions{margin:.75rem 0 1rem}
 .signin-status{display:flex;gap:.5rem;align-items:flex-start;margin:.9rem 0 0;padding:.55rem .7rem;border-radius:8px;background:var(--surface);color:var(--muted);font-size:.86rem}
@@ -388,10 +352,10 @@ body.focus main{max-width:30rem;padding:3rem 1.25rem}
 @media (max-width:36rem){.auth{padding-top:4.5rem}.auth-dog{font-size:9px}.signin{padding:1.4rem 1.25rem;border-radius:14px}}
 .nav-icon{display:inline-flex;flex:none}
 @media (max-width:55.99rem){
-  body.app{padding-bottom:calc(4.4rem + env(safe-area-inset-bottom))}
-  body.app > .site{padding:.8rem 1rem .25rem;flex-wrap:nowrap}
+  body.app{padding-bottom:calc(4.8rem + var(--safe-b));padding-left:var(--safe-l);padding-right:var(--safe-r)}
+  body.app > .site{padding:calc(.8rem + var(--safe-t)) 1rem .25rem;flex-wrap:nowrap}
   body.app > .site .account{display:none}
-  body.app > .site nav{position:fixed;left:0;right:0;bottom:0;z-index:30;max-width:none;padding:.3rem .4rem calc(.3rem + env(safe-area-inset-bottom));background:color-mix(in srgb,var(--bg) 90%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--line)}
+  body.app > .site nav{position:fixed;left:0;right:0;bottom:0;z-index:30;max-width:none;padding:.35rem max(.75rem,var(--safe-r)) calc(.4rem + var(--safe-b)) max(.75rem,var(--safe-l));background:color-mix(in srgb,var(--bg) 90%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--line)}
   body.app > .site nav ul{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0;margin:0}
   body.app > .site nav li.nav-wide{display:none}
   body.app > .site nav ul > li > a,.nav-more > details > summary{position:relative;display:flex;flex-direction:column;align-items:center;gap:.2rem;padding:.4rem .2rem .3rem;border-radius:10px;font-size:.68rem;line-height:1.1;color:var(--muted);background:none;box-shadow:none;list-style:none;cursor:pointer;white-space:nowrap}
@@ -407,7 +371,6 @@ body.focus main{max-width:30rem;padding:3rem 1.25rem}
   .nav-more-panel form{margin:0;border-top:1px solid var(--line);margin-top:.25rem;padding-top:.25rem}
   .nav-more-panel .nav-icon svg{width:1.1rem;height:1.1rem}
   .subnav ul{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
-  #heel-ceremony-status:not(:empty){bottom:calc(4.8rem + env(safe-area-inset-bottom))}
 }
 .nav-count{display:inline-block;min-width:1.35rem;margin-left:.3rem;padding:0 .4rem;border-radius:999px;background:var(--accent);color:var(--accent-text);font-size:.72rem;font-weight:700;line-height:1.35rem;text-align:center;vertical-align:1px}
 @media (min-width:56rem){
@@ -425,8 +388,26 @@ body.focus main{max-width:30rem;padding:3rem 1.25rem}
   body.app > main{grid-column:2;grid-row:2;width:100%;padding:2rem 2.25rem}
 }
 [role="status"]:empty{display:none}
-#heel-ceremony-status:not(:empty){position:fixed;left:1rem;right:1rem;bottom:1rem;max-width:56rem;margin:0 auto;z-index:20;padding:.75rem 1rem;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 30px -12px rgb(0 0 0 / .35);overflow-wrap:anywhere}
+#heel-ceremony-status:not(:empty){position:fixed;left:1rem;right:1rem;bottom:calc(1rem + var(--safe-b));max-width:56rem;margin:0 auto;z-index:20;padding:.75rem 1rem;background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:12px;box-shadow:0 10px 30px -12px rgb(0 0 0 / .35);overflow-wrap:anywhere}
 body:has(#heel-ceremony-status:not(:empty)) main{padding-bottom:10rem}
+@media (max-width:55.99rem){body.app #heel-ceremony-status:not(:empty){bottom:calc(4.8rem + var(--safe-b));left:calc(1rem + var(--safe-l));right:calc(1rem + var(--safe-r))}}
+`;
+
+/**
+ * Passkey buttons (`data-heel-ceremony`, CEREMONY_SCRIPT) keep their size in
+ * every state. Waiting and success hide the label in place and draw an icon
+ * over it, in the same box, so a button never widens, wraps or pushes its
+ * bar off screen. Unlayered, so it beats shadcn's dimmed `disabled` look
+ * while a passkey prompt is open.
+ */
+const CEREMONY_STATE_CSS = `
+button[data-heel-ceremony]{position:relative}
+.heel-btn-icon{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;color:var(--heel-btn-fg,currentColor)}
+.heel-btn-icon:empty{display:none}
+.heel-btn-icon svg{width:1.1rem;height:1.1rem}
+button[data-heel-state="waiting"],button[data-heel-state="success"]{color:transparent;transition:none;cursor:progress}
+button[data-heel-state="waiting"] > :not(.heel-btn-icon),button[data-heel-state="success"] > :not(.heel-btn-icon){visibility:hidden}
+button[data-heel-state="waiting"]:disabled,button[data-heel-state="success"]:disabled{opacity:1}
 `;
 
 /** The full stylesheet for every human-plane page. */
@@ -438,10 +419,14 @@ body:has(#heel-ceremony-status:not(:empty)) main{padding-bottom:10rem}
 export const STYLESHEET = [
   "@layer properties, theme, heel, components, utilities;",
   `:root{${variables(LIGHT)}}`,
+  // The device's safe-area insets (a home indicator, rounded corners, a notch in
+  // landscape). Non-zero only with viewport-fit=cover, mostly in the installed app.
+  ":root{--safe-t:env(safe-area-inset-top,0px);--safe-r:env(safe-area-inset-right,0px);--safe-b:env(safe-area-inset-bottom,0px);--safe-l:env(safe-area-inset-left,0px)}",
   `@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){${variables(DARK)}}}`,
   `:root[data-theme="dark"]{${variables(DARK)}}`,
   `@layer heel{${[RULES, HOME_CSS, APPROVALS_CSS, CONNECTIONS_CSS, ACTIVITY_CSS, RULES_CSS, AGENTS_CSS, SETTINGS_CSS].join("\n")}}`,
   TAILWIND_CSS,
+  CEREMONY_STATE_CSS,
 ].join("\n");
 
 /** Exposed for the contrast test, which checks each pair the pages use. */

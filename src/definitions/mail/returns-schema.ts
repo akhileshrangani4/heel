@@ -1,7 +1,7 @@
 /**
  * A built-in tool's `returns` (keys only: `{"issues": [{"number", ...}, ...],
- * "next"}`) as the JSON Schema MCP lists as its `outputSchema` (code mode
- * round 2, C5), so a client's own code mode can rely on a result's shape.
+ * "next"}`) as the JSON Schema MCP lists as its `outputSchema`, so a
+ * client's own code mode can rely on a result's shape.
  *
  * The schema is deliberately loose: an object, its keys described, none
  * required, others allowed. A result always fits it, so a client that

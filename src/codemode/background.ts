@@ -18,14 +18,14 @@ import type { StubModule } from "./stubs.ts";
 import type { CodeWorker } from "./worker.ts";
 
 /**
- * Background code-mode scripts (code mode round 2, C6; Avi's design, Nov 22):
+ * Background code-mode scripts:
  *
  * - `run_code({ background: true })` starts a script and answers at once
  *   with its id; heel runs it with no request held open, up to 10 minutes
  *   of compute (time waiting in heel doesn't count) and 30 minutes in all,
  *   per segment (from a start or a resume to the next park or the end).
  * - An agent has one running or parked at a time (a unique index).
- * - A call that asks parks it (C2). When the owner approves, heel resumes it
+ * - A call that asks parks it. When the owner approves, heel resumes it
  *   by itself: the parked call goes through the pipeline again, so the
  *   approval, rules and pauses still decide it. A denial ends the script, so
  *   no code runs because someone pressed Deny.

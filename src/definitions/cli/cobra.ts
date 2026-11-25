@@ -1,7 +1,7 @@
 /**
- * Resolves argv the way cobra and pflag do, against a generated command table
- * (spec: CLI runner, "Parsing known CLIs"). gh and kubectl are both cobra
- * programs, so heel finds the verb with the algorithm the binary itself runs:
+ * Resolves argv the way cobra and pflag do, against a generated command
+ * table. gh and kubectl are both cobra programs, so heel finds the verb with
+ * the algorithm the binary itself runs:
  * any other reading would let an argv that heel sees as one command run as
  * another. Flags before the verb, flag values that look like verbs, aliases
  * and `--` all resolve exactly as cobra resolves them, and anything the table

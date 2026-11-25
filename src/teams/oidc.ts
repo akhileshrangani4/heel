@@ -6,10 +6,10 @@ import { loadSecret } from "../vault/secret-file.ts";
 import { readGroupsClaim, roleForGroups } from "./roles.ts";
 
 /**
- * The OIDC relying party for team sign-in (spec: Teams, "Sign-in"): discovery,
+ * The OIDC relying party for team sign-in: discovery,
  * the authorization-code flow with PKCE (S256), and ID token validation —
  * issuer, audience, nonce, expiry, and the signature against the issuer's
- * JWKS. This is a library: D13b stores the pending sign-in in the human
+ * JWKS. This is a library: the caller stores the pending sign-in in the human
  * plane's session and mounts the callback at `OidcConfig.redirectUri`.
  *
  * An OIDC sign-in never decides anything; every decision still needs a fresh

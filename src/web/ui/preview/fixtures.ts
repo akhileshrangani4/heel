@@ -3,7 +3,7 @@ import type { PauseNotice } from "../layout.ts";
 import type { ActivePause } from "../pause-control.ts";
 import type { PendingRow } from "../pending-list.ts";
 import type { StandingRow } from "../standing-approval-list.ts";
-import { emailPreviewFrom, headline } from "../summary.ts";
+import { emailPreviewFrom, headline, mailPreviewFrom } from "../summary.ts";
 
 /**
  * Fixture props for the preview harness and the render tests. Every value is
@@ -108,7 +108,7 @@ export const EXECUTED_REQUEST: ApprovalRequestView = {
   executedAt: minutes(-1),
 };
 
-/** An org ask: approved once by an admin, never standing (Q-A7). */
+/** An org ask: approved once by an admin, never standing. */
 /** A GitHub merge, pinned to its head commit, with the agent's reason. */
 export const MERGE_REQUEST: ApprovalRequestView = {
   ...PENDING_REQUEST,
@@ -364,4 +364,124 @@ export const HINTED_REQUEST: ApprovalRequestView = {
 export const HINTS_UNAVAILABLE_REQUEST: ApprovalRequestView = {
   ...PENDING_REQUEST,
   hints: [{ adapter: "jev", result: { status: "unavailable", detail: "TypeSafe answered 503" } }],
+};
+
+const DRAFT_ARGS = {
+  from: "michael.magan92@gmail.com",
+  to: ["michael.magan92@gmail.com"],
+  cc: [],
+  bcc: [],
+  subject: "Approval-flow test",
+  body: "Deny test. This draft should never be created.",
+};
+
+/** Gmail's create_draft from a code-mode task, as in the owner's report: a draft, nothing sent. */
+export const DRAFT_REQUEST: ApprovalRequestView = {
+  ...PENDING_REQUEST,
+  id: "apr_Drf5tQ1zKp7",
+  agent: "claude-code-heel",
+  runId: null,
+  account: "personal",
+  provider: "gmail",
+  surface: "mcp",
+  tool: "create_draft",
+  action: "email.draft",
+  rule: { name: "drafts-ask", file: "rules/michael.yaml", line: 6 },
+  reason:
+    "Deny-path test: save a draft to the owner's own address. The owner will deny it; nothing is sent.",
+  args: DRAFT_ARGS,
+  email: mailPreviewFrom("email.draft", DRAFT_ARGS),
+  counts: [],
+  createdAt: minutes(-1),
+};
+
+export const DENIED_DRAFT_REQUEST: ApprovalRequestView = {
+  ...DRAFT_REQUEST,
+  status: "denied",
+  decision: { by: "michael", at: minutes(-1) },
+  expiresAt: hours(24),
+};
+
+/** Step 3 of a code-mode task: two calls already made, the code kept for audit. */
+export const TASK_REQUEST: ApprovalRequestView = {
+  ...DRAFT_REQUEST,
+  id: "apr_Tsk3sTp9Lm2",
+  reason: "Drafting the reply Dana asked for, after checking which address you send from.",
+  script: {
+    code: [
+      "import personal",
+      "",
+      "addresses = personal.list_send_as()",
+      'thread = personal.search(query="from:dana@studio.example newer_than:2d")',
+      "sender = addresses[0]",
+      "personal.create_draft(",
+      "    from_=sender,",
+      '    to=["dana@studio.example"],',
+      '    subject="Re: " + thread[0].subject,',
+      '    body="Thanks Dana, Thursday works.",',
+      ")",
+      "personal.send_draft(draft_id=draft.id)",
+    ].join("\n"),
+    truncated: false,
+    before: [
+      { account: "personal", tool: "list_send_as", decision: "allow" },
+      { account: "personal", tool: "search", decision: "allow" },
+    ],
+  },
+};
+
+/** Forty addresses on To, and a body long enough to fold. */
+export const LONG_EMAIL_REQUEST: ApprovalRequestView = {
+  ...PENDING_REQUEST,
+  id: "apr_Lng8mW3qZt5",
+  reason: null,
+  email: {
+    ...(PENDING_REQUEST.email as NonNullable<ApprovalRequestView["email"]>),
+    to: [...MANY_CC, "eve.long-surname-for-wrapping@a-very-long-partner-domain.example"],
+    cc: [],
+    subject:
+      "Q4 renewal: the full schedule, pricing tiers, onboarding dates and the open questions from Thursday's call",
+  },
+  args: {
+    ...(PENDING_REQUEST.args as Record<string, unknown>),
+    to: [...MANY_CC, "eve.long-surname-for-wrapping@a-very-long-partner-domain.example"],
+    cc: [],
+    subject:
+      "Q4 renewal: the full schedule, pricing tiers, onboarding dates and the open questions from Thursday's call",
+  },
+};
+
+/** A reason of 40+ words: shown whole, never cut or folded. */
+export const LONG_REASON_REQUEST: ApprovalRequestView = {
+  ...MERGE_REQUEST,
+  id: "apr_Lrs6qN2wPx8",
+  agent: "claude-code-release-assistant-for-acme-web",
+  reason:
+    "CI passed on all three platforms, Sam approved the review an hour ago, and the billing fix in this pull request is the last item blocking tonight's release. I checked that the branch is up to date with main and that no new commits landed after the approval, so merging now keeps the release on schedule.",
+};
+
+/** A Linear issue with most fields left empty: the empty ones shouldn't take the screen. */
+export const SPARSE_REQUEST: ApprovalRequestView = {
+  ...GENERIC_REQUEST,
+  id: "apr_Sps4nL7kQw1",
+  agent: "triage-bot",
+  account: "linear",
+  provider: "linear",
+  tool: "create_issue",
+  action: "linear.issue.create",
+  rule: { name: "issues-ask", file: "rules/alice.yaml", line: 52 },
+  reason: "Filing the crash Sam reported in #support so it lands in this week's triage.",
+  args: {
+    assignee_id: null,
+    cycle_id: null,
+    description:
+      "Sam reports the export button crashes the desktop app on Windows 11.\n\nSteps: open a project, Export, pick PDF.",
+    estimate: null,
+    labels: [],
+    parent_id: null,
+    priority: 2,
+    project_id: "",
+    team: "APP",
+    title: "Export to PDF crashes on Windows 11",
+  },
 };

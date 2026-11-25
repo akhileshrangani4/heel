@@ -1,11 +1,13 @@
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { MontyWorker } from "../../src/codemode/monty.ts";
 import { MAX_HELD_PER_AGENT } from "../../src/gateway/mcp/server.ts";
 import { DEFAULT_APPROVAL_WAIT } from "../../src/gateway/mcp/wait.ts";
 import { rejectRequest } from "../../src/requests/connection.ts";
 import { decideApproval, SqliteApprovalStore } from "../../src/store/approvals.ts";
+import { newId } from "../../src/store/ids.ts";
 import { SqlitePauseStore } from "../../src/store/pauses.ts";
-import { agentRequests, approvals } from "../../src/store/schema.ts";
+import { accounts, agentRequests, approvals } from "../../src/store/schema.ts";
 import { connectRequested, type McpHarness, mcpHarness } from "../helpers/mcp.ts";
 
 /**
@@ -187,26 +189,6 @@ describe("a call that needs approval waits for the decision (2.12)", () => {
     expect(h.upstream.calls.map((c) => c.name)).toEqual(["search_notes", "delete_note"]);
   });
 
-  it("heel_accounts with wait answers once a request is decided, and at once when nothing waits", async () => {
-    const h = await mcpHarness({ owner: RULES, approvalWait: wait(5_000) });
-    const client = await h.connect("/mcp/notes");
-    const started = Date.now();
-    await client.callTool({ name: "heel_accounts", arguments: { wait: true } });
-    expect(Date.now() - started).toBeLessThan(1_000);
-
-    await client.callTool({
-      name: "heel_request_connection",
-      arguments: { service: "github", alias: "gh", why: "issues" },
-    });
-    const held = client.callTool({ name: "heel_accounts", arguments: { wait: true } });
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    const row = h.t.db.select().from(agentRequests).get();
-    if (row === undefined) throw new Error("no request");
-    rejectRequest(h.t.db, row, h.t.ownerId, new Date());
-    const answer = (await held).structuredContent as { waiting: { connections: unknown[] } };
-    expect(answer.waiting.connections).toEqual([]);
-  });
-
   it("heel_accounts with wait answers once a requested key is connected, with the note for the owner", async () => {
     const h = await mcpHarness({ owner: RULES, approvalWait: wait(5_000) });
     const client = await h.connect("/mcp/notes");
@@ -258,5 +240,138 @@ describe("a call that needs approval waits for the decision (2.12)", () => {
       ),
     );
     expect(answers.filter((ms) => ms < 300)).toHaveLength(2);
+  });
+});
+
+/**
+ * `heel_accounts` with `wait: true` (2.12): the setup prompt tells the agent
+ * to keep calling it until nothing waits, so an answer must say whether
+ * something changed. One that ends its window with nothing changed used to
+ * look exactly like a real answer, and an agent read it as returning early.
+ */
+describe("heel_accounts with wait: true", () => {
+  interface Answer {
+    wait?: { outcome: string; message: string; waitedSeconds?: number };
+    accounts: { alias: string; status: string }[];
+    waiting: { connections: { alias: string }[] };
+  }
+  const answerOf = (result: unknown) => (result as { structuredContent: Answer }).structuredContent;
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  /** A harness whose agent has asked for a GitHub connection, and a client for it. */
+  async function asked(windowMs: number) {
+    const h = await mcpHarness({ owner: RULES, approvalWait: wait(windowMs) });
+    const client = await h.connect("/mcp/notes");
+    await client.callTool({
+      name: "heel_request_connection",
+      arguments: { service: "github", alias: "gh", why: "issues" },
+    });
+    const row = h.t.db.select().from(agentRequests).get();
+    if (row === undefined) throw new Error("no request");
+    return { h, client, row };
+  }
+
+  /** Calls heel_accounts with wait, noting when it answers. */
+  function callWaiting(client: Awaited<ReturnType<typeof asked>>["client"]) {
+    const state = { answered: false };
+    const started = Date.now();
+    const answer = client
+      .callTool({ name: "heel_accounts", arguments: { wait: true } })
+      .then((result) => {
+        state.answered = true;
+        return { answer: answerOf(result), ms: Date.now() - started };
+      });
+    return { state, answer };
+  }
+
+  it("holds while a connection request waits, and answers once the owner decides it", async () => {
+    const { h, client, row } = await asked(5_000);
+    const { state, answer } = callWaiting(client);
+    await sleep(300);
+    expect(state.answered).toBe(false);
+    rejectRequest(h.t.db, row, h.t.ownerId, new Date());
+    const { answer: result } = await answer;
+    expect(result.waiting.connections).toEqual([]);
+    expect(result.wait).toMatchObject({ outcome: "changed" });
+  });
+
+  it("says plainly when nothing changed before its window ended, so the agent calls again", async () => {
+    const { client } = await asked(400);
+    const { answer } = callWaiting(client);
+    const { answer: result, ms } = await answer;
+    expect(ms).toBeGreaterThanOrEqual(350);
+    // Still waiting, and the answer says this isn't the owner's decision.
+    expect(result.waiting.connections.map((c) => c.alias)).toEqual(["gh"]);
+    expect(result.wait).toMatchObject({
+      outcome: "nothing_changed",
+      message: expect.stringMatching(
+        /hasn't decided yet.*call heel_accounts with \{"wait": true\} again/i,
+      ),
+    });
+  });
+
+  it("answers when the request expires while it waits", async () => {
+    const { h, client, row } = await asked(5_000);
+    h.t.db
+      .update(agentRequests)
+      .set({ expiresAt: new Date(Date.now() + 200) })
+      .where(eq(agentRequests.id, row.id))
+      .run();
+    const { answer } = callWaiting(client);
+    const { answer: result, ms } = await answer;
+    expect(ms).toBeLessThan(2_000);
+    expect(result.waiting.connections).toEqual([]);
+    expect(result.wait).toMatchObject({ outcome: "changed" });
+  });
+
+  it("answers when an account connects some other way while its request still waits", async () => {
+    const { h, client } = await asked(5_000);
+    const { state, answer } = callWaiting(client);
+    await sleep(200);
+    expect(state.answered).toBe(false);
+    // As `heel connect github --as gh` does from the owner's terminal: the request stays open.
+    h.t.db
+      .insert(accounts)
+      .values({
+        id: newId("account"),
+        orgId: h.t.orgId,
+        ownerId: h.t.ownerId,
+        alias: "gh",
+        provider: "github",
+        settings: {},
+        status: "active",
+        createdAt: new Date(),
+      })
+      .run();
+    const { answer: result, ms } = await answer;
+    expect(ms).toBeLessThan(2_000);
+    expect(result.accounts.map((a) => a.alias)).toContain("gh");
+    expect(result.wait).toMatchObject({ outcome: "changed" });
+  });
+
+  it("answers at once, and says so, when nothing it asked for waits", async () => {
+    const h = await mcpHarness({ owner: RULES, approvalWait: wait(5_000) });
+    const client = await h.connect("/mcp/notes");
+    const { answer } = callWaiting(client);
+    const { answer: result, ms } = await answer;
+    expect(ms).toBeLessThan(1_000);
+    expect(result.wait).toMatchObject({ outcome: "nothing_waiting" });
+  });
+
+  it("tells the agent to pause before calling again when heel can't hold the call", async () => {
+    const { client } = await asked(0);
+    const { answer } = callWaiting(client);
+    const { answer: result } = await answer;
+    expect(result.wait).toMatchObject({
+      outcome: "nothing_changed",
+      waitedSeconds: 0,
+      message: expect.stringMatching(/wait a minute/i),
+    });
+  });
+
+  it("adds nothing about waiting when the agent didn't ask to wait", async () => {
+    const { client } = await asked(5_000);
+    const result = answerOf(await client.callTool({ name: "heel_accounts", arguments: {} }));
+    expect(result.wait).toBeUndefined();
   });
 });

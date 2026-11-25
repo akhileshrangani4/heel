@@ -6,7 +6,7 @@ import { defaultHeelHome } from "../config/load.ts";
 import { createMasterKeyFile } from "../vault/key.ts";
 
 /**
- * `heel init` (roadmap 1.12): everything a first `heel serve` needs, in one
+ * `heel init`: everything a first `heel serve` needs, in one
  * place, without overwriting anything that's already there: the home
  * directory, the master key, a small heel.yaml, and starter rules. It ends
  * with the next commands to run.
@@ -85,7 +85,7 @@ export function initSummary(
   steps: readonly InitStep[],
   /** Every command finds this home without an export: it's HEEL_HOME already, or the default. */
   homeFromEnv: boolean,
-  /** The HTTPS addresses guided setup gave heel (2.7); null when it stays on this computer. */
+  /** The HTTPS addresses guided setup gave heel; null when it stays on this computer. */
   addresses: { approvals: string; agents: string } | null = null,
 ): string {
   const lines = [
@@ -162,7 +162,7 @@ export async function confirm(question: string): Promise<boolean> {
 }
 
 /**
- * Asks where the owner will approve from (2.7), in a terminal. A passkey
+ * Asks where the owner will approve from, in a terminal. A passkey
  * only works on the address it was made on, so this is settled before one
  * exists.
  */

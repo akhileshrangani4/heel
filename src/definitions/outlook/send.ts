@@ -14,18 +14,18 @@ import {
   unique,
 } from "../mail/compose.ts";
 import { draftEnvelope } from "../mail/mime.ts";
-import type { Preparation } from "../mail/tool.ts";
+import type { Preparation } from "../tool-table.ts";
 import { OutlookError, type OutlookMessage, OutlookNotFoundError } from "./client.ts";
 import { messageBody, type OutlookMailbox, plainRecipients } from "./messages.ts";
 import { OutlookId, type OutlookTool, outlookTool } from "./tool.ts";
 
 /**
- * Outlook's sending tools (D9b), built the same way as Gmail's (see
+ * Outlook's sending tools, built the same way as Gmail's (see
  * `../gmail/send.ts` for the reasoning):
  *
  * - heel derives every recipient itself and composes the MIME itself, then
  *   sends it with `sendMail`, which takes the recipients from the MIME's
- *   headers (graph-research §3). Graph's own reply and forward endpoints
+ *   headers. Graph's own reply and forward endpoints
  *   fill recipients in ways its docs don't pin down, so heel doesn't use
  *   them.
  * - `composeRaw` reads the headers back and refuses to send if they differ
@@ -33,7 +33,7 @@ import { OutlookId, type OutlookTool, outlookTool } from "./tool.ts";
  * - A forwarded original or a draft is shown to the approver as text and
  *   pinned by the SHA-256 of its MIME; `run` reads it again and refuses to
  *   send if it changed.
- * - `from` must be the mailbox's own address (spec: Email, `send`).
+ * - `from` must be the mailbox's own address.
  * - Only messages in Sent Items count as the mailbox's own.
  */
 
@@ -409,7 +409,7 @@ export const SEND_TOOLS: Record<string, OutlookTool> = {
 };
 
 /**
- * `all_in_thread` (spec: State checks; I-21) for Outlook: every recipient
+ * `all_in_thread` (I-21) for Outlook: every recipient
  * must be on a message of the call's conversation that sits in Sent Items.
  * A call with no conversation or no recipients fails.
  */

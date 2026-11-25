@@ -17,7 +17,7 @@ import type { CodeWorker, ScriptLimits, Step } from "./worker.ts";
 
 /**
  * A `CodeWorker` that runs each script in its own `heel codemode-worker`
- * under bubblewrap (D6b; spec: Code mode, "the worker boundary"):
+ * under bubblewrap:
  *
  * - no network namespace and no credentials: the runner gives it a clean
  *   environment with its own HOME and TMPDIR inside the sandbox;

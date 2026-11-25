@@ -21,17 +21,16 @@ import { header, type MessageContent, messageContent } from "./messages.ts";
 import { GmailId, type GmailTool, gmailTool, type Preparation } from "./tool.ts";
 
 /**
- * Gmail's sending tools (D9a-2): `email.send` for send, reply, reply_all,
- * forward and send_draft; `email.draft` for the draft tools (spec: Email,
- * "Gmail and Outlook").
+ * Gmail's sending tools: `email.send` for send, reply, reply_all, forward
+ * and send_draft; `email.draft` for the draft tools.
  *
  * How heel keeps what it checks and what Gmail sends the same:
  * - `prepare` derives every recipient itself, from the original message for
  *   a reply and from the draft's own headers for `send_draft`, and puts them
  *   in the call's arguments. Rules, the call hash and the approval page all
  *   see those arguments, and `run` builds the message from them alone.
- * - Gmail sends to exactly the To, Cc and Bcc headers of the raw message
- *   (research §2.1). heel sends only to plain addresses, and `composeRaw`
+ * - Gmail sends to exactly the To, Cc and Bcc headers of the raw message.
+ *   heel sends only to plain addresses, and `composeRaw`
  *   reads the headers back and refuses to send if they differ.
  * - Content heel didn't write (a forwarded original, a draft) is shown to
  *   the approver as text and pinned by its SHA-256. `run` reads it again and
@@ -422,7 +421,7 @@ const sendDraft = gmailTool({
       throw notSent("the draft changed after heel checked it");
     }
     // The checked bytes, through messages.send: drafts.send would send
-    // whatever the draft holds by then (research §7, gap 1).
+    // whatever the draft holds by then.
     const sentMessage = await mailbox.client.sendMessage(
       { raw: message.raw, threadId: args.thread_id },
       signal,
@@ -449,13 +448,12 @@ export const SEND_TOOLS: Record<string, GmailTool> = {
 };
 
 /**
- * `all_in_thread` (spec: State checks; I-21): passes when every recipient
+ * `all_in_thread` (I-21): passes when every recipient
  * was on a message this mailbox sent in the call's thread. A call with no
  * thread, a thread the mailbox never sent in, or no recipients fails.
  *
- * Only messages labelled SENT count. The spec also counts a From in
- * `sendAs.list`, but anyone can write that From on mail to you, and a draft
- * carries it too, so heel doesn't.
+ * Only messages labelled SENT count, not a From in `sendAs.list`: anyone can
+ * write that From on mail to you, and a draft carries it too.
  */
 export async function allInThread(
   mailbox: Mailbox,

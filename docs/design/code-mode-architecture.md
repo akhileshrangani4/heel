@@ -131,6 +131,8 @@ On the helper path, the helper discards the worker thread by itself as soon as i
 
 Every script on it gets a `failed` step ("the code-mode helper stopped"). None is retried, because a write may already have happened. heel keeps running. The next script starts a new helper.
 
+A helper that dies before it writes heel anything couldn't start, so the error carries the start of its stderr (a line or two, cut to 300 characters): Node's own startup error, such as Seatbelt keeping it from its OpenSSL config. The helper runs with an empty environment and never holds a credential, so that line can't hold one. Once the helper has answered, its stderr could hold what scripts were doing, so the error only points to `heel logs`. heel also runs a one-line script on a helper of its own as it starts, logs an error if that fails, and `heel status` says code mode can't run.
+
 If the helper can't make a worker for a script, it sends a `failed` step for that script and keeps going.
 
 On the bubblewrap path the same event is smaller: one sandbox dying fails one script.

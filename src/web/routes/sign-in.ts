@@ -20,7 +20,7 @@ import { oidcSignIn, passkeySignIn, type SignInNotice } from "../ui/sign-in.ts";
 /**
  * Passkey sign-in (single-user installs, and every decision on team
  * installs). Signing in only lets a person see requests: every approve,
- * deny and resume asks for the passkey again (spec: The approval page).
+ * deny and resume asks for the passkey again.
  *
  * The flow:
  * - `GET /sign-in` renders the page with a one-time challenge id. The
@@ -64,6 +64,8 @@ export function safeNext(value: string | undefined, publicUrl?: URL): string {
 function noticeFrom(query: Record<string, string>): SignInNotice {
   if (query["signed-out"] !== undefined) return { kind: "signed-out" };
   if (query["enrolled"] !== undefined) return { kind: "enrolled" };
+  // Set by requireSession when the browser's session cookie no longer opens one.
+  if (query["expired"] !== undefined) return { kind: "session-expired" };
   return { kind: "none" };
 }
 

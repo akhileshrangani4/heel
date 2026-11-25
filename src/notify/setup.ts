@@ -7,7 +7,7 @@ import type { NotifyConfig } from "../config/schema.ts";
 import { type ChannelSender, emailSender, slackSender, webPushSender } from "./channels.ts";
 
 /**
- * Builds the senders `heel.yaml` turns on (spec: Notifications), reading
+ * Builds the senders `heel.yaml` turns on, reading
  * their secrets the same way as the SIEM token: from a file, with an
  * environment variable taking precedence.
  */

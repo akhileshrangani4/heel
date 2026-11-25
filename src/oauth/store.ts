@@ -15,7 +15,7 @@ import {
 } from "./rules.ts";
 
 /**
- * OAuth clients, codes and token pairs (A2). Access and refresh tokens are
+ * OAuth clients, codes and token pairs. Access and refresh tokens are
  * ordinary heel agent tokens with a kind and an expiry, so revoking an agent
  * (`heel agent revoke`) cuts off its OAuth tokens too.
  */
@@ -32,12 +32,11 @@ export class OAuthError extends Error {
   }
 }
 
-/** Dynamic client registration (RFC 7591), for public clients only. */
 /** A registered client nobody connected with is dropped after this. */
 const UNUSED_CLIENT_MS = 24 * 60 * 60 * 1000;
 /**
  * At most this many clients registered in the last day and never used: with
- * heel on the public internet (a Cloudflare tunnel, 2.7), registration is
+ * heel on the public internet (a Cloudflare tunnel), registration is
  * open to anyone, and each one is a row.
  */
 export const MAX_UNUSED_CLIENTS = 50;
@@ -72,6 +71,7 @@ function pruneUnusedClients(db: HeelDb, orgId: string, now: Date): void {
   }
 }
 
+/** Dynamic client registration (RFC 7591), for public clients only. */
 export function registerClient(
   db: HeelDb,
   input: { orgId: string; name: string; redirectUris: readonly string[]; now: Date },
@@ -123,12 +123,6 @@ export function findClient(db: HeelDb, orgId: string, clientId: string): ClientR
 }
 
 /**
- * The agent a person's connection from this client acts as. Connecting the
- * same client again reuses its agent, so its history, counts and grants
- * carry over; otherwise a new agent is named after the client ("claude",
- * then "claude-2", …).
- */
-/**
  * The agent a connection will act as, without creating it: this client's
  * live agent for the person if there is one (`existing`), else the first
  * free name from what the client calls itself. The consent page shows this,
@@ -165,6 +159,12 @@ export function plannedAgentForClient(
   return null;
 }
 
+/**
+ * The agent a person's connection from this client acts as. Connecting the
+ * same client again reuses its agent, so its history, counts and grants
+ * carry over; otherwise a new agent is named after the client ("claude",
+ * then "claude-2", …).
+ */
 export function agentForClient(
   tx: HeelTx,
   input: { orgId: string; ownerId: string; client: ClientRow; now: Date },

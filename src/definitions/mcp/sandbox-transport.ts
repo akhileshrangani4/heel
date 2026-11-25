@@ -8,7 +8,7 @@ import {
 
 /**
  * MCP's stdio transport (newline-delimited JSON-RPC) over a process heel
- * started in the sandbox (spec: Upstream MCP servers, N-8). The SDK's own
+ * started in the sandbox. The SDK's own
  * `StdioClientTransport` spawns the process itself; heel must start it under
  * bubblewrap, so this transport only speaks over the pipes it's given.
  *

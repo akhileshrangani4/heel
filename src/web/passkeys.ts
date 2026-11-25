@@ -21,7 +21,7 @@ import {
   issueChallenge,
 } from "./challenges.ts";
 
-/** How long a `heel user enroll` link stays valid (Q-N2). */
+/** How long a `heel user enroll` link stays valid. */
 export const ENROLLMENT_TTL_MS = 15 * 60_000;
 /**
  * How long a recovery link waits before it works. A local agent can run
@@ -32,7 +32,7 @@ export const RECOVERY_DELAY_MS = 24 * 60 * 60_000;
 /** How long a recovery link stays usable once it starts working. */
 export const RECOVERY_WINDOW_MS = 24 * 60 * 60_000;
 
-/** The WebAuthn relying party: the human plane's public origin (spec: Listeners). */
+/** The WebAuthn relying party: the human plane's public origin. */
 export interface RelyingParty {
   id: string;
   origin: string;
@@ -49,7 +49,6 @@ export function hashEnrollmentToken(token: string): string {
   return createHash("sha256").update(token, "utf8").digest("hex");
 }
 
-/** Path of the one-time enrollment page for a token. */
 export function enrollmentPath(token: string): string {
   return `/enroll/${token}`;
 }
@@ -72,7 +71,7 @@ export class EnrollmentError extends Error {
 }
 
 /**
- * A one-time link that adds a passkey for a user (Q-N2), valid 15 minutes.
+ * A one-time link that adds a passkey for a user, valid 15 minutes.
  *
  * - **First passkey:** `heel user enroll <user>` over the admin socket.
  * - **Another device:** from the approval page, after the person confirms with
@@ -250,8 +249,6 @@ export function anyPasskeyEnrolled(db: HeelDb, orgId: string): boolean {
   );
 }
 
-// ── response shapes ─────────────────────────────────────────────────────────
-
 const base64url = z.string().regex(/^[A-Za-z0-9_-]*$/, "expected base64url");
 const transports = z.array(z.string()).exactOptional();
 
@@ -282,8 +279,6 @@ const RegistrationResponseSchema = z.object({
   authenticatorAttachment: z.enum(["platform", "cross-platform"]).exactOptional(),
   clientExtensionResults: z.record(z.string(), z.unknown()).default({}),
 });
-
-// ── ceremonies ──────────────────────────────────────────────────────────────
 
 export type PasskeyRefusal =
   | "unknown_challenge"
@@ -332,7 +327,7 @@ export type AssertionRequest = AssertionSubject & {
 };
 
 /**
- * WebAuthn ceremonies for the human plane (spec: The approval page). Every
+ * WebAuthn ceremonies for the human plane. Every
  * decision needs a fresh assertion with user verification whose challenge
  * is bound to what is being decided (I-56); see `deriveChallenge`.
  */

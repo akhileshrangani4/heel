@@ -151,13 +151,12 @@ describe("the approval page in a browser", () => {
     // Opening a section is remembered in heel: it's still open after a reload.
     const args = page.locator('details[data-heel-fold="args"]');
     expect(await args.evaluate((d) => (d as { open: boolean }).open)).toBe(false);
-    // Full arguments sit inside the one Details fold; opening that is saved first.
-    await page.locator('details[data-heel-fold="details"] > summary').click();
+    // The raw arguments sit in the main flow, under the email, one tap away (I-57).
     const saved = page.waitForResponse(
       (r) =>
         r.url().endsWith("/approvals/folds") && (r.request().postData() ?? "").includes('"args"'),
     );
-    await page.getByText("Full arguments, exactly what runs").click();
+    await page.getByText("See raw arguments").click();
     expect((await saved).status()).toBe(200);
     await page.reload();
     expect(await args.evaluate((d) => (d as { open: boolean }).open)).toBe(true);

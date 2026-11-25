@@ -1,17 +1,19 @@
 import type { ActivityRow, AgentActivity } from "../../../store/activity.ts";
-import { activityPage, agentsPage } from "../activity-page.ts";
-import { approvalRequest } from "../approval-request.ts";
+import { ACTIVITY_PANELS_SCRIPT, activityPage, agentsPage } from "../activity-page.ts";
+import { approvalRequest, MENU_RESET_SCRIPT } from "../approval-request.ts";
 import type { CeremonyCallback } from "../ceremony.ts";
 import { connectPage } from "../connect.ts";
 import { type ConnectionRow, connectionsPage } from "../connections.ts";
 import { addDeviceControl } from "../devices.ts";
 import { enrollPage } from "../enroll.ts";
+import { errorPage } from "../error-page.ts";
 import { type GrantView, grantsPage } from "../grants-page.ts";
 import { type DayCount, type HomeProps, homePage } from "../home.ts";
 import { type Html, html } from "../html.ts";
 import {
   type FormTarget,
   type NavId,
+  type PageProps,
   type PauseNotice,
   page,
   type Theme,
@@ -33,8 +35,10 @@ import {
   AGENT_PAUSE,
   APPROVED_REQUEST,
   APPROVED_ROWS,
+  DENIED_DRAFT_REQUEST,
   DENIED_REQUEST,
   DENIED_ROWS,
+  DRAFT_REQUEST,
   EXECUTED_REQUEST,
   EXPIRED_REQUEST,
   EXPIRED_ROWS,
@@ -43,6 +47,8 @@ import {
   HINTED_REQUEST,
   HINTS_UNAVAILABLE_REQUEST,
   HTTP_REQUEST,
+  LONG_EMAIL_REQUEST,
+  LONG_REASON_REQUEST,
   MERGE_REQUEST,
   NOW,
   ORG_REQUEST,
@@ -53,6 +59,8 @@ import {
   PENDING_REQUEST,
   PENDING_ROWS,
   REVOKED_STANDING,
+  SPARSE_REQUEST,
+  TASK_REQUEST,
 } from "./fixtures.ts";
 import {
   BROKEN_RULES_TEXT,
@@ -61,6 +69,7 @@ import {
   RULES_TEXT,
   rulesFile,
 } from "./rules-fixtures.ts";
+import { SETTINGS_EDGE_STORIES } from "./settings-stories.ts";
 
 /**
  * The preview harness's stories: every component in every state the
@@ -68,7 +77,7 @@ import {
  * data plus a render function over fixture props.
  */
 
-/** The six states every component must render in (D4a acceptance criteria). */
+/** The six states every component must render in. */
 export const REQUIRED_STATES = [
   "pending",
   "approved",
@@ -105,6 +114,7 @@ export const PAGES = [
   { id: "welcome", name: "Welcome" },
   { id: "enroll", name: "Enroll" },
   { id: "connect", name: "Connect an app (OAuth)" },
+  { id: "error", name: "Error pages" },
 ] as const;
 export type ComponentId = (typeof COMPONENTS)[number]["id"] | (typeof PAGES)[number]["id"];
 
@@ -124,7 +134,11 @@ export interface Story {
   pause?: PauseNotice | null;
   /** A focus page (the agent consent screen): no header or tabs. */
   focus?: boolean;
+  /** Stand-in safe-area insets, to show the installed app on a phone. */
+  safeArea?: PageProps["safeArea"];
   body: () => Html;
+  /** The page's own script beyond the ceremony stand-ins, if it needs no server. */
+  script?: string;
 }
 
 /** Preview handlers only announce what would start; none of them decides anything. */
@@ -141,6 +155,7 @@ export const PREVIEW_CEREMONY_SCRIPT = `
   };
   const names = ["decide", "resume", "signIn", "addDevice", "applyRules", "approveConnection", "connect", "enroll", "grant", "manageAccount", "manageAgent", "managePeople", "mode", "saveRules"];
   window.heelCeremony = Object.fromEntries(names.map((name) => [name, announce]));
+  ${MENU_RESET_SCRIPT}
 })();
 `;
 
@@ -158,6 +173,7 @@ const approval = (
   request: Parameters<typeof approvalRequest>[0]["load"],
   pause: PauseNotice | null = null,
   viewer: Viewer = ALICE,
+  extra: Partial<Parameters<typeof approvalRequest>[0]> = {},
 ): Story => ({
   component: "approval-request",
   state,
@@ -167,9 +183,14 @@ const approval = (
   current: "approvals",
   pause,
   body: () =>
-    approvalRequest({ now: NOW, load: request, pause, onDecide: PREVIEW_CEREMONY.decide }),
+    approvalRequest({
+      now: NOW,
+      load: request,
+      pause,
+      onDecide: PREVIEW_CEREMONY.decide,
+      ...extra,
+    }),
 });
-
 const pending = (
   state: RequiredState,
   label: string,
@@ -263,7 +284,6 @@ const passkey = (
 });
 
 export const STORIES: readonly Story[] = [
-  // ApprovalRequest
   approval("pending", "Waiting for a decision", { ok: true, request: PENDING_REQUEST }),
   approval("approved", "Approved, waiting for the agent to re-send", {
     ok: true,
@@ -290,6 +310,65 @@ export const STORIES: readonly Story[] = [
   approval("http", "An HTTP proxy write, body decoded", { ok: true, request: HTTP_REQUEST }),
   approval("error", "The request couldn't be loaded", { ok: false, message: LOAD_ERROR }),
   approval("executed", "Ran once", { ok: true, request: EXECUTED_REQUEST }),
+  approval("draft", "An email draft, as in the owner's report", {
+    ok: true,
+    request: DRAFT_REQUEST,
+  }),
+  approval("draft-denied", "The same draft, denied", { ok: true, request: DENIED_DRAFT_REQUEST }),
+  approval("task", "Step 3 of a longer task (run_code), waiting", {
+    ok: true,
+    request: TASK_REQUEST,
+  }),
+  approval(
+    "task-background",
+    "Step 3 of a background task, waiting",
+    { ok: true, request: TASK_REQUEST },
+    null,
+    ALICE,
+    { background: true },
+  ),
+  approval("long-email", "Forty-one recipients, a long subject and body", {
+    ok: true,
+    request: LONG_EMAIL_REQUEST,
+  }),
+  // Design variant B: the email header as one labelled row per field.
+  approval(
+    "draft-rows",
+    "Variant B: the draft with one labelled row per field",
+    { ok: true, request: DRAFT_REQUEST },
+    null,
+    ALICE,
+    { emailLayout: "rows" },
+  ),
+  approval(
+    "pending-rows",
+    "Variant B: the send with one labelled row per field",
+    { ok: true, request: PENDING_REQUEST },
+    null,
+    ALICE,
+    { emailLayout: "rows" },
+  ),
+  approval("sparse", "A tool call with many empty fields", { ok: true, request: SPARSE_REQUEST }),
+  approval("long-reason", "A 50-word reason and a long agent name", {
+    ok: true,
+    request: LONG_REASON_REQUEST,
+  }),
+  approval(
+    "details-open",
+    "Details open, Technical closed",
+    { ok: true, request: DRAFT_REQUEST },
+    null,
+    ALICE,
+    { folds: new Map([["details", true]]) },
+  ),
+  approval(
+    "denied-asked-open",
+    "Denied, with What was asked open",
+    { ok: true, request: DENIED_DRAFT_REQUEST },
+    null,
+    ALICE,
+    { folds: new Map([["asked", true]]) },
+  ),
   approval(
     "org-ask",
     "Org ask: approve once only",
@@ -298,7 +377,6 @@ export const STORIES: readonly Story[] = [
     ADMIN,
   ),
 
-  // PendingList
   pending("pending", "Requests waiting", { ok: true, rows: PENDING_ROWS }),
   pending("approved", "Approved and executed requests", { ok: true, rows: APPROVED_ROWS }),
   pending("denied", "A denied request", { ok: true, rows: DENIED_ROWS }),
@@ -307,7 +385,6 @@ export const STORIES: readonly Story[] = [
   pending("error", "The list couldn't be loaded", { ok: false, message: LOAD_ERROR }),
   { ...pending("pending", "", { ok: true, rows: [] }), state: "empty", label: "Nothing waiting" },
 
-  // PauseControl
   pauseStory("pending", "Nothing paused: pause is one tap", {
     outcome: { kind: "none" },
     load: pauseLoad([]),
@@ -338,7 +415,6 @@ export const STORIES: readonly Story[] = [
     load: { ok: false, message: LOAD_ERROR },
   }),
 
-  // StandingApprovalList
   standingStory("pending", "None granted yet", { ok: true, rows: [] }),
   standingStory("approved", "Active standing approvals", { ok: true, rows: ACTIVE_STANDING }),
   standingStory("denied", "Revoked", { ok: true, rows: REVOKED_STANDING }),
@@ -350,8 +426,6 @@ export const STORIES: readonly Story[] = [
     AGENT_PAUSE,
   ),
   standingStory("error", "Couldn't be loaded", { ok: false, message: LOAD_ERROR }),
-
-  // RulesPage
 
   // Sign-in (OIDC)
   oidc("pending", "Waiting to sign in", { kind: "none" }),
@@ -382,8 +456,6 @@ export const STORIES: readonly Story[] = [
   }),
   passkey("not-enrolled", "First run: no passkey enrolled", { kind: "none" }, false),
 ];
-
-// ── Pages ───────────────────────────────────────────────────────────────────
 
 const DAY = 86_400_000;
 const ago = (ms: number) => new Date(NOW.getTime() - ms);
@@ -452,6 +524,10 @@ const HOME_BASE: HomeProps = {
     },
   ],
 };
+
+/** Safe-area insets of a phone with a notch and home indicator, as an installed app sees them. */
+const IPHONE_PORTRAIT = { top: 47, right: 0, bottom: 34, left: 0 } as const;
+const IPHONE_LANDSCAPE = { top: 0, right: 47, bottom: 21, left: 47 } as const;
 
 const pageStory = (
   component: ComponentId,
@@ -554,8 +630,9 @@ const activity = (
   label: string,
   rows: readonly ActivityRow[],
   filter: Parameters<typeof activityPage>[0]["filter"] = {},
-) =>
-  pageStory("activity", state, label, "Activity", "activity", () =>
+  extra: Partial<Parameters<typeof activityPage>[0]> = {},
+): Story => ({
+  ...pageStory("activity", state, label, "Activity", "activity", () =>
     activityPage({
       rows,
       agents: AGENT_NAMES,
@@ -566,8 +643,42 @@ const activity = (
       hidden: null,
       suggestions: [],
       canExport: true,
+      ...extra,
     }),
-  );
+  ),
+  script: ACTIVITY_PANELS_SCRIPT,
+});
+
+const LONG_AGENT = {
+  id: "agt_long",
+  name: "quarterly-finance-reconciliation-and-vendor-followup-assistant-v2",
+};
+const LONG_ACCOUNT = "finance-shared-mailbox-for-accounts-payable@very-long-company-domain.example";
+
+/** Long names, a long rule path and reason, and a hundred rows across many days. */
+const LONG_ROWS: ActivityRow[] = [
+  audit(ago(2 * 60_000), "deny", LONG_AGENT.id, LONG_ACCOUNT, "email.send", "gmail_send", {
+    rule: {
+      name: "never-send-outside-the-company-without-asking-the-finance-lead-first",
+      file: "rules/teams/finance/accounts-payable/outbound-mail.yaml",
+      line: 1204,
+    },
+    reason:
+      "The recipient domain very-long-vendor-domain-name-for-testing-wrapping.example isn't on the allow list, so heel denied it.",
+    approvalId: "apr_7QxK2mN4pR8sVeryLongApprovalIdentifier000001",
+    scriptId: "scr_very_long_script_identifier_0001",
+  }),
+  ...Array.from({ length: 99 }, (_, i) =>
+    audit(
+      ago((i + 1) * 3 * 3_600_000),
+      (["allow", "deny", "ask", "approved", "would_deny"] as const)[i % 5] ?? "allow",
+      AGENT_NAMES[i % 3]?.id ?? "agt_inbox",
+      ["gmail-work", "github", "calendar"][i % 3] ?? "gmail-work",
+      "email.label",
+      "gmail_label",
+    ),
+  ),
+];
 
 const agentActivity = (
   agentId: string,
@@ -811,7 +922,6 @@ const rulesEditor = (
   );
 
 export const PAGE_STORIES: readonly Story[] = [
-  // Home
   pageStory("home", "fresh", "Fresh install: 1 of 4 set up, no calls yet", "Home", "home", () =>
     homePage({
       ...HOME_BASE,
@@ -827,6 +937,28 @@ export const PAGE_STORIES: readonly Story[] = [
   pageStory("home", "busy", "All set up, a week of calls", "Home", "home", () =>
     homePage(HOME_BASE),
   ),
+  {
+    ...pageStory(
+      "home",
+      "installed-phone",
+      "The installed app on a phone with a home indicator (insets 47 top, 34 bottom)",
+      "Home",
+      "home",
+      () => homePage(HOME_BASE),
+    ),
+    safeArea: IPHONE_PORTRAIT,
+  },
+  {
+    ...pageStory(
+      "home",
+      "installed-landscape",
+      "The installed app in landscape, notch at the side (insets 47 left and right, 21 bottom)",
+      "Home",
+      "home",
+      () => homePage(HOME_BASE),
+    ),
+    safeArea: IPHONE_LANDSCAPE,
+  },
   pageStory(
     "home",
     "needs-you",
@@ -843,15 +975,36 @@ export const PAGE_STORIES: readonly Story[] = [
       }),
   ),
 
-  // Activity
   activity("busy", "Today, yesterday and older, every kind of decision", ACTIVITY_ROWS),
   activity("filtered-empty", "A filter with no matches", [], {
     agent: "agt_ci",
     kind: "would_ask",
   }),
   activity("empty", "No calls yet", []),
+  activity(
+    "long",
+    "A long agent name, account, rule and reason, and a hundred rows",
+    LONG_ROWS,
+    { agent: LONG_AGENT.id, account: LONG_ACCOUNT, kind: "deny" },
+    {
+      agents: [...AGENT_NAMES, LONG_AGENT],
+      accounts: ["gmail-work", "github", "calendar", LONG_ACCOUNT],
+      nextBefore: 1,
+      hidden: { matched: 12, uncertain: 3, unparseable: 1 },
+    },
+  ),
+  activity(
+    "older",
+    "An older page: Newer goes back",
+    ACTIVITY_ROWS,
+    {},
+    {
+      paged: true,
+      nextBefore: null,
+    },
+  ),
+  activity("member", "A member: no audit log download", ACTIVITY_ROWS, {}, { canExport: false }),
 
-  // Agents
   agents("busy", "Agents incl. a revoked one and an expiring token", AGENTS),
   agents("scripts", "Background scripts running and waiting", AGENTS, {
     scripts: [
@@ -877,7 +1030,6 @@ export const PAGE_STORIES: readonly Story[] = [
   }),
   agents("empty", "No agents yet", []),
 
-  // Connections
   connections("mixed", "Ready, needs sign-in, set up first, needs a new key", CONNECTIONS),
   connections("connected", "Just signed in", CONNECTIONS.slice(0, 1), {
     kind: "connected",
@@ -885,12 +1037,10 @@ export const PAGE_STORIES: readonly Story[] = [
   }),
   connections("empty", "Nothing connected yet", []),
 
-  // Devices
   devices("none", "No device gets notifications", 0, null),
   devices("several", "Three devices get notifications", 3, null),
   devices("turned-off", "Just turned off on every device", 0, 3),
 
-  // Grants
   grants("busy", "Live, expired and revoked grants", [
     grant("grt_1", "inbox-bot", "Send the Q3 numbers to the vendor", "live", 20),
     grant("grt_2", "ci-bot", "Merge the release PR", "expired", -2),
@@ -904,7 +1054,6 @@ export const PAGE_STORIES: readonly Story[] = [
   ),
   grants("empty", "No grants", []),
 
-  // People
   pageStory("people", "admin", "An admin sees everyone", "People", "people", () =>
     peoplePage({
       people: PEOPLE,
@@ -940,7 +1089,6 @@ export const PAGE_STORIES: readonly Story[] = [
     }),
   ),
 
-  // Modes
   pageStory("modes", "mixed", "Org enforces, one person watches", "Modes", "modes", () =>
     modesPage({
       rows: MODES,
@@ -958,7 +1106,6 @@ export const PAGE_STORIES: readonly Story[] = [
     }),
   ),
 
-  // Rules
   rulesEditor("loaded", "Rules load: three rules and a hide entry", {}),
   rulesEditor("problems", "The file has problems: last good rules still decide", {
     file: rulesFile(BROKEN_RULES_TEXT),
@@ -974,7 +1121,6 @@ export const PAGE_STORIES: readonly Story[] = [
     saved: "pending",
   }),
   rulesEditor("unavailable", "heel can't edit rules files from here", { file: null }),
-  // Rule history
   history("busy", "Changes from a proposal, the web and outside heel", [
     {
       id: "rc_1",
@@ -1012,7 +1158,6 @@ export const PAGE_STORIES: readonly Story[] = [
   ]),
   history("empty", "No changes yet", []),
 
-  // Welcome
   pageStory("welcome", "new", "Right after enrolling a passkey", "Welcome", "home", () =>
     welcomePage({ vapidPublicKey: "BPreviewVapidKey", devices: 0 }),
   ),
@@ -1051,6 +1196,25 @@ export const PAGE_STORIES: readonly Story[] = [
     null,
   ),
 
+  // Error pages (signed out or not, they show the same page)
+  ...(
+    [
+      ["not-found", "Page not found", "Not found. The address may be mistyped or out of date."],
+      [
+        "stale-form",
+        "This form is out of date",
+        "Refused: this form is stale. Go back, reload the page and try again.",
+      ],
+      [
+        "server-error",
+        "Something went wrong",
+        "Something went wrong in heel. Nothing was decided.",
+      ],
+    ] as const
+  ).map(([state, title, message]) =>
+    pageStory("error", state, title, title, undefined, () => errorPage({ title, message }), null),
+  ),
+
   // Connect an app (OAuth consent)
   focusStory(
     "connect",
@@ -1078,7 +1242,11 @@ export const PAGE_STORIES: readonly Story[] = [
 ];
 
 /** Every story the harness serves: components, then pages. */
-export const ALL_STORIES: readonly Story[] = [...STORIES, ...PAGE_STORIES];
+export const ALL_STORIES: readonly Story[] = [
+  ...STORIES,
+  ...PAGE_STORIES,
+  ...SETTINGS_EDGE_STORIES,
+];
 
 export function findStory(component: string, state: string): Story | undefined {
   return ALL_STORIES.find((s) => s.component === component && s.state === state);
@@ -1091,9 +1259,10 @@ export function renderStory(story: Story, theme: Theme): Html {
     viewer: story.viewer,
     ...(story.current ? { current: story.current } : {}),
     ...(story.focus ? { focus: true } : {}),
+    ...(story.safeArea ? { safeArea: story.safeArea } : {}),
     pause: story.pause ?? null,
     theme,
     body: story.body(),
-    script: PREVIEW_CEREMONY_SCRIPT,
+    script: story.script ? `${PREVIEW_CEREMONY_SCRIPT}\n${story.script}` : PREVIEW_CEREMONY_SCRIPT,
   });
 }

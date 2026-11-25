@@ -1,15 +1,13 @@
 import type { FetchFn } from "../sign-in.ts";
 
 /**
- * The few GitHub REST reads heel makes itself, with the account's own token
- * (D11; spec: Built-in providers, "GitHub"): a pull request's head commit,
+ * The few GitHub REST reads heel makes itself, with the account's own token:
+ * a pull request's head commit,
  * and whether the checks on a commit pass. Every answer heel can't read
  * plainly is an error, so the lookup is unavailable and the call is denied.
  */
 
 import { GITHUB_API, GitHubNotFoundError } from "./client.ts";
-
-export { GITHUB_API };
 
 export class GitHubLookupError extends Error {
   override readonly name = "GitHubLookupError";

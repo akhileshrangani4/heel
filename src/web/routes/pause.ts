@@ -27,7 +27,7 @@ import { clientScript } from "../ui/client.ts";
 import { type ActivePause, type PauseOutcome, pauseControl } from "../ui/pause-control.ts";
 
 /**
- * Pause and resume (spec: Pause, Q-N5). Pausing is one tap on a plain form
+ * Pause and resume. Pausing is one tap on a plain form
  * with no passkey, because it can only stop calls. Resuming lets calls run
  * again, so it takes a fresh passkey assertion naming the pause.
  *

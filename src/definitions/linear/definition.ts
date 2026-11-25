@@ -4,13 +4,12 @@ import type { ProviderFields } from "../../core/call.ts";
 import { type Definition, UpstreamError } from "../../gateway/pipeline/ports.ts";
 import type { AccountRecord } from "../../store/directory.ts";
 import type { Vault } from "../../vault/vault.ts";
-import { listedTools, type MailTool, mailDefinition } from "../mail/tool.ts";
 import type { FetchFn } from "../sign-in.ts";
+import { listedTools, type ToolRow, toolRow, toolTableDefinition } from "../tool-table.ts";
 import { LinearClient, LinearNotFoundError, LinearRefused } from "./client.ts";
 
 /**
- * The Linear definition (D12b; spec: "Calendar, Slack, Linear, Notion,
- * Stripe"): heel's own tools on Linear's GraphQL API
+ * The Linear definition: heel's own tools on Linear's GraphQL API
  * (https://linear.app/developers/graphql), connected with
  * `heel connect linear --credential-stdin` (a personal API key or an OAuth
  * access token).
@@ -37,8 +36,8 @@ interface Box {
   client: LinearClient;
 }
 
-type LinearTool = MailTool<Box>;
-const tool = <S extends z.ZodType, P, R>(t: MailTool<Box, S, P, R>) => t as unknown as LinearTool;
+type LinearTool = ToolRow<Box>;
+const tool = toolRow<Box>();
 
 const TeamKey = z
   .string()
@@ -395,10 +394,10 @@ export const LINEAR_TOOLS: readonly Tool[] = listedTools(TOOLS);
 
 export function linearDefinition(account: AccountRecord, deps: LinearDeps): Definition {
   const token = async () => (await deps.vault.accessToken(account.id)).reveal();
-  return mailDefinition({
+  return toolTableDefinition({
     tools: TOOLS,
     listed: LINEAR_TOOLS,
-    mailbox: { client: new LinearClient(deps.fetch, token) },
+    box: { client: new LinearClient(deps.fetch, token) },
     errors: {
       isNotFound: (error) => error instanceof LinearNotFoundError,
       refusal: (error) =>
