@@ -3,8 +3,8 @@ import { z } from "zod";
 import { type Definition, UpstreamError } from "../../gateway/pipeline/ports.ts";
 import type { AccountRecord } from "../../store/directory.ts";
 import type { Vault } from "../../vault/vault.ts";
-import { listedTools, type MailTool, mailDefinition } from "../mail/tool.ts";
 import type { FetchFn } from "../sign-in.ts";
+import { listedTools, type ToolRow, toolRow, toolTableDefinition } from "../tool-table.ts";
 import { SlackClient, SlackNotFoundError, SlackRefused } from "./client.ts";
 
 /**
@@ -41,8 +41,8 @@ interface Box {
   client: SlackClient;
 }
 
-type SlackTool = MailTool<Box>;
-const tool = <S extends z.ZodType, P, R>(t: MailTool<Box, S, P, R>) => t as unknown as SlackTool;
+type SlackTool = ToolRow<Box>;
+const tool = toolRow<Box>();
 
 const Channel = z.string().regex(/^[CDG][A-Z0-9]{2,30}$/, "expected a channel id like C0123ABCD");
 const Ts = z
@@ -302,10 +302,10 @@ export const SLACK_TOOLS: readonly Tool[] = listedTools(TOOLS);
 
 export function slackDefinition(account: AccountRecord, deps: SlackDeps): Definition {
   const token = async () => (await deps.vault.accessToken(account.id)).reveal();
-  return mailDefinition({
+  return toolTableDefinition({
     tools: TOOLS,
     listed: SLACK_TOOLS,
-    mailbox: { client: new SlackClient(deps.fetch, token) },
+    box: { client: new SlackClient(deps.fetch, token) },
     errors: {
       isNotFound: (error) => error instanceof SlackNotFoundError,
       // Only errors Slack raises before acting are refusals; the client leaves the rest unknown.
