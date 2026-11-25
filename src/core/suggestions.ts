@@ -1,8 +1,7 @@
 import { domainOf, normalizeAddress } from "./rules/address.ts";
 
 /**
- * Rule suggestions from recorded traffic (A5; v1 design "Rule suggestions").
- * After shadow or record mode, heel groups the calls the rules would have
+ * Rule suggestions from recorded traffic. After shadow or record mode, heel groups the calls the rules would have
  * stopped by account and action (or tool, for a passthrough), and drafts an
  * owner rule for each group. A suggestion is only text: a person reads it,
  * edits it, and adds it to their rules file themselves. Pure.

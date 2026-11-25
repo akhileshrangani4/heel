@@ -2,7 +2,7 @@ import type { RoleGroups } from "../config/schema.ts";
 import type { UserRole } from "../store/schema.ts";
 
 /**
- * Group-to-role mapping (spec: Teams, "Roles"). Pure, so sign-in (D13b) can
+ * Group-to-role mapping. Pure, so sign-in can
  * re-run it on every login and tests can table it.
  */
 

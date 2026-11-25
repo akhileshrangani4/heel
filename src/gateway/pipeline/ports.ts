@@ -10,23 +10,19 @@ import type { ApprovalOrigin } from "../../store/schema.ts";
 import type { AuthenticatedAgent } from "../agent-tokens.ts";
 
 /**
- * The seams of the decision pipeline. Surfaces (D5 MCP, D6 code mode, D7
- * HTTP, D8 CLI) hand it a `CallRequest`; provider definitions (D9, D11, D12
- * and the passthroughs) normalize, check state, execute and hide; D4b backs
- * the pause and approval stores. Store ports take the caller's query handle
- * so their reads and writes join the decision transaction.
+ * The seams of the decision pipeline. Surfaces (MCP, code mode, HTTP, CLI)
+ * hand it a `CallRequest`; provider definitions normalize, check state,
+ * execute and hide. Store ports take the caller's query handle so their
+ * reads and writes join the decision transaction.
  */
 
 export type HeelQuery = HeelDb | HeelTx;
-
-// ── surfaces ────────────────────────────────────────────────────────────────
 
 /** One call as a surface received it, after the agent token was checked. */
 export interface CallRequest {
   /** From the heel token, never from the request body. */
   agent: AuthenticatedAgent;
   surface: Surface;
-  /** The account alias the call names. */
   account: string;
   tool: string;
   args: unknown;
@@ -39,13 +35,13 @@ export interface CallRequest {
   /**
    * Why the agent says it's making the call, in its own words (MCP's
    * `heel_reason` argument). Shown to the approver beside heel's own summary.
-   * Never part of the arguments, the call hash or any rule (spec: The approval
-   * page): it's what the agent claims, not what the call does.
+   * Never part of the arguments, the call hash or any rule: it's what the
+   * agent claims, not what the call does.
    */
   reason?: string;
   /**
    * The code-mode script a call came from, and the calls it made before
-   * this one (code mode round 2, C3). Shown to the approver as the agent's
+   * this one. Shown to the approver as the agent's
    * own code; never part of the arguments, the call hash or any rule.
    */
   script?: ApprovalScript;
@@ -53,7 +49,7 @@ export interface CallRequest {
   scriptId?: string;
   /**
    * An ask doesn't open a request: a call whose rule asks is denied
-   * (`approval_needed`) unless an approval for it already exists (C4). Code
+   * (`approval_needed`) unless an approval for it already exists. Code
    * mode's parallel calls use it, so a gather of reads can't open a request
    * and notify someone for each one.
    */
@@ -66,11 +62,9 @@ export interface CallRequest {
   signal?: AbortSignal;
 }
 
-// ── provider definitions ────────────────────────────────────────────────────
-
 /**
  * Denies a definition applies while normalizing, before any rule runs.
- * Global watch never relaxes them (spec: Rules, "Watch mode").
+ * Global watch never relaxes them.
  */
 export const HARD_DENY_REASONS = [
   /** A command that prints credentials (I-31). */
@@ -87,16 +81,15 @@ export const HARD_DENY_REASONS = [
    * read differently from the provider. Same name as the rules' own deny.
    */
   "address_unparseable",
-  /** A send names a `from` the mailbox can't send as (spec: Email, `send`). */
+  /** A send names a `from` the mailbox can't send as. */
   "sender_not_allowed",
   /** The definition has no such tool, or the call uses something it refuses (a CLI alias). */
   "unsupported",
-  /** A `heel run` directory outside the agent's work roots (D8b). */
+  /** A `heel run` directory outside the agent's work roots. */
   "workdir_not_allowed",
   /**
    * The account would put its credential in a sandboxed program's
-   * environment, and its operator never chose that (spec: CLI runner,
-   * "Credential delivery").
+   * environment, and its operator never chose that.
    */
   "credential_delivery",
 ] as const;
@@ -158,7 +151,7 @@ export function keyRejectedMessage(service: string, account: string): string {
   );
 }
 
-/** The definition knows the response shape but couldn't parse this one (spec: Fail-closed). */
+/** The definition knows the response shape but couldn't parse this one. */
 export class ResponseUnparseableError extends Error {
   constructor(message = "response does not have the shape heel knows") {
     super(message);
@@ -168,18 +161,18 @@ export class ResponseUnparseableError extends Error {
 
 export interface Definition {
   /**
+   * The tools an agent sees for this account, under their own names. A
+   * built-in definition lists a fixed table; a passthrough lists what its
+   * server lists now. Absent on surfaces with no tool list (HTTP, CLI).
+   */
+  tools?(signal: AbortSignal): Promise<Tool[]>;
+  /**
    * Fills in what the provider definition derives (action, kind,
    * recipients, items, targets, …) and may rewrite `args` to what will
    * actually run. Identity fields (org, agent, owner, run id, surface,
    * account, provider) must come back unchanged. A failed provider read is
    * `{ ok: false, reason: "lookup_unavailable" }`, never a guess.
    */
-  /**
-   * The tools an agent sees for this account, under their own names. A
-   * built-in definition lists a fixed table; a passthrough lists what its
-   * server lists now. Absent on surfaces with no tool list (HTTP, CLI).
-   */
-  tools?(signal: AbortSignal): Promise<Tool[]>;
   normalize(base: Call, ctx: NormalizeContext): Promise<Normalized>;
   /**
    * Reads the provider state a rule's check needs, with heel's own
@@ -195,7 +188,7 @@ export interface Definition {
   execute(call: Call, signal: AbortSignal): Promise<unknown>;
   /**
    * How long `execute` may take, when not the pipeline's upstream deadline:
-   * a `heel run` command has the sandbox's own wall-time limit (D8b).
+   * a `heel run` command has the sandbox's own wall-time limit.
    */
   executeTimeoutMs?: number;
   /**
@@ -211,8 +204,6 @@ export interface DefinitionRegistry {
   forAccount(account: AccountRecord): Definition | null;
 }
 
-// ── pause (D4b) ─────────────────────────────────────────────────────────────
-
 export interface PauseTarget {
   orgId: string;
   agentId: string;
@@ -226,8 +217,6 @@ export interface PauseStore {
   /** The scope of a pause covering this call (global, owner, agent, account or provider), or null. */
   find(db: HeelQuery, target: PauseTarget): PauseScope | null;
 }
-
-// ── approvals (D4b) ─────────────────────────────────────────────────────────
 
 /** Where the request for a call hash stands. `executed` requests never govern. */
 export type GoverningStatus = "pending" | "approved" | "denied" | "expired";
@@ -258,7 +247,6 @@ export interface ApprovalRequest {
 export interface ApprovalScript {
   /** The script's code, cut at `MAX_SCRIPT_CHARS`. */
   code: string;
-  /** Whether `code` was cut. */
   truncated: boolean;
   /** The calls it made before this one, in order. */
   before: { account: string; tool: string; decision: string }[];
@@ -283,7 +271,7 @@ export interface ApprovalStore {
   /**
    * The request that governs this call hash now, or null when none does:
    * a pending one (repeats join it, I-51), an approved one not yet used, a
-   * denied one inside its TTL (Q-A5), or an expired one (I-55). The store
+   * denied one inside its TTL, or an expired one (I-55). The store
    * owns the TTLs and decides when an expired or denied request stops
    * governing, so a later identical call creates a new request.
    */
@@ -298,8 +286,6 @@ export interface ApprovalStore {
   /** This agent's live standing approvals for the call, whose hash the pipeline already holds. */
   standing(db: HeelQuery, call: Call, callHash: string, now: Date): StandingApprovals;
 }
-
-// ── decision adapters ───────────────────────────────────────────────────────
 
 /**
  * What a decision adapter is told about a call. The rules have already
@@ -365,8 +351,6 @@ export interface ApprovalAdapter {
   hints(input: ApprovalHintInput, signal: AbortSignal): Promise<unknown>;
 }
 
-// ── results ─────────────────────────────────────────────────────────────────
-
 /** Why the pipeline denied a call, beyond the evaluator's reasons. */
 export type PipelineDenyReason =
   | DenyReason
@@ -381,7 +365,7 @@ export type PipelineDenyReason =
   | "reconnect_required"
   /** heel has no definition for the account's provider. */
   | "provider_unavailable"
-  /** A person denied this exact call and its TTL hasn't run out (Q-A5). */
+  /** A person denied this exact call and its TTL hasn't run out. */
   | "approval_denied"
   /** The upstream response couldn't be parsed on a surface whose shape heel knows. */
   | "response_unparseable"

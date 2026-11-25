@@ -90,7 +90,7 @@ export interface VaultOptions {
   refreshers?: RefresherLookup;
   now?: () => Date;
   refreshSkewMs?: number;
-  /** Called once an account is marked `reconnect_required`, so its owner can be told (D4). */
+  /** Called once an account is marked `reconnect_required`, so its owner can be told. */
   onReconnectRequired?: (accountId: string) => void;
 }
 
@@ -229,7 +229,7 @@ export class Vault {
   }
 
   /**
-   * Seals bytes that aren't a credential (a parked code-mode script, C2) with
+   * Seals bytes that aren't a credential (a parked code-mode script) with
    * the master key. `context` binds them to where they're stored, so sealed
    * bytes moved to another row don't open.
    */

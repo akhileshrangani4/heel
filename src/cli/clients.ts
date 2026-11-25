@@ -5,7 +5,7 @@ import type { ExecFn } from "./common.ts";
  * Adding heel to an agent app (`heel agent add|rotate --client`). For Claude
  * Code heel runs `claude mcp add` itself, so the token goes straight into
  * Claude Code's config: an agent setting heel up never sees it, and a careful
- * one can't burn it by hiding it from its own output (the Nov 21 dry run).
+ * one can't burn it by hiding it from its own output.
  * Codex reads its token from an environment variable heel can't set, so for
  * Codex, and whenever running the command fails, heel prints what to run.
  */

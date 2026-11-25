@@ -8,7 +8,7 @@ import {
 } from "../credential-delivery.ts";
 
 /**
- * What a CLI account stores (D8b; spec: CLI runner): the command name
+ * What a CLI account stores: the command name
  * agents use, the absolute binary heel runs (never looked up on PATH, so the
  * agent can't swap it, I-34), the hosts it may reach through heel's egress
  * proxy, and how its credential reaches it.
@@ -61,7 +61,7 @@ export function cliCredentialDelivery(settings: CliSettings): SandboxCredentialD
   return effectiveDelivery(settings);
 }
 
-/** GitHub's hosts `gh` needs (spec: CLI runner, "Network"). */
+/** GitHub's hosts `gh` needs. */
 export const GH_EGRESS = ["api.github.com", "github.com"] as const;
 
 /**

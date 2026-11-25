@@ -25,7 +25,7 @@ import {
 } from "./schema.ts";
 
 /**
- * Where heel's rule suggestions come from (roadmap 2.10): what a person
+ * Where heel's rule suggestions come from: what a person
  * decided on their own agents' requests, as the audit log recorded each
  * decision, with the call the request stored. Org asks are left out: they go
  * to admins, and an owner rule can't answer them.
@@ -252,7 +252,7 @@ export function rememberRejected(
 }
 
 /**
- * What `heel_history` tells an agent (2.10): its own requests its owner
+ * What `heel_history` tells an agent: its own requests its owner
  * decided, grouped, and the rules heel would suggest for it. Only this agent's
  * calls, and nothing about the owner's rules file, their approvals of other
  * agents, or what a call carried.

@@ -71,7 +71,7 @@ import { SETUP_PROMPT_NAME, setupPrompt } from "./setup-prompt.ts";
 import { type ApprovalWait, type Beat, NO_APPROVAL_WAIT, waitFor } from "./wait.ts";
 
 /**
- * heel's MCP endpoints on the agent plane (spec: MCP and code mode).
+ * heel's MCP endpoints on the agent plane.
  *
  * The agent was authenticated before the request got here (requireAgent).
  * For each request the SDK builds a fresh low-level `Server` for that agent
@@ -88,7 +88,7 @@ import { type ApprovalWait, type Beat, NO_APPROVAL_WAIT, waitFor } from "./wait.
 export type McpScope =
   | { kind: "account"; alias: string }
   | { kind: "direct" }
-  /** Bare `/mcp`: code mode's `run_code` and `heel_stubs` (D6b). */
+  /** Bare `/mcp`: code mode's `run_code` and `heel_stubs`. */
   | { kind: "code" };
 
 export interface McpSurfaceDeps {
@@ -98,7 +98,6 @@ export interface McpSurfaceDeps {
   log: Logger;
   version: string;
   now?: () => Date;
-  /** A fresh sandboxed worker per script; absent where the sandbox can't run. */
   /** Makes the worker for one script of this agent (the helper path keeps each agent on its own lane). */
   codeWorker?: (agentId: string) => CodeWorker;
   /** How many scripts may run at once, shared with `heel run`; unlimited when absent. */
@@ -106,20 +105,19 @@ export interface McpSurfaceDeps {
   /** Pauses that stop an agent's proposals too; heel's own store when absent. */
   pauses?: PauseStore;
   /**
-   * Saves a script whose call asks for approval, so the agent can resume it
-   * (code mode round 2, C2); the vault, which seals it. Without it an ask ends
-   * the script, as before.
+   * Saves a script whose call asks for approval, so the agent can resume it;
+   * the vault, which seals it. Without it an ask ends the script.
    */
   parking?: { sealer: Sealer };
   /** Called after an agent proposes rules, to tell its owner. */
   onRuleProposal?: (proposalId: string) => void;
-  /** For `heel_history` (2.10): the rules in force, and when heel suggests rules (null: never). */
+  /** For `heel_history`: the rules in force, and when heel suggests rules (null: never). */
   learning?: { rules: { readonly set: RuleSet | null }; threshold: LearningThreshold | null };
   /** Called after an agent asks for a connection, to tell its owner. */
   onAgentRequest?: (requestId: string) => void;
   /** heel's approval page, named in the setup prompt; the prompt says "heel's approval page" without it. */
   approvalsUrl?: string;
-  /** How long a call that needs approval is held open for its decision (2.12); not at all when absent. */
+  /** How long a call that needs approval is held open for its decision; not at all when absent. */
   approvalWait?: ApprovalWait;
 }
 
@@ -132,7 +130,7 @@ interface Held {
   until: number;
 }
 
-/** How many calls one agent may have held at once; more answer at once (2.12). */
+/** How many calls one agent may have held at once; more answer at once. */
 export const MAX_HELD_PER_AGENT = 8;
 
 /**
@@ -149,8 +147,8 @@ export function resumeMessage(resume: string): string {
 }
 
 /**
- * A finished script's last expression, beside what it printed, like a REPL
- * (code mode round 2, C1): an agent that ends with `rows[:3]` sees the rows.
+ * A finished script's last expression, beside what it printed, like a REPL:
+ * an agent that ends with `rows[:3]` sees the rows.
  * None (a script ending in an assignment) adds nothing. A value larger than
  * the stdout cap is left out with a note, so it can't flood the agent's context.
  */
@@ -179,17 +177,17 @@ const HEEL_TOOL_NAMES: ReadonlySet<string> = new Set(HEEL_TOOLS.map((tool) => to
 export interface McpSurface {
   /** Whether bare `/mcp` serves code mode: only with a sandboxed worker. */
   readonly codeMode: boolean;
-  /** Background scripts (C6), when code mode and parking are on. */
+  /** Background scripts, when code mode and parking are on. */
   readonly background: BackgroundRunner | null;
   /** Serves one MCP request for an authenticated agent. */
   serve(request: Request, agent: AuthenticatedAgent, scope: McpScope): Promise<Response>;
   close(): Promise<void>;
 }
 
-/** What a held call tells the client while it waits (2.12). */
+/** What a held call tells the client while it waits. */
 const WAITING_NOTE = "Waiting for approval on heel's approval page.";
 
-/** `_meta` key an agent puts its run id under (spec: Run ids). */
+/** `_meta` key an agent puts its run id under. */
 export const RUN_ID_META_KEY = "heel/runId";
 
 type ListingAccount = { account: AccountRecord; tools: NonNullable<Definition["tools"]> };
@@ -212,7 +210,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     `${tokenId}\0${typeof requestId}:${requestId}`;
 
   /**
-   * Holds the request until `decided()` or the call's window ends (2.12);
+   * Holds the request until `decided()` or the call's window ends;
    * true once decided. A script that asks twice shares one window.
    */
   async function hold(held: Held, decided: () => boolean): Promise<boolean> {
@@ -286,12 +284,12 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     return [...perAccount.flat(), ...HEEL_TOOLS];
   }
 
-  /** Every account the agent may use, as a Python module (spec: Code mode). */
+  /** Every account the agent may use, as a Python module. */
   async function modulesFor(agent: AuthenticatedAgent) {
     const modules = await Promise.all(
       accountsWithTools(agent).map(async ({ account, tools }) => {
         try {
-          // Built-in accounts' reads get `_async` twins (C4); heel marks those, not the server.
+          // Built-in accounts' reads get `_async` twins; heel marks those, not the server.
           const module = accountModule(account.alias, await tools(AbortSignal.timeout(10_000)), {
             asyncReads: isBuiltInProvider(account.provider),
           });
@@ -308,7 +306,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     return modules.flat();
   }
 
-  // Background scripts (C6) need code mode and somewhere to park.
+  // Background scripts need code mode and somewhere to park.
   const background =
     deps.codeWorker !== undefined && deps.parking !== undefined
       ? new BackgroundRunner({
@@ -479,7 +477,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
   }
 
   /**
-   * `run_code`, held (2.12): a script parked at a call that asks waits for
+   * `run_code`, held: a script parked at a call that asks waits for
    * the decision and carries on from that call in the same answer.
    */
   async function runCodeHeld(
@@ -537,8 +535,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     };
   }
 
-  /** Stores a rule proposal for the agent's owner; the target file is never the agent's choice. */
-  /** The agent's own decided requests and heel's suggestions for it (2.10). */
+  /** The agent's own decided requests and heel's suggestions for it. */
   function heelHistory(agent: AuthenticatedAgent): CallToolResult {
     const { decisions, suggestions } = historyFor(
       {
@@ -569,7 +566,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
   }
 
   /**
-   * An agent asks for one of heel's suggestions for it (2.10) by id: heel
+   * An agent asks for one of heel's suggestions for it by id: heel
    * drafts the rule again from the owner's decisions and places it right
    * before the rule that asked, exactly as the owner's own Review would.
    */
@@ -620,6 +617,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     return { content: [{ type: "text", text: JSON.stringify(answer) }], structuredContent: answer };
   }
 
+  /** Stores a rule proposal for the agent's owner; the target file is never the agent's choice. */
   function proposeRulesTool(
     agent: AuthenticatedAgent,
     args: Record<string, unknown>,
@@ -744,7 +742,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
   }
 
   /**
-   * `heel_accounts` with `wait: true` (2.12): held until something this agent
+   * `heel_accounts` with `wait: true`: held until something this agent
    * asked for is decided, so it learns of a connection or a rule without its
    * person telling it to look again. Nothing waiting answers at once.
    */
@@ -763,7 +761,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     return heelAccounts(agent);
   }
 
-  /** The agent's accounts and what it asked for that still waits (roadmap 2.6). Names only. */
+  /** The agent's accounts and what it asked for that still waits. Names only. */
   function heelAccounts(agent: AuthenticatedAgent): CallToolResult {
     const at = now();
     const answer = {
@@ -782,7 +780,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
             expiresAt: r.expiresAt.toISOString(),
           })),
         ruleProposals: pendingProposals(deps.db, agent.ownerId, at)
-          // Only its own: heel's suggestions about it (2.10) aren't the agent's to see.
+          // Only its own: heel's suggestions about it aren't the agent's to see.
           .filter((p) => p.agentId === agent.agentId && p.origin === "agent")
           .map((p) => ({ proposalId: p.id, expiresAt: p.expiresAt.toISOString() })),
       },
@@ -840,7 +838,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     if (target === null) {
       throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Unknown tool: ${params.name}`);
     }
-    // The agent's reason travels beside the call, never inside it (spec: The approval page).
+    // The agent's reason travels beside the call, never inside it.
     const { args: callArgs, reason } = takeReason(args);
     const run = (noAsk: boolean) =>
       deps.pipeline.run({
@@ -907,7 +905,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
       { capabilities: { tools: {}, prompts: {}, logging: {} } },
     );
     server.setRequestHandler("tools/list", async () => ({ tools: await listTools(agent, scope) }));
-    // The setup prompt (roadmap 2.6): in Claude Code, /mcp__heel__setup.
+    // The setup prompt: in Claude Code, /mcp__heel__setup.
     server.setRequestHandler("prompts/list", async () => ({
       prompts: [
         {
@@ -1012,7 +1010,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
 
 /**
  * A static token close to its expiry adds one line to every tool result, so
- * the agent can tell its person before calls start failing (roadmap 1.6).
+ * the agent can tell its person before calls start failing.
  * OAuth access tokens renew themselves and are left alone.
  */
 export function withExpiryNote(

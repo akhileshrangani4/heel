@@ -12,7 +12,7 @@ import type { PipelineResult } from "./pipeline/ports.ts";
 import { type SandboxSlots, UNLIMITED_SLOT } from "./sandbox-slots.ts";
 
 /**
- * The CLI runner's endpoint (D8b; spec: CLI runner): `heel run` posts the
+ * The CLI runner's endpoint: `heel run` posts the
  * command line, the directory it runs in, and optionally the account. Without
  * an account, heel picks the agent owner's one CLI account for that command,
  * and refuses when there are none or several.

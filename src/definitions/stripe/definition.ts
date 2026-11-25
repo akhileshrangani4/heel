@@ -8,8 +8,8 @@ import type { FetchFn } from "../sign-in.ts";
 import { StripeClient, StripeNotFoundError, StripeRefused } from "./client.ts";
 
 /**
- * The Stripe definition (D12b; spec: "Calendar, Slack, Linear, Notion,
- * Stripe"): heel's own tools on Stripe's API (https://docs.stripe.com/api),
+ * The Stripe definition: heel's own tools on Stripe's API
+ * (https://docs.stripe.com/api),
  * connected with `heel connect stripe --credential-stdin` (a secret or,
  * better, a restricted key).
  *

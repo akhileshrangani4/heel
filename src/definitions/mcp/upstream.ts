@@ -21,8 +21,8 @@ import { type StdioUpstream, type UpstreamSettings, upstreamSettings } from "./s
 import { type UpstreamOAuthDeps, UpstreamOAuthProvider } from "./upstream-oauth.ts";
 
 /**
- * Connections to the MCP servers that passthrough accounts point at (spec:
- * Upstream MCP servers). heel is an ordinary MCP client of each one: it
+ * Connections to the MCP servers that passthrough accounts point at.
+ * heel is an ordinary MCP client of each one: it
  * re-issues every call through the SDK with the arguments the pipeline
  * decided on, never forwarding the agent's raw request.
  *
@@ -43,12 +43,12 @@ export interface UpstreamDeps {
   fetch?: FetchLike;
   /** What host names resolve to, for servers held to public hosts; DNS when absent. */
   resolveHost?: (host: string) => Promise<readonly string[]>;
+  /** Where OAuth upstreams keep their state; absent when the vault is closed. */
+  oauth?: UpstreamOAuthDeps;
   /**
    * Starts a local (stdio) MCP server in the sandbox. Absent when the host
    * can't run the sandbox: those accounts' calls are then denied.
    */
-  /** Where OAuth upstreams keep their state (D5c); absent when the vault is closed. */
-  oauth?: UpstreamOAuthDeps;
   launchStdio?: StdioLauncher;
   /**
    * Whether a pause covers the account (global, its owner, its alias or its
@@ -240,7 +240,7 @@ export class UpstreamPool {
     return { client, transport, ...(capped === undefined ? {} : { capped }) };
   }
 
-  /** The fetch for a remote server: public hosts only, hop by hop, for one an agent asked for (roadmap 2.5). */
+  /** The fetch for a remote server: public hosts only, hop by hop, for one an agent asked for. */
   #httpFetch(upstream: UpstreamSettings): FetchLike | undefined {
     if (upstream.transport !== "http" || !upstream.publicOnly) return this.#deps.fetch;
     return publicOnlyFetch(this.#deps.fetch ?? fetch, this.#deps.resolveHost);

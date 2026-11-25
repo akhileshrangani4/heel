@@ -3,7 +3,7 @@ import type { HeelDb } from "../store/db.ts";
 import { auditJsonLine } from "./jsonl.ts";
 
 /**
- * `heel audit export` (spec: Teams, "Audit"). The admin socket answers one
+ * `heel audit export`. The admin socket answers one
  * line per request, so export pages through the log. The first page pins
  * the newest row id as `throughId`; later pages pass it back, so rows
  * appended while an export runs never shift or extend its snapshot.

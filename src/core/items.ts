@@ -1,6 +1,5 @@
 /**
- * Item expansion (spec: Counts and state checks, "Item expansion per
- * action"). `items` is what one call affects, never how many calls were
+ * Item expansion. `items` is what one call affects, never how many calls were
  * made: a 1,000-id `batchDelete` is 1,000 items, and a thread-level trash is
  * every message in the thread. Provider definitions expand their own calls
  * with these helpers; anything else is one item.

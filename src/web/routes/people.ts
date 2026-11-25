@@ -22,7 +22,7 @@ import { clientScript } from "../ui/client.ts";
 import { type PeopleLink, peoplePage, personLinkPage } from "../ui/people.ts";
 
 /**
- * People in the web app (roadmap 2.9), as `heel user add`, `heel user enroll`
+ * People in the web app, as `heel user add`, `heel user enroll`
  * and `heel user email` do on the host. Every change asks for a passkey.
  *
  * - Admins add a person by name (only without a sign-in provider: with one,

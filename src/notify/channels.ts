@@ -5,7 +5,7 @@ import type { NotifyChannel } from "../store/schema.ts";
 import { type Notice, noticeText } from "./message.ts";
 
 /**
- * The three ways a notification leaves heel (spec: Notifications). Each
+ * The three ways a notification leaves heel. Each
  * sender turns a `Notice` into one message on its channel and
  * reports what happened, so the notifier can mark the delivery sent, retry
  * it, or stop trying.
@@ -38,8 +38,6 @@ function reasonOf(error: unknown): string {
   }
   return error instanceof Error ? error.name : "error";
 }
-
-// ── web push ────────────────────────────────────────────────────────────────
 
 /** Push services keep an undelivered message this long: a request lives 24 h. */
 const PUSH_TTL_SECONDS = 24 * 60 * 60;
@@ -80,8 +78,6 @@ export function webPushSender(options: {
   };
 }
 
-// ── email ───────────────────────────────────────────────────────────────────
-
 /** Email over the operator's SMTP server, as plain text with the link. */
 export function emailSender(options: { transport: Transporter; from: string }): ChannelSender {
   return {
@@ -103,8 +99,6 @@ export function emailSender(options: { transport: Transporter; from: string }): 
     },
   };
 }
-
-// ── Slack ───────────────────────────────────────────────────────────────────
 
 /** The two Slack Web API methods heel calls; a `WebClient` has both. */
 export type SlackApi = Pick<WebClient, "users" | "chat">;

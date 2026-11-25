@@ -31,7 +31,7 @@ export type ConnectProps =
   | { kind: "invalid"; message: string };
 
 /**
- * The page an AI app's "connect" button opens (A2). Connecting lets that app
+ * The page an AI app's "connect" button opens. Connecting lets that app
  * call tools as one of the person's agents, so it takes a passkey, like
  * every other decision that lets calls through. Every call it then makes
  * goes through the person's rules.

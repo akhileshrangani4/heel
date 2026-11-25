@@ -1,11 +1,9 @@
 /**
- * Holding a call open until its person decides (roadmap 2.12).
+ * Holding a call open until its person decides.
  *
- * A call that needs approval used to answer `pending` at once, and the agent
- * had to be told to check again after the passkey tap. Now heel keeps the
- * request open, checking the decision every `pollMs`, and answers as soon as
- * it's made. A call no one decides within the window answers `pending` as
- * before, so a slow decision never leaves the agent hanging.
+ * heel keeps the request open, checking the decision every `pollMs`, and
+ * answers as soon as it's made. A call no one decides within the window
+ * answers `pending`, so a slow decision never leaves the agent hanging.
  *
  * While it waits, heel sends a notification every `beatMs`: a progress
  * notification when the client asked for progress, otherwise a log line.
@@ -17,7 +15,6 @@
 export interface ApprovalWait {
   /** How long to hold a call for this client (its `clientInfo.name`); 0 doesn't hold. */
   windowMs: (clientName: string | null) => number;
-  /** How often to look at the decision. */
   pollMs: number;
   /** How often to tell the client heel is still waiting. */
   beatMs: number;
@@ -42,7 +39,7 @@ export const DEFAULT_APPROVAL_WAIT: ApprovalWait = {
   beatMs: 20_000,
 };
 
-/** Doesn't hold: answers at once, as heel did before 2.12. */
+/** Doesn't hold: answers at once. */
 export const NO_APPROVAL_WAIT: ApprovalWait = { windowMs: () => 0, pollMs: 1_000, beatMs: 20_000 };
 
 /** Tells the client heel is still waiting. */

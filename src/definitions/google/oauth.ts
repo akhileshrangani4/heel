@@ -4,7 +4,7 @@ import { type ConfidentialClient, exchangeCode, oauthRefresher } from "../oauth-
 import { type FetchFn, grantedScopes, type ProviderSignIn, SignInError } from "../sign-in.ts";
 
 /**
- * Signing in to Google for a Gmail account (D9a-1). heel is a confidential
+ * Signing in to Google for a Gmail account. heel is a confidential
  * web-server client registered by the operator (`providers.google` in
  * heel.yaml); Google offers no dynamic registration.
  *

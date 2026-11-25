@@ -14,7 +14,7 @@ export interface ProposalCard {
   hide: number;
   workdirs: number;
   reason: string | null;
-  /** `heel` when heel drafted it from your own decisions (2.10), not the agent. */
+  /** `heel` when heel drafted it from your own decisions, not the agent. */
   origin: "agent" | "heel";
   createdAt: Date;
   expiresAt: Date;
@@ -74,11 +74,11 @@ export interface ProposalPageProps {
   agent: string;
   status: RuleProposalStatus;
   reason: string | null;
-  /** `heel` when heel drafted it from the owner's decisions (2.10): `agent` didn't ask. */
+  /** `heel` when heel drafted it from the owner's decisions: `agent` didn't ask. */
   origin: "agent" | "heel";
   /** The file the rules go into, relative to heel's home: `rules/alice.yaml`. */
   file: string;
-  /** Each rule as heel will write it, and in plain words (roadmap 2.3). */
+  /** Each rule as heel will write it, and in plain words. */
   rules: readonly { yaml: string; words: string; why: string | null }[];
   /** Hide entries, added to the end of the file's `hide:` list. */
   hide: readonly { yaml: string; words: string; why: string | null }[];

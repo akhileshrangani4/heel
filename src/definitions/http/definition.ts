@@ -19,7 +19,7 @@ import {
 } from "./openapi.ts";
 
 /**
- * The definition for an HTTP account (D7a; spec: HTTP proxy): an API heel
+ * The definition for an HTTP account: an API heel
  * reaches at one base URL, with the account's credential attached.
  *
  * - The call's `tool` is `<METHOD> <path-template>`, or the raw path when no
@@ -41,9 +41,9 @@ import {
  *   form-encoded, JSON-escaped, base64, the header heel sent, a basic
  *   password on its own), is scrubbed from the body and every header passed
  *   back. Responses are read with a running 25 MB cap.
- * - Hiding (D7b): an operation with an `x-heel-hide` mapping has the hidden
+ * - Hiding: an operation with an `x-heel-hide` mapping has the hidden
  *   items removed from its JSON response, with their count in a
- *   `Heel-Hidden` header (one count, no per-row markers, spec Q-H1). A
+ *   `Heel-Hidden` header (one count, no per-row markers). A
  *   response that is one hidden item answers 403 `not_available`. A mapped
  *   response heel can't read is withheld, an error answer reaches the agent
  *   as its status only, and what is returned is always what heel checked,

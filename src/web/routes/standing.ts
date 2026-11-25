@@ -19,7 +19,7 @@ import type { SessionView } from "../sessions.ts";
 import { type StandingRow, standingApprovalList } from "../ui/standing-approval-list.ts";
 
 /**
- * Standing approvals (spec: Standing approvals). They live in the store,
+ * Standing approvals. They live in the store,
  * never in YAML. A person sees the ones on their own agents (an admin sees
  * all) and can revoke one with a plain form: revoking only tightens, so it
  * needs no passkey, and it takes effect on the next call.
@@ -38,7 +38,7 @@ function liveRuleHashes(set: RuleSet | null): Set<string> {
 /**
  * Who sees and may revoke a standing approval: admins, the agent's owner,
  * the person who granted it, and, on a shared account, that account's
- * owner and approvers (D13b), since it answers asks they decide.
+ * owner and approvers, since it answers asks they decide.
  */
 function visibleTo(db: HeelQuery, session: SessionView, record: StandingRecord): boolean {
   if (session.role === "admin" || record.ownerId === session.userId) return true;
