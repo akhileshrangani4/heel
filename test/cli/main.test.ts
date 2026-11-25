@@ -731,6 +731,8 @@ describe("heel list commands: a table, or the admin result with --json", () => {
       return decided.standingApprovalId;
     };
     await standing("exact_call", "Q3");
+    // The list is newest first; a later clock keeps that order from resting on a tie.
+    h.clock.advance(60_000);
     const revoked = await standing("rule", "Q4");
     expect(await out("approvals", "revoke", revoked)).toBe(
       `Revoked standing approval ${idOf("sta")}. It stops matching on the next call.\n`,
@@ -738,8 +740,8 @@ describe("heel list commands: a table, or the admin result with --json", () => {
 
     expect(await out("approvals", "list")).toBe(
       "ID                          AGENT      ACCOUNT     COVERS           STATUS (UTC)\n" +
-        `${idOf("sta")}  inbox-bot  gmail-work  this exact call  until ${SHORT}\n` +
-        `${idOf("sta")}  inbox-bot  gmail-work  the rule         revoked ${SHORT}\n`,
+        `${idOf("sta")}  inbox-bot  gmail-work  the rule         revoked ${SHORT}\n` +
+        `${idOf("sta")}  inbox-bot  gmail-work  this exact call  until ${SHORT}\n`,
     );
     const approval = (scope: string, revokedAt: string | null) => ({
       id: idOf("sta"),
@@ -753,7 +755,7 @@ describe("heel list commands: a table, or the admin result with --json", () => {
       revokedAt,
     });
     expect(await out("approvals", "list", "--json")).toBe(
-      asJson([approval("exact_call", null), approval("rule", AT)]),
+      asJson([approval("rule", AT), approval("exact_call", null)]),
     );
   });
 });
