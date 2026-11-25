@@ -251,9 +251,9 @@ export const AdminRequestSchema = z.discriminatedUnion("method", [
 
 export type AdminRequest = z.output<typeof AdminRequestSchema>;
 export type AdminMethod = AdminRequest["method"];
-/** A request for one method (`Extract` would miss `account.share`, which shares an entry). */
+/** A request for one method. */
 export type AdminRequestOf<M extends AdminMethod> = AdminRequest & { method: M };
-/** What each method answers with: whatever its handler in handlers.ts returns. */
+/** Each method's result, as its handler in handlers.ts returns it. */
 export type AdminResults = { [M in AdminMethod]: ReturnType<AdminHandlers[M]> };
 
 export const ADMIN_ERROR_CODES = [
