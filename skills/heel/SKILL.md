@@ -34,6 +34,6 @@ In code mode (`run_code`), reads of heel's built-in accounts have `_async` twins
 
 ## Find what you have
 
-`heel_accounts` lists the accounts you can use and your requests still waiting for the user. heel's own `setup` MCP prompt walks through putting more of the user's services behind heel.
+`heel_accounts` lists the accounts you can use and your requests still waiting for the user. With `{"wait": true}` it holds until something you asked for changes; if `wait.outcome` is `nothing_changed`, the user hasn't decided yet, so call it again the same way. heel's own `setup` MCP prompt walks through putting more of the user's services behind heel.
 
 Docs: https://useheel.dev/docs (start at https://useheel.dev/llms.txt).

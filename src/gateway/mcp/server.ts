@@ -69,7 +69,16 @@ import {
 } from "./names.ts";
 import { decisionResult, toolResult, usedDecision } from "./results.ts";
 import { SETUP_PROMPT_NAME, setupPrompt } from "./setup-prompt.ts";
-import { type ApprovalWait, type Beat, NO_APPROVAL_WAIT, waitFor } from "./wait.ts";
+import {
+  ACCOUNTS_CHANGED,
+  type AccountsWait,
+  type ApprovalWait,
+  type Beat,
+  NO_APPROVAL_WAIT,
+  NOTHING_WAITING,
+  nothingChanged,
+  waitFor,
+} from "./wait.ts";
 
 /**
  * heel's MCP endpoints on the agent plane.
@@ -212,9 +221,8 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
    * true once decided. A script that asks twice shares one window.
    */
   async function hold(held: Held, decided: () => boolean): Promise<boolean> {
-    const holding = heldCalls.get(held.agentId) ?? 0;
-    if (holding >= MAX_HELD_PER_AGENT) return decided();
-    heldCalls.set(held.agentId, holding + 1);
+    if (!canHold(held)) return decided();
+    heldCalls.set(held.agentId, (heldCalls.get(held.agentId) ?? 0) + 1);
     try {
       return await waitFor(decided, {
         windowMs: Math.max(0, held.until - Date.now()),
@@ -228,6 +236,11 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
       if (left === 0) heldCalls.delete(held.agentId);
       else heldCalls.set(held.agentId, left);
     }
+  }
+
+  /** Whether `hold` would hold this call: its window hasn't ended and its agent has a slot. */
+  function canHold(held: Held): boolean {
+    return held.until > Date.now() && (heldCalls.get(held.agentId) ?? 0) < MAX_HELD_PER_AGENT;
   }
 
   /** Whether an approval this agent asked for has been decided (or has expired). */
@@ -740,29 +753,53 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
   }
 
   /**
+   * What a held `heel_accounts` watches: what the agent asked for that still
+   * waits, and each account it can use with its status. An account its owner
+   * connects another way (`heel connect` for a key, leaving the request open)
+   * or reconnects changes it too.
+   */
+  function watched(agent: AuthenticatedAgent): { waiting: string; key: string } {
+    const waiting = waitingKey(agent);
+    const usable = accountsUsableBy(deps.db, agent.orgId, agent.ownerId)
+      .map((a) => `${a.alias}:${a.status}`)
+      .join(",");
+    return { waiting, key: `${waiting};${usable}` };
+  }
+
+  /**
    * `heel_accounts` with `wait: true`: held until something this agent
-   * asked for is decided, so it learns of a connection or a rule without its
-   * person telling it to look again. Nothing waiting answers at once.
+   * asked for is decided or expires, or one of its accounts connects or
+   * changes, so it learns of a connection or a rule without its person
+   * telling it to look again. Nothing waiting answers at once. The answer's
+   * `wait` says which happened, so a window that ends with nothing changed
+   * can't be read as the owner's answer.
    */
   async function heelAccountsWaiting(
     agent: AuthenticatedAgent,
     args: Record<string, unknown>,
     held: Held,
   ): Promise<CallToolResult> {
-    if (args["wait"] === true) {
-      const before = waitingKey(agent);
-      if (before !== "") await hold(held, () => waitingKey(agent) !== before);
-      if (!agentStillLive(deps.db, agent, now())) {
-        throw new ProtocolError(ProtocolErrorCode.InvalidRequest, "This agent is no longer active");
-      }
+    if (args["wait"] !== true) return heelAccounts(agent);
+    const before = watched(agent);
+    let wait = NOTHING_WAITING;
+    if (before.waiting !== "") {
+      const started = Date.now();
+      const holding = canHold(held);
+      const changed = await hold(held, () => watched(agent).key !== before.key);
+      wait = changed ? ACCOUNTS_CHANGED : nothingChanged(holding ? Date.now() - started : null);
     }
-    return heelAccounts(agent);
+    if (!agentStillLive(deps.db, agent, now())) {
+      throw new ProtocolError(ProtocolErrorCode.InvalidRequest, "This agent is no longer active");
+    }
+    return heelAccounts(agent, wait);
   }
 
   /** The agent's accounts and what it asked for that still waits. Names only. */
-  function heelAccounts(agent: AuthenticatedAgent): CallToolResult {
+  function heelAccounts(agent: AuthenticatedAgent, wait?: AccountsWait): CallToolResult {
     const at = now();
     const answer = {
+      // First, so the agent reads how the wait ended before the lists.
+      ...(wait === undefined ? {} : { wait }),
       accounts: accountsUsableBy(deps.db, agent.orgId, agent.ownerId).map((a) => ({
         alias: a.alias,
         // A remote MCP server's provider id carries heel's own key; the agent sees "mcp".
