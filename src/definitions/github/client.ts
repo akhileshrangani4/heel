@@ -1,30 +1,15 @@
-import { CredentialRejectedError } from "../../gateway/pipeline/ports.ts";
+import { CredentialRejectedError, UpstreamError } from "../../gateway/pipeline/ports.ts";
 import type { FetchFn } from "../sign-in.ts";
+import { NotFoundError } from "../tool-table.ts";
 export const GITHUB_API = "https://api.github.com";
 
 /**
  * GitHub's REST API with the account's token. Reads that come back
- * 404 are `GitHubNotFoundError`, so a missing target is denied like a hidden
- * one. A write GitHub answered with a 4xx is `GitHubWriteRefused`: nothing
+ * 404 are `NotFoundError`, so a missing target is denied like a hidden
+ * one. A write GitHub answered with a 4xx is an `UpstreamError`: nothing
  * happened. A 5xx, or no answer, leaves the outcome unknown; heel never
  * retries a write.
  */
-
-export class GitHubNotFoundError extends Error {
-  override readonly name = "GitHubNotFoundError";
-}
-
-export class GitHubWriteRefused extends Error {
-  override readonly name = "GitHubWriteRefused";
-  readonly status: number;
-  readonly body: unknown;
-
-  constructor(status: number, body: unknown) {
-    super(`GitHub refused the write (${status})`);
-    this.status = status;
-    this.body = body;
-  }
-}
 
 type Method = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
 
@@ -77,12 +62,12 @@ export class GitHubClient {
     // A bad token: GitHub turned it down before doing anything.
     if (response.status === 401) throw new CredentialRejectedError("GitHub");
     if (method === "GET") {
-      if (response.status === 404) throw new GitHubNotFoundError(`${path} not found`);
+      if (response.status === 404) throw new NotFoundError(`${path} not found`);
       throw new Error(`GitHub answered ${response.status} for ${path}`);
     }
     // A 4xx means GitHub refused it and nothing happened; a 5xx may have done it.
     if (response.status >= 400 && response.status < 500) {
-      throw new GitHubWriteRefused(response.status, body);
+      throw new UpstreamError(response.status, body);
     }
     throw new Error(`GitHub answered ${response.status} for a write; the outcome is unknown`);
   }

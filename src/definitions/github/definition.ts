@@ -1,13 +1,13 @@
 import type { Tool } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import { type Definition, UpstreamError } from "../../gateway/pipeline/ports.ts";
+import type { Definition } from "../../gateway/pipeline/ports.ts";
 import type { AccountRecord } from "../../store/directory.ts";
 import type { Vault } from "../../vault/vault.ts";
 import { githubRest } from "../http/rest.ts";
 import type { FetchFn } from "../sign-in.ts";
 import { listedTools, type ToolRow, toolRow, toolTableDefinition } from "../tool-table.ts";
 import { GitHubApi } from "./api.ts";
-import { GitHubClient, GitHubNotFoundError, GitHubWriteRefused } from "./client.ts";
+import { GitHubClient } from "./client.ts";
 
 /**
  * The GitHub definition: heel's
@@ -523,11 +523,6 @@ export function githubDefinition(account: AccountRecord, deps: GitHubDeps): Defi
     tools: ALL_TOOLS,
     listed: GITHUB_TOOLS,
     box,
-    errors: {
-      isNotFound: (error) => error instanceof GitHubNotFoundError,
-      refusal: (error) =>
-        error instanceof GitHubWriteRefused ? new UpstreamError(error.status, error.body) : null,
-    },
     stateCheck: async (check, b, call, signal) => {
       if (check !== "checks" || !isMergeAction(call.action) || call.repo === undefined) {
         return "fail";

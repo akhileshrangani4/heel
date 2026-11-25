@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { type FetchFn, GMAIL_API_BASE } from "../google/oauth.ts";
 import { getWithRetry, throwIfWriteFailed } from "../http-retry.ts";
+import { NotFoundError } from "../tool-table.ts";
 
 /**
  * The few Gmail API reads heel needs (Gmail API v1 reference, rev 20261106).
@@ -133,30 +134,13 @@ export const METADATA_HEADERS = [
   "References",
 ] as const;
 
-/** Gmail answered 404: the message or thread doesn't exist, or isn't this mailbox's. */
-export class GmailNotFoundError extends Error {
-  override readonly name = "GmailNotFoundError";
-}
-
-/** Gmail answered with another error, or with a body that didn't parse. */
+/** Gmail answered a read with an error other than 404, or with a body that didn't parse. */
 export class GmailError extends Error {
   override readonly name = "GmailError";
   readonly status: number;
   constructor(status: number, message: string) {
     super(message);
     this.status = status;
-  }
-}
-
-/** Gmail refused a write. The write did not happen, so the call's outcome is known. */
-export class GmailWriteRefused extends Error {
-  override readonly name = "GmailWriteRefused";
-  readonly status: number;
-  readonly body: unknown;
-  constructor(status: number, body: unknown) {
-    super(`Gmail refused the write (${status})`);
-    this.status = status;
-    this.body = body;
   }
 }
 
@@ -184,7 +168,8 @@ export class GmailClient {
         signal,
       }),
     );
-    if (response.status === 404) throw new GmailNotFoundError(`${path} was not found`);
+    // The message or thread doesn't exist, or isn't this mailbox's.
+    if (response.status === 404) throw new NotFoundError(`${path} was not found`);
     if (!response.ok) throw new GmailError(response.status, `Gmail answered ${response.status}`);
     const parsed = schema.safeParse(await response.json());
     if (!parsed.success)
@@ -194,7 +179,7 @@ export class GmailClient {
 
   /**
    * A write: sent once, never retried, since a send that timed out may have
-   * gone. A 4xx answer is a refusal (`GmailWriteRefused`): nothing happened.
+   * gone. A 4xx answer is a refusal (`UpstreamError`): nothing happened.
    * A 5xx, a 408 or a network failure leaves the outcome unknown.
    */
   async #write<T>(
@@ -214,7 +199,7 @@ export class GmailClient {
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       signal,
     });
-    await throwIfWriteFailed(response, "Gmail", GmailWriteRefused);
+    await throwIfWriteFailed(response, "Gmail");
     if (schema === null) return null;
     const parsed = schema.safeParse(await response.json());
     if (!parsed.success)

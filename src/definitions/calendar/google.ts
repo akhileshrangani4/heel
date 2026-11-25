@@ -1,6 +1,6 @@
 import type { Tool } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import { type Definition, UpstreamError } from "../../gateway/pipeline/ports.ts";
+import type { Definition } from "../../gateway/pipeline/ports.ts";
 import type { AccountRecord } from "../../store/directory.ts";
 import type { Vault } from "../../vault/vault.ts";
 import { Address, unique } from "../mail/compose.ts";
@@ -12,12 +12,7 @@ import {
   toolRow,
   toolTableDefinition,
 } from "../tool-table.ts";
-import {
-  type CalendarEvent,
-  CalendarNotFoundError,
-  CalendarWriteRefused,
-  GoogleCalendarClient,
-} from "./google-client.ts";
+import { type CalendarEvent, GoogleCalendarClient } from "./google-client.ts";
 
 /**
  * The Google Calendar definition. Actions: `calendar.read`,
@@ -344,11 +339,6 @@ export function googleCalendarDefinition(
     tools: TOOLS,
     listed: GOOGLE_CALENDAR_TOOLS,
     box,
-    errors: {
-      isNotFound: (error) => error instanceof CalendarNotFoundError,
-      refusal: (error) =>
-        error instanceof CalendarWriteRefused ? new UpstreamError(error.status, error.body) : null,
-    },
     stateCheck: async () => "fail",
   });
 }

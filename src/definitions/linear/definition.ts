@@ -1,12 +1,18 @@
 import type { Tool } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import type { ProviderFields } from "../../core/call.ts";
-import { type Definition, UpstreamError } from "../../gateway/pipeline/ports.ts";
+import type { Definition } from "../../gateway/pipeline/ports.ts";
 import type { AccountRecord } from "../../store/directory.ts";
 import type { Vault } from "../../vault/vault.ts";
 import type { FetchFn } from "../sign-in.ts";
-import { listedTools, type ToolRow, toolRow, toolTableDefinition } from "../tool-table.ts";
-import { LinearClient, LinearNotFoundError, LinearRefused } from "./client.ts";
+import {
+  listedTools,
+  NotFoundError,
+  type ToolRow,
+  toolRow,
+  toolTableDefinition,
+} from "../tool-table.ts";
+import { LinearClient, refused } from "./client.ts";
 
 /**
  * The Linear definition: heel's own tools on Linear's GraphQL API
@@ -77,7 +83,7 @@ async function unmoved(
 ) {
   const now = fieldsOf(await issueOf(box, id, signal));
   if (now.team !== fields.team || (now.project ?? null) !== (fields.project ?? null)) {
-    throw new LinearRefused(["the issue moved to another team or project after heel checked it"]);
+    throw refused(["the issue moved to another team or project after heel checked it"]);
   }
 }
 
@@ -131,7 +137,7 @@ async function issueOf(box: Box, ref: string, signal: AbortSignal): Promise<Line
   );
   const issue = data["issue"] as LinearIssue | null;
   if (issue === null || typeof issue?.id !== "string" || typeof issue.team?.key !== "string") {
-    throw new LinearNotFoundError(`issue ${ref}`);
+    throw new NotFoundError(`issue ${ref}`);
   }
   return issue;
 }
@@ -151,7 +157,7 @@ async function teamId(box: Box, key: string, signal: AbortSignal): Promise<strin
   );
   const nodes = (data["teams"] as { nodes?: { id: string; key: string }[] } | null)?.nodes ?? [];
   const match = nodes.filter((t) => t.key.toUpperCase() === key);
-  if (match.length !== 1 || match[0] === undefined) throw new LinearNotFoundError(`team ${key}`);
+  if (match.length !== 1 || match[0] === undefined) throw new NotFoundError(`team ${key}`);
   return match[0].id;
 }
 
@@ -175,7 +181,7 @@ const shownIssue = (raw: unknown) => {
 /** The result of a mutation: its `success`, or an error when Linear said no. */
 function mutated(data: Record<string, unknown>, name: string) {
   const payload = data[name] as { success?: unknown } & Record<string, unknown>;
-  if (payload?.success !== true) throw new LinearRefused([`${name} didn't succeed`]);
+  if (payload?.success !== true) throw refused([`${name} didn't succeed`]);
   return payload;
 }
 
@@ -398,11 +404,6 @@ export function linearDefinition(account: AccountRecord, deps: LinearDeps): Defi
     tools: TOOLS,
     listed: LINEAR_TOOLS,
     box: { client: new LinearClient(deps.fetch, token) },
-    errors: {
-      isNotFound: (error) => error instanceof LinearNotFoundError,
-      refusal: (error) =>
-        error instanceof LinearRefused ? new UpstreamError(400, { errors: error.messages }) : null,
-    },
     stateCheck: async () => "fail",
   });
 }

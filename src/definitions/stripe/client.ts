@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { CredentialRejectedError } from "../../gateway/pipeline/ports.ts";
+import { CredentialRejectedError, UpstreamError } from "../../gateway/pipeline/ports.ts";
 import type { FetchFn } from "../sign-in.ts";
+import { NotFoundError } from "../tool-table.ts";
 
 /**
  * Stripe's REST API with the account's secret or restricted key
@@ -14,9 +15,9 @@ import type { FetchFn } from "../sign-in.ts";
  *   so a key derived from the parameters would only make Stripe replay an
  *   earlier answer to a later, deliberate call (an email set back, a decline
  *   cached for 24 hours) and report it as new.
- * - Errors: a 404 on a read is `StripeNotFoundError`. On a write, only 400,
+ * - Errors: a 404 on a read is `NotFoundError`. On a write, only 400,
  *   401, 402, 403, 404 and 429 mean Stripe refused before acting
- *   (https://docs.stripe.com/error-low-level): `StripeRefused`. Anything
+ *   (https://docs.stripe.com/error-low-level): `UpstreamError`. Anything
  *   else (409, 424, 5xx, no answer, a 200 heel can't read) leaves the
  *   outcome unknown.
  */
@@ -26,22 +27,6 @@ export const STRIPE_VERSION = "2026-10-28.endive";
 
 /** Write statuses Stripe answers before acting. */
 const REFUSED = new Set([400, 401, 402, 403, 404, 429]);
-
-export class StripeNotFoundError extends Error {
-  override readonly name = "StripeNotFoundError";
-}
-
-export class StripeRefused extends Error {
-  override readonly name = "StripeRefused";
-  readonly status: number;
-  readonly code: string;
-
-  constructor(status: number, code: string) {
-    super(`Stripe refused the request (${status} ${code})`);
-    this.status = status;
-    this.code = code;
-  }
-}
 
 type Params = Record<string, string | number | boolean | undefined | Record<string, string>>;
 
@@ -114,10 +99,10 @@ export class StripeClient {
     const error = (body["error"] ?? {}) as { code?: unknown; type?: unknown };
     const code = String(error.code ?? error.type ?? "error");
     if (method === "GET") {
-      if (response.status === 404) throw new StripeNotFoundError(`${path}: ${code}`);
+      if (response.status === 404) throw new NotFoundError(`${path}: ${code}`);
       throw new Error(`Stripe answered ${response.status} ${code} for ${path}`);
     }
-    if (REFUSED.has(response.status)) throw new StripeRefused(response.status, code);
+    if (REFUSED.has(response.status)) throw new UpstreamError(response.status, { code });
     throw new Error(`Stripe answered ${response.status} for a write; the outcome is unknown`);
   }
 }

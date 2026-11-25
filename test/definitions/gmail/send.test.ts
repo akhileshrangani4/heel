@@ -120,9 +120,10 @@ ${SENDS.replace("rules:\n", "")}`);
   it("reports Gmail refusing the send, and never retries a send", async () => {
     const refused = setUp();
     refused.gmail.sendBehavior = "refuse";
-    expect(await refused.call("send", MESSAGE)).toMatchObject({
+    expect(await refused.call("send", MESSAGE)).toEqual({
       status: "upstream_error",
       upstreamStatus: 400,
+      body: { error: { code: 400, message: "Invalid To header" } },
     });
 
     const dropped = setUp();
@@ -227,6 +228,27 @@ describe("forward", () => {
       to: ["f@company.com"],
     });
     expect(result).toMatchObject({ status: "upstream_error", upstreamStatus: 409 });
+    expect(gmail.sent).toEqual([]);
+  });
+
+  it("sends nothing when the original is gone after heel checked it", async () => {
+    const { call, gmail } = setUp();
+    let reads = 0;
+    gmail.afterRawRead = () => {
+      reads += 1;
+      // Prepare reads the raw message twice; the send's own read finds it gone.
+      if (reads === 2) gmail.messages.delete("t2-a");
+    };
+    const result = await call("forward", {
+      message_id: "t2-a",
+      from: ALICE,
+      to: ["f@company.com"],
+    });
+    expect(result).toEqual({
+      status: "upstream_error",
+      upstreamStatus: 404,
+      body: { error: "the message is gone; nothing was sent" },
+    });
     expect(gmail.sent).toEqual([]);
   });
 });

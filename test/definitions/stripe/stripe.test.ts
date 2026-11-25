@@ -61,6 +61,8 @@ function fakeStripe(options: { status?: number; captured?: number; refunded?: nu
     }
     if (method === "GET" && p === "/v1/customers/cus_alice00001")
       return Response.json({ id: "cus_alice00001" });
+    if (method === "GET" && p === "/v1/customers/cus_gone000001")
+      return Response.json({ id: "cus_gone000001", deleted: true });
     if (method === "GET")
       return Response.json(
         { error: { type: "invalid_request_error", code: "resource_missing" } },
@@ -149,9 +151,20 @@ describe("the Stripe definition", () => {
 
   it("denies a payment intent that isn't there as not available", async () => {
     const h = setUp(SMALL_REFUNDS);
-    expect(await h.call("refund", { payment_intent: "pi_missing0001" })).toMatchObject({
+    expect(await h.call("refund", { payment_intent: "pi_missing0001" })).toEqual({
+      status: "denied",
       reason: "not_available",
+      rule: null,
     });
+  });
+
+  it("I-42: denies a customer Stripe says was deleted as not available", async () => {
+    const h = setUp(SMALL_REFUNDS);
+    expect(
+      await h.call("create_payment", { amount: 100, currency: "usd", customer: "cus_gone000001" }),
+    ).toEqual({ status: "denied", reason: "not_available", rule: null });
+    expect(h.sent.map((s) => s.path)).toContain("/v1/customers/cus_gone000001");
+    expect(posts(h.sent)).toEqual([]);
   });
 
   it("sends a fresh idempotency key and the pinned API version on every write", async () => {
@@ -167,9 +180,8 @@ describe("the Stripe definition", () => {
   it("leaves a 424 unknown, since Stripe may have acted", async () => {
     const h = setUp(SMALL_REFUNDS, fakeStripe({ status: 424 }));
     expect(
-      (await h.call("create_payment", { amount: 100, currency: "usd", customer: "cus_alice00001" }))
-        .status,
-    ).toBe("upstream_outcome_unknown");
+      await h.call("create_payment", { amount: 100, currency: "usd", customer: "cus_alice00001" }),
+    ).toEqual({ status: "upstream_outcome_unknown" });
   });
 
   it("lists payments only for a named customer", async () => {
@@ -239,17 +251,33 @@ describe("the Stripe definition", () => {
         currency: "usd",
         customer: "cus_alice00001",
       }),
-    ).toMatchObject({ status: "upstream_error", upstreamStatus: 402 });
+    ).toEqual({ status: "upstream_error", upstreamStatus: 402, body: { code: "card_declined" } });
     const conflict = setUp(SMALL_REFUNDS, fakeStripe({ status: 409 }));
     expect(
-      (
-        await conflict.call("create_payment", {
-          amount: 100,
-          currency: "usd",
-          customer: "cus_alice00001",
-        })
-      ).status,
-    ).toBe("upstream_outcome_unknown");
+      await conflict.call("create_payment", {
+        amount: 100,
+        currency: "usd",
+        customer: "cus_alice00001",
+      }),
+    ).toEqual({ status: "upstream_outcome_unknown" });
+  });
+
+  it.each([400, 403, 404, 429])("reports a write Stripe answers %i as refused", async (status) => {
+    const h = setUp(SMALL_REFUNDS, fakeStripe({ status }));
+    expect(
+      await h.call("create_payment", { amount: 100, currency: "usd", customer: "cus_alice00001" }),
+    ).toEqual({
+      status: "upstream_error",
+      upstreamStatus: status,
+      body: { code: "card_declined" },
+    });
+  });
+
+  it("leaves a 5xx write unknown", async () => {
+    const h = setUp(SMALL_REFUNDS, fakeStripe({ status: 500 }));
+    expect(
+      await h.call("create_payment", { amount: 100, currency: "usd", customer: "cus_alice00001" }),
+    ).toEqual({ status: "upstream_outcome_unknown" });
   });
 
   it("encodes nested parameters as Stripe reads them, in a fixed order", () => {

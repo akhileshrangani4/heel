@@ -90,16 +90,9 @@ export function listedTools<M>(tools: Record<string, ToolRow<M>>): Tool[] {
   }));
 }
 
-/** How a provider's errors map onto the pipeline's outcomes. */
-export interface ErrorMapping {
-  /** A read while preparing found nothing: denied like a hidden target (I-42). */
-  isNotFound(error: unknown): boolean;
-  /**
-   * A write the provider refused, so nothing happened: an upstream error
-   * with a known outcome. Return null for anything else, which leaves the
-   * outcome unknown.
-   */
-  refusal(error: unknown): Error | null;
+/** A provider read found nothing. While preparing, it's denied like a hidden target (I-42). */
+export class NotFoundError extends Error {
+  override readonly name = "NotFoundError";
 }
 
 /**
@@ -117,7 +110,6 @@ export function toolTableDefinition<M>(input: {
   tools: Record<string, ToolRow<M>>;
   listed: readonly Tool[];
   box: M;
-  errors: ErrorMapping;
   stateCheck: (
     check: StateCheck,
     box: M,
@@ -125,7 +117,7 @@ export function toolTableDefinition<M>(input: {
     signal: AbortSignal,
   ) => Promise<"pass" | "fail">;
 }): Definition {
-  const { tools, box, errors } = input;
+  const { tools, box } = input;
   const toolNamed = (name: string) => (Object.hasOwn(tools, name) ? (tools[name] ?? null) : null);
 
   return {
@@ -140,7 +132,7 @@ export function toolTableDefinition<M>(input: {
       try {
         prepared = await tool.prepare(box, parsed.data, ctx.hide, ctx.signal);
       } catch (error) {
-        if (errors.isNotFound(error)) return { ok: false, reason: "not_available" };
+        if (error instanceof NotFoundError) return { ok: false, reason: "not_available" };
         if (error instanceof CredentialRejectedError) {
           const detail = keyRejectedMessage(error.service, base.account);
           return { ok: false, reason: "lookup_unavailable", detail };
@@ -171,11 +163,7 @@ export function toolTableDefinition<M>(input: {
     async execute(call, signal) {
       const tool = toolNamed(call.tool);
       if (tool === null) throw new Error(`no tool ${call.tool}`);
-      try {
-        return await tool.run(box, call.args, signal);
-      } catch (error) {
-        throw errors.refusal(error) ?? error;
-      }
+      return tool.run(box, call.args, signal);
     },
 
     async hide(call, result, hiding) {

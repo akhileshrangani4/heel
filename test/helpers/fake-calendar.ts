@@ -19,6 +19,8 @@ export class FakeCalendar {
   /** Each write, with its `sendUpdates`. */
   readonly writes: { method: string; path: string; sendUpdates: string | null; body: unknown }[] =
     [];
+  /** Answers every write in place of the calendar, e.g. with a refusal. */
+  writeAnswer: (() => Response) | null = null;
   #next = 1;
 
   add(...events: FakeEvent[]): this {
@@ -59,6 +61,7 @@ export class FakeCalendar {
     if (method !== "GET") {
       const body = init?.body === undefined ? null : JSON.parse(String(init.body));
       this.writes.push({ method, path, sendUpdates: url.searchParams.get("sendUpdates"), body });
+      if (this.writeAnswer !== null) return this.writeAnswer();
     }
     if (id === undefined) {
       if (method === "POST") {

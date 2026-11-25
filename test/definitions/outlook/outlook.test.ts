@@ -214,6 +214,37 @@ describe("sending", () => {
     expect(h.graph.sent).toHaveLength(1);
   });
 
+  it("reports Graph refusing a send with its answer, and a 5xx as unknown", async () => {
+    const refused = setUp();
+    refused.graph.sendBehavior = "refuse";
+    expect(await refused.call("send", MESSAGE)).toEqual({
+      status: "upstream_error",
+      upstreamStatus: 400,
+      body: { error: {} },
+    });
+    const failed = setUp();
+    failed.graph.sendBehavior = "error500";
+    expect(await failed.call("send", MESSAGE)).toEqual({ status: "upstream_outcome_unknown" });
+  });
+
+  it("sends nothing when the original is gone after heel checked it", async () => {
+    const h = setUp();
+    let reads = 0;
+    h.graph.afterMimeRead = () => {
+      reads += 1;
+      // Prepare reads the MIME twice; the send's own read finds it gone.
+      if (reads === 2) h.graph.messages.delete("o2");
+    };
+    expect(
+      await h.call("forward", { message_id: "o2", from: MAILBOX, to: ["f@company.com"] }),
+    ).toEqual({
+      status: "upstream_error",
+      upstreamStatus: 404,
+      body: { error: "the message is gone; nothing was sent" },
+    });
+    expect(h.graph.sent).toEqual([]);
+  });
+
   it("refuses send_draft on a message that isn't a draft", async () => {
     const h = setUp();
     expect(await h.call("send_draft", { draft_id: "o2" })).toEqual({
@@ -404,6 +435,19 @@ describe("review findings", () => {
       reason: "not_available",
       rule: null,
     });
+  });
+
+  it("refuses a move into a folder Graph says isn't there", async () => {
+    const h = setUp(`rules:
+  - match: { action: email.label }
+    then: allow
+`);
+    expect(await h.call("move", { message_ids: ["o2"], folder: "fld-missing" })).toEqual({
+      status: "denied",
+      reason: "unsupported",
+      rule: null,
+    });
+    expect(h.graph.requests).toContain("GET me/mailFolders/fld-missing");
   });
 
   it("denies a move when the Sent Items lookup fails, rather than calling it a label change", async () => {

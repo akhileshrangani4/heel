@@ -1,11 +1,7 @@
 import type { HideCandidate, Hiding } from "../../core/hide.ts";
 import { isPlainAddress, normalizeAddress } from "../../core/rules/address.ts";
-import {
-  type OutlookClient,
-  type OutlookMessage,
-  OutlookNotFoundError,
-  type Recipient,
-} from "./client.ts";
+import { NotFoundError } from "../tool-table.ts";
+import type { OutlookClient, OutlookMessage, Recipient } from "./client.ts";
 
 /**
  * Turning a Graph message into what hiding judges and what the agent reads,
@@ -99,7 +95,7 @@ export type Destination =
  * move into it pass as a label change.
  */
 function notFoundIsNull(error: unknown): null {
-  if (error instanceof OutlookNotFoundError) return null;
+  if (error instanceof NotFoundError) return null;
   throw error;
 }
 

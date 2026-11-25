@@ -1,5 +1,6 @@
-import { CredentialRejectedError } from "../../gateway/pipeline/ports.ts";
+import { CredentialRejectedError, UpstreamError } from "../../gateway/pipeline/ports.ts";
 import type { FetchFn } from "../sign-in.ts";
+import { NotFoundError } from "../tool-table.ts";
 
 /**
  * The Slack Web API with the account's token. Every method answers
@@ -8,28 +9,12 @@ import type { FetchFn } from "../sign-in.ts";
  * errors listed in `NOTHING_HAPPENED` count as a refusal; Slack documents
  * that others (`internal_error`, `fatal_error`) may follow a partial
  * success, so those leave the outcome unknown. A 429 is a refusal too. A read that names something missing (`channel_not_found`,
- * `message_not_found`, `thread_not_found`) is `SlackNotFoundError`. Anything
+ * `message_not_found`, `thread_not_found`) is `NotFoundError`. Anything
  * else, a non-200 or no answer, leaves a write's outcome unknown; heel never
  * retries one.
  */
 
 export const SLACK_API = "https://slack.com/api/";
-
-export class SlackNotFoundError extends Error {
-  override readonly name = "SlackNotFoundError";
-}
-
-export class SlackRefused extends Error {
-  override readonly name = "SlackRefused";
-  readonly error: string;
-  readonly status: number;
-
-  constructor(method: string, error: string, status: number) {
-    super(`Slack refused ${method}: ${error}`);
-    this.error = error;
-    this.status = status;
-  }
-}
 
 /** Slack's answers to a token that's wrong, expired or revoked: nothing ran. */
 const KEY_REJECTED = new Set([
@@ -112,7 +97,7 @@ export class SlackClient {
       signal,
     });
     // Rate limited: Slack did nothing (https://docs.slack.dev/apis/web-api/rate-limits).
-    if (response.status === 429 && write) throw new SlackRefused(method, "ratelimited", 429);
+    if (response.status === 429 && write) throw new UpstreamError(429, { error: "ratelimited" });
     if (response.status !== 200) {
       throw new Error(`Slack answered ${response.status} for ${method}`);
     }
@@ -121,9 +106,9 @@ export class SlackClient {
     const error = typeof body["error"] === "string" ? body["error"] : "unknown_error";
     // A bad token: Slack turned it down before doing anything.
     if (KEY_REJECTED.has(error)) throw new CredentialRejectedError("Slack");
-    if (!write && NOT_FOUND.has(error)) throw new SlackNotFoundError(`${method}: ${error}`);
+    if (!write && NOT_FOUND.has(error)) throw new NotFoundError(`${method}: ${error}`);
     if (!write) throw new Error(`Slack refused ${method}: ${error}`);
-    if (NOTHING_HAPPENED.has(error)) throw new SlackRefused(method, error, 400);
+    if (NOTHING_HAPPENED.has(error)) throw new UpstreamError(400, { error });
     throw new Error(`Slack answered ${method} with ${error}; it may have taken effect`);
   }
 }

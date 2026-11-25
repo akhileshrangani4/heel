@@ -2,6 +2,7 @@ import { z } from "zod";
 import { getWithRetry, throwIfWriteFailed } from "../http-retry.ts";
 import { GRAPH_API_BASE } from "../microsoft/oauth.ts";
 import type { FetchFn } from "../sign-in.ts";
+import { NotFoundError } from "../tool-table.ts";
 
 /**
  * The Microsoft Graph v1.0 mail calls heel needs.
@@ -137,26 +138,9 @@ const CalendarListSchema = z.object({
     .default([]),
 });
 
-/** Graph answered 404: the item doesn't exist, or isn't this mailbox's. */
-export class OutlookNotFoundError extends Error {
-  override readonly name = "OutlookNotFoundError";
-}
-
-/** Graph answered with another error, or with a body that didn't parse. */
+/** Graph answered a read with an error other than 404, or with a body that didn't parse. */
 export class OutlookError extends Error {
   override readonly name = "OutlookError";
-}
-
-/** Graph refused a write: it didn't happen. */
-export class OutlookWriteRefused extends Error {
-  override readonly name = "OutlookWriteRefused";
-  readonly status: number;
-  readonly body: unknown;
-  constructor(status: number, body: unknown) {
-    super(`Graph refused the write (${status})`);
-    this.status = status;
-    this.body = body;
-  }
 }
 
 const MAILBOX_PREFIX = `${GRAPH_API_BASE}me/`;
@@ -191,7 +175,8 @@ export class OutlookClient {
     const response = await getWithRetry(async () =>
       this.#fetch(url, { headers: await this.#headers(), signal }),
     );
-    if (response.status === 404) throw new OutlookNotFoundError(`${url.pathname} was not found`);
+    // The item doesn't exist, or isn't this mailbox's.
+    if (response.status === 404) throw new NotFoundError(`${url.pathname} was not found`);
     if (!response.ok) throw new OutlookError(`Graph answered ${response.status}`);
     return response;
   }
@@ -221,7 +206,7 @@ export class OutlookClient {
       ...(body === null ? {} : { body: "json" in body ? JSON.stringify(body.json) : body.mime }),
       signal,
     });
-    await throwIfWriteFailed(response, "Graph", OutlookWriteRefused);
+    await throwIfWriteFailed(response, "Graph");
     return response.status === 202 || response.status === 204
       ? null
       : await response.json().catch(() => null);

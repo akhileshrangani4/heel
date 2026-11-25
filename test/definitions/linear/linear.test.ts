@@ -26,7 +26,13 @@ interface Sent {
 }
 
 function fakeLinear(
-  options: { refuse?: boolean; children?: Record<string, unknown[]>; moveAfterRead?: boolean } = {},
+  options: {
+    refuse?: boolean;
+    /** Answers every mutation in place of Linear. */
+    mutation?: () => Response;
+    children?: Record<string, unknown[]>;
+    moveAfterRead?: boolean;
+  } = {},
 ) {
   let reads = 0;
   const sent: Sent[] = [];
@@ -52,6 +58,8 @@ function fakeLinear(
       team: { id: "t2", key: "OPS" },
       project: { id: "44444444-4444-4444-8444-444444444444", name: "Infra" },
     },
+    // Linear answers a null issue with no errors.
+    "ENG-404": null,
   };
   const fetch = async (_input: string | URL, init?: RequestInit): Promise<Response> => {
     const body = JSON.parse(String(init?.body)) as {
@@ -85,6 +93,7 @@ function fakeLinear(
       });
     }
     if (q.startsWith("mutation")) {
+      if (options.mutation !== undefined) return options.mutation();
       if (options.refuse === true) {
         return Response.json({ data: null, errors: [{ message: "Argument Validation Error" }] });
       }
@@ -170,18 +179,32 @@ describe("the Linear definition", () => {
 
   it("denies a team that doesn't exist as not available", async () => {
     const h = setUp(ENG_ONLY);
-    expect(await h.call("create_issue", { team: "NOPE", title: "x" })).toMatchObject({
+    expect(await h.call("create_issue", { team: "NOPE", title: "x" })).toEqual({
       status: "denied",
       reason: "not_available",
+      rule: null,
     });
   });
 
   it("asks before a delete, and denies an issue that isn't there", async () => {
     const h = setUp(ENG_ONLY);
     expect((await h.call("delete_issue", { issue: "ENG-1" })).status).toBe("pending");
-    expect(await h.call("delete_issue", { issue: "ENG-999" })).toMatchObject({
+    expect(await h.call("delete_issue", { issue: "ENG-999" })).toEqual({
+      status: "denied",
       reason: "not_available",
+      rule: null,
     });
+  });
+
+  it("I-42: denies an issue Linear answers as null, with no error, as not available", async () => {
+    const h = setUp(ENG_ONLY);
+    expect(await h.call("add_comment", { issue: "ENG-404", body: "x" })).toEqual({
+      status: "denied",
+      reason: "not_available",
+      rule: null,
+    });
+    expect(h.sent.map((s) => s.variables["id"])).toContain("ENG-404");
+    expect(mutations(h.sent)).toEqual([]);
   });
 
   it("lets a rule name the project", async () => {
@@ -201,10 +224,46 @@ describe("the Linear definition", () => {
 
   it("reports Linear's refusal as an upstream error", async () => {
     const h = setUp(ENG_ONLY, fakeLinear({ refuse: true }));
-    expect(await h.call("add_comment", { issue: "ENG-1", body: "x" })).toMatchObject({
+    expect(await h.call("add_comment", { issue: "ENG-1", body: "x" })).toEqual({
       status: "upstream_error",
       upstreamStatus: 400,
+      body: { errors: ["Argument Validation Error"] },
     });
+  });
+
+  it.each([
+    [
+      "an HTTP 429, as a refusal with status 400",
+      () => new Response("", { status: 429 }),
+      { status: "upstream_error", upstreamStatus: 400, body: { errors: ["rate limited"] } },
+    ],
+    [
+      "success: false, as a refusal",
+      () => Response.json({ data: { commentCreate: { success: false } } }),
+      {
+        status: "upstream_error",
+        upstreamStatus: 400,
+        body: { errors: ["commentCreate didn't succeed"] },
+      },
+    ],
+    [
+      "data alongside errors, as unknown",
+      () =>
+        Response.json({
+          data: { commentCreate: { success: true, comment: { id: "c1", url: "u" } } },
+          errors: [{ message: "partial" }],
+        }),
+      { status: "upstream_outcome_unknown" },
+    ],
+    [
+      "an HTTP 5xx, as unknown",
+      () => new Response("", { status: 503 }),
+      { status: "upstream_outcome_unknown" },
+    ],
+  ])("reports a mutation Linear answers with %s", async (_label, mutation, expected) => {
+    const h = setUp(ENG_ONLY, fakeLinear({ mutation }));
+    expect(await h.call("add_comment", { issue: "ENG-1", body: "x" })).toEqual(expected);
+    expect(mutations(h.sent)).toHaveLength(1);
   });
 
   it("refuses a delete that would trash a sub-issue in another team", async () => {
@@ -233,8 +292,10 @@ describe("the Linear definition", () => {
 
   it("sends nothing when the issue moved after heel checked it", async () => {
     const h = setUp(ENG_ONLY, fakeLinear({ moveAfterRead: true }));
-    expect(await h.call("add_comment", { issue: "ENG-1", body: "x" })).toMatchObject({
+    expect(await h.call("add_comment", { issue: "ENG-1", body: "x" })).toEqual({
       status: "upstream_error",
+      upstreamStatus: 400,
+      body: { errors: ["the issue moved to another team or project after heel checked it"] },
     });
     expect(mutations(h.sent)).toEqual([]);
   });
