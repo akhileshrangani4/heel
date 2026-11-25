@@ -1,6 +1,6 @@
 import type { ActivityRow, AgentActivity } from "../../../store/activity.ts";
 import { ACTIVITY_PANELS_SCRIPT, activityPage, agentsPage } from "../activity-page.ts";
-import { approvalRequest } from "../approval-request.ts";
+import { approvalRequest, MENU_RESET_SCRIPT } from "../approval-request.ts";
 import type { CeremonyCallback } from "../ceremony.ts";
 import { connectPage } from "../connect.ts";
 import { type ConnectionRow, connectionsPage } from "../connections.ts";
@@ -35,8 +35,10 @@ import {
   AGENT_PAUSE,
   APPROVED_REQUEST,
   APPROVED_ROWS,
+  DENIED_DRAFT_REQUEST,
   DENIED_REQUEST,
   DENIED_ROWS,
+  DRAFT_REQUEST,
   EXECUTED_REQUEST,
   EXPIRED_REQUEST,
   EXPIRED_ROWS,
@@ -45,6 +47,8 @@ import {
   HINTED_REQUEST,
   HINTS_UNAVAILABLE_REQUEST,
   HTTP_REQUEST,
+  LONG_EMAIL_REQUEST,
+  LONG_REASON_REQUEST,
   MERGE_REQUEST,
   NOW,
   ORG_REQUEST,
@@ -55,6 +59,8 @@ import {
   PENDING_REQUEST,
   PENDING_ROWS,
   REVOKED_STANDING,
+  SPARSE_REQUEST,
+  TASK_REQUEST,
 } from "./fixtures.ts";
 import {
   BROKEN_RULES_TEXT,
@@ -149,6 +155,7 @@ export const PREVIEW_CEREMONY_SCRIPT = `
   };
   const names = ["decide", "resume", "signIn", "addDevice", "applyRules", "approveConnection", "connect", "enroll", "grant", "manageAccount", "manageAgent", "managePeople", "mode", "saveRules"];
   window.heelCeremony = Object.fromEntries(names.map((name) => [name, announce]));
+  ${MENU_RESET_SCRIPT}
 })();
 `;
 
@@ -166,6 +173,7 @@ const approval = (
   request: Parameters<typeof approvalRequest>[0]["load"],
   pause: PauseNotice | null = null,
   viewer: Viewer = ALICE,
+  extra: Partial<Parameters<typeof approvalRequest>[0]> = {},
 ): Story => ({
   component: "approval-request",
   state,
@@ -175,9 +183,14 @@ const approval = (
   current: "approvals",
   pause,
   body: () =>
-    approvalRequest({ now: NOW, load: request, pause, onDecide: PREVIEW_CEREMONY.decide }),
+    approvalRequest({
+      now: NOW,
+      load: request,
+      pause,
+      onDecide: PREVIEW_CEREMONY.decide,
+      ...extra,
+    }),
 });
-
 const pending = (
   state: RequiredState,
   label: string,
@@ -297,6 +310,65 @@ export const STORIES: readonly Story[] = [
   approval("http", "An HTTP proxy write, body decoded", { ok: true, request: HTTP_REQUEST }),
   approval("error", "The request couldn't be loaded", { ok: false, message: LOAD_ERROR }),
   approval("executed", "Ran once", { ok: true, request: EXECUTED_REQUEST }),
+  approval("draft", "An email draft, as in the owner's report", {
+    ok: true,
+    request: DRAFT_REQUEST,
+  }),
+  approval("draft-denied", "The same draft, denied", { ok: true, request: DENIED_DRAFT_REQUEST }),
+  approval("task", "Step 3 of a longer task (run_code), waiting", {
+    ok: true,
+    request: TASK_REQUEST,
+  }),
+  approval(
+    "task-background",
+    "Step 3 of a background task, waiting",
+    { ok: true, request: TASK_REQUEST },
+    null,
+    ALICE,
+    { background: true },
+  ),
+  approval("long-email", "Forty-one recipients, a long subject and body", {
+    ok: true,
+    request: LONG_EMAIL_REQUEST,
+  }),
+  // Design variant B: the email header as one labelled row per field.
+  approval(
+    "draft-rows",
+    "Variant B: the draft with one labelled row per field",
+    { ok: true, request: DRAFT_REQUEST },
+    null,
+    ALICE,
+    { emailLayout: "rows" },
+  ),
+  approval(
+    "pending-rows",
+    "Variant B: the send with one labelled row per field",
+    { ok: true, request: PENDING_REQUEST },
+    null,
+    ALICE,
+    { emailLayout: "rows" },
+  ),
+  approval("sparse", "A tool call with many empty fields", { ok: true, request: SPARSE_REQUEST }),
+  approval("long-reason", "A 50-word reason and a long agent name", {
+    ok: true,
+    request: LONG_REASON_REQUEST,
+  }),
+  approval(
+    "details-open",
+    "Details open, Technical closed",
+    { ok: true, request: DRAFT_REQUEST },
+    null,
+    ALICE,
+    { folds: new Map([["details", true]]) },
+  ),
+  approval(
+    "denied-asked-open",
+    "Denied, with What was asked open",
+    { ok: true, request: DENIED_DRAFT_REQUEST },
+    null,
+    ALICE,
+    { folds: new Map([["asked", true]]) },
+  ),
   approval(
     "org-ask",
     "Org ask: approve once only",
