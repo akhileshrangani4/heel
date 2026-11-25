@@ -1,7 +1,7 @@
 /**
  * The sandbox runner: runs one program under bubblewrap with one credential
- * set, a confined filesystem, limits and an egress allowlist (spec: CLI
- * runner). `heel run` (D8b) and the code-mode worker (D6a) both use it.
+ * set, a confined filesystem, limits and an egress allowlist.
+ * `heel run` and the code-mode worker both use it.
  *
  * At boot:
  *

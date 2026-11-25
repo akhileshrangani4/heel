@@ -1,6 +1,5 @@
 /**
- * Types for the `looks_like` detector (spec: Hiding, `looks_like`). D10a ships
- * the detector on its own; D10b evaluates it inside `hide` entries.
+ * Types for the `looks_like` detector.
  *
  * Categories are named for what the message lets its reader do:
  * - `password_reset`: reset a password or recover an account, by link or by code.
@@ -13,7 +12,7 @@ export type LooksLikeCategory = (typeof LOOKS_LIKE_CATEGORIES)[number];
 /**
  * `match` and `uncertain` both mean "hide" to a caller; `no_match` is the only
  * verdict that lets a message through. `uncertain` is kept distinct so the hide
- * path can count fail-closed outcomes (spec: Fail-closed, I-44).
+ * path can count fail-closed outcomes (I-44).
  */
 export type LooksLikeVerdict = "match" | "no_match" | "uncertain";
 

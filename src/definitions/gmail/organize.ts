@@ -6,16 +6,15 @@ import type { Mailbox } from "./mailbox.ts";
 import { GmailId, type GmailTool, gmailTool, type Preparation } from "./tool.ts";
 
 /**
- * Gmail's tools that remove, label and filter mail (D9a-3; spec: Email,
- * "Gmail and Outlook", and Counts).
+ * Gmail's tools that remove, label and filter mail.
  *
  * - `email.remove` is any change that takes mail out of view: trash, adding
  *   TRASH or SPAM, and removing INBOX (an archive). Every other label change
  *   is `email.label`.
  * - `items` is the number of messages affected, so one batch of 500 counts
- *   500 and a thread counts its messages (spec: Counts).
+ *   500 and a thread counts its messages.
  * - A batch with any hidden or missing id is denied whole, and the deny
- *   doesn't say which (I-42, Q-H3).
+ *   doesn't say which (I-42).
  * - heel never asks for the scope that deletes permanently, so there is no
  *   delete tool: trash is reversible for 30 days.
  * - A filter is `email.filter`. One that forwards is `email.send` instead,
@@ -25,7 +24,7 @@ import { GmailId, type GmailTool, gmailTool, type Preparation } from "./tool.ts"
  *   forward address is the call's recipient.
  */
 
-/** Gmail's limit for `batchModify` (research §2.1). */
+/** Gmail's limit for `batchModify`. */
 const MAX_BATCH = 1_000;
 
 /** Messages read at once when checking a batch for hidden ids. */

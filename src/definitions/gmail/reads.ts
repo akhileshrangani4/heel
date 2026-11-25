@@ -10,7 +10,7 @@ import {
 import { GmailId, type GmailTool, gmailTool } from "./tool.ts";
 
 /**
- * Gmail's read tools (D9a-1b). Results are rebuilt from the visible
+ * Gmail's read tools. Results are rebuilt from the visible
  * messages, field by field, with one `hidden: { count }` placeholder
  * (I-40, I-41). By-id reads are refused for a hidden target exactly as for a
  * missing one (I-42).

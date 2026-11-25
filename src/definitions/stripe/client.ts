@@ -3,13 +3,12 @@ import { CredentialRejectedError } from "../../gateway/pipeline/ports.ts";
 import type { FetchFn } from "../sign-in.ts";
 
 /**
- * Stripe's REST API with the account's secret or restricted key (D12b;
- * https://docs.stripe.com/api). Requests are form-encoded, as Stripe takes
+ * Stripe's REST API with the account's secret or restricted key
+ * (https://docs.stripe.com/api). Requests are form-encoded, as Stripe takes
  * them (https://docs.stripe.com/api/request_ids, /api/errors).
  *
- * - Every request is pinned to `Stripe-Version: 2026-10-28.endive`
- *   (docs/design/research-provider-api-verification.md §7), so what rules
- *   see doesn't depend on the account's default version.
+ * - Every request is pinned to `Stripe-Version: 2026-10-28.endive`, so what
+ *   rules see doesn't depend on the account's default version.
  * - Every write carries a fresh `Idempotency-Key`
  *   (https://docs.stripe.com/api/idempotent_requests). heel never retries,
  *   so a key derived from the parameters would only make Stripe replay an

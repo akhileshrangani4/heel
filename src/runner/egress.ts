@@ -1,5 +1,5 @@
 /**
- * heel's egress proxy (spec: CLI runner, "Network"). A sandbox has its own
+ * heel's egress proxy. A sandbox has its own
  * network namespace with nothing but loopback; its only route out is this
  * proxy, reached through a Unix socket bind-mounted into the sandbox. The
  * proxy speaks HTTP `CONNECT` and opens a tunnel only to an allowlisted

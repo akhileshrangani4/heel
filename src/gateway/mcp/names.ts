@@ -1,7 +1,7 @@
 import type { Tool } from "@modelcontextprotocol/server";
 
 /**
- * Tool names on heel's MCP endpoints (spec: Endpoints and tools). Pure.
+ * Tool names on heel's MCP endpoints. Pure.
  *
  * - `/mcp/<account>` lists one account's tools under their own names.
  * - `/mcp?tools=direct` lists every account's tools as `<account>__<tool>`.
@@ -37,7 +37,7 @@ export const HEEL_STATUS_TOOL: Tool = {
 export const HEEL_HISTORY = "heel_history";
 
 /**
- * What the calling agent's owner decided about its requests (roadmap 2.10),
+ * What the calling agent's owner decided about its requests,
  * so it can propose rules from the pattern. heel's own, like `heel_status`.
  */
 export const HEEL_HISTORY_TOOL: Tool = {
@@ -64,7 +64,7 @@ export const HEEL_HISTORY_TOOL: Tool = {
 export const HEEL_PROPOSE_RULES = "heel_propose_rules";
 
 /**
- * Proposing rules for the agent's owner (roadmap 2.1). heel's own, like
+ * Proposing rules for the agent's owner. heel's own, like
  * `heel_status`: an account tool by this name is never listed.
  */
 export const HEEL_PROPOSE_RULES_TOOL: Tool = {
@@ -165,7 +165,7 @@ export const HEEL_PROPOSE_RULES_TOOL: Tool = {
 export const HEEL_REQUEST_CONNECTION = "heel_request_connection";
 
 /**
- * Asking the agent's owner to connect an account (roadmap 2.5). heel's own:
+ * Asking the agent's owner to connect an account. heel's own:
  * an account tool by this name is never listed.
  */
 export const HEEL_REQUEST_CONNECTION_TOOL: Tool = {
@@ -218,7 +218,7 @@ export const HEEL_REQUEST_CONNECTION_TOOL: Tool = {
 export const RUN_CODE = "run_code";
 export const HEEL_STUBS = "heel_stubs";
 
-/** Code mode's one tool (spec: Code mode). */
+/** Code mode's one tool. */
 export const RUN_CODE_TOOL: Tool = {
   name: RUN_CODE,
   description:
@@ -290,8 +290,8 @@ export function splitDirectName(name: string): { alias: string; tool: string } |
 /**
  * A tool as heel lists it. An upstream (passthrough) tool's `outputSchema` is
  * dropped: heel doesn't know its results fit it, and a denied or pending
- * answer isn't shaped like its output (spec: MCP §1.3). A built-in tool's is
- * kept (C5): heel writes it, loose enough that every result fits, and heel's
+ * answer isn't shaped like its output. A built-in tool's is kept: heel
+ * writes it, loose enough that every result fits, and heel's
  * own answers are error results, which clients don't check against it.
  */
 export function listedTool(tool: Tool, name: string, keepOutputSchema = false): Tool {
@@ -306,7 +306,7 @@ export function listedTool(tool: Tool, name: string, keepOutputSchema = false): 
 
 /**
  * The optional argument every listed account tool gains: the agent's reason,
- * shown to the approver (spec: The approval page). The name is heel's own, so
+ * shown to the approver. The name is heel's own, so
  * it's taken out of the arguments before anything else sees them.
  */
 export const REASON_ARG = "heel_reason";
@@ -354,7 +354,7 @@ export function cleanReason(raw: unknown): string | undefined {
 export const HEEL_ACCOUNTS = "heel_accounts";
 
 /**
- * What's behind heel for the agent (roadmap 2.6): the accounts it can use,
+ * What's behind heel for the agent: the accounts it can use,
  * and what it asked for that still waits for its owner. heel's own: an
  * account tool by this name is never listed.
  */

@@ -31,7 +31,7 @@ function who(change: RuleChangeView): Html {
 }
 
 /**
- * The rules files' history (roadmap 2.4): every change, newest first, with
+ * The rules files' history: every change, newest first, with
  * who proposed and added it, or a note that it was made outside heel, and
  * the lines it changed.
  */

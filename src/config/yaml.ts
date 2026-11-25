@@ -42,8 +42,7 @@ export interface ParsedYaml {
 
 /**
  * Parses YAML 1.2 (core schema, duplicate keys rejected). Syntax errors throw
- * a YamlValidationError carrying file, line and column (spec: Rules, "Loading,
- * testing and reload"). An empty file is an empty mapping.
+ * a YamlValidationError carrying file, line and column. An empty file is an empty mapping.
  */
 export function parseYamlDocument(source: string, file: string): ParsedYaml {
   const lineCounter = new LineCounter();
@@ -69,7 +68,6 @@ export function parseYamlDocument(source: string, file: string): ParsedYaml {
   };
 }
 
-/** Builds a located issue for a path in a parsed document. */
 export function issueAt(
   parsed: ParsedYaml,
   path: readonly PropertyKey[],

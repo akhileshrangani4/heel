@@ -33,7 +33,7 @@ import { ruleHistoryPage } from "../ui/rule-history.ts";
 import { hideInWords, ruleInWords } from "../ui/rule-words.ts";
 
 /**
- * Rules an agent proposed (roadmap 2.1), on the human plane.
+ * Rules an agent proposed, on the human plane.
  *
  * - `GET /proposals/:id` shows the rules, the agent's why, where they would
  *   go and the file after the change.
@@ -82,7 +82,7 @@ export function proposalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
   const signedIn = requireSession(deps);
 
   /**
-   * heel's own suggestion (2.10) is checked again when it's added: a decision
+   * heel's own suggestion is checked again when it's added: a decision
    * made since, or a changed rule, can make it one heel wouldn't suggest now.
    */
   function staleSuggestion(row: ProposalRow): string | null {
@@ -163,7 +163,7 @@ export function proposalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     const existingNames = ownRules
       .map((rule) => rule.ref.name)
       .filter((name): name is string => name !== null);
-    // heel's suggestions (2.10) go right before the rule that asked.
+    // heel's suggestions go right before the rule that asked.
     const anchor = ownRules.find((rule) => rule.hash === row.rules[0]?.before);
     const placedBefore =
       anchor === undefined
@@ -231,7 +231,7 @@ export function proposalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     });
   });
 
-  // Every change to the rules files (2.4): your own; admins see everyone's and the org file.
+  // Every change to the rules files: your own; admins see everyone's and the org file.
   app.get("/rules/history", signedIn, (c) => {
     const session = c.get("session");
     const everyone = session.role === "admin";

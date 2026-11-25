@@ -27,7 +27,7 @@ import {
 import { hasErrnoCode } from "../util/errno.ts";
 
 /**
- * Rule proposals (roadmap 2.1, 2.2, 2.4). An agent proposes rules to add to
+ * Rule proposals. An agent proposes rules to add to
  * its owner's rules file; the owner applies them with a passkey on the
  * approval page. The agent never writes the file and never sees it:
  *
@@ -58,7 +58,7 @@ const MAX_WHY_CHARS = 200;
 const MAX_REASON_CHARS = 500;
 
 /**
- * Every proposed line says why, in the agent's words (roadmap 2.2): the owner
+ * Every proposed line says why, in the agent's words: the owner
  * reads it next to the rule, and it's written above the rule in the file.
  */
 const WHY_MISSING = "say in one plain sentence why your owner should add this";
@@ -143,7 +143,7 @@ export function proposeRules(
   input: ProposeRulesInput,
   now: Date,
   /**
-   * `heel` for a rule heel drafted from the owner's decisions (2.10), with
+   * `heel` for a rule heel drafted from the owner's decisions, with
    * the hash of the rule it goes before. Agents' rules always go first.
    */
   origin: { by: "agent" } | { by: "heel"; before: string } = { by: "agent" },
@@ -435,7 +435,7 @@ export function previewProposal(
     .reverse()
     .forEach((r) => {
       const node = doc.createNode(r.rule);
-      // heel's own suggestions (2.10) say so: the agent didn't ask for them.
+      // heel's own suggestions say so: the agent didn't ask for them.
       const by =
         proposal.origin === "heel"
           ? `Suggested by heel for ${agentName}`
@@ -533,7 +533,7 @@ export function applyProposal(
   signedSha: string,
   by: string,
   now: Date,
-  /** The file as the history names it, relative to heel's home (2.4); the path when absent. */
+  /** The file as the history names it, relative to heel's home; the path when absent. */
   display: string = file,
 ): { ok: true } | { ok: false; problem: string } {
   if (proposal.status !== "pending" || proposal.expiresAt < now) {
@@ -557,7 +557,7 @@ export function applyProposal(
       };
     }
     // Recorded in the same synchronous step as the write, so the reload it sets off
-    // finds nothing new to count as made outside heel (2.4).
+    // finds nothing new to count as made outside heel.
     recordProposalChange(db, {
       orgId: proposal.orgId,
       userId: proposal.ownerId,
