@@ -4,7 +4,7 @@ import { btn } from "./shadcn/button.ts";
 /**
  * Decision controls never decide. Every decision (approve once, approve as
  * standing, deny, resume) needs a fresh passkey assertion whose challenge is
- * bound to the approval id and call hash (I-56; spec: The approval page). So
+ * bound to the approval id and call hash (I-56). So
  * a decision control is a plain `type="button"` outside any form: clicking it
  * calls the client-side handler named by the component's `CeremonyCallback`
  * prop, and that handler runs the WebAuthn ceremony and posts the assertion.

@@ -2,7 +2,7 @@
  * What heel logs about an error on the decision path: class names and codes
  * along the cause chain, never a message. Messages can carry call arguments
  * (a failed SQL statement's message lists its parameters), and the error log
- * never includes argument values (spec: Fail-closed behavior).
+ * never includes argument values.
  */
 export interface ErrorShape {
   name: string;

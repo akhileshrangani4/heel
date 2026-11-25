@@ -13,7 +13,7 @@ import {
   parseAdminRequest,
 } from "./protocol.ts";
 
-/** The socket's permission bits: owner read/write, nobody else (spec: Architecture). */
+/** The socket's permission bits: owner read/write, nobody else. */
 export const ADMIN_SOCKET_MODE = 0o600;
 
 /** Umask applied while the socket is bound, so it is never briefly wider than 0600. */

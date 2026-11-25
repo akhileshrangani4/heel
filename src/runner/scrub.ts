@@ -1,6 +1,6 @@
 /**
  * Replaces every occurrence of a credential value in a byte stream with
- * `[redacted by heel]` (spec: CLI runner, "Output scrub"). Output arrives in
+ * `[redacted by heel]`. Output arrives in
  * chunks, and a credential can straddle two of them, so the scrubber holds
  * back the last `longest - 1` bytes until it knows no secret starts there.
  *
@@ -51,7 +51,6 @@ export function createScrubber(secrets: readonly string[]): Scrubber {
   };
 }
 
-/** Scrubs a complete value in one go. */
 export function scrubAll(data: Uint8Array, secrets: readonly string[]): Buffer {
   const scrubber = createScrubber(secrets);
   return Buffer.concat([scrubber.push(data), scrubber.end()]);

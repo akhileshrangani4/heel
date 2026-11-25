@@ -1,5 +1,5 @@
 import type { ActivityRow, AgentActivity } from "../../../store/activity.ts";
-import { activityPage, agentsPage } from "../activity-page.ts";
+import { ACTIVITY_PANELS_SCRIPT, activityPage, agentsPage } from "../activity-page.ts";
 import { approvalRequest, MENU_RESET_SCRIPT } from "../approval-request.ts";
 import type { CeremonyCallback } from "../ceremony.ts";
 import { connectPage } from "../connect.ts";
@@ -96,6 +96,7 @@ import {
   RULES_TEXT,
   rulesFile,
 } from "./rules-fixtures.ts";
+import { SETTINGS_EDGE_STORIES } from "./settings-stories.ts";
 
 /**
  * The preview harness's stories: every component in every state the
@@ -103,7 +104,7 @@ import {
  * data plus a render function over fixture props.
  */
 
-/** The six states every component must render in (D4a acceptance criteria). */
+/** The six states every component must render in. */
 export const REQUIRED_STATES = [
   "pending",
   "approved",
@@ -172,6 +173,8 @@ export interface Story {
   /** Show the banner as if the count changed while the page was open. */
   bannerForced?: boolean;
   body: () => Html;
+  /** The page's own script beyond the ceremony stand-ins, if it needs no server. */
+  script?: string;
 }
 
 /** Preview handlers only announce what would start; none of them decides anything. */
@@ -318,7 +321,6 @@ const passkey = (
 });
 
 export const STORIES: readonly Story[] = [
-  // ApprovalRequest
   approval("pending", "Waiting for a decision", { ok: true, request: PENDING_REQUEST }),
   approval("approved", "Approved, waiting for the agent to re-send", {
     ok: true,
@@ -412,7 +414,6 @@ export const STORIES: readonly Story[] = [
     ADMIN,
   ),
 
-  // PendingList
   pending("pending", "Requests waiting", { ok: true, rows: PENDING_ROWS }),
   pending("approved", "Approved and executed requests", { ok: true, rows: APPROVED_ROWS }),
   pending("denied", "A denied request", { ok: true, rows: DENIED_ROWS }),
@@ -421,7 +422,6 @@ export const STORIES: readonly Story[] = [
   pending("error", "The list couldn't be loaded", { ok: false, message: LOAD_ERROR }),
   { ...pending("pending", "", { ok: true, rows: [] }), state: "empty", label: "Nothing waiting" },
 
-  // PauseControl
   pauseStory("pending", "Nothing paused: pause is one tap", {
     outcome: { kind: "none" },
     load: pauseLoad([]),
@@ -452,7 +452,6 @@ export const STORIES: readonly Story[] = [
     load: { ok: false, message: LOAD_ERROR },
   }),
 
-  // StandingApprovalList
   standingStory("pending", "None granted yet", { ok: true, rows: [] }),
   standingStory("approved", "Active standing approvals", { ok: true, rows: ACTIVE_STANDING }),
   standingStory("denied", "Revoked", { ok: true, rows: REVOKED_STANDING }),
@@ -464,8 +463,6 @@ export const STORIES: readonly Story[] = [
     AGENT_PAUSE,
   ),
   standingStory("error", "Couldn't be loaded", { ok: false, message: LOAD_ERROR }),
-
-  // RulesPage
 
   // Sign-in (OIDC)
   oidc("pending", "Waiting to sign in", { kind: "none" }),
@@ -496,8 +493,6 @@ export const STORIES: readonly Story[] = [
   }),
   passkey("not-enrolled", "First run: no passkey enrolled", { kind: "none" }, false),
 ];
-
-// ── Pages ───────────────────────────────────────────────────────────────────
 
 const DAY = 86_400_000;
 const ago = (ms: number) => new Date(NOW.getTime() - ms);
@@ -726,8 +721,9 @@ const activity = (
   label: string,
   rows: readonly ActivityRow[],
   filter: Parameters<typeof activityPage>[0]["filter"] = {},
-) =>
-  pageStory("activity", state, label, "Activity", "activity", () =>
+  extra: Partial<Parameters<typeof activityPage>[0]> = {},
+): Story => ({
+  ...pageStory("activity", state, label, "Activity", "activity", () =>
     activityPage({
       rows,
       agents: AGENT_NAMES,
@@ -738,8 +734,42 @@ const activity = (
       hidden: null,
       suggestions: [],
       canExport: true,
+      ...extra,
     }),
-  );
+  ),
+  script: ACTIVITY_PANELS_SCRIPT,
+});
+
+const LONG_AGENT = {
+  id: "agt_long",
+  name: "quarterly-finance-reconciliation-and-vendor-followup-assistant-v2",
+};
+const LONG_ACCOUNT = "finance-shared-mailbox-for-accounts-payable@very-long-company-domain.example";
+
+/** Long names, a long rule path and reason, and a hundred rows across many days. */
+const LONG_ROWS: ActivityRow[] = [
+  audit(ago(2 * 60_000), "deny", LONG_AGENT.id, LONG_ACCOUNT, "email.send", "gmail_send", {
+    rule: {
+      name: "never-send-outside-the-company-without-asking-the-finance-lead-first",
+      file: "rules/teams/finance/accounts-payable/outbound-mail.yaml",
+      line: 1204,
+    },
+    reason:
+      "The recipient domain very-long-vendor-domain-name-for-testing-wrapping.example isn't on the allow list, so heel denied it.",
+    approvalId: "apr_7QxK2mN4pR8sVeryLongApprovalIdentifier000001",
+    scriptId: "scr_very_long_script_identifier_0001",
+  }),
+  ...Array.from({ length: 99 }, (_, i) =>
+    audit(
+      ago((i + 1) * 3 * 3_600_000),
+      (["allow", "deny", "ask", "approved", "would_deny"] as const)[i % 5] ?? "allow",
+      AGENT_NAMES[i % 3]?.id ?? "agt_inbox",
+      ["gmail-work", "github", "calendar"][i % 3] ?? "gmail-work",
+      "email.label",
+      "gmail_label",
+    ),
+  ),
+];
 
 const agentActivity = (
   agentId: string,
@@ -985,7 +1015,6 @@ const rulesEditor = (
   );
 
 export const PAGE_STORIES: readonly Story[] = [
-  // Home
   pageStory("home", "fresh", "Fresh install: 1 of 4 set up, no calls yet", "Home", "home", () =>
     homePage({
       ...HOME_BASE,
@@ -1123,8 +1152,30 @@ export const PAGE_STORIES: readonly Story[] = [
     kind: "would_ask",
   }),
   activity("empty", "No calls yet", []),
+  activity(
+    "long",
+    "A long agent name, account, rule and reason, and a hundred rows",
+    LONG_ROWS,
+    { agent: LONG_AGENT.id, account: LONG_ACCOUNT, kind: "deny" },
+    {
+      agents: [...AGENT_NAMES, LONG_AGENT],
+      accounts: ["gmail-work", "github", "calendar", LONG_ACCOUNT],
+      nextBefore: 1,
+      hidden: { matched: 12, uncertain: 3, unparseable: 1 },
+    },
+  ),
+  activity(
+    "older",
+    "An older page: Newer goes back",
+    ACTIVITY_ROWS,
+    {},
+    {
+      paged: true,
+      nextBefore: null,
+    },
+  ),
+  activity("member", "A member: no audit log download", ACTIVITY_ROWS, {}, { canExport: false }),
 
-  // Agents
   agents("busy", "Agents incl. a revoked one and an expiring token", AGENTS),
   agents("scripts", "Background scripts running and waiting", AGENTS, {
     scripts: [
@@ -1150,7 +1201,6 @@ export const PAGE_STORIES: readonly Story[] = [
   }),
   agents("empty", "No agents yet", []),
 
-  // Connections
   connections("mixed", "Ready, needs sign-in, set up first, needs a new key", CONNECTIONS),
   connections("connected", "Just signed in", CONNECTIONS.slice(0, 1), {
     kind: "connected",
@@ -1221,12 +1271,10 @@ export const PAGE_STORIES: readonly Story[] = [
     { open: true, picked: "gmail" },
   ),
 
-  // Devices
   devices("none", "No device gets notifications", 0, null),
   devices("several", "Three devices get notifications", 3, null),
   devices("turned-off", "Just turned off on every device", 0, 3),
 
-  // Grants
   grants("busy", "Live, expired and revoked grants", [
     grant("grt_1", "inbox-bot", "Send the Q3 numbers to the vendor", "live", 20),
     grant("grt_2", "ci-bot", "Merge the release PR", "expired", -2),
@@ -1240,7 +1288,6 @@ export const PAGE_STORIES: readonly Story[] = [
   ),
   grants("empty", "No grants", []),
 
-  // People
   pageStory("people", "admin", "An admin sees everyone", "People", "people", () =>
     peoplePage({
       people: PEOPLE,
@@ -1276,7 +1323,6 @@ export const PAGE_STORIES: readonly Story[] = [
     }),
   ),
 
-  // Modes
   pageStory("modes", "mixed", "Org enforces, one person watches", "Modes", "modes", () =>
     modesPage({
       rows: MODES,
@@ -1294,7 +1340,6 @@ export const PAGE_STORIES: readonly Story[] = [
     }),
   ),
 
-  // Rules
   rulesEditor("loaded", "Rules load: three rules and a hide entry", {}),
   rulesEditor("problems", "The file has problems: last good rules still decide", {
     file: rulesFile(BROKEN_RULES_TEXT),
@@ -1310,7 +1355,6 @@ export const PAGE_STORIES: readonly Story[] = [
     saved: "pending",
   }),
   rulesEditor("unavailable", "heel can't edit rules files from here", { file: null }),
-  // Rule history
   history("busy", "Changes from a proposal, the web and outside heel", [
     {
       id: "rc_1",
@@ -1348,7 +1392,6 @@ export const PAGE_STORIES: readonly Story[] = [
   ]),
   history("empty", "No changes yet", []),
 
-  // Welcome
   pageStory("welcome", "new", "Right after enrolling a passkey", "Welcome", "home", () =>
     welcomePage({ vapidPublicKey: "BPreviewVapidKey", devices: 0 }),
   ),
@@ -1515,7 +1558,12 @@ export const APPROVAL_STORIES: readonly Story[] = [
 ];
 
 /** Every story the harness serves: components, then pages. */
-export const ALL_STORIES: readonly Story[] = [...STORIES, ...PAGE_STORIES, ...APPROVAL_STORIES];
+export const ALL_STORIES: readonly Story[] = [
+  ...STORIES,
+  ...PAGE_STORIES,
+  ...SETTINGS_EDGE_STORIES,
+  ...APPROVAL_STORIES,
+];
 
 export function findStory(component: string, state: string): Story | undefined {
   return ALL_STORIES.find((s) => s.component === component && s.state === state);
@@ -1540,6 +1588,6 @@ export function renderStory(story: Story, theme: Theme, bannerMode?: BannerMode)
     pause: story.pause ?? null,
     theme,
     body: story.body(),
-    script: PREVIEW_CEREMONY_SCRIPT,
+    script: story.script ? `${PREVIEW_CEREMONY_SCRIPT}\n${story.script}` : PREVIEW_CEREMONY_SCRIPT,
   });
 }

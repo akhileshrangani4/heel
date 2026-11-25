@@ -43,7 +43,7 @@ import { requestCardsFor } from "./requests.ts";
 import { suggestionsOf } from "./suggestions.ts";
 
 /**
- * The approval page (spec: The approval page). A person sees every request
+ * The approval page. A person sees every request
  * they may decide, and decides one with a fresh passkey assertion:
  *
  * - `GET /approvals` lists requests waiting on, or recently decided by, them.
@@ -282,7 +282,7 @@ export function approvalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       return c.text(REFUSED.not_found, 404);
     }
     const stopped = stopParked(deps.db, deps.orgId, record.row.id);
-    // A background script waiting on it ends too, so its agent's one slot frees up (C6).
+    // A background script waiting on it ends too, so its agent's one slot frees up.
     deps.background?.stopWaitingOn(record.row.id);
     if (stopped > 0) {
       deps.log.info({ approval: record.row.id, by: session.userId }, "parked script stopped");
@@ -343,7 +343,7 @@ export function approvalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
       now,
     });
     if (!result.ok) return c.json({ ok: false, message: REFUSED[result.reason] }, 409);
-    // After the decision has committed: a background script parked on it resumes or ends (C6).
+    // After the decision has committed: a background script parked on it resumes or ends.
     const resumesScript = deps.background?.waitsOn(decision.approvalId) === true;
     deps.background?.approvalDecided(decision.approvalId);
     deps.log.info(

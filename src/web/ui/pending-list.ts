@@ -111,7 +111,7 @@ const SECTIONS = [
  * Requests waiting on, or recently decided by, this approver, grouped into
  * what needs you, what was decided, and what expired. Each row leads with
  * heel's own sentence and links to the full approval page; deciding happens
- * only there (spec: The approval page), so the list has no decision
+ * only there, so the list has no decision
  * controls at all (I-56).
  */
 export function pendingList(props: PendingListProps): Html {

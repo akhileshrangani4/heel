@@ -26,7 +26,7 @@ import { waitingRoutes } from "./routes/waiting.ts";
 export type { HumanPlaneDeps } from "./http.ts";
 
 /**
- * The human plane (spec: Listeners): where people sign in with a passkey,
+ * The human plane: where people sign in with a passkey,
  * read and decide approval requests, pause and resume, and revoke standing
  * approvals. Agent tokens are never accepted here (I-58): every route uses
  * a passkey session, a one-time enrollment link, or nothing at all.
@@ -36,7 +36,7 @@ export type { HumanPlaneDeps } from "./http.ts";
  */
 export function createHumanApp(deps: HumanPlaneDeps): Hono {
   const app = new Hono();
-  // On every response (red-team round 3): no page can be framed by another
+  // On every response: no page can be framed by another
   // site (clickjacking a passkey button) or keep a handle on a popup of it,
   // no <base> or plugin injection, no
   // content sniffing, and approval ids in URLs don't leak through Referer.

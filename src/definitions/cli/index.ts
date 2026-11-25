@@ -1,5 +1,5 @@
 /**
- * The CLI runner's command-line normalization (spec: CLI runner). `gh` and
+ * The CLI runner's command-line normalization. `gh` and
  * `kubectl` are parsed; every other command is unknown, so rules see only its
  * raw `argv` and nothing runs until a rule allows it (I-33).
  *

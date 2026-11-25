@@ -1,9 +1,9 @@
 /**
- * Credential injection at heel's egress proxy (spec: CLI runner,
- * "Credential delivery"). The sandbox never holds the credential: the
- * program gets an inert placeholder, and for the hosts the credential is
- * meant for, the proxy terminates TLS with the sandbox's own CA, reads each
- * HTTP/1.1 request, and puts the real credential in the one place it belongs.
+ * Credential injection at heel's egress proxy. The sandbox never holds the
+ * credential: the program gets an inert placeholder, and for the hosts the
+ * credential is meant for, the proxy terminates TLS with the sandbox's own CA,
+ * reads each HTTP/1.1 request, and puts the real credential in the one place it
+ * belongs.
  *
  * The rules, each of which closes a way to get the credential back out:
  *

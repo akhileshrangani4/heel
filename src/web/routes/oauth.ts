@@ -26,7 +26,7 @@ import { clientScript } from "../ui/client.ts";
 import { type ConnectRequest, connectPage } from "../ui/connect.ts";
 
 /**
- * OAuth for cloud connectors (A2). Claude, ChatGPT, Grok and other MCP hosts
+ * OAuth for cloud connectors. Claude, ChatGPT, Grok and other MCP hosts
  * add heel as a custom connector; MCP authorization makes heel's human plane
  * their authorization server and the agent plane the resource server.
  *

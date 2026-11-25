@@ -3,7 +3,7 @@
  * Pure.
  *
  * A notification only tells someone that a request is waiting and where to
- * decide it (spec: Notifications, I-56). It names the agent, the action and
+ * decide it (I-56). It names the agent, the action and
  * the account, and links to the approval page. It never carries the call's
  * arguments or any message content, because Slack and email would re-expose
  * data heel hides from agents. It never carries an approve action either:
@@ -23,7 +23,7 @@ export interface ApprovalNotice {
 }
 
 /**
- * A rule proposal waiting for its owner (roadmap 2.1). Like a request, it
+ * A rule proposal waiting for its owner. Like a request, it
  * names only the agent and how many rules, never the rules themselves: they
  * are the agent's words, and the page is where the owner reads them.
  */
@@ -40,7 +40,7 @@ export interface ProposalNotice {
 }
 
 /**
- * An agent asking for a connection (roadmap 2.5). Names the agent and heel's
+ * An agent asking for a connection. Names the agent and heel's
  * own name for the service; the alias and the agent's why stay on the page.
  */
 export interface ConnectionNotice {
@@ -95,7 +95,7 @@ export function proposalUrl(publicUrl: URL, proposalId: string): string {
 /**
  * How long to wait before each retry. After the last one, the delivery is
  * marked failed. The request itself stays pending and listed on the page
- * whatever happens here (spec: Fail-closed, "The notification channel fails").
+ * whatever happens here.
  */
 export const RETRY_DELAYS_MS: readonly number[] = [
   30_000, // 30 s

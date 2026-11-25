@@ -56,12 +56,12 @@ const headerName = z.string().regex(/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/, "expected a
 const groupName = z.string().min(1);
 
 /**
- * `oidc:` turns on team sign-in (spec: Teams, "Sign-in"). Without it the
+ * `oidc:` turns on team sign-in. Without it the
  * install is single-user and passkey-only. `roles` maps IdP groups to heel
  * roles; at least one admin group is required, or nobody could edit org rules.
  */
 /**
- * `drafting:` turns on `heel rules draft` (D13b): any OpenAI-compatible
+ * `drafting:` turns on `heel rules draft`: any OpenAI-compatible
  * endpoint. Without it, drafting is off and nothing else changes (I-17).
  */
 const DraftingSectionSchema = z.strictObject({
@@ -107,11 +107,11 @@ const OidcSectionSchema = z.strictObject({
 });
 
 /**
- * The optional SIEM sink (spec: Teams, "Audit"): batched HTTPS POSTs of JSON
+ * The optional SIEM sink: batched HTTPS POSTs of JSON
  * Lines, retried with backoff, with a backlog alert when it falls behind.
  */
 /**
- * Where approval notifications go (spec: Notifications). Web push is always
+ * Where approval notifications go. Web push is always
  * available once someone turns it on from the approval page; email and Slack
  * are on when their section is present. Secrets live in files, with an
  * environment variable taking precedence, like the SIEM token.
@@ -179,22 +179,21 @@ const SiemSectionSchema = z.strictObject({
 /**
  * The on-disk shape of `heel.yaml`. Keys are snake_case as written by
  * operators; unknown keys are errors so a typo never silently falls back to a
- * default. Later deliverables add their own sections (`drafting`, …).
+ * default.
  */
 export const HeelConfigFileSchema = z.strictObject({
   /** SQLite file. Relative paths resolve against $HEEL_HOME. */
   database: z.string().min(1).default("heel.db"),
   /**
    * The human plane's public origin; its host becomes the WebAuthn RP ID.
-   * Only https:// may serve the human plane, except localhost (spec:
-   * Architecture, "Listeners"). Unset, it is http://localhost on
+   * Only https:// may serve the human plane, except localhost. Unset, it is http://localhost on
    * `listen.human`'s port, so moving the approval page's port moves its links.
    */
   public_url: httpUrl.optional(),
   /**
    * Where cloud agents (Claude, ChatGPT, Grok connectors) reach the agent
    * plane, e.g. through a reverse proxy. Setting it turns on OAuth for
-   * connectors (A2): heel's human plane becomes their authorization server.
+   * connectors: heel's human plane becomes their authorization server.
    * https, or http on localhost.
    */
   agent_public_url: secureUrl.optional(),
@@ -253,7 +252,7 @@ export const HeelConfigFileSchema = z.strictObject({
     })
     .prefault({}),
   /**
-   * A tunnel heel runs alongside itself (roadmap 2.7): `cloudflare.config` is
+   * A tunnel heel runs alongside itself: `cloudflare.config` is
    * a cloudflared config file, relative to heel's home, that `heel init
    * --approve-from cloudflare` writes. heel runs `cloudflared tunnel run`
    * with it and restarts it if it stops.
@@ -264,7 +263,7 @@ export const HeelConfigFileSchema = z.strictObject({
     })
     .prefault({}),
   /**
-   * Suggested rules from what you approve and deny (roadmap 2.10): after
+   * Suggested rules from what you approve and deny: after
    * `decisions` of the same kind on at least `days` different days, in the
    * last 30. `enabled: false` turns suggestions off.
    */
@@ -316,7 +315,7 @@ export const HeelConfigFileSchema = z.strictObject({
 
 export type HeelConfigFile = z.output<typeof HeelConfigFileSchema>;
 
-/** Where the IdP sends people back after sign-in; D13b mounts the route here. */
+/** Where the IdP sends people back after sign-in. */
 export const OIDC_CALLBACK_PATH = "/auth/oidc/callback";
 
 /** IdP groups that grant each heel role. */
@@ -401,16 +400,16 @@ export interface HeelConfig {
   notify: NotifyConfig;
   /** Sandboxes at once; a null `total` means the host-memory default (gateway/sandbox-slots.ts). */
   sandboxes: { perAgent: number; total: number | null };
-  /** A cloudflared config heel runs a tunnel with (2.7), as an absolute path; null for none. */
+  /** A cloudflared config heel runs a tunnel with, as an absolute path; null for none. */
   tunnel: { cloudflare: { config: string } | null };
-  /** Rule suggestions from what people decide (2.10); null when turned off. */
+  /** Rule suggestions from what people decide; null when turned off. */
   learning: { decisions: number; days: number } | null;
   /** Null when the operator configured no Google client. */
   providers: { google: GoogleProviderConfig | null; microsoft: MicrosoftProviderConfig | null };
 }
 
 /** Pure: resolves relative paths against `home` and renames to camelCase. */
-/** A server install's home and admin socket (spec: Architecture, "Listeners"). */
+/** A server install's home and admin socket. */
 export const SERVER_HOME = "/var/lib/heel";
 const SERVER_ADMIN_SOCKET = "/run/heel/admin.sock";
 

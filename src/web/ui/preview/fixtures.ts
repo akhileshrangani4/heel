@@ -109,7 +109,7 @@ export const EXECUTED_REQUEST: ApprovalRequestView = {
   executedAt: minutes(-1),
 };
 
-/** An org ask: approved once by an admin, never standing (Q-A7). */
+/** An org ask: approved once by an admin, never standing. */
 /** A GitHub merge, pinned to its head commit, with the agent's reason. */
 export const MERGE_REQUEST: ApprovalRequestView = {
   ...PENDING_REQUEST,

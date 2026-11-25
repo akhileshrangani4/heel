@@ -47,7 +47,7 @@ export const GOOGLE_LOOPBACK_PATH = "/connections/google/return";
 const GOOGLE_PASTE_PATH = "/connections/google/paste";
 
 /**
- * Connections (D5c): the accounts a person owns, and OAuth sign-in for remote
+ * Connections: the accounts a person owns, and OAuth sign-in for remote
  * MCP servers that want it.
  *
  * - `GET /connections` lists them.
@@ -58,8 +58,8 @@ const GOOGLE_PASTE_PATH = "/connections/google/paste";
  *   keeps the tokens in its vault. Only the person who started a sign-in
  *   can finish it, and each one works once.
  * - Built-in mail accounts sign in the same way through the operator's own
- *   client: Gmail with Google (D9a-1), back to `/oauth/google/callback`, and
- *   Outlook with Microsoft (D9b), back to `/oauth/microsoft/callback`. A
+ *   client: Gmail with Google, back to `/oauth/google/callback`, and
+ *   Outlook with Microsoft, back to `/oauth/microsoft/callback`. A
  *   callback only finishes a sign-in for an account of its own provider.
  */
 
@@ -104,7 +104,7 @@ function outcomeFrom(
 ): ConnectionsOutcome {
   const alias = query["account"] ?? "";
   if (query["connected"] !== undefined && aliases.has(alias)) return { kind: "connected", alias };
-  // The web app's own changes (2.9) come as a note heel wrote, never from the link itself.
+  // The web app's own changes come as a note heel wrote, never from the link itself.
   if (note !== null) {
     const agrees = note.kind === "removed" ? !all.has(note.alias) : all.has(note.alias);
     if (agrees) return note;

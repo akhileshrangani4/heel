@@ -1,7 +1,7 @@
 /**
  * The `looks_like` linear model: one logistic-regression head per category
  * over hashed features, with two thresholds per head that carve out an
- * "unsure" band (spec: Hiding, `looks_like` step 2: low confidence hides).
+ * "unsure" band (low confidence hides).
  *
  * Pure: `parseLooksLikeModel` validates already-parsed JSON. Reading the
  * weights file is the caller's job (`src/lookslike/load.ts`).

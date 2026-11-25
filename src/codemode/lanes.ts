@@ -45,7 +45,6 @@ const DEFAULT_IDLE_MS = 60_000;
 interface Lane {
   agentId: string;
   host: CodemodeHost;
-  /** Scripts running on it. */
   running: number;
   idle: ReturnType<typeof setTimeout> | null;
 }

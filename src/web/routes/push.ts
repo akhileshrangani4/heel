@@ -17,7 +17,7 @@ import {
 
 /**
  * What makes the approval page an installable web app that can receive
- * notifications (spec: Notifications): the manifest, the service worker,
+ * notifications: the manifest, the service worker,
  * the app icon, and the endpoints a device subscribes and unsubscribes with.
  *
  * - `GET /manifest.webmanifest`, `GET /sw.js`, `GET /icon-180.png`, `GET /icon-512.png`

@@ -382,7 +382,6 @@ async function stopCommand(args: string[], io: CliIo): Promise<number> {
   }
 }
 
-/** `heel restart`: stop, then start in the background. */
 async function restartCommand(args: string[], io: CliIo): Promise<number> {
   const { values } = parseOrUsage(() =>
     parseArgs({
@@ -814,7 +813,7 @@ async function connectCommand(args: string[], io: CliIo): Promise<number> {
  * `heel account list`, `heel account remove <alias>`,
  * `heel account set <alias> --credential-stdin` (a new key, settings kept),
  * `heel account set <alias> --credential-host <host>...
- * [--credential-auth <auth>]`, and sharing (D13b):
+ * [--credential-auth <auth>]`, and sharing:
  * `heel account share|unshare <alias> --user <name> | --group <group>`,
  * `heel account approvers <alias> [--repo <owner/name>] [--user <name>]... [--group <group>]...`
  * (no principals clears that scope), `heel account sharing <alias>`.
@@ -1072,8 +1071,8 @@ export function pauseParams(values: {
 }
 
 /**
- * `heel pause`. One command, no passkey: pausing can only stop calls
- * (Q-N5). There is no `heel resume`; resuming needs a passkey on the page.
+ * `heel pause`. One command, no passkey: pausing can only stop calls.
+ * There is no `heel resume`; resuming needs a passkey on the page.
  */
 async function pauseCommand(args: string[], io: CliIo): Promise<number> {
   const { values, positionals } = parseOrUsage(() =>
@@ -1286,6 +1285,7 @@ async function initCommand(args: string[], io: CliIo): Promise<number> {
   const {
     addressProblem,
     agentHostnameFor,
+    configuredAddresses,
     sameParent,
     APPROVE_FROM,
     isApproveFrom,
@@ -1324,7 +1324,7 @@ async function initCommand(args: string[], io: CliIo): Promise<number> {
   ) {
     throw new UsageError("--hostname and --agent-hostname go with --approve-from cloudflare");
   }
-  // Where the owner approves from (2.7): asked in a terminal, this computer under --yes.
+  // Where the owner approves from: asked in a terminal, this computer under --yes.
   const approveFrom =
     flag ?? (values.yes === true ? "this-computer" : await chooseApproveFrom(io.stderr));
   const steps = initHome(home);
@@ -1427,15 +1427,16 @@ async function initCommand(args: string[], io: CliIo): Promise<number> {
           `  tailscale serve --bg --https=8443 http://127.0.0.1:${ports.agent}\n`,
       );
     } else {
-      // Checked before Tailscale changes anything: heel.yaml's addresses, and a passkey it would orphan.
       const databasePath = join(home, "heel.db");
-      const set = await setUpTailscale(
-        io.exec,
-        ports,
-        (want) =>
+      const set = await setUpTailscale(io.exec, ports, {
+        // Checked before Tailscale changes anything: heel.yaml's addresses, and a passkey it would orphan.
+        precheck: (want) =>
           addressProblem(configPath, want) ??
           (values["new-address"] === true ? null : passkeyProblem(databasePath, want)),
-      );
+        // Addresses heel.yaml already has keep their ports.
+        configured: configuredAddresses(readFileSync(configPath, "utf8")),
+        configPath,
+      });
       if (!set.ok) {
         // What was done, and the problem: no next steps, so nobody enrolls on the wrong address.
         io.stdout.write(initSteps(steps));
@@ -1450,6 +1451,7 @@ async function initCommand(args: string[], io: CliIo): Promise<number> {
           return EXIT.failed;
         }
       }
+      if (set.note !== undefined) io.stderr.write(`heel: ${set.note}\n`);
     }
   }
   // Every command finds the default home on its own; only another folder needs HEEL_HOME.
@@ -1530,6 +1532,27 @@ async function tuiCommand(args: string[], io: CliIo): Promise<number> {
   return runTui(configFrom(io, values.config));
 }
 
+/** What `heel status` says about code mode: ping's `codeMode`, from heel's startup check. */
+type CodeModeStatus = { state: string; reason?: string } | null | undefined;
+
+/** Pure: the headline's warning and the `Code mode:` line; nothing from a heel that has no check. */
+export function codeModeStatus(codeMode: CodeModeStatus): { warning: string; line: string[] } {
+  if (codeMode === null || codeMode === undefined) return { warning: "", line: [] };
+  if (codeMode.state === "broken") {
+    const reason = codeMode.reason ?? "no reason given";
+    return {
+      warning: ", but code mode can't run, so every run_code call fails",
+      line: [
+        `  Code mode: can't run: ${reason}${reason.includes("heel logs") ? "" : " (more in: heel logs)"}`,
+      ],
+    };
+  }
+  return {
+    warning: "",
+    line: [`  Code mode: ${codeMode.state === "ready" ? "ready" : "checking…"}`],
+  };
+}
+
 /** `heel status`: the same picture as the TUI's header, as plain lines. */
 async function statusCommand(args: string[], io: CliIo): Promise<number> {
   const { values, positionals } = parseOrUsage(() =>
@@ -1542,7 +1565,9 @@ async function statusCommand(args: string[], io: CliIo): Promise<number> {
     vault?: string;
     passkeys?: number;
     notifiedDevices?: number;
+    codeMode?: CodeModeStatus;
   };
+  const codeMode = codeModeStatus(ping.codeMode);
   const approvals = (await admin(config, { method: "approvals.list" })) as {
     status: string;
     summary: string;
@@ -1565,7 +1590,7 @@ async function statusCommand(args: string[], io: CliIo): Promise<number> {
   }[];
   const waiting = approvals.filter((a) => a.status === "pending");
   const lines = [
-    `heel ${ping.version ?? ""} is running${ping.vault === "unavailable" ? ", but the vault is closed (no master key)" : ""}.`,
+    `heel ${ping.version ?? ""} is running${ping.vault === "unavailable" ? ", but the vault is closed (no master key)" : codeMode.warning}.`,
     `  Passkeys:  ${ping.passkeys === 0 ? "none yet: run heel user enroll owner and open its link" : (ping.passkeys ?? "?")}`,
     `  Notified:  ${
       ping.notifiedDevices === undefined
@@ -1587,6 +1612,7 @@ async function statusCommand(args: string[], io: CliIo): Promise<number> {
     `  From agents: ${proposals.length === 0 ? "nothing" : `${proposals.length} waiting for you to decide`}`,
     ...proposals.slice(0, 5).map((p) => `    ${p.summary}\n      ${p.url}`),
     ...(proposals.length > 5 ? [`    and ${proposals.length - 5} more: heel tui`] : []),
+    ...codeMode.line,
     `  Scripts:   ${scripts.length === 0 ? "none running" : `${scripts.length} in the background (stop them on the Agents page)`}`,
     ...scripts.map(
       (s) =>
@@ -1631,8 +1657,8 @@ async function dispatch(argv: string[], io: CliIo): Promise<number> {
     case "audit":
       return auditCommand(rest, io);
     case "codemode-worker": {
-      // Internal: heel starts this itself, under bubblewrap, for one script
-      // (D6b). It never returns; it exits when the script ends.
+      // Internal: heel starts this itself, under bubblewrap, for one script.
+      // It never returns; it exits when the script ends.
       const { codemodeWorkerMain } = await import("../codemode/worker-main.ts");
       await codemodeWorkerMain();
       return new Promise<number>(() => {});
