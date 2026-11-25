@@ -13,6 +13,7 @@ import { EgressConfigError, isAllowlisted, parseEgressAllow } from "../runner/eg
 import { parseCredentialAuth } from "../runner/intercept.ts";
 import { isReservedEnv } from "../runner/plan.ts";
 import type { HeelDb } from "../store/db.ts";
+import { type AccountRecord, findAccount } from "../store/directory.ts";
 import { newId } from "../store/ids.ts";
 import { type AccountStatus, accounts, users } from "../store/schema.ts";
 import type { CredentialPayload, Vault } from "./vault.ts";
@@ -61,16 +62,53 @@ export function isValidAlias(alias: string): boolean {
   return ALIAS.test(alias);
 }
 
-/** What `heel connect` calls an HTTP account. */
-export const HTTP_PASSTHROUGH = "http";
+/**
+ * The accounts heel passes calls through to, by what `heel connect` calls
+ * them: someone else's MCP server, an HTTP API, or a CLI. Each is stored under
+ * the provider `<kind>:<name>`, and each has flags no other kind may be given.
+ */
+const PASSTHROUGHS = {
+  mcp: {
+    hasFlags: (input: ConnectInput) => input.url !== undefined || input.stdio !== undefined,
+    flagsError: "--url and --command are only for mcp accounts",
+    settings: mcpSettings,
+    provider: (input: ConnectInput) => mcpProvider(input.alias),
+  },
+  http: {
+    hasFlags: (input: ConnectInput) => input.http !== undefined,
+    flagsError: "--base-url and --openapi are only for http accounts",
+    settings: httpAccountSettings,
+    provider: (input: ConnectInput) => `http:${input.alias}`,
+  },
+  cli: {
+    hasFlags: (input: ConnectInput) => input.cli !== undefined,
+    flagsError: "--bin is only for cli accounts",
+    settings: cliAccountSettings,
+    // `settings` has already refused an input with no `cli`.
+    provider: (input: ConnectInput) => cliProvider((input.cli as { command: string }).command),
+  },
+};
 
-/** The provider an HTTP account is stored under. */
-export function httpProvider(alias: string): string {
-  return `${HTTP_PASSTHROUGH}:${alias}`;
+/** The provider an MCP passthrough account is stored under. */
+export function mcpProvider(alias: string): string {
+  return `mcp:${alias}`;
+}
+
+/** The provider a CLI account is stored under: its command, not its alias. */
+export function cliProvider(command: string): string {
+  return `cli:${command}`;
+}
+
+export function isMcpProvider(provider: string): boolean {
+  return provider.startsWith("mcp:");
 }
 
 export function isHttpProvider(provider: string): boolean {
-  return provider.startsWith(`${HTTP_PASSTHROUGH}:`);
+  return provider.startsWith("http:");
+}
+
+export function isCliProvider(provider: string): boolean {
+  return provider.startsWith("cli:");
 }
 
 /** Pure: `bearer`, `basic`, `header:<name>` or `query:<name>`, as settings store it. */
@@ -126,18 +164,6 @@ function httpAccountSettings(input: ConnectInput): Record<string, unknown> {
     );
   }
   return { transport: "http", baseUrl: http.baseUrl, auth, operations };
-}
-
-/** What `heel connect` calls a CLI account. */
-export const CLI_PASSTHROUGH = "cli";
-
-/** The provider a CLI account is stored under, `cli:<name>`. */
-export function cliProvider(command: string): string {
-  return `${CLI_PASSTHROUGH}:${command}`;
-}
-
-export function isCliProvider(provider: string): boolean {
-  return provider.startsWith(`${CLI_PASSTHROUGH}:`);
 }
 
 /** The settings a CLI account stores; see `definitions/cli/settings.ts`. */
@@ -258,18 +284,6 @@ function checkCredentialEnv(name: string, npm: boolean): void {
       `--credential-env ${name} is a variable heel sets itself; name another`,
     );
   }
-}
-
-/** What `heel connect` calls an MCP passthrough account. */
-export const MCP_PASSTHROUGH = "mcp";
-
-/** The provider an MCP passthrough account is stored under. */
-export function mcpProvider(alias: string): string {
-  return `${MCP_PASSTHROUGH}:${alias}`;
-}
-
-export function isMcpProvider(provider: string): boolean {
-  return provider.startsWith(`${MCP_PASSTHROUGH}:`);
 }
 
 /**
@@ -491,12 +505,7 @@ export function configureAccount(
   alias: string,
   input: ConfigureInput,
 ): ConfiguredAccount {
-  const row = db
-    .select({ id: accounts.id, provider: accounts.provider, settings: accounts.settings })
-    .from(accounts)
-    .where(and(eq(accounts.orgId, orgId), eq(accounts.alias, alias)))
-    .get();
-  if (!row) throw new ConnectError("not_found", `no account named "${alias}"`);
+  const row = requireAccount(db, orgId, alias);
   const upstream = upstreamSettings(row.settings);
   const cli = upstream === null ? cliSettings(row.settings) : null;
   const current = upstream?.transport === "stdio" ? upstream : cli;
@@ -600,6 +609,13 @@ export class ConnectError extends Error {
   }
 }
 
+/** The account named `alias` in `orgId`; `not_found` when there is none. */
+export function requireAccount(db: HeelDb, orgId: string, alias: string): AccountRecord {
+  const account = findAccount(db, orgId, alias);
+  if (account === null) throw new ConnectError("not_found", `no account named "${alias}"`);
+  return account;
+}
+
 export interface ConnectInput {
   orgId: string;
   ownerId: string;
@@ -667,34 +683,22 @@ export function connectAccount(
       "aliases are 1–64 lower-case letters, digits or '-', starting with a letter",
     );
   }
-  const passthrough = input.provider === MCP_PASSTHROUGH;
-  const http = input.provider === HTTP_PASSTHROUGH;
-  const cli = input.provider === CLI_PASSTHROUGH;
-  if (!passthrough && (input.url !== undefined || input.stdio !== undefined)) {
-    throw new ConnectError("invalid_settings", "--url and --command are only for mcp accounts");
+  const passthrough = Object.hasOwn(PASSTHROUGHS, input.provider)
+    ? PASSTHROUGHS[input.provider as keyof typeof PASSTHROUGHS]
+    : null;
+  for (const other of Object.values(PASSTHROUGHS)) {
+    if (other !== passthrough && other.hasFlags(input)) {
+      throw new ConnectError("invalid_settings", other.flagsError);
+    }
   }
-  if (!http && input.http !== undefined) {
-    throw new ConnectError(
-      "invalid_settings",
-      "--base-url and --openapi are only for http accounts",
-    );
-  }
-  if (!cli && input.cli !== undefined) {
-    throw new ConnectError("invalid_settings", "--bin is only for cli accounts");
-  }
-  const settings = passthrough
-    ? mcpSettings(input)
-    : http
-      ? httpAccountSettings(input)
-      : cli
-        ? cliAccountSettings(input)
-        : {};
-  if (!passthrough && !http && !cli && !isBuiltInProvider(input.provider)) {
+  const settings = passthrough?.settings(input) ?? {};
+  if (passthrough === null && !isBuiltInProvider(input.provider)) {
     throw new ConnectError(
       "unknown_provider",
       `unknown provider "${input.provider}"; use mcp, or a built-in provider: ${BUILT_IN_PROVIDERS.join(", ")}`,
     );
   }
+  const provider = passthrough?.provider(input) ?? input.provider;
   if (SIGNS_IN.has(input.provider) && input.credential !== undefined) {
     throw new ConnectError(
       "invalid_settings",
@@ -723,17 +727,14 @@ export function connectAccount(
         orgId: input.orgId,
         ownerId: input.ownerId,
         alias: input.alias,
-        provider: passthrough
-          ? mcpProvider(input.alias)
-          : http
-            ? httpProvider(input.alias)
-            : cli
-              ? cliProvider((input.cli as { command: string }).command)
-              : input.provider,
+        provider,
         settings,
-        // A built-in provider needs its credential first; a passthrough may need none,
+        // A built-in provider needs its credential first; an MCP server may need none,
         // unless its owner still has to sign in to it (OAuth).
-        status: passthrough && settings["oauth"] !== true ? "active" : "reconnect_required",
+        status:
+          passthrough === PASSTHROUGHS.mcp && settings["oauth"] !== true
+            ? "active"
+            : "reconnect_required",
         createdAt: now,
       })
       .run();
@@ -756,13 +757,7 @@ export function connectAccount(
   return {
     accountId,
     alias: input.alias,
-    provider: passthrough
-      ? mcpProvider(input.alias)
-      : http
-        ? httpProvider(input.alias)
-        : cli
-          ? cliProvider((input.cli as { command: string }).command)
-          : input.provider,
+    provider,
     status: row.status,
   };
 }
