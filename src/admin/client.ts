@@ -2,8 +2,9 @@ import { connect } from "node:net";
 import { hasErrnoCode } from "../util/errno.ts";
 import {
   ADMIN_IDLE_TIMEOUT_MS,
-  type AdminRequest,
-  type AdminResponse,
+  type AdminMethod,
+  type AdminReply,
+  type AdminRequestOf,
   AdminResponseSchema,
   encodeAdminLine,
 } from "./protocol.ts";
@@ -39,11 +40,11 @@ export function describeConnectError(path: string, error: unknown): AdminClientE
   return new AdminClientError("not_running", `could not reach heel at ${path}`, { cause: error });
 }
 
-export function adminCall(
+export function adminCall<M extends AdminMethod>(
   path: string,
-  request: AdminRequest,
+  request: AdminRequestOf<M>,
   timeoutMs: number = ADMIN_IDLE_TIMEOUT_MS,
-): Promise<AdminResponse> {
+): Promise<AdminReply<M>> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let settled = false;
@@ -76,7 +77,8 @@ export function adminCall(
           return;
         }
         const parsed = AdminResponseSchema.safeParse(json);
-        if (parsed.success) resolve(parsed.data);
+        // The result is what this method's handler returned; callers allow for an older heel.
+        if (parsed.success) resolve(parsed.data as AdminReply<M>);
         else reject(new AdminClientError("bad_response", "heel sent a malformed response"));
       }),
     );

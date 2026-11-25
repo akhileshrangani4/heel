@@ -3,6 +3,8 @@ import { randomBytes } from "node:crypto";
 import { existsSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, onTestFinished } from "vitest";
+import { createAdminHandler } from "../../src/admin/handlers.ts";
+import { startAdminServer } from "../../src/admin/server.ts";
 import { formatTable } from "../../src/cli/common.ts";
 import {
   addToClient,
@@ -17,6 +19,8 @@ import { loadConfig, resolveConfigSource } from "../../src/config/load.ts";
 import { createLogger } from "../../src/log.ts";
 import { startHeel } from "../../src/serve.ts";
 import { encodeMasterKey, MASTER_KEY_ENV } from "../../src/vault/key.ts";
+import { approvalHarness, pendingId, SEND } from "../helpers/approvals.ts";
+import { oneRule } from "../helpers/pipeline.ts";
 import { tempDir } from "../helpers/store.ts";
 
 const REPO_ROOT = join(import.meta.dirname, "..", "..");
@@ -569,6 +573,190 @@ describe("heel CLI", () => {
     child.kill("SIGTERM");
     expect(await exited).toBe(0);
     expect(existsSync(join(home, "run", "admin.sock"))).toBe(false);
+  });
+});
+
+/** Times and generated ids change run to run: mask them, keeping their length so tables align. */
+function masked(text: string): string {
+  return text
+    .replace(/\d{4}-\d\d-\d\d[T ]\d\d:\d\d(:\d\d\.\d{3}Z)?/g, (time) => time.replace(/\d/g, "0"))
+    .replace(/\b([a-z]+)_[A-Za-z0-9_-]{22}(?![A-Za-z0-9_-])/g, (_id, kind) => idOf(kind));
+}
+const idOf = (kind: string) => `${kind}_${"x".repeat(22)}`;
+const AT = "0000-00-00T00:00:00.000Z";
+const SHORT = "0000-00-00 00:00";
+const asJson = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`;
+
+describe("heel list commands: a table, or the admin result with --json", () => {
+  it("agent, account and pause lists, empty and filled, and heel status", async () => {
+    const home = heelHome();
+    await serveIn(home);
+    const env = { HEEL_HOME: home };
+    const out = async (...argv: string[]) => masked((await run(argv, env)).stdout);
+
+    expect(await out("agent", "list")).toBe("No agents yet. Add one: heel agent add <name>\n");
+    expect(await out("account", "list")).toBe(
+      "No accounts yet. Connect one: heel connect <provider> --as <alias>\n",
+    );
+    expect(await out("pause", "list")).toBe("Nothing is paused.\n");
+    for (const list of ["agent", "account", "pause"]) {
+      expect(await out(list, "list", "--json")).toBe("[]\n");
+    }
+
+    await run(["agent", "add", "inbox-bot"], env);
+    await run(["agent", "add", "forever-bot", "--expires", "never"], env);
+    await run(["agent", "add", "old-bot"], env);
+    await run(["agent", "revoke", "old-bot"], env);
+    await run(["connect", "slack", "--as", "slack-work"], env);
+    await run(["connect", "github", "--as", "gh-work", "--credential-stdin"], env, ["ghp_x\n"]);
+    await run(["pause", "--agent", "inbox-bot"], env);
+    await run(["pause", "--all"], env);
+
+    expect(await out("agent", "list")).toBe(
+      "NAME         OWNER  STATUS                    TOKEN EXPIRES (UTC)  ADDED (UTC)\n" +
+        `forever-bot  owner  active                    never                ${SHORT}\n` +
+        `inbox-bot    owner  active                    ${SHORT}     ${SHORT}\n` +
+        `old-bot      owner  revoked ${SHORT}                       ${SHORT}\n`,
+    );
+    const agent = (name: string, revokedAt: string | null, tokenExpiresAt: string | null) => ({
+      id: idOf("agt"),
+      name,
+      ownerId: idOf("usr"),
+      owner: "owner",
+      createdAt: AT,
+      revokedAt,
+      hasToken: revokedAt === null,
+      tokenExpiresAt,
+    });
+    expect(await out("agent", "list", "--json")).toBe(
+      asJson([
+        agent("forever-bot", null, null),
+        agent("inbox-bot", null, AT),
+        agent("old-bot", AT, null),
+      ]),
+    );
+
+    expect(await out("account", "list")).toBe(
+      "ALIAS       PROVIDER  OWNER  STATUS              CREDENTIAL\n" +
+        "gh-work     github    owner  ready\n" +
+        "slack-work  slack     owner  reconnect required\n",
+    );
+    const account = (alias: string, provider: string, status: string) => ({
+      id: idOf("acc"),
+      alias,
+      provider,
+      ownerId: idOf("usr"),
+      owner: "owner",
+      status,
+      credentialDelivery: null,
+    });
+    expect(await out("account", "list", "--json")).toBe(
+      asJson([
+        account("gh-work", "github", "active"),
+        account("slack-work", "slack", "reconnect_required"),
+      ]),
+    );
+
+    expect(await out("pause", "list")).toBe(
+      "SCOPE  WHAT        SINCE (UTC)       BY\n" +
+        `agent  inbox-bot   ${SHORT}  admin-socket\n` +
+        `all    everything  ${SHORT}  admin-socket\n`,
+    );
+    expect(await out("pause", "list", "--json")).toBe(
+      asJson([
+        {
+          scope: "agent",
+          target: idOf("agt"),
+          targetName: "inbox-bot",
+          pausedBy: "admin-socket",
+          pausedAt: AT,
+        },
+        {
+          scope: "global",
+          target: "",
+          targetName: "everything",
+          pausedBy: "admin-socket",
+          pausedAt: AT,
+        },
+      ]),
+    );
+
+    const status = (await out("status"))
+      .replace(", but code mode can't run, so every run_code call fails", "")
+      .replace(/^ {2}Code mode: .*$/m, "  Code mode: <state>");
+    expect(status).toBe(
+      [
+        "heel test is running.",
+        "  Passkeys:  none yet: run heel user enroll owner and open its link",
+        "  Notified:  no device yet: turn on notifications under Settings, Devices",
+        "  Agents:    2",
+        "  Accounts:  2 (1 need sign-in)",
+        "  Paused:    agent inbox-bot, everything",
+        "  Waiting:   nothing",
+        "  From agents: nothing",
+        "  Code mode: <state>",
+        "  Scripts:   none running",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  it("approvals list: standing approvals by scope, live or revoked", async () => {
+    const home = heelHome();
+    const h = approvalHarness({ owner: oneRule("{ action: email.send }", "ask") });
+    const server = await startAdminServer({
+      path: join(home, "run", "admin.sock"),
+      handle: createAdminHandler({
+        db: h.t.db,
+        orgId: h.t.orgId,
+        vault: null,
+        version: "test",
+        publicUrl: new URL("https://heel.example.com"),
+        now: () => h.clock.now,
+      }),
+      log: createLogger("silent"),
+    });
+    onTestFinished(() => server.close());
+    const env = { HEEL_HOME: home };
+    const out = async (...argv: string[]) => masked((await run(argv, env)).stdout);
+
+    expect(await out("approvals", "list")).toBe("No standing approvals.\n");
+    expect(await out("approvals", "list", "--json")).toBe("[]\n");
+
+    // Each call differs, so no standing approval made here covers the next one.
+    const standing = async (scope: "exact_call" | "rule", subject: string) => {
+      const pending = pendingId(await h.call({ args: { ...SEND, subject } }));
+      const decided = h.decide(pending, "approve", { standing: { scope, duration: "1d" } });
+      if (!decided.ok || decided.standingApprovalId === null) throw new Error("no standing");
+      return decided.standingApprovalId;
+    };
+    await standing("exact_call", "Q3");
+    // The list is newest first; a later clock keeps that order from resting on a tie.
+    h.clock.advance(60_000);
+    const revoked = await standing("rule", "Q4");
+    expect(await out("approvals", "revoke", revoked)).toBe(
+      `Revoked standing approval ${idOf("sta")}. It stops matching on the next call.\n`,
+    );
+
+    expect(await out("approvals", "list")).toBe(
+      "ID                          AGENT      ACCOUNT     COVERS           STATUS (UTC)\n" +
+        `${idOf("sta")}  inbox-bot  gmail-work  the rule         revoked ${SHORT}\n` +
+        `${idOf("sta")}  inbox-bot  gmail-work  this exact call  until ${SHORT}\n`,
+    );
+    const approval = (scope: string, revokedAt: string | null) => ({
+      id: idOf("sta"),
+      agent: "inbox-bot",
+      account: "gmail-work",
+      scope,
+      covers: "email.send",
+      rule: { name: null, file: "rules/owner.yaml", line: 2 },
+      createdAt: AT,
+      expiresAt: AT,
+      revokedAt,
+    });
+    expect(await out("approvals", "list", "--json")).toBe(
+      asJson([approval("rule", AT), approval("exact_call", null)]),
+    );
   });
 });
 

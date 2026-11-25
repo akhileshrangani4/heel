@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { adminCall } from "../admin/client.ts";
-import type { AdminRequest } from "../admin/protocol.ts";
+import type { AdminMethod, AdminRequestOf, AdminResults } from "../admin/protocol.ts";
 import type { HeelConfig } from "../config/schema.ts";
 
 /**
@@ -14,30 +14,13 @@ import type { HeelConfig } from "../config/schema.ts";
  * them without a terminal; `runTui` is the loop around them.
  */
 
-export interface ApprovalItem {
-  id: string;
-  agent: string;
-  account: string;
-  status: string;
-  summary: string;
-  reason: string | null;
-  createdAt: string;
-  expiresAt: string;
-  url: string;
-}
+export type ApprovalItem = AdminResults["approvals.list"][number];
 
 /** A rule proposal waiting for its owner, as `proposals.list` returns it. */
-export interface ProposalItem {
-  id: string;
-  agent: string;
-  owner: string;
-  rules: number;
-  summary: string;
-  reason: string | null;
-  createdAt: string;
-  expiresAt: string;
-  url: string;
-}
+export type ProposalItem = Pick<
+  AdminResults["proposals.list"][number],
+  "id" | "agent" | "owner" | "rules" | "summary" | "reason" | "createdAt" | "expiresAt" | "url"
+>;
 
 /**
  * Pure: proposals join the Requests list as waiting items, newest first
@@ -64,38 +47,19 @@ export function withProposals(
   return [...approvals, ...asItems].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-export interface ActivityItem {
-  id: number;
-  at: string;
-  kind: string;
-  mode: string | null;
-  agentId: string;
-  account: string;
-  action: string;
-  rule: string | null;
-  reason: string | null;
-}
+export type ActivityItem = AdminResults["activity.list"][number];
 
-export interface AgentItem {
-  id: string;
-  name: string;
-  owner: string;
-  revokedAt: string | null;
-  tokenExpiresAt: string | null;
-  hasToken: boolean;
-}
+export type AgentItem = Pick<
+  AdminResults["agent.list"][number],
+  "id" | "name" | "owner" | "revokedAt" | "tokenExpiresAt" | "hasToken"
+>;
 
-export interface AccountItem {
-  alias: string;
-  provider: string;
-  owner: string;
-  status: string;
-}
+export type AccountItem = Pick<
+  AdminResults["account.list"][number],
+  "alias" | "provider" | "owner" | "status"
+>;
 
-export interface PauseItem {
-  scope: string;
-  targetName: string;
-}
+export type PauseItem = Pick<AdminResults["pause.list"][number], "scope" | "targetName">;
 
 export interface TuiData {
   version: string | null;
@@ -479,7 +443,10 @@ export function handleKey(
   }
 }
 
-async function call(config: HeelConfig, request: AdminRequest): Promise<unknown> {
+async function call<M extends AdminMethod>(
+  config: HeelConfig,
+  request: AdminRequestOf<M>,
+): Promise<AdminResults[M]> {
   const response = await adminCall(config.adminSocketPath, request);
   if (!response.ok) throw new Error(response.error.message);
   return response.result;
@@ -498,12 +465,12 @@ async function load(config: HeelConfig, previous: TuiData): Promise<TuiData> {
       call(config, { method: "pause.list" }),
     ]);
     return {
-      version: (ping as { version?: string }).version ?? null,
-      approvals: withProposals(approvals as ApprovalItem[], proposals as ProposalItem[]),
-      activity: activity as ActivityItem[],
-      agents: agents as AgentItem[],
-      accounts: accounts as AccountItem[],
-      pauses: pauses as PauseItem[],
+      version: ping.version,
+      approvals: withProposals(approvals, proposals),
+      activity,
+      agents,
+      accounts,
+      pauses,
       error: null,
     };
   } catch (error) {

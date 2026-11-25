@@ -6,7 +6,13 @@ import { parseArgs } from "node:util";
 import { parseDocument } from "yaml";
 import { z } from "zod";
 import { AdminClientError, adminCall } from "../admin/client.ts";
-import { type AdminRequest, AUDIT_EXPORT_MAX_PAGE } from "../admin/protocol.ts";
+import {
+  type AdminMethod,
+  type AdminRequest,
+  type AdminRequestOf,
+  type AdminResults,
+  AUDIT_EXPORT_MAX_PAGE,
+} from "../admin/protocol.ts";
 import { AdminSocketError } from "../admin/server.ts";
 import { defaultHeelHome } from "../config/load.ts";
 import type { HeelConfig, ListenAddress } from "../config/schema.ts";
@@ -38,37 +44,6 @@ import { RULES_USAGE, rulesCommand } from "./rules.ts";
 export { type CliIo, EXIT } from "./common.ts";
 
 import { runCommand } from "./run.ts";
-
-/** What the list admin methods return, as the tables read it. */
-interface AgentRow {
-  name: string;
-  owner: string;
-  createdAt: string;
-  revokedAt: string | null;
-  tokenExpiresAt: string | null;
-  hasToken: boolean;
-}
-interface AccountRow {
-  alias: string;
-  provider: string;
-  owner: string;
-  status: string;
-  credentialDelivery: string | null;
-}
-interface PauseRowView {
-  scope: string;
-  targetName: string;
-  pausedAt: string;
-  pausedBy: string;
-}
-interface StandingRowView {
-  id: string;
-  agent: string;
-  account: string | null;
-  scope: string;
-  expiresAt: string;
-  revokedAt: string | null;
-}
 
 export const USAGE = `usage:
   heel init [--home <dir>] [--yes]        set heel up: its home, master key, heel.yaml
@@ -266,10 +241,28 @@ import { agentMcpUrl } from "../gateway/mcp-url.ts";
 export { agentMcpUrl };
 
 /** Sends one admin request; a refusal becomes a RefusedError carrying heel's message. */
-async function admin(config: HeelConfig, request: AdminRequest): Promise<unknown> {
+async function admin<M extends AdminMethod>(
+  config: HeelConfig,
+  request: AdminRequestOf<M>,
+): Promise<AdminResults[M]> {
   const response = await adminCall(config.adminSocketPath, request);
   if (!response.ok) throw new RefusedError(`${response.error.message} (${response.error.code})`);
   return response.result;
+}
+
+/** A list command's output: the admin result as JSON with --json, else a table of its rows. */
+function printList<T>(
+  io: CliIo,
+  json: boolean | undefined,
+  listed: readonly T[],
+  table: { headers: string[]; row: (item: T) => string[]; empty: string },
+): number {
+  io.stdout.write(
+    json === true
+      ? `${JSON.stringify(listed, null, 2)}\n`
+      : formatTable(table.headers, listed.map(table.row), table.empty),
+  );
+  return EXIT.ok;
 }
 
 async function readAll(stdin: AsyncIterable<string | Buffer>): Promise<string> {
@@ -638,30 +631,21 @@ async function agentCommand(args: string[], io: CliIo): Promise<number> {
     }
     case "list": {
       if (rest.length > 0) throw new UsageError(`unexpected argument "${rest[0]}"`);
-      const listed = await admin(config, { method: "agent.list" });
-      if (values.json) {
-        io.stdout.write(`${JSON.stringify(listed, null, 2)}\n`);
-        return EXIT.ok;
-      }
-      const rows = (listed as AgentRow[]).map((a) => [
-        a.name,
-        a.owner,
-        a.revokedAt === null ? "active" : `revoked ${shortTime(a.revokedAt)}`,
-        a.revokedAt !== null || !a.hasToken
-          ? ""
-          : a.tokenExpiresAt === null
-            ? "never"
-            : shortTime(a.tokenExpiresAt),
-        shortTime(a.createdAt),
-      ]);
-      io.stdout.write(
-        formatTable(
-          ["name", "owner", "status", "token expires (UTC)", "added (UTC)"],
-          rows,
-          "No agents yet. Add one: heel agent add <name>",
-        ),
-      );
-      return EXIT.ok;
+      return printList(io, values.json, await admin(config, { method: "agent.list" }), {
+        headers: ["name", "owner", "status", "token expires (UTC)", "added (UTC)"],
+        row: (a) => [
+          a.name,
+          a.owner,
+          a.revokedAt === null ? "active" : `revoked ${shortTime(a.revokedAt)}`,
+          a.revokedAt !== null || !a.hasToken
+            ? ""
+            : a.tokenExpiresAt === null
+              ? "never"
+              : shortTime(a.tokenExpiresAt),
+          shortTime(a.createdAt),
+        ],
+        empty: "No agents yet. Add one: heel agent add <name>",
+      });
     }
     default:
       throw new UsageError(
@@ -848,28 +832,17 @@ async function accountCommand(args: string[], io: CliIo): Promise<number> {
   switch (subcommand) {
     case "list":
       if (alias !== undefined) throw new UsageError(`unexpected argument "${alias}"`);
-      {
-        const listed = await admin(config, { method: "account.list" });
-        if (values.json) {
-          print(listed);
-          return EXIT.ok;
-        }
-        const rows = (listed as AccountRow[]).map((a) => [
+      return printList(io, values.json, await admin(config, { method: "account.list" }), {
+        headers: ["alias", "provider", "owner", "status", "credential"],
+        row: (a) => [
           a.alias,
           a.provider,
           a.owner,
           a.status === "active" ? "ready" : a.status.replaceAll("_", " "),
           a.credentialDelivery ?? "",
-        ]);
-        io.stdout.write(
-          formatTable(
-            ["alias", "provider", "owner", "status", "credential"],
-            rows,
-            "No accounts yet. Connect one: heel connect <provider> --as <alias>",
-          ),
-        );
-      }
-      return EXIT.ok;
+        ],
+        empty: "No accounts yet. Connect one: heel connect <provider> --as <alias>",
+      });
     case "set": {
       if (alias === undefined) throw new UsageError("missing account alias");
       const credentialHosts = values["credential-host"] ?? [];
@@ -1099,21 +1072,16 @@ async function pauseCommand(args: string[], io: CliIo): Promise<number> {
     if (all !== undefined || [agent, account, owner].some((v) => v !== undefined)) {
       throw new UsageError("pause list takes no scope flags");
     }
-    const listed = await admin(config, { method: "pause.list" });
-    if (values.json) {
-      io.stdout.write(`${JSON.stringify(listed, null, 2)}\n`);
-      return EXIT.ok;
-    }
-    const rows = (listed as PauseRowView[]).map((p) => [
-      p.scope === "global" ? "all" : p.scope,
-      p.targetName,
-      shortTime(p.pausedAt),
-      p.pausedBy,
-    ]);
-    io.stdout.write(
-      formatTable(["scope", "what", "since (UTC)", "by"], rows, "Nothing is paused."),
-    );
-    return EXIT.ok;
+    return printList(io, values.json, await admin(config, { method: "pause.list" }), {
+      headers: ["scope", "what", "since (UTC)", "by"],
+      row: (p) => [
+        p.scope === "global" ? "all" : p.scope,
+        p.targetName,
+        shortTime(p.pausedAt),
+        p.pausedBy,
+      ],
+      empty: "Nothing is paused.",
+    });
   }
   const params = pauseParams(values);
   const paused = PauseResult.parse(await admin(config, { method: "pause", params }));
@@ -1140,13 +1108,9 @@ async function approvalsCommand(args: string[], io: CliIo): Promise<number> {
   switch (subcommand) {
     case "list":
       if (rest.length > 0) throw new UsageError(`unexpected argument "${rest[0]}"`);
-      {
-        const listed = await admin(config, { method: "standing.list" });
-        if (values.json) {
-          io.stdout.write(`${JSON.stringify(listed, null, 2)}\n`);
-          return EXIT.ok;
-        }
-        const rows = (listed as StandingRowView[]).map((a) => [
+      return printList(io, values.json, await admin(config, { method: "standing.list" }), {
+        headers: ["id", "agent", "account", "covers", "status (UTC)"],
+        row: (a) => [
           a.id,
           a.agent,
           a.account ?? "",
@@ -1158,16 +1122,9 @@ async function approvalsCommand(args: string[], io: CliIo): Promise<number> {
           a.revokedAt === null
             ? `until ${shortTime(a.expiresAt)}`
             : `revoked ${shortTime(a.revokedAt)}`,
-        ]);
-        io.stdout.write(
-          formatTable(
-            ["id", "agent", "account", "covers", "status (UTC)"],
-            rows,
-            "No standing approvals.",
-          ),
-        );
-      }
-      return EXIT.ok;
+        ],
+        empty: "No standing approvals.",
+      });
     case "revoke": {
       const id = onePositional(rest, "standing approval id");
       await admin(config, { method: "standing.revoke", params: { id } });
@@ -1560,34 +1517,15 @@ async function statusCommand(args: string[], io: CliIo): Promise<number> {
   );
   if (positionals.length > 0) throw new UsageError(`unexpected argument "${positionals[0]}"`);
   const config = configFrom(io, values.config);
-  const ping = (await admin(config, { method: "ping" })) as {
-    version?: string;
-    vault?: string;
-    passkeys?: number;
-    notifiedDevices?: number;
-    codeMode?: CodeModeStatus;
-  };
+  // An older heel may leave some of these out.
+  const ping: Partial<AdminResults["ping"]> = await admin(config, { method: "ping" });
   const codeMode = codeModeStatus(ping.codeMode);
-  const approvals = (await admin(config, { method: "approvals.list" })) as {
-    status: string;
-    summary: string;
-    url: string;
-  }[];
-  const agents = (await admin(config, { method: "agent.list" })) as { revokedAt: string | null }[];
-  const accounts = (await admin(config, { method: "account.list" })) as { status: string }[];
-  const pauses = (await admin(config, { method: "pause.list" })) as {
-    scope: string;
-    targetName: string;
-  }[];
-  const proposals = (await admin(config, { method: "proposals.list" })) as {
-    summary: string;
-    url: string;
-  }[];
-  const scripts = (await admin(config, { method: "scripts.list" })) as {
-    agentName: string;
-    status: string;
-    calls: number;
-  }[];
+  const approvals = await admin(config, { method: "approvals.list" });
+  const agents = await admin(config, { method: "agent.list" });
+  const accounts = await admin(config, { method: "account.list" });
+  const pauses = await admin(config, { method: "pause.list" });
+  const proposals = await admin(config, { method: "proposals.list" });
+  const scripts = await admin(config, { method: "scripts.list" });
   const waiting = approvals.filter((a) => a.status === "pending");
   const lines = [
     `heel ${ping.version ?? ""} is running${ping.vault === "unavailable" ? ", but the vault is closed (no master key)" : codeMode.warning}.`,

@@ -80,7 +80,7 @@ export async function rulesCommand(args: string[], io: CliIo): Promise<number> {
       try {
         const response = await adminCall(config.adminSocketPath, { method: "account.list" });
         if (response.ok) {
-          accounts = new Set((response.result as { alias: string }[]).map((a) => a.alias));
+          accounts = new Set(response.result.map((a) => a.alias));
         }
       } catch {
         accounts = null;
@@ -301,7 +301,7 @@ async function draftCommand(
   try {
     const response = await adminCall(config.adminSocketPath, { method: "account.list" });
     if (response.ok) {
-      accounts = (response.result as { alias: string; provider: string; owner: string }[])
+      accounts = response.result
         .filter((a) => a.owner === user)
         .map((a) => ({ alias: a.alias, provider: a.provider }));
     }

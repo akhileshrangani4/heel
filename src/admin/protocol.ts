@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { CredentialDeliveryChoice } from "../definitions/credential-delivery.ts";
+import type { AdminHandlers } from "./handlers.ts";
 
 /**
  * The admin socket protocol: one JSON request line, one JSON response line,
@@ -250,6 +251,10 @@ export const AdminRequestSchema = z.discriminatedUnion("method", [
 
 export type AdminRequest = z.output<typeof AdminRequestSchema>;
 export type AdminMethod = AdminRequest["method"];
+/** A request for one method. */
+export type AdminRequestOf<M extends AdminMethod> = AdminRequest & { method: M };
+/** Each method's result, as its handler in handlers.ts returns it. */
+export type AdminResults = { [M in AdminMethod]: ReturnType<AdminHandlers[M]> };
 
 export const ADMIN_ERROR_CODES = [
   "bad_request",
@@ -270,6 +275,10 @@ export const AdminResponseSchema = z.discriminatedUnion("ok", [
 ]);
 
 export type AdminResponse = z.output<typeof AdminResponseSchema>;
+/** A response to one method, its result typed. */
+export type AdminReply<M extends AdminMethod> =
+  | { ok: true; result: AdminResults[M] }
+  | Extract<AdminResponse, { ok: false }>;
 
 export function adminOk(result: unknown): AdminResponse {
   return { ok: true, result };

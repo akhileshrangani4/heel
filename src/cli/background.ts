@@ -10,6 +10,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { adminCall } from "../admin/client.ts";
+import type { AdminResults } from "../admin/protocol.ts";
 import type { HeelConfig } from "../config/schema.ts";
 
 /**
@@ -28,19 +29,14 @@ export function logFileOf(config: Pick<HeelConfig, "home">): string {
   return join(config.home, "logs", "heel.log");
 }
 
-/** What a running heel answers to `ping`. */
-export interface Ping {
-  version?: string;
-  vault?: string;
-  pid?: number;
-  background?: boolean;
-}
+/** What a running heel answers to `ping`; an older heel may leave some of it out. */
+export type Ping = Partial<AdminResults["ping"]>;
 
 /** The running heel's `ping`, or null when none answers on the admin socket. */
 export async function pingHeel(config: Pick<HeelConfig, "adminSocketPath">): Promise<Ping | null> {
   try {
     const response = await adminCall(config.adminSocketPath, { method: "ping" }, 2_000);
-    return response.ok ? (response.result as Ping) : null;
+    return response.ok ? response.result : null;
   } catch {
     return null;
   }
