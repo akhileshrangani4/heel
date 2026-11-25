@@ -80,7 +80,8 @@ export function clientScript(csrfToken: string | null): string {
     return json;
   };
 
-  // The three steps every ceremony shares.
+  // The three steps every ceremony shares. Resolves to the button's next state:
+  // "success", "error" or "cancelled" (CEREMONY_SCRIPT draws it).
   const run = async ({ status, start, sign, finish, extra }) => {
     const say = (text) => { if (status) status.textContent = text; };
     try {
@@ -92,9 +93,11 @@ export function clientScript(csrfToken: string | null): string {
       const result = await post(finish, { challengeId: issued.challengeId, response: signed, ...(extra || {}) });
       say(result.message || "Done.");
       if (result.next) window.location.assign(result.next);
+      return "success";
     } catch (error) {
       const cancelled = error && (error.name === "NotAllowedError" || error.name === "AbortError");
-      say(cancelled ? "The passkey check was cancelled. Nothing changed." : String(error.message || error) + " Nothing changed.");
+      say(cancelled ? "Cancelled. Nothing changed." : String(error.message || error) + " Nothing changed.");
+      return cancelled ? "cancelled" : "error";
     }
   };
   const getAssertion = async (options) =>
@@ -293,7 +296,7 @@ export function clientScript(csrfToken: string | null): string {
       if (field && !(options && options.key && options.key.trim())) {
         if (status) status.textContent = "Paste the key first. Nothing changed.";
         field.focus();
-        return;
+        return "error";
       }
       return run({
         status,
