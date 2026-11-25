@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.13](https://github.com/akhileshrangani4/heel/compare/v0.2.12...v0.2.13) (2026-11-25)
+
+
+### Documentation
+
+* **site:** the roadmap marks the launch video and the build write-up started ([#273](https://github.com/akhileshrangani4/heel/issues/273)) ([cba5193](https://github.com/akhileshrangani4/heel/commit/cba51937b8db663ad66be77068c2c3fdab8974d4))
+
 ## [0.2.12](https://github.com/akhileshrangani4/heel/compare/v0.2.11...v0.2.12) (2026-11-25)
 
 
