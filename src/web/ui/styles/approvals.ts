@@ -336,7 +336,8 @@ ${ALLOW_BUTTON_CSS}
 .ap[data-kind="call"] .ap-bar:has(.ap-split input[type="radio"][name="scope"]:not([value="once"]):checked) > .ap-bar-yes{flex-grow:3}
 .ap[data-kind="call"] .ap-bar:has(.ap-split input[type="radio"][name="scope"]:not([value="once"]):checked) > .ap-bar-no{flex-grow:2}
 .ap-split-menu{flex:none;display:flex}
-.ap .ap-split-toggle{display:inline-grid;place-items:center;width:2.75rem;min-height:2.5rem;height:100%;padding:0 .7rem;border-radius:0 6px 6px 0;background:var(--accent);color:var(--accent-text);box-shadow:inset 1px 0 0 color-mix(in srgb,var(--accent-text) 25%,transparent)}
+/* .ap-split-menu in the selector: the toggle is a <summary>, and the folds' summary rule above would round its left corners. */
+.ap .ap-split-menu > .ap-split-toggle{display:inline-grid;place-items:center;width:2.75rem;min-height:2.5rem;height:100%;padding:0 .7rem;border-radius:0 6px 6px 0;background:var(--accent);color:var(--accent-text);box-shadow:inset 1px 0 0 color-mix(in srgb,var(--accent-text) 25%,transparent)}
 .ap .ap-split-toggle svg{width:1rem;height:1rem;transition:transform .2s}
 .ap .ap-split-menu[open] > .ap-split-toggle svg{transform:rotate(180deg)}
 .ap-split:has(:disabled) .ap-split-toggle{opacity:.5;pointer-events:none}
