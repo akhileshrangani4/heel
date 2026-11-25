@@ -19,11 +19,13 @@ import {
 import { coverage } from "../../requests/coverage.ts";
 import { liveGrants } from "../../store/grants.ts";
 import { modeFor } from "../../store/modes.ts";
-import { accounts, agents, users } from "../../store/schema.ts";
+import { accounts, agents } from "../../store/schema.ts";
 import { ConnectError, connectAccount } from "../../vault/connect.ts";
 import {
   type HumanPlaneDeps,
   jsonBody,
+  nameOf,
+  notFoundPage,
   passkeyChallenge,
   passkeyFailed,
   renderPage,
@@ -56,14 +58,6 @@ import { type RequestCard, requestCards, requestPage } from "../ui/requests.ts";
  * agent named is contacted here: a sign-in, if the account needs one, starts
  * from the Connections sign-in route after approval.
  */
-
-function nameOf(deps: HumanPlaneDeps, table: "user" | "agent", id: string): string {
-  const row =
-    table === "user"
-      ? deps.db.select({ name: users.name }).from(users).where(eq(users.id, id)).get()
-      : deps.db.select({ name: agents.name }).from(agents).where(eq(agents.id, id)).get();
-  return row?.name ?? "unknown";
-}
 
 function ownRequest(deps: HumanPlaneDeps, session: SessionView, id: string): RequestRow | null {
   const row = findRequest(deps.db, deps.orgId, id);
@@ -121,25 +115,15 @@ export function requestRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     microsoft: deps.providerClients.microsoft !== null,
   };
 
-  const notFound = (c: Context<SignedInEnv>, session: SessionView) =>
-    renderPage(
-      c,
-      {
-        title: "Not found",
-        viewer: viewerOf(session),
-        current: "approvals",
-        body: html`<h1>Not found</h1>
-          <p>There's no request with that id for you.</p>`,
-      },
-      404,
-    );
+  const notFound = (c: Context<SignedInEnv>) =>
+    notFoundPage(c, html`There's no request with that id for you.`);
 
   app.get("/requests/:id", signedIn, (c) => {
     const session = c.get("session");
     const now = deps.now();
     pendingRequests(deps.db, session.userId, now); // expires old ones first
     const row = ownRequest(deps, session, c.req.param("id"));
-    if (row === null) return notFound(c, session);
+    if (row === null) return notFound(c);
     const agent = nameOf(deps, "agent", row.agentId);
     const { details } = row;
     const account =
@@ -219,7 +203,7 @@ export function requestRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
   app.post("/requests/:id/reject", signedIn, requireCsrfField(), (c) => {
     const session = c.get("session");
     const row = ownRequest(deps, session, c.req.param("id"));
-    if (row === null) return notFound(c, session);
+    if (row === null) return notFound(c);
     rejectRequest(deps.db, row, session.userId, deps.now());
     deps.log.info({ request: row.id, by: session.userId }, "connection request rejected");
     return c.redirect(`/requests/${encodeURIComponent(row.id)}?rejected`, 303);

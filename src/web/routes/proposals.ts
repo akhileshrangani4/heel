@@ -13,10 +13,12 @@ import {
 } from "../../proposals/rules.ts";
 import { rememberRejected, stillSuggested } from "../../store/learning.ts";
 import { listRuleChanges } from "../../store/rule-changes.ts";
-import { agents, users } from "../../store/schema.ts";
+import { users } from "../../store/schema.ts";
 import {
   type HumanPlaneDeps,
   jsonBody,
+  nameOf,
+  notFoundPage,
   passkeyChallenge,
   passkeyFailed,
   renderPage,
@@ -49,14 +51,6 @@ import { hideInWords, ruleInWords } from "../ui/rule-words.ts";
  *
  * Only the owner whose file it is can see or decide a proposal.
  */
-
-function nameOf(deps: HumanPlaneDeps, table: "user" | "agent", id: string): string {
-  const row =
-    table === "user"
-      ? deps.db.select({ name: users.name }).from(users).where(eq(users.id, id)).get()
-      : deps.db.select({ name: agents.name }).from(agents).where(eq(agents.id, id)).get();
-  return row?.name ?? "unknown";
-}
 
 /** The proposal, if it exists and this person owns the file it targets. */
 function ownProposal(deps: HumanPlaneDeps, session: SessionView, id: string): ProposalRow | null {
@@ -139,25 +133,15 @@ export function proposalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     };
   }
 
-  const notFound = (c: Context<SignedInEnv>, session: SessionView) =>
-    renderPage(
-      c,
-      {
-        title: "Not found",
-        viewer: viewerOf(session),
-        current: "approvals",
-        body: html`<h1>Not found</h1>
-          <p>There's no proposal with that id for your rules.</p>`,
-      },
-      404,
-    );
+  const notFound = (c: Context<SignedInEnv>) =>
+    notFoundPage(c, html`There's no proposal with that id for your rules.`);
 
   app.get("/proposals/:id", signedIn, (c) => {
     const session = c.get("session");
     const now = deps.now();
     pendingProposals(deps.db, session.userId, now); // expires old ones first
     const row = ownProposal(deps, session, c.req.param("id"));
-    if (row === null) return notFound(c, session);
+    if (row === null) return notFound(c);
     const { where, effect } = preview(row);
     const ownRules =
       effect.ok && deps.rules.set !== null
@@ -253,7 +237,7 @@ export function proposalRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
   app.post("/proposals/:id/reject", signedIn, requireCsrfField(), (c) => {
     const session = c.get("session");
     const row = ownProposal(deps, session, c.req.param("id"));
-    if (row === null) return notFound(c, session);
+    if (row === null) return notFound(c);
     rejectProposal(deps.db, row, session.userId, deps.now());
     rememberRejected(deps.db, row, deps.now());
     deps.log.info({ proposal: row.id, by: session.userId }, "rule proposal rejected");

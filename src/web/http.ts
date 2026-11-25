@@ -1,4 +1,5 @@
 import type { FetchLike } from "@modelcontextprotocol/client";
+import { eq } from "drizzle-orm";
 import type { Context, MiddlewareHandler } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import type { RulesPaths } from "../config/rules.ts";
@@ -12,6 +13,7 @@ import type { PauseStore } from "../gateway/pipeline/ports.ts";
 import type { Logger } from "../log.ts";
 import type { SqliteApprovalStore } from "../store/approvals.ts";
 import type { HeelDb } from "../store/db.ts";
+import { agents, users } from "../store/schema.ts";
 import type { OidcClient } from "../teams/oidc.ts";
 import type { KeyCheck } from "../vault/key-check.ts";
 import type { Vault } from "../vault/vault.ts";
@@ -25,7 +27,7 @@ import {
   sessionCookieName,
 } from "./sessions.ts";
 import { errorPage } from "./ui/error-page.ts";
-import { toHtmlString } from "./ui/html.ts";
+import { type Html, html, toHtmlString } from "./ui/html.ts";
 import { type PageProps, page, type Viewer } from "./ui/layout.ts";
 import { waitingVersion } from "./waiting.ts";
 
@@ -161,6 +163,30 @@ export function renderPage(
     ...(version === undefined ? {} : { waitingVersion: version }),
   };
   return c.html(toHtmlString(page(full)), status);
+}
+
+/** The 404 for something on the Approvals page that doesn't exist or isn't the viewer's to see. */
+export function notFoundPage(c: Context<SignedInEnv>, message: Html): Response {
+  return renderPage(
+    c,
+    {
+      title: "Not found",
+      viewer: viewerOf(c.get("session")),
+      current: "approvals",
+      body: html`<h1>Not found</h1>
+          <p>${message}</p>`,
+    },
+    404,
+  );
+}
+
+/** A person's or an agent's name, or `unknown` once it's gone. */
+export function nameOf(deps: HumanPlaneDeps, table: "user" | "agent", id: string): string {
+  const row =
+    table === "user"
+      ? deps.db.select({ name: users.name }).from(users).where(eq(users.id, id)).get()
+      : deps.db.select({ name: agents.name }).from(agents).where(eq(agents.id, id)).get();
+  return row?.name ?? "unknown";
 }
 
 /** True for a browser page load or form post, which can show a page; false for a script's fetch. */
