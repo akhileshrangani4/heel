@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.2.12](https://github.com/akhileshrangani4/heel/compare/v0.2.11...v0.2.12) (2026-11-25)
+
+
+### Features
+
+* **mcp:** heel_accounts tells the agent what to say once a requested key is connected ([#249](https://github.com/akhileshrangani4/heel/issues/249)) ([733e6a3](https://github.com/akhileshrangani4/heel/commit/733e6a37164e6c9eaebe826bed63a9a3eb115f86))
+* **web:** connection requests and rule changes share one approval shell with call approvals ([#251](https://github.com/akhileshrangani4/heel/issues/251)) ([13ce3ad](https://github.com/akhileshrangani4/heel/commit/13ce3ad7953548988ca829c0e35608a7eff9d59e))
+* **web:** one waiting count everywhere, a shorter Home and Approvals list, and a two-step connect dialog ([#252](https://github.com/akhileshrangani4/heel/issues/252)) ([88786b4](https://github.com/akhileshrangani4/heel/commit/88786b4df9bdeabdc01ff318702fa48d61f0d4af))
+* **web:** show times in the viewer's own time zone ([#242](https://github.com/akhileshrangani4/heel/issues/242)) ([6608881](https://github.com/akhileshrangani4/heel/commit/6608881c02885db9201a9e9eb964907b2d031d3c))
+* **web:** the call approval page leads with the ask and ends with one decision ([#250](https://github.com/akhileshrangani4/heel/issues/250)) ([bbd77cf](https://github.com/akhileshrangani4/heel/commit/bbd77cfb5882879ecf3fa9da8cfe22631cd7ce97))
+
+
+### Bug Fixes
+
+* **codemode:** code mode runs with a Homebrew Node on macOS, and says why when it can't ([#244](https://github.com/akhileshrangani4/heel/issues/244)) ([47e07e0](https://github.com/akhileshrangani4/heel/commit/47e07e02a273379785df4b67b18c19cee32441f1))
+* **init:** use free Tailscale ports when 443 or 8443 is taken ([#247](https://github.com/akhileshrangani4/heel/issues/247)) ([0f06d76](https://github.com/akhileshrangani4/heel/commit/0f06d76da8300c79af6e1a3ab40073760866d7e9))
+* **mcp:** heel_accounts with wait says when nothing changed yet ([#246](https://github.com/akhileshrangani4/heel/issues/246)) ([2b2a966](https://github.com/akhileshrangani4/heel/commit/2b2a966269e71854d49bbe4f1b7de3eca9345293))
+* **notify:** notifications lead with the ask, show once per request, and log drops ([#248](https://github.com/akhileshrangani4/heel/issues/248)) ([e491f2d](https://github.com/akhileshrangani4/heel/commit/e491f2d1b62ae62021cd726975149eca313412ca))
+* **requests:** an agent asks for an alias of at most 32 characters ([#243](https://github.com/akhileshrangani4/heel/issues/243)) ([4fe182c](https://github.com/akhileshrangani4/heel/commit/4fe182cef59e55535064c3ebf1f7431a4b69bca7))
+* **web:** 44px touch areas, named Enforce buttons and readable revoked agents on settings pages ([#234](https://github.com/akhileshrangani4/heel/issues/234)) ([b2ea84d](https://github.com/akhileshrangani4/heel/commit/b2ea84d3f1f9f729b583450a0c9b2e8d7d4030d2))
+* **web:** Activity rows, filter chips and panels behave on phones and desktop ([#236](https://github.com/akhileshrangani4/heel/issues/236)) ([3573d0e](https://github.com/akhileshrangani4/heel/commit/3573d0ecb2047216652920bd612ebb6ff513b0b3))
+* **web:** Activity's live stream stays on the newest page and stops when the session ends ([#237](https://github.com/akhileshrangani4/heel/issues/237)) ([f730fcd](https://github.com/akhileshrangani4/heel/commit/f730fcdc4188412f4931c883bca9cda4d258e469))
+* **web:** error pages with a way back to Home, and sign-in when a session has ended ([#238](https://github.com/akhileshrangani4/heel/issues/238)) ([c4f87ad](https://github.com/akhileshrangani4/heel/commit/c4f87ade4944416b305e4a856c3b84a8b1ff6f0e))
+* **web:** open a select's menu upward when its dialog would cut it off ([#233](https://github.com/akhileshrangani4/heel/issues/233)) ([da8e21d](https://github.com/akhileshrangani4/heel/commit/da8e21de7ee94e6935f994e48d40d797b1dcf9fe))
+* **web:** passkey buttons keep their size while the prompt is open ([#230](https://github.com/akhileshrangani4/heel/issues/230)) ([7ef8fff](https://github.com/akhileshrangani4/heel/commit/7ef8fff581d961cf44db41c89ebd52f81979d16a))
+* **web:** settings pages fit phone screens, with no sideways scroll or cut-off text ([#232](https://github.com/akhileshrangani4/heel/issues/232)) ([e44c5b0](https://github.com/akhileshrangani4/heel/commit/e44c5b017c518aef7f4dbb40ed30f70c7956976e))
+* **web:** show the whole decision menu on the Rules page's last rules ([#231](https://github.com/akhileshrangani4/heel/issues/231)) ([a534b62](https://github.com/akhileshrangani4/heel/commit/a534b620a2314fb7b4427371a42eea777863e062))
+* **web:** sign in again after a wrong passkey without reloading, and say when a browser has no passkeys ([#235](https://github.com/akhileshrangani4/heel/issues/235)) ([7dba87c](https://github.com/akhileshrangani4/heel/commit/7dba87ce9b88b32d053569d693284db65b82ea81))
+* **web:** the installed app's tab bar clears the home indicator and rounded corners ([#241](https://github.com/akhileshrangani4/heel/issues/241)) ([3eadd3a](https://github.com/akhileshrangani4/heel/commit/3eadd3ac2338ca285cd5cb5f4e80a9683c2927ba))
+* **web:** the passkey status sits above the phone tab bar, and dialogs fit a phone's visible screen ([#239](https://github.com/akhileshrangani4/heel/issues/239)) ([bc5cf42](https://github.com/akhileshrangani4/heel/commit/bc5cf42c42a5193e445772a3ddb0d6c93b7122f7))
+
+
+### Documentation
+
+* **setup:** sign-in, Node over ssh and key help in the setup prompt ([#245](https://github.com/akhileshrangani4/heel/issues/245)) ([fdceefd](https://github.com/akhileshrangani4/heel/commit/fdceefd1852db47572f87a86bbc019aa2c5aeb3e))
+
 ## [0.2.11](https://github.com/akhileshrangani4/heel/compare/v0.2.10...v0.2.11) (2026-11-23)
 
 
