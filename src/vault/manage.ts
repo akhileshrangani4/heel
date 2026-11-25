@@ -11,7 +11,7 @@ import {
   grants,
   standingApprovals,
 } from "../store/schema.ts";
-import { ConnectError } from "./connect.ts";
+import { ConnectError, requireAccount } from "./connect.ts";
 import type { CredentialPayload, Vault } from "./vault.ts";
 
 /**
@@ -27,16 +27,6 @@ export interface RemovedAccount {
   /** Standing approvals and grants that named this account, now revoked. */
   revokedStanding: number;
   revokedGrants: number;
-}
-
-function findAccount(db: HeelDb, orgId: string, alias: string) {
-  const row = db
-    .select({ id: accounts.id, provider: accounts.provider, settings: accounts.settings })
-    .from(accounts)
-    .where(and(eq(accounts.orgId, orgId), eq(accounts.alias, alias)))
-    .get();
-  if (!row) throw new ConnectError("not_found", `no account named "${alias}"`);
-  return row;
 }
 
 /** Whether a grant's match is limited to this account alias (`account: x` or `account: [x, …]`). */
@@ -61,7 +51,7 @@ function grantNamesAccount(match: string, alias: string): boolean {
  * audit log keeps its rows; they record what happened.
  */
 export function removeAccount(db: HeelDb, orgId: string, alias: string, now: Date): RemovedAccount {
-  const row = findAccount(db, orgId, alias);
+  const row = requireAccount(db, orgId, alias);
   return db.transaction((tx) => {
     const expired = tx
       .update(approvals)
@@ -148,7 +138,7 @@ export function setAccountCredential(
   alias: string,
   credential: CredentialPayload & { type: "static" },
 ): { alias: string; accountId: string } {
-  const row = findAccount(db, orgId, alias);
+  const row = requireAccount(db, orgId, alias);
   if (vault === null) {
     throw new ConnectError(
       "vault_unavailable",

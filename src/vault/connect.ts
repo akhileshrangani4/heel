@@ -13,6 +13,7 @@ import { EgressConfigError, isAllowlisted, parseEgressAllow } from "../runner/eg
 import { parseCredentialAuth } from "../runner/intercept.ts";
 import { isReservedEnv } from "../runner/plan.ts";
 import type { HeelDb } from "../store/db.ts";
+import { type AccountRecord, findAccount } from "../store/directory.ts";
 import { newId } from "../store/ids.ts";
 import { type AccountStatus, accounts, users } from "../store/schema.ts";
 import type { CredentialPayload, Vault } from "./vault.ts";
@@ -504,12 +505,7 @@ export function configureAccount(
   alias: string,
   input: ConfigureInput,
 ): ConfiguredAccount {
-  const row = db
-    .select({ id: accounts.id, provider: accounts.provider, settings: accounts.settings })
-    .from(accounts)
-    .where(and(eq(accounts.orgId, orgId), eq(accounts.alias, alias)))
-    .get();
-  if (!row) throw new ConnectError("not_found", `no account named "${alias}"`);
+  const row = requireAccount(db, orgId, alias);
   const upstream = upstreamSettings(row.settings);
   const cli = upstream === null ? cliSettings(row.settings) : null;
   const current = upstream?.transport === "stdio" ? upstream : cli;
@@ -611,6 +607,13 @@ export class ConnectError extends Error {
     super(message);
     this.code = code;
   }
+}
+
+/** The account named `alias` in `orgId`; `not_found` when there is none. */
+export function requireAccount(db: HeelDb, orgId: string, alias: string): AccountRecord {
+  const account = findAccount(db, orgId, alias);
+  if (account === null) throw new ConnectError("not_found", `no account named "${alias}"`);
+  return account;
 }
 
 export interface ConnectInput {
