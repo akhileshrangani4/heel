@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { CliResult } from "../definitions/cli/definition.ts";
 import type { HeelDb } from "../store/db.ts";
 import { accountsUsableBy } from "../store/sharing.ts";
-import { isCliProvider } from "../vault/connect.ts";
+import { cliProvider, isCliProvider } from "../vault/connect.ts";
 import type { AuthenticatedAgent } from "./agent-tokens.ts";
 import { cleanReason } from "./mcp/names.ts";
 import type { Pipeline } from "./pipeline/pipeline.ts";
@@ -123,7 +123,7 @@ export async function handleRun(
     (account) =>
       isCliProvider(account.provider) &&
       (parsed.data.account === undefined
-        ? account.provider === `cli:${command}`
+        ? account.provider === cliProvider(command)
         : account.alias === parsed.data.account),
   );
   if (candidates.length === 0) return deny(c, "unknown_endpoint", 404);
