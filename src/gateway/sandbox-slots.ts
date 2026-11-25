@@ -37,7 +37,6 @@ export function defaultTotalSandboxes(memoryBytes: number = totalmem()): number 
   return Math.min(16, Math.max(2, Math.floor(memoryBytes / GIB) - 1));
 }
 
-/** Which limit a refused request hit. */
 export type SlotRefusal = "agent" | "total";
 
 export type SlotAcquisition =

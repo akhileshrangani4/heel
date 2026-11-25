@@ -6,7 +6,7 @@ import { ruleInWords } from "./rule-words.ts";
 import { btn } from "./shadcn/button.ts";
 
 /**
- * Rules heel suggests from what you decided (roadmap 2.10). Each one is read
+ * Rules heel suggests from what you decided. Each one is read
  * on its own: what it would do, the decisions it rests on, and two buttons.
  * Reviewing opens it as a proposal, which you add with a passkey; nothing here
  * changes your rules.

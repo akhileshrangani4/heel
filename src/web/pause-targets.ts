@@ -17,7 +17,7 @@ import type { PauseNotice } from "./ui/layout.ts";
  * pause by id; the page shows and posts names. This module translates
  * between the two, and decides who may pause or resume what.
  *
- * Who may do what (spec: Teams, Pause):
+ * Who may do what:
  * - an admin may pause and resume anything;
  * - a member may pause their own agents, their own accounts and themselves
  *   (owner scope), and may resume only a pause they made themselves, so a
@@ -110,8 +110,6 @@ export function pauseNoticeFor(db: HeelDb, call: Call): PauseNotice | null {
 export function noticeOf(db: HeelDb, row: PauseRow): PauseNotice {
   return { scope: row.scope, target: pauseTargetName(db, row), since: row.pausedAt };
 }
-
-// ── permissions ─────────────────────────────────────────────────────────────
 
 export function mayPause(db: HeelDb, session: SessionView, key: PauseKey): boolean {
   if (session.role === "admin") return true;

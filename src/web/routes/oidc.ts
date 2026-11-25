@@ -10,8 +10,7 @@ import { oidcSignIn, type SignInNotice } from "../ui/sign-in.ts";
 import { safeNext } from "./sign-in.ts";
 
 /**
- * Team sign-in through the organization's IdP (D13b; spec: Teams,
- * "Sign-in"): the authorization code flow with PKCE.
+ * Team sign-in through the organization's IdP: the authorization code flow with PKCE.
  *
  * - `GET /auth/oidc?next=` stores the pending sign-in server-side, binds it
  *   to this browser with a short-lived cookie, and redirects to the IdP.
@@ -21,7 +20,7 @@ import { safeNext } from "./sign-in.ts";
  *   user, and nobody is signed in.
  * - The session it starts lets a person see requests. Every decision still
  *   needs a fresh assertion from a passkey enrolled to that person, which
- *   only `heel user enroll` on the host can add (I-56, Q-N2).
+ *   only `heel user enroll` on the host can add (I-56).
  */
 
 /** `__Host-` on https, so a sibling subdomain can't plant one (login CSRF). */

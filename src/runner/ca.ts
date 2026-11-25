@@ -1,8 +1,7 @@
 /**
- * The certificate authority for one sandbox (spec: CLI runner, "Credential
- * delivery"). heel's egress proxy terminates TLS for the hosts a credential
- * goes to, so it can add the credential on the wire; the sandbox trusts this
- * CA for those hosts and for nothing else.
+ * The certificate authority for one sandbox. heel's egress proxy terminates TLS
+ * for the hosts a credential goes to, so it can add the credential on the wire;
+ * the sandbox trusts this CA for those hosts and for nothing else.
  *
  * - One CA per credential host per sandbox, ECDSA P-256. Private keys live
  *   only in heel's memory and die with the proxy; nothing writes them to disk.

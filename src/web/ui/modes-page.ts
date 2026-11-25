@@ -5,7 +5,7 @@ import { CHEVRON_DOWN } from "./icons.ts";
 import { badge, type FormTarget, notice, postForm, scrollRegion } from "./layout.ts";
 
 /**
- * The Modes page (A3): the org's default mode and each person's own, and
+ * The Modes page: the org's default mode and each person's own, and
  * the controls to switch them. Tightening to `enforce` is a plain form, like
  * pausing; loosening needs a passkey, like resuming.
  *
@@ -74,7 +74,7 @@ function segmented(row: ModeRow, tighten: FormTarget, orgEffective: Mode): Html 
       : postForm(
           tighten,
           { owner: row.ownerId },
-          html`<button type="submit" class="seg-item"><span class="visually-hidden">Switch to </span>Enforce</button>`,
+          html`<button type="submit" class="seg-item"><span class="visually-hidden">Switch ${row.label} to </span>Enforce</button>`,
         );
   return html`<span class="seg" aria-label="${row.label}'s mode">${
     current === "Enforce" ? html`${pressed("Enforce")}${other}` : html`${other}${pressed("Watch")}`
@@ -140,8 +140,8 @@ export function modesPage(props: {
     ${props.outcome.kind === "switched" ? switchedNotice(props.outcome, props.rows) : ""}
     ${scrollRegion(
       "Modes",
-      html`<table class="data">
-      <caption>Modes</caption>
+      html`<table class="data modes-table">
+      <caption class="visually-hidden">Modes</caption>
       <thead>
         <tr>
           <th scope="col">Who</th>

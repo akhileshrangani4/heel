@@ -1,7 +1,7 @@
 import { Secret } from "../../vault/secret.ts";
 
 /**
- * heel's own Google OAuth client (roadmap 1.14): a "Desktop app" client in
+ * heel's own Google OAuth client: a "Desktop app" client in
  * heel's Google Cloud project, so Gmail and Google Calendar sign in with no
  * setup. Google treats a desktop client's secret as public (installed apps
  * can't keep one), and PKCE protects every sign-in, so both values ship in
@@ -10,7 +10,7 @@ import { Secret } from "../../vault/secret.ts";
  *
  * The values are filled in only in release builds, from repository secrets
  * (scripts/inject-google-client.ts), so they stay out of git. A build from a
- * checkout leaves them empty and needs the operator's own client, as before.
+ * checkout leaves them empty and needs the operator's own client.
  * An operator's `providers.google` always wins.
  */
 const CLIENT_ID = "";

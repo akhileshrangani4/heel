@@ -11,12 +11,12 @@ import {
 /**
  * Where an MCP passthrough account's server lives, as `heel connect mcp`
  * stored it in the account's settings (never a secret; those are in the
- * vault). Two kinds (spec: Upstream MCP servers):
+ * vault). Two kinds:
  *
  * - `http`: a remote server at a URL. heel is its HTTP client.
  * - `stdio`: a local program heel starts under bubblewrap, talking MCP over
  *   its stdin and stdout. It gets its own work directory, reaches only the
- *   hosts its egress list names (N-8). With credential hosts, its credential
+ *   hosts its egress list names. With credential hosts, its credential
  *   variable holds an inert placeholder and heel's egress proxy adds the real
  *   credential to requests to those hosts, so the server never holds it.
  *   Without them, the credential would be in the variable itself: heel does
@@ -31,13 +31,13 @@ const HttpSettings = z.object({
   transport: z.literal("http").default("http"),
   url: z.string().min(1),
   /**
-   * The server wants OAuth sign-in (D5c): heel is its OAuth client, and the
+   * The server wants OAuth sign-in: heel is its OAuth client, and the
    * account's tokens live in the vault. The account needs its owner to sign
    * in from the Connections page before any call works.
    */
   oauth: z.boolean().default(false),
   /**
-   * Set for a server an agent asked for (roadmap 2.5): heel contacts it, its
+   * Set for a server an agent asked for: heel contacts it, its
    * redirects and its sign-in endpoints only on public https hosts.
    */
   publicOnly: z.boolean().default(false),

@@ -27,7 +27,7 @@ export interface PasskeySignInProps {
   challengeId: string;
   /**
    * `false` before anyone has enrolled. Enrollment happens only over the
-   * admin socket (`heel user enroll`), never from this page (Q-N2, I-58).
+   * admin socket (`heel user enroll`), never from this page (I-58).
    */
   enrolled: boolean;
   notice: SignInNotice;

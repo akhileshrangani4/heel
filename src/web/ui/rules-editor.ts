@@ -8,7 +8,7 @@ import { hideInWords, ruleInWords } from "./rule-words.ts";
 import { btn } from "./shadcn/button.ts";
 
 /**
- * The Rules page (roadmap 2.9): your rules as sentences, in the order heel
+ * The Rules page: your rules as sentences, in the order heel
  * reads them, with a menu to change what each decides and a button to remove
  * it. The YAML is there for whoever wants it, folded away. Nothing changes
  * until a preview has been read and a passkey taps Save.

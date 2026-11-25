@@ -41,7 +41,7 @@ export interface ApprovalRequestView {
   id: string;
   callHash: string;
   status: ApprovalStatus;
-  /** `org` asks are approved once by an org admin and never stand (Q-A7). */
+  /** `org` asks are approved once by an org admin and never stand. */
   origin: ApprovalOrigin;
   agent: string;
   runId: string | null;
@@ -57,7 +57,7 @@ export interface ApprovalRequestView {
    * never what the call does: it's shown apart from heel's facts, as quoted words.
    */
   reason: string | null;
-  /** The code-mode task the call came from, as the agent wrote it (C3), or null. */
+  /** The code-mode task the call came from, as the agent wrote it, or null. */
   script: ApprovalScript | null;
   /** The MCP client the agent used, as that client named itself; null when unknown. */
   client: string | null;
@@ -72,7 +72,7 @@ export interface ApprovalRequestView {
   items: number;
   counts: readonly CountWindow[];
   createdAt: Date;
-  /** Pending: 24 h after creation. Approved: 1 h after the decision (Q-A4). */
+  /** Pending: 24 h after creation. Approved: 1 h after the decision. */
   expiresAt: Date;
   decision: { by: string; at: Date } | null;
   executedAt: Date | null;
@@ -85,7 +85,7 @@ export interface ApprovalRequestView {
 
 /**
  * Standing approval lengths offered to the approver. The longest one is what
- * the page and the docs promise; the store's 90-day hard cap (Q-A6) is a
+ * the page and the docs promise; the store's 90-day hard cap is a
  * backstop above it, never an option.
  */
 export const STANDING_DURATIONS = [
@@ -110,7 +110,7 @@ export interface ApprovalRequestProps {
   onDecide: CeremonyCallback;
   /** The viewer's remembered sections for this kind of request; none by default. */
   folds?: Folds;
-  /** The task waiting on this call runs in the background: approving starts it again at once (C6). */
+  /** The task waiting on this call runs in the background: approving starts it again at once. */
   background?: boolean;
   emailLayout?: EmailLayout;
   /** Phones: pin the action bar to the bottom of the screen (the default), or keep it in the page. */
@@ -945,7 +945,7 @@ function decidedPage(request: ApprovalRequestView, folds: Folds, now: Date, cont
 }
 
 /**
- * The approval page body (spec: The approval page). Top to bottom: who is
+ * The approval page body. Top to bottom: who is
  * asking (named once), what will happen in one sentence, the agent's reason
  * set apart, heel's one note, the content as it will land with its raw
  * arguments a tap away, then Deny and Approve once, pinned on a phone. The

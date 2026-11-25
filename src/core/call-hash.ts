@@ -2,8 +2,7 @@ import type { Call } from "./call.ts";
 import { canonicalHash } from "./canonical.ts";
 
 /**
- * What makes two calls "the same call" for approvals (spec: Call model,
- * "Canonical call hash"; I-51, I-52).
+ * What makes two calls "the same call" for approvals (I-51, I-52).
  *
  * - The agent is in: approving is approving an agent as well as an action,
  *   so another agent's identical call is a separate request.

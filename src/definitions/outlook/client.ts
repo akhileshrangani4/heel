@@ -3,7 +3,7 @@ import { GRAPH_API_BASE } from "../microsoft/oauth.ts";
 import type { FetchFn } from "../sign-in.ts";
 
 /**
- * The Microsoft Graph v1.0 mail calls heel needs (graph-research §2–§9).
+ * The Microsoft Graph v1.0 mail calls heel needs.
  *
  * - Every request asks for immutable ids, so a message keeps its id when it
  *   moves folders, and for text bodies.

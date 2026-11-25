@@ -70,10 +70,30 @@ describe("heel serve", () => {
         background: false,
         passkeys: 0,
         notifiedDevices: 0,
+        // No agent plane, so no code mode to check.
+        codeMode: null,
       },
     });
     expect(output()).toContain("agent plane refused");
   });
+
+  it("checks code mode as the agent plane starts, and ping says what it found", async () => {
+    const home = tempDir("heel-boot-");
+    const config = configIn(home);
+    const { logger, output } = captureLogger();
+    await boot(config, { [MASTER_KEY_ENV]: newKey() }, logger);
+    const codeMode = async () => {
+      const ping = await adminCall(config.adminSocketPath, { method: "ping" });
+      return ping.ok ? (ping.result as { codeMode?: { state: string } }).codeMode : undefined;
+    };
+    let found = await codeMode();
+    for (let tries = 0; found?.state === "checking" && tries < 300; tries += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      found = await codeMode();
+    }
+    expect(found).toEqual({ state: "ready" });
+    expect(output()).toContain("code mode checked: a test script ran");
+  }, 40_000);
 
   it("vault fails closed: a malformed master key keeps the agent plane down", async () => {
     const home = tempDir("heel-boot-");

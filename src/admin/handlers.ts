@@ -1,5 +1,6 @@
 import { and, count, eq } from "drizzle-orm";
 import { exportAuditPage } from "../audit/export.ts";
+import type { CodeModeHealth } from "../codemode/self-test.ts";
 import {
   type ConfiguredSignIns,
   missingSignInSetup,
@@ -66,7 +67,7 @@ export interface AdminDeps {
   version: string;
   /** The human plane's public origin; enrollment links point at it. */
   publicUrl: URL;
-  /** heel's own state directory; no agent work root may overlap it (D8b). */
+  /** heel's own state directory; no agent work root may overlap it. */
   home?: string;
   /** `heel account set` changed how an account's server runs: stop the one running now. */
   onAccountConfigured?: (accountId: string) => void;
@@ -77,16 +78,22 @@ export interface AdminDeps {
    */
   signIns?: ConfiguredSignIns;
   /**
-   * Background code-mode scripts (C6): listed by `heel status`, and stopped
+   * Background code-mode scripts: listed by `heel status`, and stopped
    * when their agent is revoked or its token rotated. Absent without code mode.
    */
   backgroundScripts?: {
     list(): readonly { id: string; agentName: string; status: string; calls: number }[];
     stopAgent(agentId: string): void;
   };
+  /**
+   * Whether code mode can run, from the check heel makes as the agent plane
+   * starts (`codemode/self-test.ts`): shown by `heel status`. Null, or left
+   * out, when the agent plane isn't up.
+   */
+  codeMode?: () => CodeModeHealth | null;
   /** Started by `heel start` (it sets HEEL_BACKGROUND=1), so `heel update` may restart it. */
   background?: boolean;
-  /** People sign in with an IdP (D13): they join by signing in, so `heel user add` is refused. */
+  /** People sign in with an IdP: they join by signing in, so `heel user add` is refused. */
   teamSignIn?: boolean;
   now?: () => Date;
 }
@@ -164,7 +171,7 @@ function signInState(deps: AdminDeps, provider: string): "ready" | "needs_setup"
   return missingSignInSetup(provider, deps.signIns) === null ? "ready" : "needs_setup";
 }
 
-/** Stops a revoked or rotated agent's background scripts (C6). */
+/** Stops a revoked or rotated agent's background scripts. */
 function stopScriptsOf(deps: AdminDeps, db: HeelDb, orgId: string, name: string): void {
   const agent = db
     .select({ id: agents.id })
@@ -188,13 +195,14 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
         // For `heel status`, and an agent setting heel up: whether anyone can approve yet.
         passkeys:
           db.select({ n: count() }).from(passkeys).where(eq(passkeys.orgId, orgId)).get()?.n ?? 0,
-        // Devices that get approval notifications (2.7).
         notifiedDevices:
           db
             .select({ n: count() })
             .from(pushSubscriptions)
             .where(eq(pushSubscriptions.orgId, orgId))
             .get()?.n ?? 0,
+        // For `heel status`: a heel whose code mode can't run says so, not just "running".
+        codeMode: deps.codeMode?.() ?? null,
       });
     case "agent.add": {
       const ownerId = resolveOwner(db, orgId, request.params.owner);

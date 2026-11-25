@@ -1,8 +1,8 @@
 import { ACTION_PHRASES } from "./summary.ts";
 
 /**
- * A proposed rule or hide entry in plain words, for the approval page
- * (roadmap 2.3): "claude-code may open a GitHub issue on github without
+ * A proposed rule or hide entry in plain words, for the approval page:
+ * "claude-code may open a GitHub issue on github without
  * asking you." Pure, and built from the rule heel will write, never from the
  * agent's why, so the sentence says what the rule does, not what the agent
  * says it does.

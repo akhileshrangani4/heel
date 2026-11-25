@@ -16,7 +16,7 @@ import { TAILWIND_CSS } from "./styles/tailwind.ts";
 
 /**
  * Light: a warm off-white page with white cards, near-black ink, and status
- * colours on soft tints (roadmap 1.11). `bg` is a card's background; `page`
+ * colours on soft tints. `bg` is a card's background; `page`
  * is behind the cards. `line` is a quiet divider; `border` outlines inputs
  * and must stay visible (3:1).
  */
@@ -184,7 +184,7 @@ ul.hints li{display:flex;align-items:baseline;gap:.6rem}
 pre{overflow-x:auto;max-width:100%}
 code,pre,.mono{font-family:ui-monospace,"Geist Mono",SFMono-Regular,Menlo,Consolas,monospace;font-size:.9rem}
 pre.args,pre.body{margin:0;padding:1rem;background:var(--surface);border:1px solid var(--line);border-radius:10px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}
-.table-scroll{overflow-x:auto;max-width:100%;border:1px solid var(--line);border-radius:14px;margin:.75rem 0;background:linear-gradient(to right,var(--bg) 30%,transparent) left/2rem 100% no-repeat local,linear-gradient(to left,var(--bg) 30%,transparent) right/2rem 100% no-repeat local,radial-gradient(farthest-side at 0 50%,rgb(0 0 0 / .18),transparent) left/.75rem 100% no-repeat scroll,radial-gradient(farthest-side at 100% 50%,rgb(0 0 0 / .18),transparent) right/.75rem 100% no-repeat scroll}
+.table-scroll{position:relative;overflow-x:auto;max-width:100%;border:1px solid var(--line);border-radius:14px;margin:.75rem 0;background:linear-gradient(to right,var(--bg) 30%,transparent) left/2rem 100% no-repeat local,linear-gradient(to left,var(--bg) 30%,transparent) right/2rem 100% no-repeat local,radial-gradient(farthest-side at 0 50%,rgb(0 0 0 / .18),transparent) left/.75rem 100% no-repeat scroll,radial-gradient(farthest-side at 100% 50%,rgb(0 0 0 / .18),transparent) right/.75rem 100% no-repeat scroll}
 .btn{font-family:inherit;line-height:1.25;border:0 solid var(--line);background-color:transparent;color:inherit;cursor:pointer}
 a.btn{text-decoration:none}
 table.data{border-collapse:collapse;margin:0;background:var(--bg)}
@@ -280,7 +280,7 @@ main:has(.auth){max-width:none;padding:0}
 .signin{width:100%;max-width:25rem;margin:0;padding:1.75rem;text-align:left;background:var(--bg);border:1px solid var(--line);border-radius:16px;box-shadow:0 24px 60px -28px rgb(0 0 0 / .45)}
 .signin h1{font-size:1.35rem}
 .signin .actions{margin:1.25rem 0}
-.signin .actions .btn{width:100%;justify-content:center;text-align:center;min-height:2.85rem;border-radius:999px}
+.signin .actions .btn{width:100%;justify-content:center;text-align:center;min-height:2.85rem}
 .signin > p.muted{font-size:.88rem}
 .signin .actions{margin:.75rem 0 1rem}
 .signin-status{display:flex;gap:.5rem;align-items:flex-start;margin:.9rem 0 0;padding:.55rem .7rem;border-radius:8px;background:var(--surface);color:var(--muted);font-size:.86rem}
@@ -337,10 +337,10 @@ body.focus main{max-width:30rem;padding:3rem 1.25rem}
 @media (max-width:36rem){.auth{padding-top:4.5rem}.auth-dog{font-size:9px}.signin{padding:1.4rem 1.25rem;border-radius:14px}}
 .nav-icon{display:inline-flex;flex:none}
 @media (max-width:55.99rem){
-  body.app{padding-bottom:calc(4.4rem + env(safe-area-inset-bottom))}
-  body.app > .site{padding:.8rem 1rem .25rem;flex-wrap:nowrap}
+  body.app{padding-bottom:calc(4.8rem + var(--safe-b));padding-left:var(--safe-l);padding-right:var(--safe-r)}
+  body.app > .site{padding:calc(.8rem + var(--safe-t)) 1rem .25rem;flex-wrap:nowrap}
   body.app > .site .account{display:none}
-  body.app > .site nav{position:fixed;left:0;right:0;bottom:0;z-index:30;max-width:none;padding:.3rem .4rem calc(.3rem + env(safe-area-inset-bottom));background:color-mix(in srgb,var(--bg) 90%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--line)}
+  body.app > .site nav{position:fixed;left:0;right:0;bottom:0;z-index:30;max-width:none;padding:.35rem max(.75rem,var(--safe-r)) calc(.4rem + var(--safe-b)) max(.75rem,var(--safe-l));background:color-mix(in srgb,var(--bg) 90%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--line)}
   body.app > .site nav ul{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0;margin:0}
   body.app > .site nav li.nav-wide{display:none}
   body.app > .site nav ul > li > a,.nav-more > details > summary{position:relative;display:flex;flex-direction:column;align-items:center;gap:.2rem;padding:.4rem .2rem .3rem;border-radius:10px;font-size:.68rem;line-height:1.1;color:var(--muted);background:none;box-shadow:none;list-style:none;cursor:pointer;white-space:nowrap}
@@ -356,7 +356,7 @@ body.focus main{max-width:30rem;padding:3rem 1.25rem}
   .nav-more-panel form{margin:0;border-top:1px solid var(--line);margin-top:.25rem;padding-top:.25rem}
   .nav-more-panel .nav-icon svg{width:1.1rem;height:1.1rem}
   .subnav ul{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
-  #heel-ceremony-status:not(:empty){bottom:calc(4.8rem + env(safe-area-inset-bottom))}
+  #heel-ceremony-status:not(:empty){bottom:calc(5.2rem + var(--safe-b));left:calc(1rem + var(--safe-l));right:calc(1rem + var(--safe-r))}
 }
 .nav-count{display:inline-block;min-width:1.35rem;margin-left:.3rem;padding:0 .4rem;border-radius:999px;background:var(--accent);color:var(--accent-text);font-size:.72rem;font-weight:700;line-height:1.35rem;text-align:center;vertical-align:1px}
 @media (min-width:56rem){
@@ -404,6 +404,9 @@ button[data-heel-state="waiting"]:disabled,button[data-heel-state="success"]:dis
 export const STYLESHEET = [
   "@layer properties, theme, heel, components, utilities;",
   `:root{${variables(LIGHT)}}`,
+  // The device's safe-area insets (a home indicator, rounded corners, a notch in
+  // landscape). Non-zero only with viewport-fit=cover, mostly in the installed app.
+  ":root{--safe-t:env(safe-area-inset-top,0px);--safe-r:env(safe-area-inset-right,0px);--safe-b:env(safe-area-inset-bottom,0px);--safe-l:env(safe-area-inset-left,0px)}",
   `@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){${variables(DARK)}}}`,
   `:root[data-theme="dark"]{${variables(DARK)}}`,
   `@layer heel{${[RULES, HOME_CSS, APPROVALS_CSS, CONNECTIONS_CSS, ACTIVITY_CSS, RULES_CSS, AGENTS_CSS, SETTINGS_CSS].join("\n")}}`,

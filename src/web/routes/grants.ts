@@ -21,7 +21,7 @@ import { clientScript } from "../ui/client.ts";
 import { type GrantsOutcome, type GrantView, grantsPage } from "../ui/grants-page.ts";
 
 /**
- * Intent grants on the human plane (A4b).
+ * Intent grants on the human plane.
  *
  * - `GET /grants` lists the grants a person may see: their own agents', or
  *   everyone's for an admin.

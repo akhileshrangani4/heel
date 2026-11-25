@@ -4,7 +4,7 @@ import { isPlainAddress, normalizeAddress, splitAddressList } from "../../core/r
 /**
  * Outgoing mail as RFC 5322 bytes, and the headers of mail heel didn't
  * write (a draft). Gmail sends to exactly the To, Cc and Bcc headers of the
- * raw message (research §2.1), so these functions decide where mail goes.
+ * raw message, so these functions decide where mail goes.
  *
  * Three parsers read every address: heel's, nodemailer's and Gmail's. To
  * keep them from disagreeing:

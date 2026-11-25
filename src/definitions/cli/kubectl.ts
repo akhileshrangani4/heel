@@ -1,6 +1,6 @@
 /**
- * `kubectl` command lines → the fields rules see (spec: CLI runner, "Parsing
- * known CLIs"). The global flag table resolves `-n prod delete pod x` to
+ * `kubectl` command lines → the fields rules see. The global flag table
+ * resolves `-n prod delete pod x` to
  * `delete`; unknown flags and unknown verbs (plugins, kuberc aliases) come
  * back unparseable. The verb is the action (`kubectl.delete`), and `-n`
  * stays in `flags.namespace`.

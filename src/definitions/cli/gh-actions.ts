@@ -1,8 +1,7 @@
 /**
- * What each built-in `gh` command means to rules (spec: CLI runner, "Parsing
- * known CLIs", and Built-in providers, GitHub). Keyed by the canonical command
- * path from the generated table, so an alias (`gh pr co`) maps like its
- * command. This module is data only: the GitHub definition (D11) imports it
+ * What each built-in `gh` command means to rules. Keyed by the canonical
+ * command path from the generated table, so an alias (`gh pr co`) maps like
+ * its command. This module is data only: the GitHub definition imports it
  * to keep the CLI and native tools on one action catalogue.
  *
  * A command with no entry gets no `action` and no `kind`. Rules can still
@@ -108,7 +107,7 @@ export const GH_PERSISTENCE: ReadonlySet<string> = new Set([
 
 /**
  * Commands that run git in the agent's checkout with `GH_TOKEN` set, so the
- * checkout's hooks would see the token (spec: "Denied: runs repo code").
+ * checkout's hooks would see the token.
  */
 export const GH_RUNS_REPO_CODE: ReadonlySet<string> = new Set([
   "pr checkout",

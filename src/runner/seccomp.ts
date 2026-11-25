@@ -1,10 +1,10 @@
 /**
- * The seccomp filter every sandboxed process runs under (spec: CLI runner,
- * "a seccomp filter"). bubblewrap already drops every capability and, with
- * `--disable-userns`, forbids new user namespaces, so mounts and namespace
- * changes fail without this filter. It narrows what is left of the kernel:
- * debugging other processes, keyrings, eBPF, perf, io_uring, module loading
- * and the clock, none of which a CLI talking to an API needs.
+ * The seccomp filter every sandboxed process runs under. bubblewrap already
+ * drops every capability and, with `--disable-userns`, forbids new user
+ * namespaces, so mounts and namespace changes fail without this filter. It
+ * narrows what is left of the kernel: debugging other processes, keyrings,
+ * eBPF, perf, io_uring, module loading and the clock, none of which a CLI
+ * talking to an API needs.
  *
  * The program is classic BPF over `struct seccomp_data`, built here instead
  * of through libseccomp so heel has no native dependency. Syscall numbers come

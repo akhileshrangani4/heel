@@ -49,8 +49,7 @@ export interface Approver {
 }
 
 /**
- * Approval requests and standing approvals in SQLite (spec: Approvals,
- * standing approvals and pause). The pipeline side (`ApprovalStore`) runs
+ * Approval requests and standing approvals in SQLite. The pipeline side (`ApprovalStore`) runs
  * inside the decision transaction it is handed; the human side runs its own
  * `BEGIN IMMEDIATE` transactions so a decision and a re-send never interleave.
  */
@@ -172,8 +171,6 @@ export class SqliteApprovalStore implements ApprovalStore {
   }
 }
 
-// ── reads for the human plane and check-back ────────────────────────────────
-
 /** The name of the user a column points at, as a correlated subquery. */
 function userNameOf(column: SQLiteColumn) {
   return sql<string | null>`(select name from users where users.id = ${column})`;
@@ -208,8 +205,7 @@ export function getApproval(
 }
 
 /**
- * Read-only check-back for the agent that made the request (spec: Pending,
- * joining and checking back). Another agent's request reads as unknown, so
+ * Read-only check-back for the agent that made the request. Another agent's request reads as unknown, so
  * ids can't be probed across agents. Never executes anything.
  */
 export function approvalStatusForAgent(
@@ -233,7 +229,7 @@ export function approvalStatusForAgent(
 }
 
 /**
- * The user ids allowed to decide a request (D13b; spec: Teams, "Approvers"):
+ * The user ids allowed to decide a request:
  * admins for an org ask; otherwise the account's approvers for the call's
  * repo, its general approvers, or its owner. An admin who isn't one of them
  * can't decide an account's ask.
@@ -300,8 +296,6 @@ export function listApprovalsFor(db: HeelQuery, approver: Approver, now: Date): 
   );
 }
 
-// ── deciding ────────────────────────────────────────────────────────────────
-
 export interface StandingChoice {
   scope: StandingScope;
   duration: StandingDuration;
@@ -323,7 +317,7 @@ export type DecideResult =
   | { ok: false; reason: DecisionRefusal | "not_found" | "hash_mismatch"; pauseScope?: PauseScope };
 
 /**
- * Records a person's decision (spec: Approvals). Approving runs nothing
+ * Records a person's decision. Approving runs nothing
  * (I-53): it only lets the agent's identical re-send execute once. The whole
  * check-and-write runs in one `BEGIN IMMEDIATE` transaction with the pause
  * check, so a pause and an approval can't cross (I-61).
@@ -371,7 +365,7 @@ export function decideApproval(
       }
 
       if (input.intent === "deny") {
-        // Keeps its original deadline: re-sends read `denied` until the pending TTL ends (Q-A5).
+        // Keeps its original deadline: re-sends read `denied` until the pending TTL ends.
         tx.update(approvals)
           .set({ status: "denied", decidedAt: now, decidedBy: approver.userId })
           .where(eq(approvals.id, row.id))
@@ -419,7 +413,7 @@ export function decideApproval(
   );
 }
 
-/** The longest a run-scoped standing approval lasts (A4a). */
+/** The longest a run-scoped standing approval lasts. */
 export const RUN_SCOPE_MAX_MS = 24 * 60 * 60_000;
 
 function grantStanding(
@@ -464,8 +458,6 @@ function grantStanding(
     .run();
   return id;
 }
-
-// ── standing approvals for the human plane ──────────────────────────────────
 
 export interface StandingRecord {
   row: StandingRow;

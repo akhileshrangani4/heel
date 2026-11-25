@@ -15,7 +15,7 @@ import {
 import type { SessionView } from "../sessions.ts";
 
 /**
- * Suggested rules (roadmap 2.10). A suggestion is named only by its key: the
+ * Suggested rules. A suggestion is named only by its key: the
  * rule is drafted again from the person's own decisions on every request, so
  * nothing in a form can change what gets proposed.
  *

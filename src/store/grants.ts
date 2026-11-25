@@ -4,7 +4,7 @@ import { newId } from "./ids.ts";
 import { grants } from "./schema.ts";
 
 /**
- * Intent grants in SQLite (A4b). The pipeline reads an agent's live grants
+ * Intent grants in SQLite. The pipeline reads an agent's live grants
  * inside its decision transaction; revoking one applies from the next call.
  */
 

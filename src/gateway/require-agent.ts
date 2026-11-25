@@ -12,7 +12,7 @@ export interface AgentPlaneEnv {
   Variables: { agent: AuthenticatedAgent };
 }
 
-/** Pure: true when any query parameter carries a heel token (spec: tokens go in the header only). */
+/** Pure: true when any query parameter carries a heel token; tokens go in the header only. */
 export function queryCarriesAgentToken(url: URL): boolean {
   for (const value of url.searchParams.values()) {
     if (isAgentTokenShape(value)) return true;
@@ -21,7 +21,7 @@ export function queryCarriesAgentToken(url: URL): boolean {
 }
 
 /**
- * The agent plane's first step (spec: Pipeline order, step 1). Nothing after
+ * The agent plane's first step. Nothing after
  * this middleware runs for a missing, malformed, unknown or revoked token
  * (I-03). The 401 body is empty and identical for every failure so a caller
  * learns nothing about which tokens once existed; the reason goes to the log,
@@ -67,7 +67,7 @@ export function requireAgent(deps: {
         deps.now?.() ?? new Date(),
       );
     } catch (error) {
-      // A store failure must not let a request through (spec: Fail-closed behavior).
+      // A store failure must not let a request through.
       deps.log.error({ err: error }, "agent authentication failed: store error");
       return c.json({ status: "denied", reason: "heel error" }, 503);
     }
@@ -83,7 +83,6 @@ export function requireAgent(deps: {
   };
 }
 
-/** Pure: the JSON body of an agent-plane 401. */
 export function refusalBody(failure: AgentAuthFailure | "query"): {
   status: "denied";
   reason: "token_expired" | "token_refused";

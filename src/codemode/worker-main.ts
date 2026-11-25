@@ -11,7 +11,7 @@ import {
 import type { Step } from "./worker.ts";
 
 /**
- * `heel codemode-worker` (D6b): runs one script with Monty and speaks the
+ * `heel codemode-worker`: runs one script with Monty and speaks the
  * line protocol on stdin and stdout. heel starts it under bubblewrap with no
  * network, no credentials and a clean environment, so the only thing the
  * script can reach is heel, through the calls this relays. Monty is imported
