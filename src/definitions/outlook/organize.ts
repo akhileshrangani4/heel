@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { Hiding } from "../../core/hide.ts";
 import { normalizeAddress } from "../../core/rules/address.ts";
 import { mapLimit } from "../mail/map-limit.ts";
-import type { Preparation } from "../mail/tool.ts";
+import type { Preparation } from "../tool-table.ts";
 import type { OutlookMailbox } from "./messages.ts";
 import { OutlookId, type OutlookTool, outlookTool } from "./tool.ts";
 

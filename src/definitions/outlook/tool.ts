@@ -1,18 +1,13 @@
 import { z } from "zod";
-import type { MailTool } from "../mail/tool.ts";
+import { type ToolRow, toolRow } from "../tool-table.ts";
 import type { OutlookMailbox } from "./messages.ts";
 
-export type { Preparation } from "../mail/tool.ts";
+export type { Preparation } from "../tool-table.ts";
 
-/** An Outlook tool: a mail tool row over Outlook's per-call mailbox (see `../mail/tool.ts`). */
-export type OutlookTool = MailTool<OutlookMailbox>;
+/** An Outlook tool: a tool row over Outlook's per-call mailbox (see `../tool-table.ts`). */
+export type OutlookTool = ToolRow<OutlookMailbox>;
 
-/** Keeps each tool's own types while the table holds them all. */
-export function outlookTool<S extends z.ZodType, P, R>(
-  tool: MailTool<OutlookMailbox, S, P, R>,
-): OutlookTool {
-  return tool as unknown as OutlookTool;
-}
+export const outlookTool = toolRow<OutlookMailbox>();
 
 /** A Graph message, conversation, draft or folder id (immutable ids are base64-like). */
 export const OutlookId = z.string().regex(/^[A-Za-z0-9_=+/-]{1,512}$/, "expected an Outlook id");
