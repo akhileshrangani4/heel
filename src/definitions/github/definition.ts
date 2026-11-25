@@ -6,7 +6,7 @@ import { type ApiDeps, accountToken } from "../api-deps.ts";
 import { githubRest } from "../http/rest.ts";
 import { listedTools, type ToolRow, toolRow, toolTableDefinition } from "../tool-table.ts";
 import { GitHubApi } from "./api.ts";
-import { GitHubClient } from "./client.ts";
+import { GITHUB_API, GitHubClient } from "./client.ts";
 
 /**
  * The GitHub definition: heel's
@@ -498,7 +498,7 @@ function rawPathProblem(
   if (path.includes("%") || path.includes("\\")) return true;
   const segments = path.split("/").slice(1);
   if (segments.some((s) => s === "" || s === "." || s === "..")) return true;
-  if (new URL(path, "https://api.github.com").pathname !== path) return true;
+  if (new URL(path, GITHUB_API).pathname !== path) return true;
   if (COVERED.some((pattern) => pattern.test(path))) return true;
   // A path the REST map would turn into a native tool is never raw.
   return (
