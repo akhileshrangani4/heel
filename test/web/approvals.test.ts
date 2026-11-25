@@ -388,7 +388,9 @@ describe("the approval page", () => {
     expect(decided).toEqual([approvalId]);
     // Once approved, the page is the outcome in a word and a line; what happens next is in Details.
     const afterPage = await (await h.fetch(`/approvals/${approvalId}`, { as: owner })).text();
-    expect(afterPage).toMatch(/<h1 class="ap-outcome-word">Approved<\/h1>/);
+    expect(afterPage).toMatch(
+      /<h1 class="ap-title"><span class="ap-outcome"[^>]*>[\s\S]*?Approved<\/span/,
+    );
     expect(afterPage).not.toContain("If you approve, the rest runs");
     expect(afterPage).toContain("when the task goes on from this step");
 

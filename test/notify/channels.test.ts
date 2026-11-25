@@ -51,8 +51,8 @@ describe("the notice", () => {
       url: "https://heel.example.com/requests/req_1",
     } as const;
     expect(noticeText(notice)).toEqual({
-      title: "inbox-bot asks you to connect Gmail",
-      body: "Nothing is connected until you approve it. Open heel to see the request and decide.",
+      title: "inbox-bot wants to connect Gmail",
+      body: "Open heel to decide.",
     });
     expect(requestUrl(new URL("https://heel.example.com/"), "req_1")).toBe(notice.url);
   });
@@ -67,12 +67,12 @@ describe("the notice", () => {
       url: "u",
     } as const;
     expect(noticeText(one)).toEqual({
-      title: "inbox-bot proposes a new rule",
-      body: "Nothing changes until you add them. Open heel to read them and decide.",
+      title: "inbox-bot wants to add a new rule",
+      body: "Open heel to decide.",
     });
-    expect(noticeText({ ...one, rules: 3 }).title).toBe("inbox-bot proposes 3 new rules");
+    expect(noticeText({ ...one, rules: 3 }).title).toBe("inbox-bot wants to add 3 new rules");
     expect(noticeText({ ...one, rules: 0, workdirs: 1 }).title).toBe(
-      "inbox-bot proposes a workdir",
+      "inbox-bot wants to add a workdir",
     );
     expect(proposalUrl(new URL("https://heel.example.com/"), "rpr_1")).toBe(
       "https://heel.example.com/proposals/rpr_1",

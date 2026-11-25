@@ -14,20 +14,23 @@ import { NOW, PENDING_REQUEST } from "../../src/web/ui/preview/fixtures.ts";
  */
 
 const ORIGIN = "http://heel.test";
-const HTML = toHtmlString(
-  layout({
-    title: "Approval request",
-    viewer: { name: "alice", role: "member", csrfToken: "csrf" },
-    current: "approvals",
-    body: approvalRequest({
-      now: NOW,
-      load: { ok: true, request: PENDING_REQUEST },
-      pause: null,
-      onDecide: { handler: "decide" },
+const pageFor = (dock: "inline" | "pinned") =>
+  toHtmlString(
+    layout({
+      title: "Approval request",
+      viewer: { name: "alice", role: "member", csrfToken: "csrf" },
+      current: "approvals",
+      body: approvalRequest({
+        now: NOW,
+        load: { ok: true, request: PENDING_REQUEST },
+        pause: null,
+        onDecide: { handler: "decide" },
+        dock,
+      }),
+      script: clientScript("csrf"),
     }),
-    script: clientScript("csrf"),
-  }),
-);
+  );
+const HTML = { inline: pageFor("inline"), pinned: pageFor("pinned") };
 
 /** `hang` never resolves; `refuse` is the person cancelling; `answer` signs. */
 type Mode = "hang" | "refuse" | "answer";
@@ -56,7 +59,12 @@ afterAll(async () => {
   await browser.close();
 });
 
-async function open(mode: Mode, width: number, height: number): Promise<Page> {
+async function open(
+  mode: Mode,
+  width: number,
+  height: number,
+  dock: "inline" | "pinned" = "pinned",
+): Promise<Page> {
   const page = await browser.newPage({ viewport: { width, height } });
   await page.addInitScript(fakeCredentials, mode);
   await page.route(`${ORIGIN}/**`, (route) => {
@@ -71,7 +79,7 @@ async function open(mode: Mode, width: number, height: number): Promise<Page> {
       });
     }
     if (url.endsWith("/decide")) return route.fulfill({ json: { ok: true, message: "Approved." } });
-    return route.fulfill({ contentType: "text/html", body: HTML });
+    return route.fulfill({ contentType: "text/html", body: HTML[dock] });
   });
   await page.goto(`${ORIGIN}/approvals/${PENDING_REQUEST.id}`);
   return page;
@@ -107,26 +115,32 @@ const MEASURE = `(() => {
 const measure = (page: Page): Promise<Sizes> => page.evaluate(MEASURE);
 
 describe("passkey buttons while the passkey prompt is open", () => {
-  for (const [width, height] of [
-    [360, 780],
-    [390, 844],
-    [390, 400],
-    [768, 1024],
-    [1280, 800],
-  ] as const) {
-    it(`keep their size and stay on screen at ${width}x${height}`, async () => {
-      const page = await open("hang", width, height);
-      const idle = await measure(page);
-      await page.getByRole("button", { name: "Approve once" }).click();
-      await page.locator('[data-heel-state="waiting"]').waitFor();
-      const waiting = await measure(page);
-      expect(waiting.buttonWidth).toBeCloseTo(idle.buttonWidth, 0);
-      expect(waiting.buttonHeight).toBeCloseTo(idle.buttonHeight, 0);
-      expect(waiting.barHeight).toBeCloseTo(idle.barHeight, 0);
-      expect(waiting.past).toBe(0);
-      expect(waiting.scrollWidth).toBeLessThanOrEqual(waiting.innerWidth);
-      await page.close();
-    });
+  for (const dock of ["pinned", "inline"] as const) {
+    for (const [width, height] of [
+      [360, 780],
+      [390, 844],
+      [390, 400],
+      [768, 1024],
+      [1280, 800],
+    ] as const) {
+      it(`keep their size and stay on screen at ${width}x${height}, bar ${dock}`, async () => {
+        const page = await open("hang", width, height, dock);
+        await page.getByRole("button", { name: "Approve once" }).scrollIntoViewIfNeeded();
+        const idle = await measure(page);
+        await page.getByRole("button", { name: "Approve once" }).click();
+        await page.locator('[data-heel-state="waiting"]').waitFor();
+        const waiting = await measure(page);
+        expect(waiting.buttonWidth).toBeCloseTo(idle.buttonWidth, 0);
+        expect(waiting.buttonHeight).toBeCloseTo(idle.buttonHeight, 0);
+        expect(waiting.barHeight).toBeCloseTo(idle.barHeight, 0);
+        expect(waiting.past).toBe(0);
+        expect(waiting.scrollWidth).toBeLessThanOrEqual(waiting.innerWidth);
+        // The progress line is in the bar's own slot, not a second block over the page.
+        expect(await page.locator(".ap-bar-status").textContent()).toContain("passkey");
+        expect(await page.locator("#heel-ceremony-status").textContent()).toBe("");
+        await page.close();
+      });
+    }
   }
 
   it("go back to idle after a cancel or an error, so the owner can try again", async () => {

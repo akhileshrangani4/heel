@@ -4,6 +4,7 @@ import { canonicalHash } from "../../core/canonical.ts";
 import { resolveAll } from "../../definitions/mcp/public-only.ts";
 import { missingSignInSetup } from "../../definitions/sign-in-setup.ts";
 import { compileGrant } from "../../grants/compile.ts";
+import { serviceActions } from "../../requests/actions.ts";
 import {
   approveRequest,
   findRequest,
@@ -100,6 +101,8 @@ export function requestCardsFor(deps: HumanPlaneDeps, session: SessionView, now:
     id: row.id,
     agent: nameOf(deps, "agent", row.agentId),
     service: serviceLabel(row.details),
+    provider: row.details.provider,
+    alias: row.details.alias,
     why: row.why,
     createdAt: row.createdAt,
     expiresAt: row.expiresAt,
@@ -167,6 +170,7 @@ export function requestRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
             : { by: nameOf(deps, "user", row.decidedBy), at: row.decidedAt },
         now,
         coverage: coverage(deps.rules.set, nameOf(deps, "user", row.ownerId), agent, details, {
+          actions: serviceActions(details.provider),
           grants: liveGrants(deps.db, deps.orgId, row.agentId, now).flatMap((g) => {
             try {
               return [{ id: g.id, rule: compileGrant(g.match, { id: g.id }).rule }];

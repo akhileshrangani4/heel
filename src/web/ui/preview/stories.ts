@@ -23,12 +23,31 @@ import { type ModeRow, modesPage } from "../modes-page.ts";
 import { pauseControl } from "../pause-control.ts";
 import { pendingList } from "../pending-list.ts";
 import { peoplePage } from "../people.ts";
+import { proposalCards, proposalPage } from "../proposals.ts";
 import { pushControl } from "../push-control.ts";
+import { requestCards, requestPage } from "../requests.ts";
 import { ruleHistoryPage } from "../rule-history.ts";
 import { rulesEditorPage } from "../rules-editor.ts";
 import { oidcSignIn, passkeySignIn } from "../sign-in.ts";
 import { standingApprovalList } from "../standing-approval-list.ts";
 import { welcomePage } from "../welcome.ts";
+import {
+  APPLIED_PROPOSAL,
+  CONNECTED_REQUEST,
+  GITHUB_REQUEST,
+  LONG_REASON,
+  LONG_REASON_CONNECTION,
+  MCP_REQUEST,
+  PROPOSAL,
+  PROPOSAL_CARDS,
+  REJECTED_REQUEST,
+  REQUEST_CARDS,
+  SIGN_IN_REQUEST,
+  STRESS_MCP_REQUEST,
+  STRESS_PROPOSAL,
+  STRESS_REQUEST,
+  TAKEN_REQUEST,
+} from "./approval-fixtures.ts";
 import {
   ACTIVE_PAUSES,
   ACTIVE_STANDING,
@@ -114,6 +133,10 @@ export const PAGES = [
   { id: "welcome", name: "Welcome" },
   { id: "enroll", name: "Enroll" },
   { id: "connect", name: "Connect an app (OAuth)" },
+  { id: "connection-request", name: "Connection request" },
+  { id: "rule-proposal", name: "Rule change" },
+  { id: "approval-task", name: "Approval: part of a longer task" },
+  { id: "approvals-inbox", name: "Approvals with requests and rule changes" },
   { id: "error", name: "Error pages" },
 ] as const;
 export type ComponentId = (typeof COMPONENTS)[number]["id"] | (typeof PAGES)[number]["id"];
@@ -1241,11 +1264,103 @@ export const PAGE_STORIES: readonly Story[] = [
   ),
 ];
 
+// ── Approval pages: one shell for calls, connections and rule changes ───────
+
+const OWNER: Viewer = { name: "michael", role: "admin", csrfToken: "preview" };
+
+const connection = (
+  state: string,
+  label: string,
+  props: Parameters<typeof requestPage>[0],
+): Story =>
+  pageStory(
+    "connection-request",
+    state,
+    label,
+    "Connection request",
+    "approvals",
+    () => requestPage(props),
+    OWNER,
+  );
+
+const ruleChange = (
+  state: string,
+  label: string,
+  props: Parameters<typeof proposalPage>[0],
+): Story =>
+  pageStory(
+    "rule-proposal",
+    state,
+    label,
+    "Rule change",
+    "approvals",
+    () => proposalPage(props),
+    OWNER,
+  );
+
+export const APPROVAL_STORIES: readonly Story[] = [
+  // Connection requests
+  connection("pending", "A: GitHub key, bar pinned on phones, actions grouped by outcome", {
+    ...GITHUB_REQUEST,
+    dock: "pinned",
+  }),
+  connection("pending-b", "B: GitHub key, bar inline, one list of actions", {
+    ...GITHUB_REQUEST,
+    dock: "inline",
+    coverageLayout: "list",
+  }),
+  connection("mcp", "An MCP server: no definition, so every call asks", {
+    ...MCP_REQUEST,
+    dock: "pinned",
+  }),
+  connection("stress", "64-character alias, long agent name, long rule name", {
+    ...STRESS_REQUEST,
+    dock: "pinned",
+  }),
+  connection("stress-mcp", "64-character alias and a long MCP URL", {
+    ...STRESS_MCP_REQUEST,
+    dock: "pinned",
+  }),
+  connection("taken", "The name is taken: only Reject", { ...TAKEN_REQUEST, dock: "pinned" }),
+  connection("long-reason", "The agent's reason runs over 40 words: shown in full", {
+    ...LONG_REASON_CONNECTION,
+    dock: "pinned",
+  }),
+  connection("connected", "After approving: the confirmation", CONNECTED_REQUEST),
+  connection("connected-sign-in", "After approving a sign-in service", SIGN_IN_REQUEST),
+  connection("rejected", "Rejected", REJECTED_REQUEST),
+
+  // Rule changes
+  ruleChange("pending", "A: one rule, bar pinned on phones", { ...PROPOSAL, dock: "pinned" }),
+  ruleChange("pending-b", "B: one rule, bar inline", { ...PROPOSAL, dock: "inline" }),
+  ruleChange("stress", "Long agent, file and rule names", { ...STRESS_PROPOSAL, dock: "pinned" }),
+  ruleChange("applied", "After adding", APPLIED_PROPOSAL),
+  ruleChange("long-reason", "The agent's reason runs over 40 words: shown in full", {
+    ...PROPOSAL,
+    reason: LONG_REASON,
+    dock: "pinned",
+  }),
+
+  // The Approvals list with every kind waiting
+  pageStory(
+    "approvals-inbox",
+    "cards",
+    "Calls, connection requests and rule changes; each row is one click target",
+    "Approvals",
+    "approvals",
+    () =>
+      html`${pendingList({ now: NOW, load: { ok: true, rows: PENDING_ROWS } })}
+      ${requestCards(REQUEST_CARDS, NOW)} ${proposalCards(PROPOSAL_CARDS, NOW)}`,
+    OWNER,
+  ),
+];
+
 /** Every story the harness serves: components, then pages. */
 export const ALL_STORIES: readonly Story[] = [
   ...STORIES,
   ...PAGE_STORIES,
   ...SETTINGS_EDGE_STORIES,
+  ...APPROVAL_STORIES,
 ];
 
 export function findStory(component: string, state: string): Story | undefined {

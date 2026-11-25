@@ -477,10 +477,11 @@ describe("ApprovalRequest", () => {
     expect(text(doc.querySelector("h1"))).toBe(word);
     expect(text(doc.querySelector(".ap-outcome"))).toBe(word);
     // Then the ask in one sentence, naming the agent once, and the agent's words whole.
-    expect(text(doc.querySelector(".ap-title"))).toMatch(new RegExp(`^${request.agent} asked to `));
+    expect(text(doc.querySelector(".ap-why"))).toMatch(new RegExp(`^${request.agent} asked to `));
     expect(text(doc.querySelector("blockquote"))).toBe(request.reason);
-    expect(doc.querySelector(".ap-back a")?.getAttribute("href")).toBe("/approvals");
-    expect(text(doc.querySelector(".ap-back"))).toBe("Back to Approvals");
+    // The way back is the shell's link at the top, as on every approval page.
+    expect(doc.querySelector(".ap-crumbs a")?.getAttribute("href")).toBe("/approvals");
+    expect(text(doc.querySelector(".ap-crumbs"))).toBe("Approvals");
     // The content is folded but whole (I-57); who decided and what a resend gets are in Details.
     const asked = doc.querySelector("details[data-heel-fold='asked']");
     expect(asked?.hasAttribute("open")).toBe(false);

@@ -1,5 +1,6 @@
 import { flag, type Html, html, trusted } from "./html.ts";
 import { btn } from "./shadcn/button.ts";
+import { middle } from "./summary.ts";
 
 /**
  * One layout for every approval page: call approvals, connection requests
@@ -12,6 +13,8 @@ import { btn } from "./shadcn/button.ts";
  * - Phones: title, side panel, details, in that order. With `dock: "pinned"`
  *   the bar is pinned to the bottom of the screen and takes the tab bar's
  *   place while a decision is open; with `"inline"` it stays in the panel.
+ * - A call (`kind: "call"`) has no side panel: it reads top to bottom in one
+ *   column, the content first and the bar after it (styles/approvals.ts).
  *
  * Presentation only: what the bar's buttons do is the caller's (I-56).
  */
@@ -20,14 +23,18 @@ export type Dock = "pinned" | "inline";
 
 export interface ShellProps {
   kind: "call" | "connection" | "rules";
-  /** The breadcrumb's last part: "Request", "Connection", "Rule change". */
+  /** The breadcrumb's last part ("Request"), or "" for just the link back. */
   crumb: string;
+  /** One short line above the title, such as who is asking. */
+  lead?: Html | "";
   /** What is asked, or what happened once decided: the page's one h1. */
   title: Html;
   /** One line of why it matters, in heel's words. */
   why?: Html | string;
-  /** The status badge and one short muted line beside it. */
-  status: Html;
+  /** The agent's own one line of why (`quote()`), right under the title. */
+  quote?: Html | "";
+  /** The status badge and one short muted line beside it; left out when it would repeat the page. */
+  status?: Html | "";
   /** The agent's words, notices, the decision and the folds. */
   side: Html;
   /** The details; omitted when there are none. */
@@ -48,22 +55,76 @@ export function approvalShell(props: ShellProps): Html {
   >
     <nav class="ap-crumbs" aria-label="Breadcrumb">
       <a href="/approvals">${trusted(BACK)}Approvals</a>
-      <span class="muted" aria-hidden="true">/</span>
-      <span aria-current="page">${props.crumb}</span>
+      ${
+        props.crumb === ""
+          ? ""
+          : html`<span class="muted" aria-hidden="true">/</span>
+            <span aria-current="page">${props.crumb}</span>`
+      }
     </nav>
     <div class="ap-layout">
       <header class="ap-head">
+        ${props.lead ?? ""}
         <h1 class="ap-title">${props.title}</h1>
+        ${props.quote ?? ""}
         ${props.why ? html`<p class="ap-why">${props.why}</p>` : ""}
       </header>
-      <aside class="ap-side" aria-label="Decision">
-        <p class="ap-status">${props.status}</p>
-        ${props.side}
-      </aside>
+      ${
+        // No empty panel when a decided page has nothing left to do.
+        !props.status && String(props.side).trim() === ""
+          ? ""
+          : html`<aside class="ap-side" aria-label="Decision">
+              ${props.status ? html`<p class="ap-status">${props.status}</p>` : ""}
+              ${props.side}
+            </aside>`
+      }
       ${main === "" ? "" : html`<div class="ap-main">${main}</div>`}
     </div>
   </article>`;
 }
+
+/**
+ * The agent's own reason, in full: a quote block with a left rule, labelled
+ * as the agent's words so it's never mistaken for heel's. Never shortened.
+ */
+export function quote(agent: string, words: string | null): Html | "" {
+  if (words === null) return "";
+  return html`<figure class="reason ap-quote">
+    <figcaption>The agent says<span class="visually-hidden">, ${agent} (its own words; heel didn't check them)</span>:</figcaption>
+    <blockquote>${words}</blockquote>
+  </figure>`;
+}
+
+/** The agent's reason on an Approvals card, in full and labelled. */
+export function cardReason(words: string): Html {
+  return html`<span class="req-reason"><span class="muted">The agent says:</span> ${words}</span>`;
+}
+
+/**
+ * A page fold: closed by default, and only one of a page's folds is open at
+ * a time (`name` groups them, as the browser does natively).
+ */
+export function pageFold(label: string, content: Html, className = ""): Html {
+  return html`<details class="ap-more ${className}" name="ap-page">
+    <summary><span class="fold-label">${label}</span></summary>
+    <div class="ap-fold-body">${content}</div>
+  </details>`;
+}
+
+/** The one fold inside Details: ids, absolute times, rules and tool names. */
+export function technical(content: Html): Html {
+  return html`<details class="ap-tech">
+    <summary><span class="fold-label">Technical</span></summary>
+    ${content}
+  </details>`;
+}
+
+/**
+ * A long name, alias or host cut in the middle ("a234567890-b…f23456789"),
+ * for titles and rows. The full value is always on the page too, in Details.
+ * The same cut as the call page's `middle()`: the first 12 and last 8 characters.
+ */
+export const shorten = middle;
 
 /**
  * The one action bar: no on the left, yes on the right, side by side at
@@ -80,9 +141,12 @@ export function actionBar(props: {
   /** Pin it to the bottom of a phone screen when the page docks (false for a locked bar). */
   dock?: boolean;
 }): Html {
-  return html`<div class="ap-bar"${flag("data-dock", props.dock ?? true)}>
+  // `data-heel-bar`: the passkey script writes this bar's progress and errors to its
+  // own one-line status slot, which always holds its line, so the bar never grows.
+  return html`<div class="ap-bar" data-heel-bar${flag("data-dock", props.dock ?? true)}>
       ${props.yes === "" ? "" : html`<span class="ap-bar-yes">${props.yes}</span>`}
       ${props.no === "" ? "" : html`<span class="ap-bar-no">${props.no}</span>`}
+      <p class="ap-bar-status" data-heel-bar-status role="status" aria-live="polite"></p>
     </div>
     <p id="${props.helpId}" class="${props.showHelp === true ? "ap-bar-note muted" : "visually-hidden"}">
       ${props.help}
