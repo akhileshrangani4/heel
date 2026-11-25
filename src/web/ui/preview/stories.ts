@@ -511,7 +511,7 @@ const week = (calls: readonly number[]): DayCount[] =>
   }));
 
 /** Stress values for middle ellipsis. */
-const LONG_AGENT = "claude-code-heel-on-michaels-work-laptop-2";
+const LONG_AGENT_NAME = "claude-code-heel-on-michaels-work-laptop-2";
 const LONG_ALIAS = "github-tambo-ai-charming-and-heel-monorepo-fine-grained-read-only";
 
 const NO_WAITING = { calls: 0, requests: 0, proposals: 0, recoveries: 0 } as const;
@@ -1091,12 +1091,12 @@ export const PAGE_STORIES: readonly Story[] = [
         ...(CALL_ITEMS[0] as WaitingItem & { kind: "call" }),
         headline: {
           ...(CALL_ITEMS[0] as WaitingItem & { kind: "call" }).headline,
-          agent: LONG_AGENT,
+          agent: LONG_AGENT_NAME,
         },
       },
       {
         ...CONNECTION_ITEM,
-        agent: LONG_AGENT,
+        agent: LONG_AGENT_NAME,
         service: "the MCP server at notes-and-tasks.internal.example.com",
       },
     ],
@@ -1106,7 +1106,7 @@ export const PAGE_STORIES: readonly Story[] = [
       ok: true,
       rows: PENDING_ROWS.map((row) => ({
         ...row,
-        headline: { ...row.headline, agent: LONG_AGENT, place: LONG_ALIAS },
+        headline: { ...row.headline, agent: LONG_AGENT_NAME, place: LONG_ALIAS },
       })),
     }),
     state: "long-values",
