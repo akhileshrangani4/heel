@@ -65,6 +65,19 @@ export interface HeelToolsContext {
   canHold: (held: Held) => boolean;
 }
 
+/** An answer as a tool result: the object as `structuredContent` and as JSON text. */
+function jsonResult(body: Record<string, unknown>, isError = false): CallToolResult {
+  return {
+    ...(isError && { isError: true }),
+    content: [{ type: "text", text: JSON.stringify(body) }],
+    structuredContent: body,
+  };
+}
+
+function refuse(body: Record<string, unknown>): CallToolResult {
+  return jsonResult(body, true);
+}
+
 /** heel's own tools by name, in the order every scope lists them. */
 export function heelTools({
   deps,
@@ -75,17 +88,29 @@ export function heelTools({
 }: HeelToolsContext): ReadonlyMap<string, HeelTool> {
   const pauses = deps.pauses ?? new SqlitePauseStore();
 
+  /** A pause that covers this agent: it stops what the agent proposes or asks for too. */
+  function agentPause(agent: AuthenticatedAgent) {
+    return pauses.find(deps.db, {
+      orgId: agent.orgId,
+      agentId: agent.agentId,
+      ownerId: agent.ownerId,
+      account: "",
+      provider: "",
+    });
+  }
+
+  /** What heel suggests rules from, read at each call: the rules in force can reload. */
+  function learning() {
+    return {
+      db: deps.db,
+      rules: deps.learning?.rules.set ?? null,
+      threshold: deps.learning?.threshold ?? null,
+    };
+  }
+
   /** The agent's own decided requests and heel's suggestions for it. */
   function heelHistory(agent: AuthenticatedAgent): CallToolResult {
-    const { decisions, suggestions } = historyFor(
-      {
-        db: deps.db,
-        rules: deps.learning?.rules.set ?? null,
-        threshold: deps.learning?.threshold ?? null,
-      },
-      agent,
-      now(),
-    );
+    const { decisions, suggestions } = historyFor(learning(), agent, now());
     const body = {
       window_days: LEARNING_WINDOW_DAYS,
       decisions,
@@ -102,7 +127,7 @@ export function heelTools({
           ? "No rule to suggest yet. Propose one with heel_propose_rules only if your owner keeps approving the same kind of call."
           : 'To ask for a suggested rule, call heel_propose_rules with {"suggestion": "<its suggestion id>"}. heel writes the rule, adds the conditions of your owner\'s rule that asked, and places it before that rule; nothing changes until your owner adds it with a passkey.',
     };
-    return { content: [{ type: "text", text: JSON.stringify(body) }], structuredContent: body };
+    return jsonResult(body);
   }
 
   /**
@@ -113,7 +138,6 @@ export function heelTools({
   function proposeSuggestionTool(
     agent: AuthenticatedAgent,
     args: Record<string, unknown>,
-    refuse: (body: Record<string, unknown>) => CallToolResult,
   ): CallToolResult {
     const key = args["suggestion"];
     if (typeof key !== "string" || Object.keys(args).length !== 1) {
@@ -122,13 +146,8 @@ export function heelTools({
         problems: ["suggestion: send only the id of a rule heel_history suggests, as a string"],
       });
     }
-    const learning = {
-      db: deps.db,
-      rules: deps.learning?.rules.set ?? null,
-      threshold: deps.learning?.threshold ?? null,
-    };
     const outcome = proposeSuggestion(
-      learning,
+      learning(),
       { orgId: agent.orgId, userId: agent.ownerId },
       key,
       now(),
@@ -154,7 +173,7 @@ export function heelTools({
         "Your owner will see heel's suggested rule on heel's approval page and can add it with a passkey. " +
         "Nothing changes until then.",
     };
-    return { content: [{ type: "text", text: JSON.stringify(answer) }], structuredContent: answer };
+    return jsonResult(answer);
   }
 
   /** Stores a rule proposal for the agent's owner; the target file is never the agent's choice. */
@@ -162,20 +181,9 @@ export function heelTools({
     agent: AuthenticatedAgent,
     args: Record<string, unknown>,
   ): CallToolResult {
-    const refuse = (body: Record<string, unknown>): CallToolResult => ({
-      isError: true,
-      content: [{ type: "text", text: JSON.stringify(body) }],
-      structuredContent: body,
-    });
-    const paused = pauses.find(deps.db, {
-      orgId: agent.orgId,
-      agentId: agent.agentId,
-      ownerId: agent.ownerId,
-      account: "",
-      provider: "",
-    });
+    const paused = agentPause(agent);
     if (paused !== null) return refuse({ status: "paused", scope: paused });
-    if ("suggestion" in args) return proposeSuggestionTool(agent, args, refuse);
+    if ("suggestion" in args) return proposeSuggestionTool(agent, args);
     const input = ProposeRulesInput.safeParse(args);
     if (!input.success) {
       return refuse({
@@ -200,7 +208,7 @@ export function heelTools({
         "Your owner will see this on heel's approval page and can add it with a passkey. " +
         "Nothing changes until then; calls it would allow are still decided as they are now.",
     };
-    return { content: [{ type: "text", text: JSON.stringify(answer) }], structuredContent: answer };
+    return jsonResult(answer);
   }
 
   /** Stores a connection request for the agent's owner; nothing is connected or contacted. */
@@ -208,18 +216,7 @@ export function heelTools({
     agent: AuthenticatedAgent,
     args: Record<string, unknown>,
   ): CallToolResult {
-    const refuse = (body: Record<string, unknown>): CallToolResult => ({
-      isError: true,
-      content: [{ type: "text", text: JSON.stringify(body) }],
-      structuredContent: body,
-    });
-    const paused = pauses.find(deps.db, {
-      orgId: agent.orgId,
-      agentId: agent.agentId,
-      ownerId: agent.ownerId,
-      account: "",
-      provider: "",
-    });
+    const paused = agentPause(agent);
     if (paused !== null) return refuse({ status: "paused", scope: paused });
     const input = RequestConnectionInput.safeParse(args);
     if (!input.success) {
@@ -245,7 +242,7 @@ export function heelTools({
         "Your owner will see this on heel's approval page and can connect it with a passkey. " +
         "Nothing is connected until then. Once it is, the account's tools appear and your owner's rules decide what you can do.",
     };
-    return { content: [{ type: "text", text: JSON.stringify(answer) }], structuredContent: answer };
+    return jsonResult(answer);
   }
 
   /** The ids of what this agent asked for that still waits for its owner, as one string. */
@@ -373,27 +370,18 @@ export function heelTools({
       },
       ...(deps.approvalsUrl === undefined ? {} : { approveAt: deps.approvalsUrl }),
     };
-    return { content: [{ type: "text", text: JSON.stringify(answer) }], structuredContent: answer };
+    return jsonResult(answer);
   }
 
   function heelStatus(agent: AuthenticatedAgent, args: Record<string, unknown>): CallToolResult {
     if (typeof args["script_id"] === "string") {
       const view = background?.view(agent, args["script_id"]) ?? null;
       const answer = view ?? { scriptId: args["script_id"], status: "unknown" };
-      return {
-        ...(view === null && { isError: true }),
-        content: [{ type: "text", text: JSON.stringify(answer) }],
-        structuredContent: answer as Record<string, unknown>,
-      };
+      return jsonResult(answer as Record<string, unknown>, view === null);
     }
     const approvalId = typeof args["approval_id"] === "string" ? args["approval_id"] : "";
     const status = approvalStatusForAgent(deps.db, agent, approvalId, now());
-    const answer = { approvalId, status: status ?? "unknown" };
-    return {
-      ...(status === null && { isError: true }),
-      content: [{ type: "text", text: JSON.stringify(answer) }],
-      structuredContent: answer,
-    };
+    return jsonResult({ approvalId, status: status ?? "unknown" }, status === null);
   }
 
   const tools: HeelTool[] = [
