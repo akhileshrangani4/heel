@@ -1,5 +1,5 @@
 /**
- * Rollout modes (A3; v1 design "Three modes"): how much of the rules heel
+ * Rollout modes: how much of the rules heel
  * enforces, set per org and per owner and switchable live.
  *
  * - `enforce`: heel decides every call. The default.

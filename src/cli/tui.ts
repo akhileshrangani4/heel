@@ -4,7 +4,7 @@ import type { AdminRequest } from "../admin/protocol.ts";
 import type { HeelConfig } from "../config/schema.ts";
 
 /**
- * `heel tui` (roadmap 1.12): a full-screen view of a running heel from the
+ * `heel tui`: a full-screen view of a running heel from the
  * terminal it runs on. It reads through the admin socket and changes only
  * what a plain admin command can: it pauses an agent (one key, then a
  * confirm). Deciding a request needs a passkey, which a terminal can't
@@ -26,7 +26,7 @@ export interface ApprovalItem {
   url: string;
 }
 
-/** A rule proposal waiting for its owner (roadmap 2.1), as `proposals.list` returns it. */
+/** A rule proposal waiting for its owner, as `proposals.list` returns it. */
 export interface ProposalItem {
   id: string;
   agent: string;

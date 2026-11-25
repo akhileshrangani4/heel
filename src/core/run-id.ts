@@ -1,5 +1,5 @@
 /**
- * Run ids (spec: Call model, "Run ids"). An agent names its run so per-run
+ * Run ids. An agent names its run so per-run
  * counts can group its calls. heel stores them as `(agent_id, run_id)`, so
  * two agents sending the same string never share a count.
  *

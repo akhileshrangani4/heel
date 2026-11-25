@@ -5,7 +5,7 @@ import { newId } from "./ids.ts";
 import { passkeys, users } from "./schema.ts";
 
 /**
- * The people on one heel (roadmap 2.9). With a sign-in provider (D13), people
+ * The people on one heel. With a sign-in provider, people
  * join by signing in. Without one, an admin adds a person by name (`heel user
  * add`, or the People page) and gives them an enrollment link for their
  * passkey. A new person is a member: they own their own agents, accounts and

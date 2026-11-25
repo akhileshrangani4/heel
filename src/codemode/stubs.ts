@@ -1,5 +1,5 @@
 /**
- * Code mode's type stubs (D6a; spec: Code mode). Each account an agent may
+ * Code mode's type stubs. Each account an agent may
  * use becomes one Python module, named after its alias with `-` turned into
  * `_` (`gmail-work` → `gmail_work`), and each of its tools one function in
  * it, with keyword-only parameters typed from the tool's JSON Schema. Monty
@@ -74,7 +74,7 @@ export interface StubModule {
   /** Tools left out, with why: a name that can't be a Python identifier, or a clash. */
   skipped: readonly { tool: string; reason: string }[];
   /**
-   * The `_async` twins of read tools (code mode round 2, C4): Python names
+   * The `_async` twins of read tools: Python names
    * whose calls heel runs as futures, several at once under asyncio.gather.
    * Each is also in `functions`, pointing at the same tool.
    */
@@ -170,7 +170,6 @@ function functionStub(
   return `def ${name}(${signature}) -> Any:\n    ${docstring(tool.description)}\n`;
 }
 
-/** The module for one account. */
 export function accountModule(
   alias: string,
   tools: readonly StubTool[],

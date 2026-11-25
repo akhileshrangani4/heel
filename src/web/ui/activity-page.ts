@@ -12,7 +12,7 @@ import { btn } from "./shadcn/button.ts";
 import { actionPhrase } from "./summary.ts";
 
 /**
- * The observability pages (A5): what agents did, as heel decided it. Every
+ * The observability pages: what agents did, as heel decided it. Every
  * row here is an audit row; nothing is shown that the audit log doesn't
  * hold, and a person sees only their own agents' rows unless they're an
  * admin.
@@ -207,17 +207,12 @@ function filterMenu(
   agents: readonly { id: string; name: string }[],
   accounts: readonly string[],
 ): Html {
-  const active = [filter.agent, filter.account, filter.kind].filter((v) => v !== undefined).length;
   const accountChoices =
     filter.account !== undefined && !accounts.includes(filter.account)
       ? [filter.account, ...accounts]
       : accounts;
   return html`<details class="act-filter">
-    <summary class="${btn("outline", "sm")}">${trusted(FILTER_ICON)}Filter${
-      active > 0
-        ? html`<span class="act-filter-count"><span class="visually-hidden">, </span>${String(active)}<span class="visually-hidden"> on</span></span>`
-        : ""
-    }</summary>
+    <summary class="${btn("outline", "sm")}">${trusted(FILTER_ICON)}Filter</summary>
     <form method="get" action="/activity" class="act-filter-panel">
       ${filter.script === undefined ? "" : html`<input type="hidden" name="script" value="${filter.script}" />`}
       <div class="act-filter-groups">
@@ -272,7 +267,7 @@ export function activityPage(props: {
     agent?: string | undefined;
     account?: string | undefined;
     kind?: string | undefined;
-    /** One code-mode script's calls (C3). */
+    /** One code-mode script's calls. */
     script?: string | undefined;
   };
   nextBefore: number | null;
@@ -280,7 +275,7 @@ export function activityPage(props: {
   paged?: boolean;
   hidden: Readonly<Record<string, number>> | null;
   suggestions: readonly Suggestion[];
-  /** Rules suggested from what the viewer decided (2.10), as cards. */
+  /** Rules suggested from what the viewer decided, as cards. */
   learned?: Html | "";
   /** An admin: they may download the whole audit log. */
   canExport?: boolean;
@@ -343,6 +338,11 @@ export function activityPage(props: {
       }
     </div>
     ${
+      props.paged === true
+        ? ""
+        : html`<p class="act-live-note" id="activity-live-note" role="status" hidden>Signed out. <a href="/sign-in?next=${encodeURIComponent(activityHref(props.filter))}">Sign in</a> to see new activity.</p>`
+    }
+    ${
       props.rows.length === 0
         ? html`<div class="card req-empty">
             <p><strong>${filtered ? "Nothing matches these filters." : "No decisions yet."}</strong></p>
@@ -352,7 +352,7 @@ export function activityPage(props: {
     }
     ${scrollRegion(
       "Decisions",
-      html`<table class="data act-table" id="activity" data-latest="${String(latest)}" data-today="${dayKey(now)}" data-filter="${params({})}"${props.rows.length === 0 ? html` hidden` : ""}>
+      html`<table class="data act-table" id="activity" data-latest="${String(latest)}" data-today="${dayKey(now)}" data-filter="${params({})}"${props.paged === true ? "" : html` data-live`}${props.rows.length === 0 ? html` hidden` : ""}>
         <caption class="visually-hidden">Decisions</caption>
         <thead class="visually-hidden">
           <tr>
@@ -412,7 +412,7 @@ function tokenCell(expiry: Date | "never" | null | undefined, now: Date): Html {
 export function agentsPage(props: {
   agents: readonly AgentActivity[];
   sinceHours: number;
-  /** Managing agents here (2.9): who may, their workdirs, and what just happened. */
+  /** Managing agents here: who may, their workdirs, and what just happened. */
   manage?: {
     csrfToken: string;
     viewerId: string;
@@ -423,7 +423,7 @@ export function agentsPage(props: {
   /** Each agent's static token expiry: a date, "never", or null without one. */
   tokens?: ReadonlyMap<string, Date | "never" | null>;
   now?: Date;
-  /** Background scripts running or parked (C6), each with the form that stops it. */
+  /** Background scripts running or parked, each with the form that stops it. */
   scripts?: readonly {
     id: string;
     agentName: string;
@@ -591,15 +591,48 @@ function agentRow(
 }
 
 /**
- * The live stream: puts each row the server sends under its day's heading,
- * adding "Today" (or the day) when the newest heading is another day.
+ * The Filter and Download panels: Escape or a click outside closes them (on
+ * a phone the filter sheet covers its own button), and opening one closes
+ * the other.
  */
-export const ACTIVITY_SCRIPT = `
+export const ACTIVITY_PANELS_SCRIPT = `
+(() => {
+  const panels = [...document.querySelectorAll("details.act-filter, details.audit-export")];
+  for (const panel of panels) {
+    panel.addEventListener("toggle", () => {
+      if (panel.open) for (const other of panels) if (other !== panel) other.open = false;
+    });
+  }
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    for (const panel of panels) {
+      if (!panel.open) continue;
+      panel.open = false;
+      panel.querySelector("summary").focus();
+    }
+  });
+  document.addEventListener("click", (event) => {
+    for (const panel of panels) if (panel.open && !panel.contains(event.target)) panel.open = false;
+  });
+})();
+`;
+
+/**
+ * The live stream: puts each row the server sends under its day's heading,
+ * adding "Today" (or the day, in words as the server writes it) when the
+ * newest heading is another day.
+ */
+export const ACTIVITY_SCRIPT = `${ACTIVITY_PANELS_SCRIPT}
 (() => {
   const table = document.getElementById("activity");
-  if (!table || !window.EventSource) return;
+  // An older page doesn't take live rows: they belong on the newest page.
+  if (!table || !table.hasAttribute("data-live") || !window.EventSource) return;
   const filter = table.dataset.filter;
   const source = new EventSource("/activity/stream?after=" + table.dataset.latest + (filter ? "&" + filter : ""));
+  const dayName = (day) =>
+    day === table.dataset.today
+      ? "Today"
+      : new Date(day + "T00:00:00Z").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: "UTC" });
   source.addEventListener("row", (event) => {
     const body = table.querySelector("tbody");
     const holder = document.createElement("tbody");
@@ -615,7 +648,7 @@ export const ACTIVITY_SCRIPT = `
       const cell = document.createElement("th");
       cell.colSpan = ${String(COLUMNS)};
       cell.scope = "colgroup";
-      cell.textContent = (day === table.dataset.today ? "Today" : day) + " ";
+      cell.textContent = dayName(day) + " ";
       const count = document.createElement("span");
       count.className = "day-count";
       count.textContent = "0";
@@ -629,6 +662,19 @@ export const ACTIVITY_SCRIPT = `
     table.hidden = false;
     const empty = table.closest(".table-scroll")?.previousElementSibling;
     if (empty && empty.classList.contains("req-empty")) empty.remove();
+  });
+  // A dropped connection or the server's own 10-minute end leaves the source
+  // CONNECTING, and it resumes by itself. CLOSED means heel answered with
+  // something other than a stream: if a session check now gets 401, the
+  // session ended, so say so and offer sign-in. Rows on screen stay.
+  source.addEventListener("error", async () => {
+    if (source.readyState !== EventSource.CLOSED) return;
+    try {
+      const check = await fetch("/activity", { method: "HEAD", redirect: "manual" });
+      if (check.status !== 401) return;
+    } catch { return; }
+    const note = document.getElementById("activity-live-note");
+    if (note) note.hidden = false;
   });
 })();
 `;

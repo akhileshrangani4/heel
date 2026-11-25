@@ -7,7 +7,7 @@ import type { OutlookMailbox } from "./messages.ts";
 import { OutlookId, type OutlookTool, outlookTool } from "./tool.ts";
 
 /**
- * Outlook calendar (D12a; spec: "Calendar (Google and Outlook)"), on the
+ * Outlook calendar, on the
  * same Outlook account as its mail. The same actions and facts as Google
  * Calendar:
  *
@@ -19,7 +19,7 @@ import { OutlookId, type OutlookTool, outlookTool } from "./tool.ts";
  *   account's address.
  * - No tool shares a calendar or subscribes to changes (I-70).
  *
- * P-5, the Graph v1.0 reference each call was written against
+ * The Graph v1.0 reference each call was written against
  * (https://learn.microsoft.com/en-us/graph/api/<page>?view=graph-rest-1.0):
  * - user-list-calendarview: startDateTime and endDateTime are required, and
  *   $top is 1 to 1000.

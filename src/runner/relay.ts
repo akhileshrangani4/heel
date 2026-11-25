@@ -1,10 +1,9 @@
 /**
- * The egress relay, run by Node inside the sandbox (spec: CLI runner,
- * "Network"). The sandbox's network namespace has only loopback, and CLIs
- * expect an HTTP proxy on a TCP port, not a Unix socket. The relay listens on
- * `127.0.0.1:<port>` in that namespace, pipes every connection to heel's
- * egress proxy through the bind-mounted socket, then runs the real command
- * and exits with its status.
+ * The egress relay, run by Node inside the sandbox. The sandbox's network
+ * namespace has only loopback, and CLIs expect an HTTP proxy on a TCP port, not
+ * a Unix socket. The relay listens on `127.0.0.1:<port>` in that namespace,
+ * pipes every connection to heel's egress proxy through the bind-mounted
+ * socket, then runs the real command and exits with its status.
  *
  * Only this file is mounted into the sandbox, so it imports nothing but Node
  * built-ins. It decides nothing: the allowlist lives in the host-side proxy,

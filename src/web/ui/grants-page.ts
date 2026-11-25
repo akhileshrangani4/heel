@@ -7,7 +7,7 @@ import { badge, type FormTarget, notice, postForm, scrollRegion } from "./layout
 import { btn } from "./shadcn/button.ts";
 
 /**
- * The Grants page (A4b): a person states a task, writes what the agent may
+ * The Grants page: a person states a task, writes what the agent may
  * do for it as one rules-language `match`, and signs it with a passkey.
  * Revoking is a plain form, since it can only stop calls.
  */

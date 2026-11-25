@@ -1,6 +1,6 @@
 import type { PauseScope } from "../../core/call.ts";
 import { CEREMONY_SCRIPT } from "./ceremony.ts";
-import { formatPauseScope, formatUtc } from "./format.ts";
+import { formatPauseScope, formatUtc, LOCAL_TIME_SCRIPT } from "./format.ts";
 import { type Child, type Html, html, trusted } from "./html.ts";
 import { LOGO_SVG } from "./logo.ts";
 import { SELECT_SCRIPT } from "./select.ts";
@@ -14,7 +14,7 @@ export interface Viewer {
   csrfToken: string;
 }
 
-/** A pause that covers what the page shows (spec: Pause). */
+/** A pause that covers what the page shows. */
 export interface PauseNotice {
   scope: PauseScope;
   /** The agent, account or provider paused; null for a global pause. */
@@ -77,6 +77,12 @@ export interface PageProps {
    * or section tabs, the content centred and narrow, nothing else to click.
    */
   focus?: boolean;
+  /**
+   * Preview only: stands in for the device's safe-area insets, in px, so the
+   * harness can show an installed app on a phone with a home indicator.
+   * Real pages leave it out and get `env(safe-area-inset-*)`.
+   */
+  safeArea?: { top: number; right: number; bottom: number; left: number };
 }
 
 /**
@@ -136,7 +142,7 @@ export function scrollRegion(label: string, content: Html): Html {
 
 /** `<time>` with a machine-readable instant and a UTC label. */
 export function time(at: Date): Html {
-  return html`<time datetime="${at.toISOString()}">${formatUtc(at)}</time>`;
+  return html`<time datetime="${at.toISOString()}" data-heel-local>${formatUtc(at)}</time>`;
 }
 
 /** lucide's circle-pause. */
@@ -301,13 +307,20 @@ export function page(props: PageProps): Html {
   const theme = props.theme ?? "auto";
   // Sign-in screens never reveal pause state to someone who isn't signed in.
   const pause = props.viewer !== null ? (props.pause ?? null) : null;
+  const inset = props.safeArea;
+  const insetStyle =
+    inset === undefined
+      ? ""
+      : html` style="--safe-t:${String(inset.top)}px;--safe-r:${String(inset.right)}px;--safe-b:${String(inset.bottom)}px;--safe-l:${String(inset.left)}px"`;
   return html`<!doctype html>
-<html lang="en"${theme === "auto" ? "" : html` data-theme="${theme}"`}>
+<html lang="en"${theme === "auto" ? "" : html` data-theme="${theme}"`}${insetStyle}>
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
-    <meta name="theme-color" content="#16181D" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f6f6f4" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f0f10" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icon-180.png" />
     <link rel="apple-touch-icon" href="/icon-180.png" />
@@ -325,6 +338,7 @@ export function page(props: PageProps): Html {
     </main>
     <script>${trusted(CEREMONY_SCRIPT)}</script>
     <script>${trusted(SELECT_SCRIPT)}</script>
+    <script>${trusted(LOCAL_TIME_SCRIPT)}</script>
     ${props.script ? html`<script>${trusted(props.script)}</script>` : ""}
   </body>
 </html>`;

@@ -12,7 +12,7 @@ import {
 import { YamlValidationError } from "./yaml.ts";
 
 /**
- * Hot reload (spec: Rules, "Loading, testing and reload"). heel watches the
+ * Hot reload. heel watches the
  * rules files and swaps the whole set in at once. An invalid owner file keeps
  * that owner's last good rules while everyone else's edits apply; an invalid
  * org file keeps the whole last good set, since org rules bound every owner.
@@ -144,7 +144,7 @@ export function watchRules(holder: RulesHolder, options: WatchRulesOptions): Rul
   /**
    * A new watcher can take a moment to start reporting (FSEvents on macOS), so
    * a change in its first moments could slip past it. `then` runs once that
-   * moment has passed, to read whatever landed meanwhile (roadmap T16).
+   * moment has passed, to read whatever landed meanwhile.
    */
   const settleThen = (then: () => void) => {
     if (closed) return;

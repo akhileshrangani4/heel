@@ -39,7 +39,6 @@ export function describeConnectError(path: string, error: unknown): AdminClientE
   return new AdminClientError("not_running", `could not reach heel at ${path}`, { cause: error });
 }
 
-/** Sends one request over the admin socket and returns heel's response. */
 export function adminCall(
   path: string,
   request: AdminRequest,

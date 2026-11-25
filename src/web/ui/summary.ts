@@ -1,8 +1,8 @@
 /**
- * What a request does, in plain words, for the approval page (spec: The
- * approval page). Pure: everything comes from the stored call heel will run,
- * never from what the agent said about it, so the sentence can't be talked
- * into saying something the call doesn't do.
+ * What a request does, in plain words, for the approval page. Pure:
+ * everything comes from the stored call heel will run, never from what the
+ * agent said about it, so the sentence can't be talked into saying something
+ * the call doesn't do.
  *
  * Folding a list never hides an outlier: recipients are grouped by domain,
  * every domain is named, and the full addresses stay on the page (I-57).
@@ -18,7 +18,7 @@ export interface EmailPreview {
   /** Shown as text. An HTML body is shown as its source, never rendered. */
   body: string;
   bodyFormat: "text" | "html";
-  /** Listed by name, type and size, never inlined (Q-N4). */
+  /** Listed by name, type and size, never inlined. */
   attachments: readonly { name: string; type: string; size: number }[];
   /** A forward's original message, as heel read it, when the call forwards one. */
   forwarded?: { text: string; attachments: readonly string[] } | undefined;
@@ -320,7 +320,7 @@ export function clientLabel(name: string): string {
   return KNOWN[name] ?? name;
 }
 
-/** An HTTP proxy request, as the approver reads it (spec: HTTP proxy). */
+/** An HTTP proxy request, as the approver reads it. */
 export interface HttpPreview {
   method: string;
   path: string;

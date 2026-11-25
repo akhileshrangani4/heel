@@ -6,7 +6,7 @@ import { allOf, evalCondition, type Outcome } from "./match.ts";
 import type { Decision } from "./schema.ts";
 
 /**
- * First-match evaluation (spec: Rules, "Files and layers"): org rules, then
+ * First-match evaluation: org rules, then
  * the agent owner's rules top to bottom, each standing approval checked just
  * above the rule that asked for it; no match denies (I-10). Pure: counts,
  * state lookups and standing approvals come in through the context.
@@ -24,7 +24,6 @@ export interface RuleSet {
 
 export type StateOutcome = "pass" | "fail" | "unavailable";
 
-/** D4b fills this in from `standing_approvals`. */
 export interface StandingApprovals {
   /**
    * A live standing approval of this agent's that covers this call under
@@ -41,9 +40,8 @@ export interface EvalContext {
   owner: string;
   facts: RuleFacts;
   /**
-   * The rollout mode for this call (A3). `shadow` and `record` relax only
-   * what `heel serve --watch` relaxes (I-71); `record` also skips the
-   * owner's rules entirely.
+   * The rollout mode for this call. `shadow` and `record` relax only
+   * what `heel serve --watch` relaxes (I-71).
    */
   mode: Mode;
   /** A state check's result for this call, under the rule that names it. */
@@ -56,7 +54,7 @@ export interface EvalContext {
   counted(rule: CompiledRule, per: "run" | "hour"): number;
   standing: StandingApprovals;
   /**
-   * The agent's live intent grants (A4b), compiled as owner-layer allows.
+   * The agent's live intent grants, compiled as owner-layer allows.
    * Consulted only when the rules end in an owner ask or the default deny.
    */
   grants?: readonly CompiledRule[];
@@ -85,7 +83,7 @@ export type Verdict =
       decision: "allow";
       rule: CompiledRule;
       standingApprovalId: string | null;
-      /** Set when an intent grant answered an ask or the default deny (A4b). */
+      /** Set when an intent grant answered an ask or the default deny. */
       grant?: true;
     }
   | { decision: "ask"; rule: CompiledRule }
@@ -97,7 +95,6 @@ export interface WatchedRule {
 }
 
 export interface Evaluation {
-  /** What the rules decide. */
   verdict: Verdict;
   /**
    * Global watch let the call run although `verdict` denies or asks: heel
@@ -106,7 +103,6 @@ export interface Evaluation {
   relaxed: boolean;
   /** `watch: true` rules that matched on the way, in order. They never decide (I-72). */
   watched: readonly WatchedRule[];
-  /** The mode this call was evaluated in. */
   mode: Mode;
 }
 
@@ -120,7 +116,7 @@ export function rulesFor(set: RuleSet, owner: string): readonly CompiledRule[] {
   return [...(set.org?.rules ?? []), ...(set.owners.get(owner)?.rules ?? [])];
 }
 
-/** Hide entries for an account: the org file's and the account owner's (spec: Hiding). */
+/** Hide entries for an account: the org file's and the account owner's. */
 export function hideEntriesFor(set: RuleSet, accountOwner: string): readonly CompiledHideEntry[] {
   return [...(set.org?.hide ?? []), ...(set.owners.get(accountOwner)?.hide ?? [])];
 }
@@ -184,7 +180,7 @@ function ruleVerdict(
 }
 
 /**
- * Intent grants (A4b) stand in for a person's approval, so they answer only
+ * Intent grants stand in for a person's approval, so they answer only
  * what a person could have approved: an owner rule's ask, or a call no rule
  * covers. They never turn a deny into an allow, nor an org ask.
  */
@@ -212,7 +208,7 @@ function decide(rule: CompiledRule, ctx: EvalContext): Verdict {
     case "deny":
       return { decision: "deny", rule, reason: "rule" };
     case "ask": {
-      // Org asks are approved once by an admin and never stand (Q-A7).
+      // Org asks are approved once by an admin and never stand.
       const standing = rule.layer === "owner" ? ctx.standing.find(rule, ctx.facts) : null;
       return standing === null
         ? { decision: "ask", rule }
@@ -224,7 +220,7 @@ function decide(rule: CompiledRule, ctx: EvalContext): Verdict {
 /**
  * Shadow and record (global watch) relax only outcomes of the owner's own rules and the
  * default deny. Org rules are the admin's ceiling, and the fail-closed
- * denies mean heel couldn't decide safely; both still hold (Q-W1).
+ * denies mean heel couldn't decide safely; both still hold.
  */
 function relaxable(verdict: Verdict): boolean {
   if (verdict.decision === "allow") return false;
@@ -241,7 +237,7 @@ function names(rule: CompiledRule, facts: RuleFacts): boolean {
   );
 }
 
-/** The rule's plain conditions on one call's facts; D3 also filters count history with it. */
+/** The rule's plain conditions on one call's facts; count history is filtered with it too. */
 export function plainMatch(rule: CompiledRule, facts: RuleFacts): Outcome {
   return allOf(
     rule.conditions.map((condition) =>
@@ -256,8 +252,7 @@ type RuleOutcome = "match" | "no_match" | "unparseable" | "unreadable" | "unavai
  * Conditions are ANDed, so a definite false anywhere means no match. Only
  * when nothing is false does an unreadable address or a failed lookup
  * matter, and then the call is denied rather than the condition read as
- * false, which would let a broader rule below match (spec: Counts and state
- * checks). State lookups run last, so heel reads a provider only for a rule
+ * false, which would let a broader rule below match. State lookups run last, so heel reads a provider only for a rule
  * that would otherwise match.
  */
 function ruleOutcome(rule: CompiledRule, ctx: EvalContext): RuleOutcome {

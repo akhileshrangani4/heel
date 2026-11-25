@@ -4,7 +4,7 @@ import { compileRulesText } from "../config/rules.ts";
 import { formatYamlIssue, YamlValidationError } from "../config/yaml.ts";
 
 /**
- * Editing an owner's rules file from the web app (roadmap 2.9), mostly
+ * Editing an owner's rules file from the web app, mostly
  * without YAML: change a rule's decision, remove a rule or a hide entry, or,
  * for those who want it, replace the whole text. heel makes the change on the
  * YAML document, so comments and layout stay, and checks the result loads

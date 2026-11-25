@@ -6,8 +6,7 @@ import { newId } from "./ids.ts";
 import { accountApprovers, accountShares, accounts, type PrincipalKind, users } from "./schema.ts";
 
 /**
- * Account sharing and approvers (D13b; spec: Teams, "Who may use an
- * account", "Approvers").
+ * Account sharing and approvers.
  *
  * - An account's owner may use it, and so may every user or IdP group it is
  *   shared with. An agent may call an account only if the agent's owner may.
@@ -39,7 +38,7 @@ export class SharingError extends Error {
   }
 }
 
-/** How long groups read at a sign-in keep counting: a session's maximum, 12 h (spec: Teams). */
+/** How long groups read at a sign-in keep counting: a session's maximum, 12 h. */
 export const GROUPS_FRESH_MS = 12 * 60 * 60_000;
 
 /** A user's groups, if read from the IdP recently enough to count. */

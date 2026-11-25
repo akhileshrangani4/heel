@@ -1,8 +1,8 @@
 import { readPlainMessage } from "../mail/raw-read.ts";
 
 /**
- * The built-in providers' REST paths (D7b; spec: HTTP proxy, "Built-in
- * providers"): a request to a provider's own API, sent through
+ * The built-in providers' REST paths: a request to a provider's own API,
+ * sent through
  * `/http/<account>/...`, becomes a call to heel's native tool for it, so
  * actions, recipients, items, state checks and hiding behave exactly as
  * over MCP. The answer is the tool's own result, as JSON. Paths heel has no
@@ -343,7 +343,7 @@ const GITHUB_ROUTES: readonly GitHubRoute[] = [
  * GitHub's REST API. A mapped route becomes heel's own tool; a route that
  * matches but carries something the tool doesn't take is refused. Anything
  * else is `github.api`: sent as it is, and let through only by a rule that
- * names `github.api` (spec: GitHub, "Actions").
+ * names `github.api`.
  */
 export function githubRest(request: RestRequest): RestCall | null {
   const q = singleQuery(request.query);

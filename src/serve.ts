@@ -10,9 +10,11 @@ import { createAdminHandler } from "./admin/handlers.ts";
 import { startAdminServer } from "./admin/server.ts";
 import { SiemSink } from "./audit/siem.ts";
 import type { BackgroundRunner } from "./codemode/background.ts";
+import { CodemodeHost, type CodemodeHostOptions, HostedCodeWorker } from "./codemode/hosted.ts";
 import { CodemodeLanes } from "./codemode/lanes.ts";
 import { purgeExpiredParked } from "./codemode/parking.ts";
 import { SandboxedCodeWorker } from "./codemode/sandboxed.ts";
+import { type CodeModeCheck, checkCodeMode } from "./codemode/self-test.ts";
 import type { CodeWorker } from "./codemode/worker.ts";
 import { rulesPaths } from "./config/rules.ts";
 import { type ReloadOutcome, RulesHolder, watchRules } from "./config/rules-reload.ts";
@@ -109,12 +111,6 @@ export function listenerUrl(address: Pick<AddressInfo, "address" | "family" | "p
   return `http://${host}:${address.port}`;
 }
 
-/**
- * Loads the master key and proves it against the database. A missing,
- * malformed or wrong key leaves the vault closed, and the caller keeps the
- * agent plane down (spec: Fail-closed behavior). Anything else is a fault in
- * heel or the host and aborts the boot.
- */
 /** heel's install directory (the repo root): mounted read-only into the code-mode worker. */
 const INSTALL_DIR = fileURLToPath(new URL("..", import.meta.url));
 
@@ -168,6 +164,12 @@ function loadApprovalAdapters(
   );
 }
 
+/**
+ * Loads the master key and proves it against the database. A missing,
+ * malformed or wrong key leaves the vault closed, and the caller keeps the
+ * agent plane down. Anything else is a fault in heel or the host and aborts
+ * the boot.
+ */
 function openVault(
   db: HeelDb,
   options: Pick<StartOptions, "config" | "env" | "log">,
@@ -250,12 +252,12 @@ function logRulesOutcome(log: Logger, outcome: ReloadOutcome): void {
 /**
  * Loads the rules and watches them for edits. Invalid rules at boot don't
  * stop heel: every call is denied, and the human plane stays up so people
- * can fix the file and pause agents (spec: Fail-closed behavior).
+ * can fix the file and pause agents.
  */
 function startRules(
   options: Pick<StartOptions, "config" | "log" | "rulesDebounceMs">,
   closers: Closer[],
-  /** After every load: records rules-file changes made outside heel (2.4). */
+  /** After every load: records rules-file changes made outside heel. */
   notice: () => void,
 ): RulesHolder {
   const { config, log } = options;
@@ -346,7 +348,7 @@ function exposureFacts(config: HeelConfig): ExposureFacts {
 
 /**
  * `heel serve`: opens the store and vault, then binds the admin socket, the
- * human plane and the agent plane (spec: Architecture).
+ * human plane and the agent plane.
  *
  * The admin socket binds first, so a second heel on the same install stops
  * before it touches a TCP port. A plane that can't run safely is refused
@@ -362,7 +364,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
 
   try {
     const { orgId } = ensureInstall(store.db, now());
-    // Single-user install: OIDC sign-in (D13) creates users instead.
+    // Single-user install: OIDC sign-in creates users instead.
     ensureLocalOwner(store.db, orgId, now());
 
     for (const warning of [
@@ -393,11 +395,10 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
     if (watch) log.warn("watch mode: owner-rule and default-deny outcomes are logged, then run");
 
     // The operator's own OAuth clients sign built-in mail accounts in and
-    // refresh their tokens: Google for Gmail (D9a-1), Microsoft for Outlook
-    // (D9b). A configured client whose secret is missing stops the boot,
+    // refresh their tokens: Google for Gmail, Microsoft for Outlook. A configured client whose secret is missing stops the boot,
     // rather than letting every account of that provider lapse.
     const providerClients = loadProviderClients(config, options.env);
-    // heel's own Google client (roadmap 1.14), for when heel.yaml names none.
+    // heel's own Google client, for when heel.yaml names none.
     const builtInGoogle = builtInGoogleClient();
     const approvalAdapters = loadApprovalAdapters(config, options.env);
     const refreshers: RefresherLookup = (provider, clientId) => {
@@ -425,9 +426,11 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
     const vault = opening.ok ? opening.vault : null;
 
     let evictLocalServer: (accountId: string) => void = () => {};
-    // Background code-mode scripts (C6) live on the agent plane, which starts later; the admin
+    // Background code-mode scripts live on the agent plane, which starts later; the admin
     // socket and the human plane reach them through this.
     let backgroundRunner: BackgroundRunner | null = null;
+    // Whether code mode can run, checked once the agent plane starts; `heel status` shows it.
+    let codeModeCheck: CodeModeCheck | null = null;
     const admin = await startAdminServer({
       path: config.adminSocketPath,
       handle: createAdminHandler({
@@ -446,6 +449,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
           list: () => backgroundRunner?.list(null) ?? [],
           stopAgent: (agentId) => backgroundRunner?.stopAgent(orgId, agentId),
         },
+        codeMode: () => codeModeCheck?.health() ?? null,
         signIns: {
           google: providerClients.google !== null || builtInGoogle !== null,
           microsoft: providerClients.microsoft !== null,
@@ -455,11 +459,11 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
     });
     closers.push(() => admin.close());
 
-    // Sign-ins to remote MCP servers that want OAuth (D5c), shared by the
+    // Sign-ins to remote MCP servers that want OAuth, shared by the
     // Connections page and the upstream pool.
     const upstreamSignIns = new UpstreamSignIns();
 
-    // Approval notifications (D4d). The pipeline below hands each new request
+    // Approval notifications. The pipeline below hands each new request
     // to `notifier.approvalRequested`.
     const notify = notifySetup(config.notify, options.env);
     const notifier = new Notifier({
@@ -475,7 +479,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
     log.info({ channels: [...notifier.channels] }, "notifications ready");
 
     // Messages hidden from agents, by reason; `uncertain` is the fail-closed
-    // count (I-44). Shown on the Activity page (A5).
+    // count (I-44). Shown on the Activity page.
     const hideCounts = new HideCounts();
 
     const portProblem = publicUrlPortProblem(config);
@@ -537,7 +541,6 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
       agent = { state: "refused", reason: `vault unavailable: ${opening.reason}` };
       log.error({ reason: agent.reason }, "agent plane refused");
     } else {
-      // The decision pipeline (D3) with the D4 stores, and the MCP surface (D5a).
       // Local (stdio) MCP servers run in the sandbox; without it their calls are denied.
       const sandbox = await probeSandbox();
       if (!sandbox.ok) {
@@ -591,7 +594,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         linear: { vault: opening.vault, fetch },
         http: { vault: opening.vault, fetch },
         github: { vault: opening.vault, fetch },
-        // `heel run` (D8b): every command runs in the sandbox, so without it each is denied.
+        // `heel run`: every command runs in the sandbox, so without it each is denied.
         cli: {
           vault: opening.vault,
           sandbox: sandbox.ok ? sandbox.host : null,
@@ -626,26 +629,43 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         onHidden: (reason) => hideCounts.record(reason),
       });
       // Code mode everywhere, and heel never loads Monty itself: each script in its own
-      // worker under bubblewrap where that runs (D6b), otherwise on a locked-down helper
+      // worker under bubblewrap where that runs, otherwise on a locked-down helper
       // running Monty as WebAssembly, one per agent (a lane), a few at a time.
       let codeWorker: (agentId: string) => CodeWorker;
       let closeHelper: Closer | null = null;
+      // A one-line script now, on a worker of its own, so code mode that can't run here is in the
+      // log and `heel status` before an agent finds out (codemode/self-test.ts).
+      let check: CodeModeCheck;
       if (sandbox.ok) {
         const host = sandbox.host;
         codeWorker = () => new SandboxedCodeWorker({ host, installDir: INSTALL_DIR });
+        check = checkCodeMode({
+          worker: new SandboxedCodeWorker({ host, installDir: INSTALL_DIR }),
+          log,
+        });
       } else {
-        // Making the lanes starts nothing: a helper process starts on an agent's first script.
-        const lanes = new CodemodeLanes({
+        const helper: CodemodeHostOptions = {
           installDir: INSTALL_DIR,
           onExit: (exit) =>
             log.warn(
               { code: exit.code, signal: exit.signal, detail: exit.detail },
               "code-mode helper exited; its running scripts failed",
             ),
-        });
+        };
+        // Making the lanes starts nothing: a helper process starts on an agent's first script.
+        const lanes = new CodemodeLanes(helper);
         closeHelper = () => lanes.close();
         codeWorker = (agentId) => lanes.worker(agentId);
+        // The check's helper is its own, closed once it's done: it's never an agent's lane.
+        const probe = new CodemodeHost(helper);
+        check = checkCodeMode({
+          worker: new HostedCodeWorker(probe),
+          log,
+          release: () => probe.close(),
+        });
       }
+      codeModeCheck = check;
+      closers.push(() => check.close());
       // Parked scripts whose approvals expired while heel was down go now.
       if (vault !== null) purgeExpiredParked(store.db, now());
       const mcp = createMcpSurface({
@@ -658,15 +678,15 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
         version,
         now,
         slots,
-        // Tell the owner a proposal is waiting, the same way as a request (roadmap 2.1).
+        // Tell the owner a proposal is waiting, the same way as a request.
         onRuleProposal: (proposalId) => notifier.ruleProposed(proposalId),
-        // heel_history (2.10) suggests the same rules the owner's pages do.
+        // heel_history suggests the same rules the owner's pages do.
         learning: { rules, threshold: config.learning },
         onAgentRequest: (requestId) => notifier.agentRequested(requestId),
-        // A call that asks is held open until the owner decides, so the agent carries on by itself (2.12).
+        // A call that asks is held open until the owner decides, so the agent carries on by itself.
         approvalWait: DEFAULT_APPROVAL_WAIT,
         codeWorker,
-        // An asking script is saved, sealed with the vault, so the agent can resume it (C2).
+        // An asking script is saved, sealed with the vault, so the agent can resume it.
         ...(vault === null ? {} : { parking: { sealer: vault } }),
       });
       backgroundRunner = mcp.background;
@@ -696,7 +716,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
     }
 
     // The SIEM sink only reads the audit log on its own timer, so its state
-    // never reaches a decision (spec: Fail-closed behavior).
+    // never reaches a decision.
     if (config.audit.siem) {
       const siem = new SiemSink({
         db: store.db,
@@ -712,7 +732,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
       log.info({ sink: config.audit.siem.url.href }, "SIEM sink started");
     }
 
-    // The Cloudflare tunnel heel init set up (2.7), last: only once this heel owns the admin
+    // The Cloudflare tunnel heel init set up, last: only once this heel owns the admin
     // socket and both planes listen, so a second heel never starts a second tunnel. Being
     // last, it's also the first thing stopped on shutdown.
     if (config.tunnel.cloudflare !== null) {
@@ -741,7 +761,7 @@ export async function startHeel(options: StartOptions): Promise<RunningHeel> {
 }
 
 /**
- * Team sign-in (D13b): the IdP client is discovered on first use, so heel
+ * Team sign-in: the IdP client is discovered on first use, so heel
  * starts even while the IdP is unreachable; a failed discovery is retried on
  * the next sign-in. The client secret is read here, at boot, so a missing or
  * loosely permissioned secret file stops `heel serve` instead of quietly

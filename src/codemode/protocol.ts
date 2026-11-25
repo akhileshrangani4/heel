@@ -45,7 +45,7 @@ export function fromWireModules(modules: readonly WireModule[]): StubModule[] {
   }));
 }
 
-/** Pure: whether a step is the script's last: anything but a call or an await (C4) ends it. */
+/** Pure: whether a step is the script's last: anything but a call or an await ends it. */
 export function isFinal(step: { kind: string }): boolean {
   return step.kind !== "call" && step.kind !== "await";
 }
@@ -64,7 +64,7 @@ export type ToWorker =
       code: string;
       modules: WireModule[];
       limits: ScriptLimits;
-      /** A parked script to resume instead of running `code` (C2). */
+      /** A parked script to resume instead of running `code`. */
       snapshot?: string;
     }
   | Answer;

@@ -8,8 +8,8 @@ import type { FetchFn } from "../sign-in.ts";
 import { SlackClient, SlackNotFoundError, SlackRefused } from "./client.ts";
 
 /**
- * The Slack definition (D12b; spec: "Calendar, Slack, Linear, Notion,
- * Stripe"): heel's own tools on the Slack Web API with the account's token
+ * The Slack definition: heel's own tools on the Slack Web API with the
+ * account's token
  * (a bot or user token, connected with `heel connect slack --credential-stdin`).
  *
  * - Actions: `slack.read`, `slack.post`, `slack.update`, `slack.delete`, and

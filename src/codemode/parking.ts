@@ -6,7 +6,7 @@ import { approvals, type ParkedCall, parkedScripts } from "../store/schema.ts";
 import type { StubModule } from "./stubs.ts";
 
 /**
- * Parked code-mode scripts (code mode round 2, C2). When a call in a script
+ * Parked code-mode scripts. When a call in a script
  * asks for approval, heel saves the suspended script here instead of ending
  * it; once the approval is decided the agent sends `run_code({ resume })`
  * and the script carries on from that call.

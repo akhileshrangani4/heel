@@ -12,7 +12,7 @@ export interface Install {
 
 /**
  * Returns the install's org, creating it on first boot. v1 supports one org
- * per install (spec: Teams); more than one row means the database was edited
+ * per install; more than one row means the database was edited
  * by hand or by a newer heel, and guessing which org to serve would be unsafe.
  */
 export function ensureInstall(db: HeelDb, now: Date): Install {
@@ -31,8 +31,8 @@ export function ensureInstall(db: HeelDb, now: Date): Install {
 
 /**
  * Returns the user who owns agents on a single-user install, creating it the
- * first time. Passkey enrollment (D4) attaches to this user; OIDC installs
- * (D13) create users at sign-in instead.
+ * first time. Passkey enrollment attaches to this user; OIDC installs
+ * create users at sign-in instead.
  */
 export function ensureLocalOwner(db: HeelDb, orgId: string, now: Date): string {
   return db.transaction((tx) => {

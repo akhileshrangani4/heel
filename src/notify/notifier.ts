@@ -20,12 +20,12 @@ import type { ChannelSender, DeliveryTarget } from "./channels.ts";
 import { approvalUrl, type Notice, nextAttemptAfter, proposalUrl, requestUrl } from "./message.ts";
 
 /**
- * Sends notifications (spec: Notifications) from the outbox.
+ * Sends notifications from the outbox.
  *
  * When the pipeline creates a pending request it calls `approvalRequested`,
  * which queues one delivery per approver and channel and starts sending at
  * once. A new rule proposal does the same through `ruleProposed`, to the
- * agent's owner (roadmap 2.1). A timer picks up retries. Each delivery ends one of four ways:
+ * agent's owner. A timer picks up retries. Each delivery ends one of four ways:
  *
  * - sent;
  * - retried with backoff (`RETRY_DELAYS_MS`), then failed after the last try;

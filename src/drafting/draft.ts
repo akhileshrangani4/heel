@@ -1,8 +1,7 @@
 import type { Secret } from "../vault/secret.ts";
 
 /**
- * Rule drafting (D13b; spec: Teams, "Rule drafting"; README "You can
- * describe a rule in words"). A configured, OpenAI-compatible model turns a
+ * Rule drafting. A configured, OpenAI-compatible model turns a
  * description into a rules file.
  *
  * What the model is sent is exactly four things, and `draftMessages` is the
@@ -34,7 +33,7 @@ export class DraftingError extends Error {
   override readonly name = "DraftingError";
 }
 
-/** The actions each built-in provider maps its tools to (spec: Built-in providers). */
+/** The actions each built-in provider maps its tools to. */
 const PROVIDER_ACTIONS: Readonly<Record<string, readonly string[]>> = {
   gmail: ["email.send", "email.draft", "email.remove", "email.filter", "email.label"],
   outlook: [
@@ -85,12 +84,12 @@ const PROVIDER_ACTIONS: Readonly<Record<string, readonly string[]>> = {
   ],
 };
 
-/** The action names a set of providers has, sorted and without repeats. */
 /** Every action a built-in provider maps its tools to. */
 export const BUILT_IN_ACTIONS: ReadonlySet<string> = new Set(
   Object.values(PROVIDER_ACTIONS).flat(),
 );
 
+/** The action names a set of providers has, sorted and without repeats. */
 export function actionsFor(providers: readonly string[]): string[] {
   const out = new Set<string>();
   for (const provider of providers) {
