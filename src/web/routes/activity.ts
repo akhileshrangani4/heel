@@ -65,8 +65,8 @@ function isKind(value: string | undefined): value is AuditKind {
 
 /** What an agent change from the web app did, for the notice on Agents. */
 function doneMessage(query: Record<string, string>): string | null {
-  if ("revoked" in query) return "Revoked. Its tokens stopped working, and its scripts stopped.";
-  if ("workdir-added" in query) return "Folder added. Its heel run can work there now.";
+  if ("revoked" in query) return "Revoked.";
+  if ("workdir-added" in query) return "Folder added.";
   if ("workdir-removed" in query) return "Folder removed.";
   return null;
 }

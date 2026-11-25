@@ -94,7 +94,7 @@ describe("what the Modes page says", () => {
       .replace(/<[^>]+>/g, "")
       .replace(/\s+/g, " ");
 
-  it("names two modes, Enforce and Watch, and explains both", async () => {
+  it("names two modes, Enforce and Watch, and says what Watch lets through", async () => {
     const h = humanPlaneHarness();
     const admin = await h.signIn(await h.enroll());
     setMode(h.t.db, {
@@ -105,8 +105,7 @@ describe("what the Modes page says", () => {
       at: new Date(),
     });
     const page = text(await (await h.fetch("/modes", { as: admin })).text());
-    expect(page).toContain("Enforce: heel applies the rules");
-    expect(page).toContain("Watch: Calls your rules would deny");
+    expect(page).toContain("Calls your rules would deny or send for approval run anyway.");
     // record is stored, but shown as Watch: one name.
     expect(page).not.toMatch(/\b(shadow|record)\b/);
     expect(page).toContain("Switch Everyone (org default) to Enforce");

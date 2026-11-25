@@ -150,7 +150,7 @@ describe("pause and resume", () => {
     const before = await (await h.fetch("/pause", { as: sam })).text();
     expect(before).not.toContain("inbox-bot");
     expect(before).not.toContain("gmail-work");
-    expect(before).toContain("Nothing is paused");
+    expect(before).not.toContain("Paused by");
 
     // Everything is paused: that stops sam's calls too, so sam sees it, without a Resume.
     h.pause({ scope: "global", target: "" });

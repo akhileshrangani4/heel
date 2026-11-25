@@ -12,8 +12,8 @@ export const SETTINGS_CSS = `
 @media (prefers-reduced-motion:reduce){.ui-switch-track,.ui-switch-thumb{transition:none}}
 /* Touch: at least a 44px hit area around small controls, without moving them. */
 @media (pointer:coarse){
-  .ui-switch,.seg-item,.set-menu > summary,.set-fold > summary,.pause-everything .btn,.settings-row-foot .btn{position:relative}
-  .ui-switch::after,.seg-item::after,.set-menu > summary::after,.set-fold > summary::after,.pause-everything .btn::after,.settings-row-foot .btn::after{content:"";position:absolute;top:50%;left:50%;width:max(100%,44px);height:max(100%,44px);transform:translate(-50%,-50%)}
+  .ui-switch,.seg-item,.set-menu > summary,.pause-everything .btn,.settings-row-foot .btn{position:relative}
+  .ui-switch::after,.seg-item::after,.set-menu > summary::after,.pause-everything .btn::after,.settings-row-foot .btn::after{content:"";position:absolute;top:50%;left:50%;width:max(100%,44px);height:max(100%,44px);transform:translate(-50%,-50%)}
 }
 .pause-rule{margin:0 0 1rem}
 .pause-everything{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin:0 0 1rem}
@@ -61,13 +61,6 @@ table.person-table .person-name,table.person-table .person-meta{white-space:norm
   table.person-table .person-meta{grid-column:1 / -1}
   table.person-table .person-manage{grid-row:1;grid-column:2}
 }
-.set-fold{margin:.25rem 0 1rem;font-size:.9rem}
-.set-fold > summary{display:inline-flex;align-items:center;gap:.3rem;color:var(--muted);list-style:none;width:fit-content}
-.set-fold > summary::-webkit-details-marker{display:none}
-.set-fold > summary:hover{color:var(--text)}
-.set-fold .chev{width:.95rem;height:.95rem;transition:transform .15s}
-.set-fold[open] > summary .chev{transform:rotate(180deg)}
-.set-fold > :not(summary){margin-top:.5rem}
 .seg{display:inline-flex;align-items:center;gap:2px;padding:3px;border-radius:9px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line)}
 .seg form{display:inline-flex;margin:0}
 .seg-item{display:inline-flex;align-items:center;padding:.25rem .8rem;border:0;border-radius:7px;background:none;color:var(--muted);font:inherit;font-size:.85rem;line-height:1.4;white-space:nowrap;cursor:pointer}

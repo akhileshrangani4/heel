@@ -1,7 +1,6 @@
 import type { RuleRef } from "../../core/call.ts";
 import type { StandingScope } from "../../store/schema.ts";
 import { formatRelative, formatRule } from "./format.ts";
-import { howItWorks } from "./grants-page.ts";
 import { type Html, html, trusted } from "./html.ts";
 import {
   badge,
@@ -73,7 +72,7 @@ function stateBadge(row: StandingRow): Html {
 function stateDetail(row: StandingRow, now: Date): Html {
   return row.state === "active"
     ? html`Ends ${time(row.expiresAt)} (${formatRelative(row.expiresAt, now)})${
-        row.paused ? html`. Paused: calls in scope return “paused” anyway` : ""
+        row.paused ? html`. On hold until you resume` : ""
       }`
     : row.state === "revoked" && row.revoked
       ? html`Revoked by ${row.revoked.by} at ${time(row.revoked.at)}`
@@ -87,19 +86,12 @@ function stateDetail(row: StandingRow, now: Date): Html {
  * its parent rule's ask into allow; a deny above it still wins.
  */
 export function standingApprovalList(props: StandingApprovalListProps): Html {
-  const heading = html`<h1>Standing approvals</h1>
-    <p class="muted">Turns one rule's ask into allow for one agent, until it ends.</p>
-    ${howItWorks(
-      "How standing approvals work",
-      html`Each one turns a single rule's ask into allow for one agent until it ends. It lapses when
-      that rule is edited or deleted, and a deny above the rule still wins.`,
-    )}`;
+  const heading = html`<h1>Standing approvals</h1>`;
   if (!props.load.ok) {
     return html`${heading}
       ${notice(
         "error",
-        html`<p><strong>Standing approvals couldn't be loaded.</strong> ${props.load.message}</p>
-          <p><code>heel approvals revoke &lt;id&gt;</code> on the heel host still works.</p>`,
+        html`<p><strong>Standing approvals couldn't be loaded.</strong> ${props.load.message}</p>`,
       )}`;
   }
   const rows = props.load.rows;
@@ -108,7 +100,6 @@ export function standingApprovalList(props: StandingApprovalListProps): Html {
       <div class="req-empty">
         <span class="req-empty-icon agents-empty-icon">${trusted(CLOCK_CHECK)}</span>
         <p class="req-empty-title">No standing approvals</p>
-        <p class="muted">Approving a request for longer adds one here.</p>
       </div>`;
   }
   return html`${heading}

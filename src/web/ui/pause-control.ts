@@ -99,15 +99,9 @@ function outcomeNotice(outcome: PauseOutcome): Html | "" {
   const what = formatPauseScope(outcome.scope, outcome.target);
   switch (outcome.kind) {
     case "paused":
-      return notice("ok", html`<p>Paused ${what}. Calls in scope now return “paused”.</p>`);
+      return notice("ok", html`<p>Paused ${what}.</p>`);
     case "resumed":
-      return notice(
-        "ok",
-        html`<p>
-          Resumed ${what} after your passkey check. Pending requests can be approved again unless
-          they expired; nothing called during the pause is replayed.
-        </p>`,
-      );
+      return notice("ok", html`<p>Resumed ${what}.</p>`);
     case "resume-refused":
       return notice(
         "error",
@@ -116,10 +110,7 @@ function outcomeNotice(outcome: PauseOutcome): Html | "" {
     case "challenge-expired":
       return notice(
         "warn",
-        html`<p>
-          <strong>${what} is still paused.</strong> The passkey check took too long and expired.
-          Try resume again.
-        </p>`,
+        html`<p><strong>${what} is still paused.</strong> The passkey check expired. Try again.</p>`,
       );
   }
 }
@@ -129,17 +120,13 @@ function outcomeNotice(outcome: PauseOutcome): Html | "" {
  * assertion. The asymmetry is deliberate: pausing can only stop calls.
  */
 export function pauseControl(props: PauseControlProps): Html {
-  const heading = html`<h1>Pause</h1>
-    <p class="muted">
-      A paused agent or account gets “paused” on every call and reaches no upstream, even for a
-      call that was already approved. Nothing called during a pause is replayed after resume.
-    </p>`;
+  const heading = html`<h1>Pause</h1>`;
   if (!props.load.ok) {
     return html`${heading}
       ${notice(
         "error",
         html`<p><strong>Pause state couldn't be loaded.</strong> ${props.load.message}</p>
-          <p>Pausing still works: it only ever stops calls.</p>`,
+          <p>Pausing still works.</p>`,
       )}
       ${postForm(
         props.pauseForm,
@@ -180,13 +167,13 @@ export function pauseControl(props: PauseControlProps): Html {
       ? ""
       : html`<li class="pause-group-label" aria-hidden="true">${title}</li>${rows}`;
   return html`${heading} ${outcomeNotice(props.outcome)}
-    <p class="muted pause-rule">${active.length === 0 ? "Nothing is paused. Every call goes through the rules as usual. " : ""}Pausing is instant. <span id="${RESUME_HELP_ID}">Resuming asks for your passkey.</span></p>
+    <p class="muted pause-rule" id="${RESUME_HELP_ID}">Resuming asks for your passkey.</p>
     ${
       canPauseAll || global !== undefined
         ? html`<div class="card pause-everything${global === undefined ? "" : " is-paused"}">
             <div class="pause-row-text">
               <strong>Everything</strong>
-              <span class="muted">${global === undefined ? "Every agent and every account at once." : pausedBy(global)}</span>
+              ${global === undefined ? "" : html`<span class="muted">${pausedBy(global)}</span>`}
             </div>
             ${
               global === undefined

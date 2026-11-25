@@ -2,7 +2,6 @@ import { ceremonyButton } from "./ceremony.ts";
 import { dialog, dialogTrigger } from "./dialog.ts";
 import { formatRelative, formatUtc } from "./format.ts";
 import { type Html, html, trusted } from "./html.ts";
-import { CHEVRON_DOWN } from "./icons.ts";
 import { badge, type FormTarget, notice, postForm, scrollRegion } from "./layout.ts";
 import { btn } from "./shadcn/button.ts";
 
@@ -40,31 +39,21 @@ export function grantsPage(props: {
 }): Html {
   const outcome =
     props.outcome.kind === "granted"
-      ? notice("ok", html`<p>Granted. The agent can do what it names until it ends.</p>`)
+      ? notice("ok", html`<p>Granted.</p>`)
       : props.outcome.kind === "revoked"
-        ? notice("ok", html`<p>Revoked. It applies from the agent's next call.</p>`)
+        ? notice("ok", html`<p>Revoked.</p>`)
         : "";
   const now = props.now ?? new Date();
   return html`<div class="page-head">
       <div>
         <h1>Grants</h1>
-        <p class="muted">Let one agent do one narrow thing for a task, without asking each time.</p>
       </div>
       ${dialogTrigger({ dialogId: "grant-dialog", label: html`<span aria-hidden="true">+</span> New grant`, className: btn("default", "sm") })}
     </div>
-    ${howItWorks(
-      "How grants work",
-      html`A grant lets one agent do one narrow thing for a task you describe, without asking each
-      time. It answers your rules' asks and calls no rule covers; it never overrides a deny, your
-      organization's rules, or a request someone denied. It ends when it expires or you revoke it, and
-      you sign each one with your passkey.`,
-    )}
     ${outcome}
     ${dialog({
       id: "grant-dialog",
       title: "Grant something new",
-      description:
-        "Describe the task, write what the agent may do for it as a rule's match, and sign it with your passkey.",
       body: html`<form id="grant-form" class="grant-form dialog-form" onsubmit="return false">
         <label for="grant-agent">Agent</label>
         <select id="grant-agent" name="agent">
@@ -96,7 +85,6 @@ export function grantsPage(props: {
         ? html`<div class="req-empty">
             <span class="req-empty-icon agents-empty-icon">${trusted(TICKET_ICON)}</span>
             <p class="req-empty-title">No grants yet</p>
-            <p class="muted">A grant you sign shows up here until it ends.</p>
           </div>`
         : scrollRegion(
             "Grants",
@@ -134,11 +122,3 @@ export function grantsPage(props: {
 
 /** lucide's ticket. */
 const TICKET_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 17v2"/><path d="M13 11v2"/></svg>`;
-
-/** A small fold holding a page's full explanation, under its one-line intro. */
-export function howItWorks(label: string, body: Html): Html {
-  return html`<details class="how-fold">
-    <summary>${label}${trusted(CHEVRON_DOWN)}</summary>
-    <p class="muted">${body}</p>
-  </details>`;
-}

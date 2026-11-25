@@ -1,7 +1,6 @@
 import type { Mode } from "../../core/modes.ts";
 import { ceremonyButton } from "./ceremony.ts";
-import { type Html, html, trusted } from "./html.ts";
-import { CHEVRON_DOWN } from "./icons.ts";
+import { type Html, html } from "./html.ts";
 import { badge, type FormTarget, notice, postForm, scrollRegion } from "./layout.ts";
 
 /**
@@ -34,11 +33,8 @@ export function modeLabel(mode: Mode): "Enforce" | "Watch" {
   return mode === "enforce" ? "Enforce" : "Watch";
 }
 
-const DESCRIPTION: Record<"Enforce" | "Watch", string> = {
-  Enforce: "heel applies the rules: calls are allowed, sent for approval or denied.",
-  Watch:
-    "Calls your rules would deny or send for approval run anyway, and Activity shows what heel would have done.",
-};
+/** The one note a mode needs: Watch lets calls through that the rules would stop. */
+const WATCH_NOTE = "Calls your rules would deny or send for approval run anyway.";
 
 function tone(mode: Mode) {
   return mode === "enforce" ? "ok" : "warn";
@@ -58,8 +54,10 @@ function segmented(row: ModeRow, tighten: FormTarget, orgEffective: Mode): Html 
   if (current === "Enforce" && row.ownerId !== "" && orgEffective === "enforce") {
     return html`<span class="seg" aria-label="${row.label}'s mode">
         ${pressed("Enforce")}<span class="seg-item" aria-disabled="true">Watch</span>
-      </span>
-      <span class="muted seg-note">Follows the org default</span>`;
+      </span>${
+        // The badge already says so when the row has no mode of its own.
+        row.mode === null ? "" : html`<span class="muted seg-note">Follows the org default</span>`
+      }`;
   }
   const other =
     current === "Enforce"
@@ -109,30 +107,13 @@ export function modesPage(props: {
   const org = props.rows.find((r) => r.ownerId === "");
   const orgEffective = org?.effective ?? "enforce";
   return html`<h1>Modes</h1>
-    <p class="muted">Enforce applies your rules; Watch lets calls run and shows what heel would have done.</p>
-    <details class="set-fold">
-      <summary>How modes work${trusted(CHEVRON_DOWN)}</summary>
-      <ul>
-        <li><strong>Enforce</strong>: ${DESCRIPTION.Enforce}</li>
-        <li>
-          <strong>Watch</strong>: ${DESCRIPTION.Watch} Use it to try new rules on real traffic, then
-          switch to Enforce.
-        </li>
-      </ul>
-      <p class="muted">
-        Some things hold in both modes: pause, org rules, hidden mail, and calls heel can't check
-        safely are still stopped. A person's own mode can only be stricter than the org default.
-        Switching to Watch needs your passkey.
-      </p>
-    </details>
     ${
       props.watchFallback
         ? notice(
             "info",
             html`<p>
               heel was started with <code>--watch</code>, so anyone without a mode of their own is in
-              Watch mode. Switch the org default to Enforce here, or restart heel without
-              <code>--watch</code>.
+              Watch mode.
             </p>`,
           )
         : ""
@@ -165,7 +146,7 @@ export function modesPage(props: {
           return html`<tr>
             <th scope="row">${row.label}</th>
             <td class="mode-switch">${segmented(row, props.tighten, orgEffective)}</td>
-            <td>${badge(`${shown}${note}`, tone(row.effective))}<span class="muted mode-means">${DESCRIPTION[shown]}</span></td>
+            <td>${badge(`${shown}${note}`, tone(row.effective))}${shown === "Watch" ? html`<span class="muted mode-means">${WATCH_NOTE}</span>` : ""}</td>
           </tr>`;
         })}
       </tbody>

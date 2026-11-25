@@ -49,10 +49,7 @@ export function addDeviceControl(): Html {
     <div class="settings-row">
       <div class="settings-row-text">
         <h2 id="device-heading" class="settings-row-title">Add another device</h2>
-        <p class="muted" id="device-help">
-          Confirm with this passkey to get a one-time link. Open it within 15 minutes on the device
-          you want to add, such as your phone.
-        </p>
+        <p class="muted" id="device-help">Confirm with this passkey to get a one-time link.</p>
       </div>
       ${ceremonyButton({
         callback: { handler: "addDevice" },
