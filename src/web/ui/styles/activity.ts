@@ -25,7 +25,7 @@ export const ACTIVITY_CSS = `
 .act-chip-filter a:hover{background:var(--surface);color:var(--text)}
 .act-chip-filter svg{width:.85rem;height:.85rem}
 @media (max-width:36rem){
-  .act-filter-panel{position:fixed;left:.75rem;right:.75rem;top:auto;bottom:calc(5rem + env(safe-area-inset-bottom));width:auto;max-height:70vh;overflow-y:auto}
+  .act-filter-panel{position:fixed;left:calc(.75rem + var(--safe-l));right:calc(.75rem + var(--safe-r));top:auto;bottom:calc(5.4rem + var(--safe-b));width:auto;max-height:70dvh;overflow-y:auto}
   .act-filter-groups{grid-template-columns:1fr}
   .act-filter-group{max-height:none}
   .act-filter-panel{padding-bottom:0}
