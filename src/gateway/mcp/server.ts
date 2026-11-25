@@ -7,7 +7,7 @@ import {
   Server,
   type Tool,
 } from "@modelcontextprotocol/server";
-import { and, eq, gt } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { BackgroundRunner } from "../../codemode/background.ts";
 import {
   type ClaimedScript,
@@ -21,22 +21,14 @@ import {
 import { type CallRecord, runScript, type ScriptStatus } from "../../codemode/run.ts";
 import { accountModule } from "../../codemode/stubs.ts";
 import { type CodeWorker, DEFAULT_LIMITS } from "../../codemode/worker.ts";
-import { LEARNING_WINDOW_DAYS, type LearningThreshold } from "../../core/learning.ts";
+import type { LearningThreshold } from "../../core/learning.ts";
 import type { RuleSet } from "../../core/rules/evaluate.ts";
 import { RUN_ID_META_KEY } from "../../core/run-id.ts";
 import type { Logger } from "../../log.ts";
-import { ProposeRulesInput, pendingProposals, proposeRules } from "../../proposals/rules.ts";
-import {
-  pendingRequests,
-  RequestConnectionInput,
-  requestConnection,
-} from "../../requests/connection.ts";
 import { approvalStatusForAgent } from "../../store/approvals.ts";
 import type { HeelDb } from "../../store/db.ts";
 import { type AccountRecord, findAccount } from "../../store/directory.ts";
-import { historyFor, proposeSuggestion } from "../../store/learning.ts";
-import { SqlitePauseStore } from "../../store/pauses.ts";
-import { agentRequests, agentTokens, ruleProposals } from "../../store/schema.ts";
+import { agentTokens } from "../../store/schema.ts";
 import { accountsUsableBy } from "../../store/sharing.ts";
 import { errorShape } from "../../util/error-shape.ts";
 import { isBuiltInProvider, isMcpProvider } from "../../vault/connect.ts";
@@ -47,19 +39,9 @@ import type { Pipeline } from "../pipeline/pipeline.ts";
 import type { Definition, DefinitionRegistry, PauseStore } from "../pipeline/ports.ts";
 import { type SandboxSlots, UNLIMITED_SLOT } from "../sandbox-slots.ts";
 import { clientNameFrom } from "./client-info.ts";
-import { CONNECTED_NOTE_MS, connectedKeyNote } from "./connected.ts";
+import { heelTools } from "./heel-tools.ts";
 import {
   directName,
-  HEEL_ACCOUNTS,
-  HEEL_ACCOUNTS_TOOL,
-  HEEL_HISTORY,
-  HEEL_HISTORY_TOOL,
-  HEEL_PROPOSE_RULES,
-  HEEL_PROPOSE_RULES_TOOL,
-  HEEL_REQUEST_CONNECTION,
-  HEEL_REQUEST_CONNECTION_TOOL,
-  HEEL_STATUS,
-  HEEL_STATUS_TOOL,
   HEEL_STUBS,
   HEEL_STUBS_TOOL,
   listedTool,
@@ -70,16 +52,7 @@ import {
 } from "./names.ts";
 import { decisionResult, toolResult, usedDecision } from "./results.ts";
 import { SETUP_PROMPT_NAME, setupPrompt } from "./setup-prompt.ts";
-import {
-  ACCOUNTS_CHANGED,
-  type AccountsWait,
-  type ApprovalWait,
-  type Beat,
-  NO_APPROVAL_WAIT,
-  NOTHING_WAITING,
-  nothingChanged,
-  waitFor,
-} from "./wait.ts";
+import { type ApprovalWait, type Held, NO_APPROVAL_WAIT, waitFor } from "./wait.ts";
 
 /**
  * heel's MCP endpoints on the agent plane.
@@ -90,9 +63,9 @@ import {
  *
  * - `tools/list`: the tools of the accounts the agent's owner owns, as each
  *   account's definition lists them (a passthrough asks its server now),
- *   plus `heel_status`;
+ *   plus heel's own tools (heel-tools.ts);
  * - `tools/call`: every call goes through the decision pipeline as one
- *   `Call` with `surface: "mcp"`; `heel_status` only reads an approval.
+ *   `Call` with `surface: "mcp"`; heel answers its own tools itself.
  */
 
 /** Which tools a request sees: one account's, or every account's prefixed. */
@@ -132,15 +105,6 @@ export interface McpSurfaceDeps {
   approvalWait?: ApprovalWait;
 }
 
-/** What a held call needs from its request: the client going away, and a way to say it's still waiting. */
-interface Held {
-  agentId: string;
-  signal: AbortSignal;
-  beat: Beat;
-  /** When the call stops waiting (epoch ms). */
-  until: number;
-}
-
 /** How many calls one agent may have held at once; more answer at once. */
 export const MAX_HELD_PER_AGENT = 8;
 
@@ -175,16 +139,6 @@ export function lastExpression(output: unknown): { output?: unknown; output_omit
   return { output };
 }
 
-/** heel's own tools, listed on every MCP scope. */
-const HEEL_TOOLS = [
-  HEEL_STATUS_TOOL,
-  HEEL_ACCOUNTS_TOOL,
-  HEEL_HISTORY_TOOL,
-  HEEL_PROPOSE_RULES_TOOL,
-  HEEL_REQUEST_CONNECTION_TOOL,
-];
-const HEEL_TOOL_NAMES: ReadonlySet<string> = new Set(HEEL_TOOLS.map((tool) => tool.name));
-
 export interface McpSurface {
   /** Whether bare `/mcp` serves code mode: only with a sandboxed worker. */
   readonly codeMode: boolean;
@@ -201,7 +155,6 @@ const WAITING_NOTE = "Waiting for approval on heel's approval page.";
 type ListingAccount = { account: AccountRecord; tools: NonNullable<Definition["tools"]> };
 
 export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
-  const pauses = deps.pauses ?? new SqlitePauseStore();
   const now = deps.now ?? (() => new Date());
   const approvalWait = deps.approvalWait ?? NO_APPROVAL_WAIT;
   /** Calls held right now, per agent. */
@@ -266,17 +219,17 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     const listed = await tools(AbortSignal.timeout(10_000));
     const builtIn = isBuiltInProvider(account.provider);
     return listed
-      .filter((tool) => !HEEL_TOOL_NAMES.has(tool.name))
+      .filter((tool) => !heel.has(tool.name))
       .map((tool) => listedTool(tool, rename(tool.name), builtIn));
   }
 
   async function listTools(agent: AuthenticatedAgent, scope: McpScope): Promise<Tool[]> {
-    if (scope.kind === "code") return [RUN_CODE_TOOL, HEEL_STUBS_TOOL, ...HEEL_TOOLS];
+    if (scope.kind === "code") return [RUN_CODE_TOOL, HEEL_STUBS_TOOL, ...heelListed];
     const accounts = accountsWithTools(agent);
     if (scope.kind === "account") {
       const listing = accounts.find(({ account }) => account.alias === scope.alias);
       const tools = listing === undefined ? [] : await accountTools(listing, (name) => name);
-      return [...tools, ...HEEL_TOOLS];
+      return [...tools, ...heelListed];
     }
     const perAccount = await Promise.all(
       accounts.map(async (listing) => {
@@ -293,7 +246,7 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
         }
       }),
     );
-    return [...perAccount.flat(), ...HEEL_TOOLS];
+    return [...perAccount.flat(), ...heelListed];
   }
 
   /** Every account the agent may use, as a Python module. */
@@ -332,6 +285,10 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
           now,
         })
       : null;
+
+  // heel's own tools: listed last on every scope, and answered before any account's.
+  const heel = heelTools({ deps, now, background, hold, canHold });
+  const heelListed = [...heel.values()].map(({ tool }) => tool);
 
   async function heelStubs(
     agent: AuthenticatedAgent,
@@ -547,327 +504,6 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     };
   }
 
-  /** The agent's own decided requests and heel's suggestions for it. */
-  function heelHistory(agent: AuthenticatedAgent): CallToolResult {
-    const { decisions, suggestions } = historyFor(
-      {
-        db: deps.db,
-        rules: deps.learning?.rules.set ?? null,
-        threshold: deps.learning?.threshold ?? null,
-      },
-      agent,
-      now(),
-    );
-    const body = {
-      window_days: LEARNING_WINDOW_DAYS,
-      decisions,
-      suggestions: suggestions.map((s) => ({
-        suggestion: s.key,
-        // Only what heel drew from this agent's own calls: the conditions heel adds from the
-        // owner's rule that asked stay with heel, as the owner's file always does.
-        decision: s.decision,
-        match: s.own,
-        evidence: s.evidence,
-      })),
-      message:
-        suggestions.length === 0
-          ? "No rule to suggest yet. Propose one with heel_propose_rules only if your owner keeps approving the same kind of call."
-          : 'To ask for a suggested rule, call heel_propose_rules with {"suggestion": "<its suggestion id>"}. heel writes the rule, adds the conditions of your owner\'s rule that asked, and places it before that rule; nothing changes until your owner adds it with a passkey.',
-    };
-    return { content: [{ type: "text", text: JSON.stringify(body) }], structuredContent: body };
-  }
-
-  /**
-   * An agent asks for one of heel's suggestions for it by id: heel
-   * drafts the rule again from the owner's decisions and places it right
-   * before the rule that asked, exactly as the owner's own Review would.
-   */
-  function proposeSuggestionTool(
-    agent: AuthenticatedAgent,
-    args: Record<string, unknown>,
-    refuse: (body: Record<string, unknown>) => CallToolResult,
-  ): CallToolResult {
-    const key = args["suggestion"];
-    if (typeof key !== "string" || Object.keys(args).length !== 1) {
-      return refuse({
-        status: "invalid",
-        problems: ["suggestion: send only the id of a rule heel_history suggests, as a string"],
-      });
-    }
-    const learning = {
-      db: deps.db,
-      rules: deps.learning?.rules.set ?? null,
-      threshold: deps.learning?.threshold ?? null,
-    };
-    const outcome = proposeSuggestion(
-      learning,
-      { orgId: agent.orgId, userId: agent.ownerId },
-      key,
-      now(),
-      agent.agentId,
-    );
-    if (outcome === null) {
-      return refuse({
-        status: "invalid",
-        problems: ["suggestion: heel_history doesn't suggest that for you now"],
-      });
-    }
-    if (!outcome.ok) return refuse({ status: "invalid", problems: outcome.problems });
-    deps.log.info(
-      { agent: agent.agentName, proposal: outcome.proposalId },
-      "suggested rule proposed",
-    );
-    deps.onRuleProposal?.(outcome.proposalId);
-    const answer = {
-      status: "proposed",
-      proposalId: outcome.proposalId,
-      expiresAt: outcome.expiresAt.toISOString(),
-      message:
-        "Your owner will see heel's suggested rule on heel's approval page and can add it with a passkey. " +
-        "Nothing changes until then.",
-    };
-    return { content: [{ type: "text", text: JSON.stringify(answer) }], structuredContent: answer };
-  }
-
-  /** Stores a rule proposal for the agent's owner; the target file is never the agent's choice. */
-  function proposeRulesTool(
-    agent: AuthenticatedAgent,
-    args: Record<string, unknown>,
-  ): CallToolResult {
-    const refuse = (body: Record<string, unknown>): CallToolResult => ({
-      isError: true,
-      content: [{ type: "text", text: JSON.stringify(body) }],
-      structuredContent: body,
-    });
-    const paused = pauses.find(deps.db, {
-      orgId: agent.orgId,
-      agentId: agent.agentId,
-      ownerId: agent.ownerId,
-      account: "",
-      provider: "",
-    });
-    if (paused !== null) return refuse({ status: "paused", scope: paused });
-    if ("suggestion" in args) return proposeSuggestionTool(agent, args, refuse);
-    const input = ProposeRulesInput.safeParse(args);
-    if (!input.success) {
-      return refuse({
-        status: "invalid",
-        problems: input.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`),
-      });
-    }
-    const outcome = proposeRules(
-      deps.db,
-      { orgId: agent.orgId, ownerId: agent.ownerId, agentId: agent.agentId },
-      input.data,
-      now(),
-    );
-    if (!outcome.ok) return refuse({ status: "invalid", problems: outcome.problems });
-    deps.log.info({ agent: agent.agentName, proposal: outcome.proposalId }, "rules proposed");
-    deps.onRuleProposal?.(outcome.proposalId);
-    const answer = {
-      status: "proposed",
-      proposalId: outcome.proposalId,
-      expiresAt: outcome.expiresAt.toISOString(),
-      message:
-        "Your owner will see this on heel's approval page and can add it with a passkey. " +
-        "Nothing changes until then; calls it would allow are still decided as they are now.",
-    };
-    return { content: [{ type: "text", text: JSON.stringify(answer) }], structuredContent: answer };
-  }
-
-  /** Stores a connection request for the agent's owner; nothing is connected or contacted. */
-  function requestConnectionTool(
-    agent: AuthenticatedAgent,
-    args: Record<string, unknown>,
-  ): CallToolResult {
-    const refuse = (body: Record<string, unknown>): CallToolResult => ({
-      isError: true,
-      content: [{ type: "text", text: JSON.stringify(body) }],
-      structuredContent: body,
-    });
-    const paused = pauses.find(deps.db, {
-      orgId: agent.orgId,
-      agentId: agent.agentId,
-      ownerId: agent.ownerId,
-      account: "",
-      provider: "",
-    });
-    if (paused !== null) return refuse({ status: "paused", scope: paused });
-    const input = RequestConnectionInput.safeParse(args);
-    if (!input.success) {
-      return refuse({
-        status: "invalid",
-        problems: input.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`),
-      });
-    }
-    const outcome = requestConnection(
-      deps.db,
-      { orgId: agent.orgId, ownerId: agent.ownerId, agentId: agent.agentId },
-      input.data,
-      now(),
-    );
-    if (!outcome.ok) return refuse({ status: "refused", problem: outcome.problem });
-    deps.log.info({ agent: agent.agentName, request: outcome.requestId }, "connection requested");
-    deps.onAgentRequest?.(outcome.requestId);
-    const answer = {
-      status: "requested",
-      requestId: outcome.requestId,
-      expiresAt: outcome.expiresAt.toISOString(),
-      message:
-        "Your owner will see this on heel's approval page and can connect it with a passkey. " +
-        "Nothing is connected until then. Once it is, the account's tools appear and your owner's rules decide what you can do.",
-    };
-    return { content: [{ type: "text", text: JSON.stringify(answer) }], structuredContent: answer };
-  }
-
-  /** The ids of what this agent asked for that still waits for its owner, as one string. */
-  function waitingKey(agent: AuthenticatedAgent): string {
-    // Read-only and narrow, as it runs every poll; marking rows expired is left to heelAccounts.
-    const at = now();
-    const requests = deps.db
-      .select({ id: agentRequests.id })
-      .from(agentRequests)
-      .where(
-        and(
-          eq(agentRequests.agentId, agent.agentId),
-          eq(agentRequests.status, "pending"),
-          gt(agentRequests.expiresAt, at),
-        ),
-      )
-      .all();
-    const proposals = deps.db
-      .select({ id: ruleProposals.id })
-      .from(ruleProposals)
-      .where(
-        and(
-          eq(ruleProposals.agentId, agent.agentId),
-          eq(ruleProposals.origin, "agent"),
-          eq(ruleProposals.status, "pending"),
-          gt(ruleProposals.expiresAt, at),
-        ),
-      )
-      .all();
-    return [...requests, ...proposals]
-      .map((row) => row.id)
-      .sort()
-      .join(",");
-  }
-
-  /**
-   * What a held `heel_accounts` watches: what the agent asked for that still
-   * waits, and each account it can use with its status. An account its owner
-   * connects another way (`heel connect` for a key, leaving the request open)
-   * or reconnects changes it too.
-   */
-  function watched(agent: AuthenticatedAgent): { waiting: string; key: string } {
-    const waiting = waitingKey(agent);
-    const usable = accountsUsableBy(deps.db, agent.orgId, agent.ownerId)
-      .map((a) => `${a.alias}:${a.status}`)
-      .join(",");
-    return { waiting, key: `${waiting};${usable}` };
-  }
-
-  /**
-   * `heel_accounts` with `wait: true`: held until something this agent
-   * asked for is decided or expires, or one of its accounts connects or
-   * changes, so it learns of a connection or a rule without its person
-   * telling it to look again. Nothing waiting answers at once. The answer's
-   * `wait` says which happened, so a window that ends with nothing changed
-   * can't be read as the owner's answer.
-   */
-  async function heelAccountsWaiting(
-    agent: AuthenticatedAgent,
-    args: Record<string, unknown>,
-    held: Held,
-  ): Promise<CallToolResult> {
-    if (args["wait"] !== true) return heelAccounts(agent);
-    const before = watched(agent);
-    let wait = NOTHING_WAITING;
-    if (before.waiting !== "") {
-      const started = Date.now();
-      const holding = canHold(held);
-      const changed = await hold(held, () => watched(agent).key !== before.key);
-      wait = changed ? ACCOUNTS_CHANGED : nothingChanged(holding ? Date.now() - started : null);
-    }
-    if (!agentStillLive(deps.db, agent, now())) {
-      throw new ProtocolError(ProtocolErrorCode.InvalidRequest, "This agent is no longer active");
-    }
-    return heelAccounts(agent, wait);
-  }
-
-  /** The accounts this agent asked for that its owner connected in the last day. */
-  function justConnected(agent: AuthenticatedAgent, at: Date): Set<string> {
-    const rows = deps.db
-      .select({ accountId: agentRequests.accountId })
-      .from(agentRequests)
-      .where(
-        and(
-          eq(agentRequests.agentId, agent.agentId),
-          eq(agentRequests.status, "approved"),
-          gt(agentRequests.decidedAt, new Date(at.getTime() - CONNECTED_NOTE_MS)),
-        ),
-      )
-      .all();
-    return new Set(rows.flatMap((row) => (row.accountId === null ? [] : [row.accountId])));
-  }
-
-  /** The agent's accounts and what it asked for that still waits. Names only. */
-  function heelAccounts(agent: AuthenticatedAgent, wait?: AccountsWait): CallToolResult {
-    const at = now();
-    const asked = justConnected(agent, at);
-    const answer = {
-      // First, so the agent reads how the wait ended before the lists.
-      ...(wait === undefined ? {} : { wait }),
-      accounts: accountsUsableBy(deps.db, agent.orgId, agent.ownerId).map((a) => {
-        // A key it asked for, now working: what the owner can do with other copies of it.
-        const next =
-          asked.has(a.id) && a.status === "active" ? connectedKeyNote(a.provider, a.alias) : null;
-        return {
-          alias: a.alias,
-          // A remote MCP server's provider id carries heel's own key; the agent sees "mcp".
-          service: isMcpProvider(a.provider) ? "mcp" : a.provider,
-          status: a.status,
-          ...(next === null ? {} : { next }),
-        };
-      }),
-      waiting: {
-        connections: pendingRequests(deps.db, agent.ownerId, at)
-          .filter((r) => r.agentId === agent.agentId)
-          .map((r) => ({
-            alias: r.details.alias,
-            service: r.details.provider,
-            expiresAt: r.expiresAt.toISOString(),
-          })),
-        ruleProposals: pendingProposals(deps.db, agent.ownerId, at)
-          // Only its own: heel's suggestions about it aren't the agent's to see.
-          .filter((p) => p.agentId === agent.agentId && p.origin === "agent")
-          .map((p) => ({ proposalId: p.id, expiresAt: p.expiresAt.toISOString() })),
-      },
-      ...(deps.approvalsUrl === undefined ? {} : { approveAt: deps.approvalsUrl }),
-    };
-    return { content: [{ type: "text", text: JSON.stringify(answer) }], structuredContent: answer };
-  }
-
-  function heelStatus(agent: AuthenticatedAgent, args: Record<string, unknown>): CallToolResult {
-    if (typeof args["script_id"] === "string") {
-      const view = background?.view(agent, args["script_id"]) ?? null;
-      const answer = view ?? { scriptId: args["script_id"], status: "unknown" };
-      return {
-        ...(view === null && { isError: true }),
-        content: [{ type: "text", text: JSON.stringify(answer) }],
-        structuredContent: answer as Record<string, unknown>,
-      };
-    }
-    const approvalId = typeof args["approval_id"] === "string" ? args["approval_id"] : "";
-    const status = approvalStatusForAgent(deps.db, agent, approvalId, now());
-    const answer = { approvalId, status: status ?? "unknown" };
-    return {
-      ...(status === null && { isError: true }),
-      content: [{ type: "text", text: JSON.stringify(answer) }],
-      structuredContent: answer,
-    };
-  }
-
   async function callTool(
     agent: AuthenticatedAgent,
     scope: McpScope,
@@ -879,11 +515,8 @@ export function createMcpSurface(deps: McpSurfaceDeps): McpSurface {
     held: Held,
   ): Promise<CallToolResult> {
     const args = params.arguments ?? {};
-    if (params.name === HEEL_STATUS) return heelStatus(agent, args);
-    if (params.name === HEEL_ACCOUNTS) return heelAccountsWaiting(agent, args, held);
-    if (params.name === HEEL_HISTORY) return heelHistory(agent);
-    if (params.name === HEEL_PROPOSE_RULES) return proposeRulesTool(agent, args);
-    if (params.name === HEEL_REQUEST_CONNECTION) return requestConnectionTool(agent, args);
+    const own = heel.get(params.name);
+    if (own !== undefined) return own.call(agent, args, held);
     if (scope.kind === "code") {
       if (params.name === RUN_CODE)
         return runCodeHeld(agent, args, params._meta?.[RUN_ID_META_KEY], held);
