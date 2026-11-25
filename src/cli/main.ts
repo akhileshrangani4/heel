@@ -6,7 +6,13 @@ import { parseArgs } from "node:util";
 import { parseDocument } from "yaml";
 import { z } from "zod";
 import { AdminClientError, adminCall } from "../admin/client.ts";
-import { type AdminRequest, AUDIT_EXPORT_MAX_PAGE } from "../admin/protocol.ts";
+import {
+  type AdminMethod,
+  type AdminRequest,
+  type AdminRequestOf,
+  type AdminResults,
+  AUDIT_EXPORT_MAX_PAGE,
+} from "../admin/protocol.ts";
 import { AdminSocketError } from "../admin/server.ts";
 import { defaultHeelHome } from "../config/load.ts";
 import type { HeelConfig, ListenAddress } from "../config/schema.ts";
@@ -38,37 +44,6 @@ import { RULES_USAGE, rulesCommand } from "./rules.ts";
 export { type CliIo, EXIT } from "./common.ts";
 
 import { runCommand } from "./run.ts";
-
-/** What the list admin methods return, as the tables read it. */
-interface AgentRow {
-  name: string;
-  owner: string;
-  createdAt: string;
-  revokedAt: string | null;
-  tokenExpiresAt: string | null;
-  hasToken: boolean;
-}
-interface AccountRow {
-  alias: string;
-  provider: string;
-  owner: string;
-  status: string;
-  credentialDelivery: string | null;
-}
-interface PauseRowView {
-  scope: string;
-  targetName: string;
-  pausedAt: string;
-  pausedBy: string;
-}
-interface StandingRowView {
-  id: string;
-  agent: string;
-  account: string | null;
-  scope: string;
-  expiresAt: string;
-  revokedAt: string | null;
-}
 
 export const USAGE = `usage:
   heel init [--home <dir>] [--yes]        set heel up: its home, master key, heel.yaml
@@ -266,7 +241,10 @@ import { agentMcpUrl } from "../gateway/mcp-url.ts";
 export { agentMcpUrl };
 
 /** Sends one admin request; a refusal becomes a RefusedError carrying heel's message. */
-async function admin(config: HeelConfig, request: AdminRequest): Promise<unknown> {
+async function admin<M extends AdminMethod>(
+  config: HeelConfig,
+  request: AdminRequestOf<M>,
+): Promise<AdminResults[M]> {
   const response = await adminCall(config.adminSocketPath, request);
   if (!response.ok) throw new RefusedError(`${response.error.message} (${response.error.code})`);
   return response.result;
@@ -643,7 +621,7 @@ async function agentCommand(args: string[], io: CliIo): Promise<number> {
         io.stdout.write(`${JSON.stringify(listed, null, 2)}\n`);
         return EXIT.ok;
       }
-      const rows = (listed as AgentRow[]).map((a) => [
+      const rows = listed.map((a) => [
         a.name,
         a.owner,
         a.revokedAt === null ? "active" : `revoked ${shortTime(a.revokedAt)}`,
@@ -854,7 +832,7 @@ async function accountCommand(args: string[], io: CliIo): Promise<number> {
           print(listed);
           return EXIT.ok;
         }
-        const rows = (listed as AccountRow[]).map((a) => [
+        const rows = listed.map((a) => [
           a.alias,
           a.provider,
           a.owner,
@@ -1104,7 +1082,7 @@ async function pauseCommand(args: string[], io: CliIo): Promise<number> {
       io.stdout.write(`${JSON.stringify(listed, null, 2)}\n`);
       return EXIT.ok;
     }
-    const rows = (listed as PauseRowView[]).map((p) => [
+    const rows = listed.map((p) => [
       p.scope === "global" ? "all" : p.scope,
       p.targetName,
       shortTime(p.pausedAt),
@@ -1146,7 +1124,7 @@ async function approvalsCommand(args: string[], io: CliIo): Promise<number> {
           io.stdout.write(`${JSON.stringify(listed, null, 2)}\n`);
           return EXIT.ok;
         }
-        const rows = (listed as StandingRowView[]).map((a) => [
+        const rows = listed.map((a) => [
           a.id,
           a.agent,
           a.account ?? "",
@@ -1560,34 +1538,15 @@ async function statusCommand(args: string[], io: CliIo): Promise<number> {
   );
   if (positionals.length > 0) throw new UsageError(`unexpected argument "${positionals[0]}"`);
   const config = configFrom(io, values.config);
-  const ping = (await admin(config, { method: "ping" })) as {
-    version?: string;
-    vault?: string;
-    passkeys?: number;
-    notifiedDevices?: number;
-    codeMode?: CodeModeStatus;
-  };
+  // An older heel may leave some of these out.
+  const ping: Partial<AdminResults["ping"]> = await admin(config, { method: "ping" });
   const codeMode = codeModeStatus(ping.codeMode);
-  const approvals = (await admin(config, { method: "approvals.list" })) as {
-    status: string;
-    summary: string;
-    url: string;
-  }[];
-  const agents = (await admin(config, { method: "agent.list" })) as { revokedAt: string | null }[];
-  const accounts = (await admin(config, { method: "account.list" })) as { status: string }[];
-  const pauses = (await admin(config, { method: "pause.list" })) as {
-    scope: string;
-    targetName: string;
-  }[];
-  const proposals = (await admin(config, { method: "proposals.list" })) as {
-    summary: string;
-    url: string;
-  }[];
-  const scripts = (await admin(config, { method: "scripts.list" })) as {
-    agentName: string;
-    status: string;
-    calls: number;
-  }[];
+  const approvals = await admin(config, { method: "approvals.list" });
+  const agents = await admin(config, { method: "agent.list" });
+  const accounts = await admin(config, { method: "account.list" });
+  const pauses = await admin(config, { method: "pause.list" });
+  const proposals = await admin(config, { method: "proposals.list" });
+  const scripts = await admin(config, { method: "scripts.list" });
   const waiting = approvals.filter((a) => a.status === "pending");
   const lines = [
     `heel ${ping.version ?? ""} is running${ping.vault === "unavailable" ? ", but the vault is closed (no master key)" : codeMode.warning}.`,

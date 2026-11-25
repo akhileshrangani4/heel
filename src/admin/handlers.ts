@@ -52,8 +52,9 @@ import {
 } from "../web/ui/summary.ts";
 import {
   type AdminErrorCode,
+  type AdminMethod,
   type AdminRequest,
-  type AdminResponse,
+  type AdminRequestOf,
   adminError,
   adminOk,
 } from "./protocol.ts";
@@ -114,12 +115,14 @@ const CONNECT_ERROR_CODES: Record<ConnectErrorCode, AdminErrorCode> = {
   vault_unavailable: "vault_unavailable",
 };
 
-class OwnerNotFound extends Error {
-  override readonly name = "OwnerNotFound";
-}
-
-class TargetNotFound extends Error {
-  override readonly name = "TargetNotFound";
+/** An expected refusal, answered as an error response with its code. */
+class Refused extends Error {
+  override readonly name = "Refused";
+  readonly code: AdminErrorCode;
+  constructor(code: AdminErrorCode, message: string) {
+    super(message);
+    this.code = code;
+  }
 }
 
 function resolveOwner(db: HeelDb, orgId: string, name: string | undefined): string {
@@ -129,7 +132,7 @@ function resolveOwner(db: HeelDb, orgId: string, name: string | undefined): stri
     .from(users)
     .where(and(eq(users.orgId, orgId), eq(users.name, ownerName)))
     .get();
-  if (!row) throw new OwnerNotFound(`no user named "${ownerName}"`);
+  if (!row) throw new Refused("not_found", `no user named "${ownerName}"`);
   return row.id;
 }
 
@@ -153,7 +156,7 @@ function pauseKeyFor(db: HeelDb, orgId: string, params: PauseParams): PauseKey {
         .from(accounts)
         .where(and(eq(accounts.orgId, orgId), eq(accounts.alias, params.name)))
         .get();
-      if (!account) throw new TargetNotFound(`no account named "${params.name}"`);
+      if (!account) throw new Refused("not_found", `no account named "${params.name}"`);
       return { scope: "account", target: account.alias };
     }
   }
@@ -181,53 +184,48 @@ function stopScriptsOf(deps: AdminDeps, db: HeelDb, orgId: string, name: string)
   if (agent !== undefined) deps.backgroundScripts?.stopAgent(agent.id);
 }
 
-function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminResponse {
+/** One function per admin method; what each returns is that method's result (`AdminResults`). */
+function handlersFor(deps: AdminDeps, now: Date) {
   const { db, orgId } = deps;
-  switch (request.method) {
-    case "ping":
-      return adminOk({
-        version: deps.version,
-        vault: deps.vault ? "open" : "unavailable",
-        // For `heel stop` and `heel update`: which process to signal, and
-        // whether it runs in the background where heel may restart it.
-        pid: process.pid,
-        background: deps.background ?? false,
-        // For `heel status`, and an agent setting heel up: whether anyone can approve yet.
-        passkeys:
-          db.select({ n: count() }).from(passkeys).where(eq(passkeys.orgId, orgId)).get()?.n ?? 0,
-        notifiedDevices:
-          db
-            .select({ n: count() })
-            .from(pushSubscriptions)
-            .where(eq(pushSubscriptions.orgId, orgId))
-            .get()?.n ?? 0,
-        // For `heel status`: a heel whose code mode can't run says so, not just "running".
-        codeMode: deps.codeMode?.() ?? null,
-      });
-    case "agent.add": {
+  return {
+    ping: () => ({
+      version: deps.version,
+      vault: deps.vault ? "open" : "unavailable",
+      // For `heel stop` and `heel update`: which process to signal, and
+      // whether it runs in the background where heel may restart it.
+      pid: process.pid,
+      background: deps.background ?? false,
+      // For `heel status`, and an agent setting heel up: whether anyone can approve yet.
+      passkeys:
+        db.select({ n: count() }).from(passkeys).where(eq(passkeys.orgId, orgId)).get()?.n ?? 0,
+      notifiedDevices:
+        db
+          .select({ n: count() })
+          .from(pushSubscriptions)
+          .where(eq(pushSubscriptions.orgId, orgId))
+          .get()?.n ?? 0,
+      // For `heel status`: a heel whose code mode can't run says so, not just "running".
+      codeMode: deps.codeMode?.() ?? null,
+    }),
+    "agent.add": (request) => {
       const ownerId = resolveOwner(db, orgId, request.params.owner);
       const { name, expiresInDays } = request.params;
-      return adminOk(
-        addAgent(
-          db,
-          { orgId, ownerId, name, ...(expiresInDays === undefined ? {} : { expiresInDays }) },
-          now,
-        ),
+      return addAgent(
+        db,
+        { orgId, ownerId, name, ...(expiresInDays === undefined ? {} : { expiresInDays }) },
+        now,
       );
-    }
-    case "agent.workdirs":
-      return adminOk(
-        setWorkRoots(
-          db,
-          orgId,
-          request.params.name,
-          request.params.workRoots,
-          deps.home === undefined ? [] : [deps.home],
-        ),
-      );
-    case "agent.workdirs.list":
-      return adminOk(workRootsByName(db, orgId, request.params.name));
-    case "agent.rotate": {
+    },
+    "agent.workdirs": (request) =>
+      setWorkRoots(
+        db,
+        orgId,
+        request.params.name,
+        request.params.workRoots,
+        deps.home === undefined ? [] : [deps.home],
+      ),
+    "agent.workdirs.list": (request) => workRootsByName(db, orgId, request.params.name),
+    "agent.rotate": (request) => {
       const rotated = rotateAgentToken(
         db,
         orgId,
@@ -237,24 +235,22 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
       );
       // Scripts started with the old token stop now, rather than at their next call.
       stopScriptsOf(deps, db, orgId, request.params.name);
-      return adminOk(rotated);
-    }
-    case "agent.revoke":
+      return rotated;
+    },
+    "agent.revoke": (request) => {
       revokeAgent(db, orgId, request.params.name, now);
       stopScriptsOf(deps, db, orgId, request.params.name);
-      return adminOk({ name: request.params.name, revoked: true });
-    case "scripts.list":
-      return adminOk(deps.backgroundScripts?.list() ?? []);
-    case "agent.list":
-      return adminOk(
-        listAgents(db, orgId).map((agent) => ({
-          ...agent,
-          tokenExpiresAt: agent.tokenExpiresAt?.toISOString() ?? null,
-          createdAt: agent.createdAt.toISOString(),
-          revokedAt: agent.revokedAt?.toISOString() ?? null,
-        })),
-      );
-    case "account.connect": {
+      return { name: request.params.name, revoked: true };
+    },
+    "scripts.list": () => deps.backgroundScripts?.list() ?? [],
+    "agent.list": () =>
+      listAgents(db, orgId).map((agent) => ({
+        ...agent,
+        tokenExpiresAt: agent.tokenExpiresAt?.toISOString() ?? null,
+        createdAt: agent.createdAt.toISOString(),
+        revokedAt: agent.revokedAt?.toISOString() ?? null,
+      })),
+    "account.connect": (request) => {
       const { provider, alias, owner, credential, url, stdio, oauth, http, cli } = request.params;
       const ownerId = resolveOwner(db, orgId, owner);
       const input = {
@@ -270,11 +266,10 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
         ...(cli === undefined ? {} : { cli }),
       };
       const connected = connectAccount(db, deps.vault, input, now);
-      return adminOk({ ...connected, signIn: signInState(deps, provider) });
-    }
-    case "account.list":
-      return adminOk(listAccounts(db, orgId));
-    case "account.configure": {
+      return { ...connected, signIn: signInState(deps, provider) };
+    },
+    "account.list": () => listAccounts(db, orgId),
+    "account.configure": (request) => {
       const { alias, credentialHosts, credentialAuth, credentialDelivery, credential } =
         request.params;
       const configured = configureAccount(db, deps.vault, orgId, alias, {
@@ -285,46 +280,48 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
       });
       // A running server holds whatever it started with; it starts again on its next call.
       deps.onAccountConfigured?.(configured.accountId);
-      return adminOk(configured);
-    }
-    case "account.credential": {
+      return configured;
+    },
+    "account.credential": (request) => {
       const { alias, credential } = request.params;
       const set = setAccountCredential(db, deps.vault, orgId, alias, credential);
       // A local server holds the credential it started with; it starts again on its next call.
       deps.onAccountConfigured?.(set.accountId);
-      return adminOk(set);
-    }
-    case "account.remove": {
+      return set;
+    },
+    "account.remove": (request) => {
       const removed = removeAccount(db, orgId, request.params.alias, now);
       deps.onAccountConfigured?.(removed.accountId);
-      return adminOk(removed);
-    }
-    case "account.share":
-    case "account.unshare": {
+      return removed;
+    },
+    "account.share": (request) => {
       const { alias, kind, name } = request.params;
-      if (request.method === "account.share") shareAccount(db, orgId, alias, { kind, name }, now);
-      else unshareAccount(db, orgId, alias, { kind, name });
-      return adminOk(sharingOf(db, orgId, alias));
-    }
-    case "account.approvers": {
+      shareAccount(db, orgId, alias, { kind, name }, now);
+      return sharingOf(db, orgId, alias);
+    },
+    "account.unshare": (request) => {
+      const { alias, kind, name } = request.params;
+      unshareAccount(db, orgId, alias, { kind, name });
+      return sharingOf(db, orgId, alias);
+    },
+    "account.approvers": (request) => {
       const { alias, repo, approvers } = request.params;
       setApprovers(db, orgId, alias, repo, approvers, now);
-      return adminOk(sharingOf(db, orgId, alias));
-    }
-    case "account.sharing":
-      return adminOk(sharingOf(db, orgId, request.params.alias));
-    case "user.add": {
+      return sharingOf(db, orgId, alias);
+    },
+    "account.sharing": (request) => sharingOf(db, orgId, request.params.alias),
+    "user.add": (request) => {
       if (deps.teamSignIn === true) {
-        return adminError(
+        throw new Refused(
           "invalid",
           "people join this heel by signing in with its sign-in provider, not by name",
         );
       }
       const added = addPerson(db, orgId, request.params.name, now);
-      if (!added.ok) return adminError("invalid", added.problem);
-      return adminOk({ name: request.params.name });
-    }
-    case "user.enroll": {
+      if (!added.ok) throw new Refused("invalid", added.problem);
+      return { name: request.params.name };
+    },
+    "user.enroll": (request) => {
       const enrollment = createEnrollment(db, {
         orgId,
         userName: request.params.name,
@@ -338,51 +335,48 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
           .from(users)
           .where(and(eq(users.orgId, orgId), eq(users.name, request.params.name)))
           .get()?.subject ?? null;
-      return adminOk({
+      return {
         url: enrollment.url,
         expiresAt: enrollment.expiresAt.toISOString(),
         activeFrom: enrollment.activeFrom?.toISOString() ?? null,
         subject,
-      });
-    }
-    case "user.email": {
+      };
+    },
+    "user.email": (request) => {
       const { name, email } = request.params;
       if (!setUserEmail(db, orgId, name, email)) {
-        return adminError("not_found", `no user named "${name}"`);
+        throw new Refused("not_found", `no user named "${name}"`);
       }
-      return adminOk({ name, email });
-    }
-    case "pause": {
+      return { name, email };
+    },
+    pause: (request) => {
       const key = pauseKeyFor(db, orgId, request.params);
-      return adminOk({ ...key, ...pause(db, orgId, key, ADMIN_SOCKET_ACTOR, now) });
-    }
-    case "approvals.list": {
-      return adminOk(
-        listOrgApprovals(db, orgId, now).map(({ row, agentName, status }) => {
-          const said = headline({
-            agent: agentName,
-            action: row.call.action ?? null,
-            tool: row.tool,
-            account: row.account,
-            email: emailPreviewFrom(row.call.action ?? null, row.call.args),
-            merge: mergePreviewFrom(row.call.action ?? null, row.call.args),
-            http: httpPreviewFrom(row.call),
-          });
-          return {
-            id: row.id,
-            agent: agentName,
-            account: row.account,
-            status,
-            summary: `${said.agent} wants to ${said.action} ${said.preposition} ${said.place}${said.rest}`,
-            reason: row.reason,
-            createdAt: row.createdAt.toISOString(),
-            expiresAt: row.expiresAt.toISOString(),
-            url: new URL(`/approvals/${encodeURIComponent(row.id)}`, deps.publicUrl).href,
-          };
-        }),
-      );
-    }
-    case "proposals.list": {
+      return { ...key, ...pause(db, orgId, key, ADMIN_SOCKET_ACTOR, now) };
+    },
+    "approvals.list": () =>
+      listOrgApprovals(db, orgId, now).map(({ row, agentName, status }) => {
+        const said = headline({
+          agent: agentName,
+          action: row.call.action ?? null,
+          tool: row.tool,
+          account: row.account,
+          email: emailPreviewFrom(row.call.action ?? null, row.call.args),
+          merge: mergePreviewFrom(row.call.action ?? null, row.call.args),
+          http: httpPreviewFrom(row.call),
+        });
+        return {
+          id: row.id,
+          agent: agentName,
+          account: row.account,
+          status,
+          summary: `${said.agent} wants to ${said.action} ${said.preposition} ${said.place}${said.rest}`,
+          reason: row.reason,
+          createdAt: row.createdAt.toISOString(),
+          expiresAt: row.expiresAt.toISOString(),
+          url: new URL(`/approvals/${encodeURIComponent(row.id)}`, deps.publicUrl).href,
+        };
+      }),
+    "proposals.list": () => {
       // Rule proposals and connection requests: everything agents asked their owners for.
       const proposals = orgPendingProposals(db, orgId, now).map(
         ({ row, agentName, ownerName }) => ({
@@ -411,27 +405,23 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
         expiresAt: row.expiresAt.toISOString(),
         url: new URL(`/requests/${encodeURIComponent(row.id)}`, deps.publicUrl).href,
       }));
-      return adminOk(
-        [...proposals, ...requests].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
-      );
-    }
-    case "activity.list": {
+      return [...proposals, ...requests].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    },
+    "activity.list": (request) => {
       const { afterId, limit } = request.params;
-      return adminOk(
-        readActivity(db, { orgId, ownerIds: null, afterId, limit }).map((row) => ({
-          id: row.id,
-          at: row.at.toISOString(),
-          kind: row.kind,
-          mode: row.mode,
-          agentId: row.agentId,
-          account: row.account,
-          action: row.action ?? row.tool,
-          rule: row.rule === null ? null : (row.rule.name ?? `${row.rule.file}:${row.rule.line}`),
-          reason: row.reason,
-        })),
-      );
-    }
-    case "pause.list": {
+      return readActivity(db, { orgId, ownerIds: null, afterId, limit }).map((row) => ({
+        id: row.id,
+        at: row.at.toISOString(),
+        kind: row.kind,
+        mode: row.mode,
+        agentId: row.agentId,
+        account: row.account,
+        action: row.action ?? row.tool,
+        rule: row.rule === null ? null : (row.rule.name ?? `${row.rule.file}:${row.rule.line}`),
+        reason: row.reason,
+      }));
+    },
+    "pause.list": () => {
       // Agents and owners are stored by id; people read them by name.
       const agentNames = new Map(listAgents(db, orgId).map((a) => [a.id, a.name]));
       const ownerNames = new Map(
@@ -450,51 +440,47 @@ function dispatch(deps: AdminDeps, request: AdminRequest, now: Date): AdminRespo
             : scope === "global"
               ? "everything"
               : target;
-      return adminOk(
-        listPauses(db, orgId).map((row) => ({
-          scope: row.scope,
-          target: row.target,
-          targetName: nameOf(row.scope, row.target),
-          pausedBy: row.pausedBy,
-          pausedAt: row.pausedAt.toISOString(),
-        })),
-      );
-    }
-    case "standing.revoke": {
+      return listPauses(db, orgId).map((row) => ({
+        scope: row.scope,
+        target: row.target,
+        targetName: nameOf(row.scope, row.target),
+        pausedBy: row.pausedBy,
+        pausedAt: row.pausedAt.toISOString(),
+      }));
+    },
+    "standing.revoke": (request) => {
       const revoked = revokeStanding(db, orgId, request.params.id, null, now);
-      if (revoked.ok) return adminOk({ id: request.params.id, revoked: true });
-      return revoked.reason === "not_found"
-        ? adminError("not_found", `no standing approval "${request.params.id}"`)
-        : adminError("conflict", `standing approval "${request.params.id}" is already revoked`);
-    }
-    case "standing.list":
-      return adminOk(
-        listStanding(db, orgId).map(({ row, agentName, account, covers }) => ({
-          id: row.id,
-          agent: agentName,
-          account,
-          scope: row.scope,
-          covers,
-          rule: row.rule,
-          createdAt: row.createdAt.toISOString(),
-          expiresAt: row.expiresAt.toISOString(),
-          revokedAt: row.revokedAt?.toISOString() ?? null,
-        })),
-      );
-    case "audit.export": {
+      if (revoked.ok) return { id: request.params.id, revoked: true };
+      throw revoked.reason === "not_found"
+        ? new Refused("not_found", `no standing approval "${request.params.id}"`)
+        : new Refused("conflict", `standing approval "${request.params.id}" is already revoked`);
+    },
+    "standing.list": () =>
+      listStanding(db, orgId).map(({ row, agentName, account, covers }) => ({
+        id: row.id,
+        agent: agentName,
+        account,
+        scope: row.scope,
+        covers,
+        rule: row.rule,
+        createdAt: row.createdAt.toISOString(),
+        expiresAt: row.expiresAt.toISOString(),
+        revokedAt: row.revokedAt?.toISOString() ?? null,
+      })),
+    "audit.export": (request) => {
       const { since, until, afterId, throughId, limit } = request.params;
-      return adminOk(
-        exportAuditPage(db, orgId, {
-          afterId,
-          limit,
-          ...(since === undefined ? {} : { since: new Date(since) }),
-          ...(until === undefined ? {} : { until: new Date(until) }),
-          ...(throughId === undefined ? {} : { throughId }),
-        }),
-      );
-    }
-  }
+      return exportAuditPage(db, orgId, {
+        afterId,
+        limit,
+        ...(since === undefined ? {} : { since: new Date(since) }),
+        ...(until === undefined ? {} : { until: new Date(until) }),
+        ...(throughId === undefined ? {} : { throughId }),
+      });
+    },
+  } satisfies { [M in AdminMethod]: (request: AdminRequestOf<M>) => unknown };
 }
+
+export type AdminHandlers = ReturnType<typeof handlersFor>;
 
 /**
  * Admin methods over the store. Expected failures (a taken name, an unknown
@@ -505,8 +491,11 @@ export function createAdminHandler(deps: AdminDeps): AdminHandler {
   const now = deps.now ?? (() => new Date());
   return (request) => {
     try {
-      return dispatch(deps, request, now());
+      // TypeScript can't pair the method with its handler's request type, so widen it.
+      const handle = handlersFor(deps, now())[request.method] as (request: AdminRequest) => unknown;
+      return adminOk(handle(request));
     } catch (error) {
+      if (error instanceof Refused) return adminError(error.code, error.message);
       if (error instanceof AgentError) {
         return adminError(AGENT_ERROR_CODES[error.code], error.message);
       }
@@ -515,9 +504,6 @@ export function createAdminHandler(deps: AdminDeps): AdminHandler {
       }
       if (error instanceof SharingError) {
         return adminError(error.code === "invalid" ? "invalid" : "not_found", error.message);
-      }
-      if (error instanceof OwnerNotFound || error instanceof TargetNotFound) {
-        return adminError("not_found", error.message);
       }
       if (error instanceof EnrollmentError) {
         return adminError(error.code === "unknown_user" ? "not_found" : "conflict", error.message);
