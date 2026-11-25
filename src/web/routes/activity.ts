@@ -15,13 +15,14 @@ import {
 import { agents } from "../../store/schema.ts";
 import {
   type HumanPlaneDeps,
+  readSessionCookie,
   renderPage,
   requireCsrfField,
   requireSession,
   type SignedInEnv,
   viewerOf,
 } from "../http.ts";
-import type { SessionView } from "../sessions.ts";
+import { readSession, type SessionView } from "../sessions.ts";
 import { ACTIVITY_SCRIPT, activityPage, activityRow, agentsPage } from "../ui/activity-page.ts";
 import { clientScript } from "../ui/client.ts";
 import { toHtmlString } from "../ui/html.ts";
@@ -251,9 +252,14 @@ export function activityRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     const resumeFrom = Number.parseInt(c.req.header("last-event-id") ?? query["after"] ?? "0", 10);
     let after = Number.isFinite(resumeFrom) ? resumeFrom : 0;
     const names = new Map(agentChoices(session).map((a) => [a.id, a.name]));
+    const cookie = readSessionCookie(c, deps);
     return streamSSE(c, async (stream) => {
       const ends = Date.now() + STREAM_LIFETIME_MS;
       while (!stream.aborted && Date.now() < ends) {
+        // Signed out or expired since the stream opened: stop sending rows now,
+        // not at the stream's 10-minute end. The browser's reconnect then fails
+        // the session check, and the page says it's signed out.
+        if (cookie === undefined || readSession(deps.db, cookie, deps.now()) === null) break;
         const rows = readActivity(deps.db, {
           orgId: deps.orgId,
           ownerIds: visibleOwners(session),

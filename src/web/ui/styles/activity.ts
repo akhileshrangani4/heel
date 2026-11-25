@@ -31,6 +31,7 @@ export const ACTIVITY_CSS = `
   .act-filter-panel{padding-bottom:0}
   .act-filter-actions{position:sticky;bottom:0;margin:0 -.5rem;padding:.6rem .5rem;background:var(--bg)}
 }
+.act-live-note{margin:.5rem 0;font-size:.88rem;color:var(--muted)}
 .audit-export{position:relative;flex:none}
 .audit-export > summary{list-style:none}
 .audit-export > summary::-webkit-details-marker{display:none}
