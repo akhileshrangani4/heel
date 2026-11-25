@@ -34,6 +34,8 @@ In code mode (`run_code`), reads of heel's built-in accounts have `_async` twins
 
 ## Find what you have
 
-`heel_accounts` lists the accounts you can use and your requests still waiting for the user. heel's own `setup` MCP prompt walks through putting more of the user's services behind heel.
+`heel_accounts` lists the accounts you can use and your requests still waiting for the user. With `{"wait": true}` it holds until something you asked for changes; if `wait.outcome` is `nothing_changed`, the user hasn't decided yet, so call it again the same way. heel's own `setup` MCP prompt walks through putting more of the user's services behind heel.
+
+When the user connects a key you asked for (GitHub, Slack, Linear, Notion, Stripe), that account carries a `next` note in `heel_accounts` for a day. Once a call on it works, pass the note on once, in plain words to the user: heel now holds that key, so it should live only in heel; an older key or login for the same account elsewhere on their machine can be deleted, and revoked on the service if it's a different key. Never tell them to revoke the key heel holds (if it came from `gh auth token`, revoking the GitHub CLI's access on GitHub revokes it too). Logging `gh` out is their choice: give the tradeoff (handy to keep, but a second place with broad access to their GitHub) and don't tell them never to keep it.
 
 Docs: https://useheel.dev/docs (start at https://useheel.dev/llms.txt).

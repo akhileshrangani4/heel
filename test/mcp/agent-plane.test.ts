@@ -1,4 +1,7 @@
+import type { Client } from "@modelcontextprotocol/client";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
+import { CONNECTED_NOTE_MS } from "../../src/gateway/mcp/connected.ts";
 import { decideApproval, SqliteApprovalStore } from "../../src/store/approvals.ts";
 import { pause, SqlitePauseStore } from "../../src/store/pauses.ts";
 import {
@@ -8,7 +11,8 @@ import {
   auditLog,
   ruleProposals,
 } from "../../src/store/schema.ts";
-import { mcpHarness } from "../helpers/mcp.ts";
+import { connectAccount } from "../../src/vault/connect.ts";
+import { connectRequested, mcpHarness } from "../helpers/mcp.ts";
 
 /** A rule object as an agent sends it; `then` is the rules file's own key. */
 const ruleOf = (fields: Record<string, unknown>, decision: string) =>
@@ -546,5 +550,88 @@ describe("heel_request_connection", () => {
     const result = await client.callTool({ name: "heel_request_connection", arguments: ask });
     expect(result.structuredContent).toMatchObject({ status: "paused" });
     expect(h.t.db.select().from(agentRequests).all()).toEqual([]);
+  });
+});
+
+describe("heel_accounts once a requested connection is made", () => {
+  type Listed = { alias: string; service: string; status: string; next?: string };
+  const listed = async (client: Client) => {
+    const result = await client.callTool({ name: "heel_accounts", arguments: {} });
+    const { accounts: rows } = result.structuredContent as { accounts: Listed[] };
+    return new Map(rows.map((row) => [row.alias, row]));
+  };
+  const ask = (service: string, alias: string, more: Record<string, unknown> = {}) => ({
+    name: "heel_request_connection",
+    arguments: { service, alias, why: "for the task", ...more },
+  });
+
+  it("a key it asked for carries a next note on what to do with other copies of that key", async () => {
+    const h = await mcpHarness({ owner: READS_ALLOWED });
+    const client = await h.connect("/mcp/notes");
+    await client.callTool(ask("github", "github"));
+    await client.callTool(ask("linear", "linear-work"));
+    connectRequested(h, "github");
+    connectRequested(h, "linear-work");
+
+    const accounts = await listed(client);
+    expect(accounts.get("github")).toMatchObject({ service: "github", status: "active" });
+    expect(accounts.get("github")?.next).toMatch(
+      /^When a call on github first works, tell your owner/,
+    );
+    expect(accounts.get("github")?.next).toMatch(/heel now holds their GitHub key/);
+    expect(accounts.get("github")?.next).toMatch(/gh auth logout\) is optional and their choice/);
+    expect(accounts.get("linear-work")?.next).toMatch(/heel now holds their Linear key/);
+    expect(accounts.get("linear-work")?.next).not.toMatch(/\bgh\b/);
+    // The key itself never goes back to the agent.
+    expect(JSON.stringify([...accounts.values()])).not.toContain("pasted-key");
+    // An account heel had before the agent asked gets nothing.
+    expect(accounts.get("notes")).not.toHaveProperty("next");
+  });
+
+  it("a sign-in service or an MCP server it asked for gets no note: there's no key to hand over", async () => {
+    const h = await mcpHarness({ owner: READS_ALLOWED });
+    const client = await h.connect("/mcp/notes");
+    await client.callTool(ask("gmail", "gmail-work"));
+    await client.callTool(ask("mcp", "docs", { url: "https://mcp.example.com/mcp", oauth: false }));
+    connectRequested(h, "gmail-work");
+    connectRequested(h, "docs");
+    // The owner has signed in, so the account works.
+    h.t.db.update(accounts).set({ status: "active" }).where(eq(accounts.alias, "gmail-work")).run();
+
+    const listedNow = await listed(client);
+    expect(listedNow.get("gmail-work")).toMatchObject({ status: "active" });
+    expect(listedNow.get("docs")).toMatchObject({ service: "mcp", status: "active" });
+    for (const row of listedNow.values()) expect(row).not.toHaveProperty("next");
+  });
+
+  it("no note for a key the owner connected unasked, one connected over a day ago, or one heel can't use", async () => {
+    const h = await mcpHarness({ owner: READS_ALLOWED });
+    const client = await h.connect("/mcp/notes");
+    connectAccount(
+      h.t.db,
+      h.vault,
+      {
+        orgId: h.t.orgId,
+        ownerId: h.t.ownerId,
+        provider: "slack",
+        alias: "slack",
+        credential: { type: "static", value: "owner-key" },
+      },
+      new Date(),
+    );
+    await client.callTool(ask("stripe", "stripe"));
+    connectRequested(h, "stripe", new Date(Date.now() - CONNECTED_NOTE_MS - 60_000));
+    await client.callTool(ask("notion", "notion"));
+    connectRequested(h, "notion");
+    // The service turned the key down since; the account needs a new one.
+    h.t.db
+      .update(accounts)
+      .set({ status: "reconnect_required" })
+      .where(eq(accounts.alias, "notion"))
+      .run();
+
+    const listedNow = await listed(client);
+    expect([...listedNow.keys()]).toEqual(expect.arrayContaining(["slack", "stripe", "notion"]));
+    for (const row of listedNow.values()) expect(row).not.toHaveProperty("next");
   });
 });

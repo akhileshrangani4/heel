@@ -4,8 +4,8 @@ import { type Definition, UpstreamError } from "../../gateway/pipeline/ports.ts"
 import type { AccountRecord } from "../../store/directory.ts";
 import type { Vault } from "../../vault/vault.ts";
 import { githubRest } from "../http/rest.ts";
-import { listedTools, type MailTool, mailDefinition } from "../mail/tool.ts";
 import type { FetchFn } from "../sign-in.ts";
+import { listedTools, type ToolRow, toolRow, toolTableDefinition } from "../tool-table.ts";
 import { GitHubApi } from "./api.ts";
 import { GitHubClient, GitHubNotFoundError, GitHubWriteRefused } from "./client.ts";
 
@@ -41,8 +41,8 @@ interface Box {
   api: GitHubApi;
 }
 
-type GitHubTool = MailTool<Box>;
-const tool = <S extends z.ZodType, P, R>(t: MailTool<Box, S, P, R>) => t as unknown as GitHubTool;
+type GitHubTool = ToolRow<Box>;
+const tool = toolRow<Box>();
 
 const Repo = z
   .string()
@@ -519,10 +519,10 @@ export function githubDefinition(account: AccountRecord, deps: GitHubDeps): Defi
     client: new GitHubClient(deps.fetch, token),
     api: new GitHubApi(token, deps.fetch),
   };
-  return mailDefinition({
+  return toolTableDefinition({
     tools: ALL_TOOLS,
     listed: GITHUB_TOOLS,
-    mailbox: box,
+    box,
     errors: {
       isNotFound: (error) => error instanceof GitHubNotFoundError,
       refusal: (error) =>

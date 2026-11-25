@@ -2,8 +2,8 @@ import type { Tool } from "@modelcontextprotocol/server";
 import { type Definition, UpstreamError } from "../../gateway/pipeline/ports.ts";
 import type { AccountRecord } from "../../store/directory.ts";
 import type { Vault } from "../../vault/vault.ts";
-import { listedTools, mailDefinition } from "../mail/tool.ts";
 import { type FetchFn, mailboxSettings } from "../sign-in.ts";
+import { listedTools, toolTableDefinition } from "../tool-table.ts";
 import { CALENDAR_TOOLS } from "./calendar.ts";
 import { OutlookClient, OutlookNotFoundError, OutlookWriteRefused } from "./client.ts";
 import { OutlookMailbox } from "./messages.ts";
@@ -15,7 +15,7 @@ import type { OutlookTool } from "./tool.ts";
 /**
  * The Outlook definition: heel's own tools on Microsoft Graph, with
  * the account's credential. Each tool is one row in `reads.ts`, `send.ts`
- * or `organize.ts`; `mailDefinition` routes a call to its row.
+ * or `organize.ts`; `toolTableDefinition` routes a call to its row.
  *
  * An account that has never signed in has no mailbox address yet, so it
  * has no definition: its calls are denied (`provider_unavailable`) until
@@ -44,10 +44,10 @@ export function outlookDefinition(account: AccountRecord, deps: OutlookDeps): De
     new OutlookClient(deps.fetch, async () => (await deps.vault.accessToken(account.id)).reveal()),
     settings.mailbox,
   );
-  return mailDefinition({
+  return toolTableDefinition({
     tools: TOOLS,
     listed: OUTLOOK_TOOLS,
-    mailbox,
+    box: mailbox,
     errors: {
       isNotFound: (error) => error instanceof OutlookNotFoundError,
       refusal: (error) =>

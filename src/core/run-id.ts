@@ -39,29 +39,3 @@ export function parseRunId(raw: unknown): RunIdParse {
     ? { kind: "valid", runId: raw }
     : { kind: "invalid", problem: "bad_format" };
 }
-
-/** Pure: the raw run id an MCP request's `_meta` carries, if any. */
-export function runIdFromMeta(meta: unknown): unknown {
-  if (typeof meta !== "object" || meta === null || Array.isArray(meta)) return undefined;
-  return Object.hasOwn(meta, RUN_ID_META_KEY) ? Reflect.get(meta, RUN_ID_META_KEY) : undefined;
-}
-
-/** Pure: the raw run id an HTTP request carries, if any. */
-export function runIdFromHeaders(headers: Headers): string | undefined {
-  return headers.get(RUN_ID_HEADER) ?? undefined;
-}
-
-/** Pure: the run id `heel run` forwards from its environment, if any. */
-export function runIdFromEnv(
-  env: Readonly<Record<string, string | undefined>>,
-): string | undefined {
-  return env[RUN_ID_ENV];
-}
-
-/**
- * Pure: code mode's run id. The `run_id` argument of `run_code` wins; if it
- * is absent, the run id of the MCP request that carried the script applies.
- */
-export function codeModeRunId(argument: unknown, requestMeta: unknown): unknown {
-  return argument === undefined || argument === null ? runIdFromMeta(requestMeta) : argument;
-}

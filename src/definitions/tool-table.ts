@@ -1,8 +1,8 @@
 import type { Tool } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import type { Call, ProviderFields } from "../../core/call.ts";
-import type { Hiding } from "../../core/hide.ts";
-import type { StateCheck } from "../../core/rules/compile.ts";
+import type { Call, ProviderFields } from "../core/call.ts";
+import type { Hiding } from "../core/hide.ts";
+import type { StateCheck } from "../core/rules/compile.ts";
 import {
   CredentialRejectedError,
   type Definition,
@@ -10,11 +10,11 @@ import {
   keyRejectedMessage,
   type Normalized,
   ResponseUnparseableError,
-} from "../../gateway/pipeline/ports.ts";
-import { returnsSchema } from "./returns-schema.ts";
+} from "../gateway/pipeline/ports.ts";
+import { returnsSchema } from "./mail/returns-schema.ts";
 
 /**
- * The shape of one built-in mail tool, shared by Gmail and Outlook:
+ * The shape of one built-in tool, shared by every built-in service:
  * everything heel knows about a tool in one place.
  *
  * 1. `args` validates what the agent sent; anything else is refused.
@@ -26,8 +26,8 @@ import { returnsSchema } from "./returns-schema.ts";
  * 4. `show` turns what `run` returned into what the agent reads, dropping
  *    hidden messages.
  *
- * `M` is the provider's per-call mailbox: its client plus what several
- * tools read once per call.
+ * `M` is the provider's per-call box: its client plus what several tools
+ * read once per call.
  */
 
 export interface Prepared<P> {
@@ -50,7 +50,7 @@ export interface Prepared<P> {
 
 export type Preparation<P> = Prepared<P> | { deny: HardDenyReason };
 
-export interface MailTool<M, S extends z.ZodType = z.ZodType, P = unknown, R = unknown> {
+export interface ToolRow<M, S extends z.ZodType = z.ZodType, P = unknown, R = unknown> {
   description: string;
   /**
    * The shape of what `show` gives the agent, keys only:
@@ -61,14 +61,14 @@ export interface MailTool<M, S extends z.ZodType = z.ZodType, P = unknown, R = u
   returns: string;
   args: S;
   readOnly: boolean;
-  prepare(
-    mailbox: M,
-    args: z.output<S>,
-    hiding: Hiding,
-    signal: AbortSignal,
-  ): Promise<Preparation<P>>;
-  run(mailbox: M, args: P, signal: AbortSignal): Promise<R>;
-  show(mailbox: M, result: R, hiding: Hiding, signal: AbortSignal): Promise<unknown>;
+  prepare(box: M, args: z.output<S>, hiding: Hiding, signal: AbortSignal): Promise<Preparation<P>>;
+  run(box: M, args: P, signal: AbortSignal): Promise<R>;
+  show(box: M, result: R, hiding: Hiding, signal: AbortSignal): Promise<unknown>;
+}
+
+/** Keeps each tool's own types while a service's table holds them all. */
+export function toolRow<M>() {
+  return <S extends z.ZodType, P, R>(row: ToolRow<M, S, P, R>) => row as unknown as ToolRow<M>;
 }
 
 /** `outputSchema` for a tool whose `returns` describes an object; nothing otherwise. */
@@ -78,7 +78,7 @@ function outputSchemaOf(returns: string): { outputSchema?: Tool["outputSchema"] 
 }
 
 /** The tools as MCP lists them. */
-export function listedTools<M>(tools: Record<string, MailTool<M>>): Tool[] {
+export function listedTools<M>(tools: Record<string, ToolRow<M>>): Tool[] {
   return Object.entries(tools).map(([name, tool]) => ({
     name,
     description: `${tool.description} Returns ${tool.returns}.`,
@@ -103,7 +103,7 @@ export interface ErrorMapping {
 }
 
 /**
- * A definition from a table of mail tools. It only routes: each tool's row
+ * A definition from a table of tools. It only routes: each tool's row
  * does the work.
  *
  * - The table is the only place a tool is marked read (I-20).
@@ -113,19 +113,19 @@ export interface ErrorMapping {
  *   denied exactly like a hidden one, `not_available` (I-42).
  * - Writes are never retried.
  */
-export function mailDefinition<M>(input: {
-  tools: Record<string, MailTool<M>>;
+export function toolTableDefinition<M>(input: {
+  tools: Record<string, ToolRow<M>>;
   listed: readonly Tool[];
-  mailbox: M;
+  box: M;
   errors: ErrorMapping;
   stateCheck: (
     check: StateCheck,
-    mailbox: M,
+    box: M,
     call: Call,
     signal: AbortSignal,
   ) => Promise<"pass" | "fail">;
 }): Definition {
-  const { tools, mailbox, errors } = input;
+  const { tools, box, errors } = input;
   const toolNamed = (name: string) => (Object.hasOwn(tools, name) ? (tools[name] ?? null) : null);
 
   return {
@@ -138,7 +138,7 @@ export function mailDefinition<M>(input: {
       if (!parsed.success) return { ok: false, reason: "unsupported" };
       let prepared: Preparation<unknown>;
       try {
-        prepared = await tool.prepare(mailbox, parsed.data, ctx.hide, ctx.signal);
+        prepared = await tool.prepare(box, parsed.data, ctx.hide, ctx.signal);
       } catch (error) {
         if (errors.isNotFound(error)) return { ok: false, reason: "not_available" };
         if (error instanceof CredentialRejectedError) {
@@ -166,13 +166,13 @@ export function mailDefinition<M>(input: {
       };
     },
 
-    stateCheck: (check, call, signal) => input.stateCheck(check, mailbox, call, signal),
+    stateCheck: (check, call, signal) => input.stateCheck(check, box, call, signal),
 
     async execute(call, signal) {
       const tool = toolNamed(call.tool);
       if (tool === null) throw new Error(`no tool ${call.tool}`);
       try {
-        return await tool.run(mailbox, call.args, signal);
+        return await tool.run(box, call.args, signal);
       } catch (error) {
         throw errors.refusal(error) ?? error;
       }
@@ -181,7 +181,7 @@ export function mailDefinition<M>(input: {
     async hide(call, result, hiding) {
       const tool = toolNamed(call.tool);
       if (tool === null) throw new ResponseUnparseableError();
-      return tool.show(mailbox, result, hiding, AbortSignal.timeout(60_000));
+      return tool.show(box, result, hiding, AbortSignal.timeout(60_000));
     },
   };
 }
