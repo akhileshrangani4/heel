@@ -1,6 +1,6 @@
 import type { PauseScope } from "../../core/call.ts";
 import { CEREMONY_SCRIPT } from "./ceremony.ts";
-import { formatPauseScope, formatUtc } from "./format.ts";
+import { formatPauseScope, formatUtc, LOCAL_TIME_SCRIPT } from "./format.ts";
 import { type Child, type Html, html, trusted } from "./html.ts";
 import { LOGO_SVG } from "./logo.ts";
 import { SELECT_SCRIPT } from "./select.ts";
@@ -136,7 +136,7 @@ export function scrollRegion(label: string, content: Html): Html {
 
 /** `<time>` with a machine-readable instant and a UTC label. */
 export function time(at: Date): Html {
-  return html`<time datetime="${at.toISOString()}">${formatUtc(at)}</time>`;
+  return html`<time datetime="${at.toISOString()}" data-heel-local>${formatUtc(at)}</time>`;
 }
 
 /** lucide's circle-pause. */
@@ -325,6 +325,7 @@ export function page(props: PageProps): Html {
     </main>
     <script>${trusted(CEREMONY_SCRIPT)}</script>
     <script>${trusted(SELECT_SCRIPT)}</script>
+    <script>${trusted(LOCAL_TIME_SCRIPT)}</script>
     ${props.script ? html`<script>${trusted(props.script)}</script>` : ""}
   </body>
 </html>`;

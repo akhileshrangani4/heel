@@ -14,6 +14,24 @@ export function formatUtc(at: Date): string {
   return `${at.toISOString().slice(0, 16).replace("T", " ")} UTC`;
 }
 
+/**
+ * Shows every `<time data-heel-local>` in the viewer's own time zone. The
+ * server doesn't know the zone, so it renders UTC (`formatUtc`) as the
+ * no-script fallback, and this rewrites the text from the `datetime`
+ * attribute, keeping UTC in the tooltip. Presentation only.
+ */
+export const LOCAL_TIME_SCRIPT = `
+(() => {
+  const show = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
+  for (const el of document.querySelectorAll("time[data-heel-local]")) {
+    const at = new Date(el.getAttribute("datetime"));
+    if (Number.isNaN(at.getTime())) continue;
+    el.title = el.textContent;
+    el.textContent = show.format(at);
+  }
+})();
+`;
+
 /** A coarse span such as `23 h 59 min` or `6 days 4 h`, for "expires in". */
 export function formatSpan(ms: number): string {
   const total = Math.max(0, Math.round(ms / MINUTE)) * MINUTE;
