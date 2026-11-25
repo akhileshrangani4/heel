@@ -363,6 +363,7 @@ export const HEEL_ACCOUNTS_TOOL: Tool = {
   description:
     "What's behind heel for you: the accounts you can use (by alias and service), and your connection requests and rule proposals still waiting for your owner. " +
     "Names and services only; heel never shows a key. Read-only. " +
+    "An account you asked for that your owner just connected with a key carries a `next` note: pass it on to your owner once a call on it works. " +
     "With wait: true and something still waiting, it holds the call until that changes (your owner decides, a request expires, or an account connects) or for a few minutes at most, " +
     "so you don't need your owner to tell you they've approved. Its answer's wait.outcome says how the wait ended: " +
     '"changed", "nothing_changed" (no decision yet: call it again the same way to keep waiting) or "nothing_waiting".',
