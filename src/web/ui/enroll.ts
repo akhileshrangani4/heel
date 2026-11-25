@@ -40,21 +40,15 @@ export function enrollPage(props: EnrollProps): Html {
       ${notice(
         "info",
         html`<p>
-            <strong>This recovery link works from ${time(props.until)}.</strong> ${props.userName}
-            already has a passkey, so heel waits a day before a link from the command line can add
-            another. Until then, anyone signed in sees it on the approval page and can cancel it.
-          </p>
-          <p>Come back to this link then. To add a device sooner, sign in with your passkey and
-            use "Add another device" on the approval page.</p>`,
+          <strong>This recovery link works from ${time(props.until)}.</strong> Come back to this link
+          then.
+        </p>`,
       )}
     </div>`;
   }
   return html`<div class="signin">
     <h1>Enroll a passkey</h1>
-    <p id="enroll-help">
-      This adds a passkey for <strong>${props.userName}</strong>. You'll use it to sign in and for
-      every approve, deny and resume.
-    </p>
+    <p id="enroll-help">This adds a passkey for <strong>${props.userName}</strong>.</p>
     <div class="actions">
       ${ceremonyButton({
         callback: { handler: "enroll" },

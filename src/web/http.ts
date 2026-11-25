@@ -324,7 +324,7 @@ export function requireCsrfField(): MiddlewareHandler<SignedInEnv> {
         c,
         403,
         "This form is out of date",
-        "Refused: this form is stale. Go back, reload the page and try again.",
+        "Go back, reload the page and try again.",
       );
     }
     return next();

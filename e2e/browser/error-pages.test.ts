@@ -39,6 +39,6 @@ describe("error pages in a browser", () => {
     endSession(h.t.db, cookie, h.clock.now);
     await page.getByRole("button", { name: "Sign out" }).first().click();
     await page.waitForURL(/\/sign-in\?next=%2F&expired$/);
-    await page.getByText("Your session ended. Sign in again to continue.").waitFor();
+    await page.getByText("Your session ended.").waitFor();
   });
 });

@@ -111,7 +111,7 @@ export function loopbackSignInPage(props: LoopbackSignInProps): Html {
     ? html`${googleStep(props)}
         <li>
           <p>
-            Google ends on a page that won't load. That's expected: heel runs on another machine.
+            Google ends on a page that won't load. That's expected.
             On that page, tap the address bar and copy the whole address (it starts
             <code>http://127.0.0.1</code>).
           </p>

@@ -81,21 +81,11 @@ export function createHumanApp(deps: HumanPlaneDeps): Hono {
   app.route("/", activityRoutes(deps));
   app.route("/", waitingRoutes(deps));
   app.notFound((c) =>
-    errorResponse(
-      c,
-      404,
-      "Page not found",
-      "Not found. The address may be mistyped or out of date.",
-    ),
+    errorResponse(c, 404, "Page not found", "The address may be mistyped or out of date."),
   );
   app.onError((error, c) => {
     deps.log.error({ err: error, path: c.req.path }, "human plane request failed");
-    return errorResponse(
-      c,
-      500,
-      "Something went wrong",
-      "Something went wrong in heel. Nothing was decided.",
-    );
+    return errorResponse(c, 500, "Something went wrong", "Nothing was decided.");
   });
   return app;
 }

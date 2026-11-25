@@ -1436,17 +1436,9 @@ export const PAGE_STORIES: readonly Story[] = [
   // Error pages (signed out or not, they show the same page)
   ...(
     [
-      ["not-found", "Page not found", "Not found. The address may be mistyped or out of date."],
-      [
-        "stale-form",
-        "This form is out of date",
-        "Refused: this form is stale. Go back, reload the page and try again.",
-      ],
-      [
-        "server-error",
-        "Something went wrong",
-        "Something went wrong in heel. Nothing was decided.",
-      ],
+      ["not-found", "Page not found", "The address may be mistyped or out of date."],
+      ["stale-form", "This form is out of date", "Go back, reload the page and try again."],
+      ["server-error", "Something went wrong", "Nothing was decided."],
     ] as const
   ).map(([state, title, message]) =>
     pageStory("error", state, title, title, undefined, () => errorPage({ title, message }), null),
