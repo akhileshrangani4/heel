@@ -169,10 +169,7 @@ const PAUSE_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" s
 export function pauseBanner(pause: PauseNotice): Html {
   return html`<div class="pause-alert" role="status">
     <span class="pause-alert-icon">${trusted(PAUSE_ICON)}</span>
-    <span class="pause-alert-text"
-      ><strong>On hold: ${formatPauseScope(pause.scope, pause.target)}</strong>. Nothing runs until you
-      resume.</span
-    >
+    <span class="pause-alert-text"><strong>On hold: ${formatPauseScope(pause.scope, pause.target)}</strong></span>
     <a class="pause-alert-action" href="/pause">Resume</a>
   </div>`;
 }

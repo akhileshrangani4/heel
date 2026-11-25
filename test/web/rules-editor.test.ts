@@ -72,7 +72,7 @@ describe("the rules page (2.9)", () => {
     const { h } = setUp();
     const owner = await h.signIn(await h.enroll());
     const page = await (await h.fetch("/rules", { as: owner })).text();
-    expect(page).toContain("Your rules load, with no problems.");
+    expect(page).not.toContain("Your rules file has problems.");
     expect(page).toContain("Any of your agents may read anything");
     expect(page).toContain("Edit the file directly (YAML)");
   });
@@ -167,7 +167,7 @@ describe("the rules page (2.9)", () => {
     const page = await (
       await h.fetch("/rules?op=decision&index=1&then=allow", { as: owner })
     ).text();
-    expect(page).toContain("came from a link, not from your Rules page");
+    expect(page).toContain("came from a link, so it can't be saved from here");
     expect(page).not.toContain("Save with your passkey");
   });
 

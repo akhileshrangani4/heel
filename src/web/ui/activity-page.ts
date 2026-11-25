@@ -294,11 +294,8 @@ export function activityPage(props: {
   return html`<h1>Activity</h1>
     ${
       props.filter.script === undefined
-        ? html`<p class="muted">Every decision heel made, newest first. New ones appear as they happen.</p>`
-        : html`<p>
-            One script's calls, newest first, including those made after it was parked and
-            resumed. <a href="/activity">All activity</a>
-          </p>`
+        ? ""
+        : html`<p>One script's calls. <a href="/activity">All activity</a></p>`
     }
     ${
       props.hidden === null
@@ -317,7 +314,7 @@ export function activityPage(props: {
           <summary class="${btn("outline", "icon-sm")}" title="Download the audit log"><span class="visually-hidden">Download the audit log</span>${trusted(DOWNLOAD_ICON)}</summary>
           <div class="audit-export-panel">
             <p class="audit-export-title">Download the audit log</p>
-            <p class="muted">Every decision for everyone on this heel, one JSON object per line, as <code>heel audit export</code> writes it. Leave the days empty for all of it.</p>
+            <p class="muted">Leave the days empty for all of it.</p>
             <form method="get" action="/activity/export" class="stack-form">
               <div class="row">
                 <label for="export-since">From (day)</label>
@@ -343,7 +340,6 @@ export function activityPage(props: {
       props.rows.length === 0
         ? html`<div class="card req-empty">
             <p><strong>${filtered ? "Nothing matches these filters." : "No decisions yet."}</strong></p>
-            <p class="muted">${filtered ? "Try another agent, account or decision, or clear the filters." : "Calls your agents make through heel show up here as they happen."}</p>
           </div>`
         : ""
     }
@@ -384,14 +380,9 @@ export function activityPage(props: {
     }
     ${props.learned ?? ""}
     <h2>Suggested from Watch mode</h2>
-    <p class="muted">
-      Drawn from Watch mode: calls your rules would have stopped, grouped by account and
-      action. Suggestions are only text. Read them, edit them, and add the ones you want to your rules
-      file. Sends are suggested as ask, never allow.
-    </p>
     ${
       props.suggestions.length === 0
-        ? html`<p class="muted">Nothing yet. Run in Watch mode for a while.</p>`
+        ? html`<p class="muted">Nothing yet.</p>`
         : html`<pre class="mono">${props.suggestions.map((s) => s.yaml).join("\n")}</pre>`
     }`;
 }

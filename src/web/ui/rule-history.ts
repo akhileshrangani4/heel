@@ -13,13 +13,12 @@ function changedOnly(diff: string): string {
     .join("\n");
 }
 
-function who(change: RuleChangeView): Html {
+/** Who made the change; null when the badge already says all there is ("Outside heel"). */
+function who(change: RuleChangeView): Html | null {
   if (change.source === "web") {
-    return html`Changed by ${change.decidedBy ?? "someone no longer here"} in heel's rules page.`;
+    return html`Changed by ${change.decidedBy ?? "someone no longer here"}.`;
   }
-  if (change.source === "outside") {
-    return html`Changed outside heel: edited by hand, or by git or another program.`;
-  }
+  if (change.source === "outside") return null;
   const by = change.decidedBy ?? "someone no longer here";
   const proposal =
     change.proposalId === null
@@ -42,11 +41,6 @@ export function ruleHistoryPage(props: {
   everyone: boolean;
 }): Html {
   return html`<h1>Rule history</h1>
-    <p class="muted">
-      Every change to ${props.everyone ? "the rules files" : "your rules file"}, newest first:
-      those added from a proposal, with who proposed and who added them, and those made outside
-      heel, which heel notices when it reloads the file.
-    </p>
     ${
       props.changes.length === 0
         ? html`<p class="muted">No changes yet.</p>`
@@ -67,7 +61,7 @@ export function ruleHistoryPage(props: {
                   <span class="mono">${change.file}</span>
                   <time class="muted" datetime="${change.at.toISOString()}" title="${formatUtc(change.at)}">${formatRelative(change.at, props.now)}</time>
                 </p>
-                <p class="timeline-who">${who(change)}</p>
+                ${who(change) === null ? "" : html`<p class="timeline-who">${who(change)}</p>`}
                 <details class="fold">
                   <summary>What changed${trusted(CHEVRON_DOWN)}</summary>
                   ${diffLines(changedOnly(change.diff) || "  (only spacing or order changed)", "What changed")}

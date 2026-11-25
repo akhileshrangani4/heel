@@ -72,10 +72,7 @@ function outcomeNotice(outcome: ConnectionsOutcome): Html | "" {
     case "none":
       return "";
     case "connected":
-      return notice(
-        "ok",
-        html`<p>Signed in to <strong>${outcome.alias}</strong>. Agents can use it now.</p>`,
-      );
+      return notice("ok", html`<p>Signed in to <strong>${outcome.alias}</strong>.</p>`);
     case "failed":
       return notice(
         "error",
@@ -85,11 +82,11 @@ function outcomeNotice(outcome: ConnectionsOutcome): Html | "" {
     case "rekeyed": {
       const said =
         outcome.kind === "added"
-          ? html`Connected <strong>${outcome.alias}</strong>. If it signs in, sign in below; otherwise agents can use it now.`
-          : html`Replaced <strong>${outcome.alias}</strong>'s key. Agents use the new one from now on.`;
+          ? html`Connected <strong>${outcome.alias}</strong>.`
+          : html`Replaced <strong>${outcome.alias}</strong>'s key.`;
       return notice(
         "ok",
-        html`<p>${said}${outcome.unchecked ? " heel couldn't check the key with the service, so it was stored unchecked." : ""}</p>`,
+        html`<p>${said}${outcome.unchecked ? " heel couldn't check the key." : ""}</p>`,
       );
     }
     case "sharing":
@@ -258,7 +255,6 @@ function connectForm(
       <div class="connect-field connect-name">
         <label for="connect-alias">Name</label>
         <input id="connect-alias" name="alias" maxlength="64" autocomplete="off" placeholder="notes" autocapitalize="off" autocorrect="off" spellcheck="false" value="${chosen?.alias ?? ""}" oninput="this.dataset.auto=''"${chosen?.alias ? trusted(' data-auto="1"') : ""} />
-        <p class="muted">How rules and tools call it.</p>
       </div>
       <div class="connect-field" data-for="mcp">
         <label for="connect-url">Server URL</label>
@@ -280,7 +276,7 @@ function connectForm(
             : ""
         }</p>
       </div>
-      <p class="muted" data-for="signin">You sign in right after, on this page.</p>
+      <p class="muted" data-for="signin">You sign in after.</p>
       <div class="connect-field" data-for="cli">
         <p class="muted">Run this on heel's host:</p>
         <pre class="args">heel connect cli gh --as gh --bin /usr/bin/gh --credential-stdin</pre>
@@ -308,7 +304,7 @@ const PLUG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-
 /** The commands that do the same from the machine heel runs on. */
 const CLI_FOLD = html`<details class="connect-cli">
   <summary>From the command line${trusted(CHEVRON_DOWN)}</summary>
-  <p class="muted">On the machine heel runs on. heel asks for the key on stdin; for Gmail, Calendar and Outlook you sign in here afterwards.</p>
+  <p class="muted">On the machine heel runs on.</p>
   <pre class="args">heel connect github --as github --credential-stdin
 heel connect gmail --as gmail-work
 heel connect mcp --as notes --url https://notes.example.com/mcp --oauth</pre>
@@ -325,7 +321,7 @@ function sharingControls(row: ConnectionRow, manage: Manage, key: string): Html 
   const people = manage.people ?? [];
   const sharing = row.sharing ?? { sharedWith: [], approvers: [] };
   if (people.length === 0 && manage.groups !== true && sharing.sharedWith.length === 0) {
-    return html`<p class="muted">Only you can use it. Once other people use this heel, you can share it here.</p>`;
+    return html`<p class="muted">Only you can use it.</p>`;
   }
   const general = sharing.approvers.filter((a) => a.repo === undefined);
   const byRepo = sharing.approvers.filter((a) => a.repo !== undefined);
@@ -604,7 +600,6 @@ export function connectionsPage(props: ConnectionsProps): Html {
         ? html`<div class="req-empty conn-empty">
             <span class="req-empty-icon conn-empty-icon">${trusted(PLUG)}</span>
             <p class="req-empty-title">No accounts yet</p>
-            <p class="muted">Connect Gmail, Calendar, GitHub or any API so your agents can use it through heel.</p>
             ${canAdd ? dialogTrigger({ dialogId: "connect-another", label: "Add connection", className: btn("outline", "sm") }) : html`<p class="muted">From the command line: <code>heel connect &lt;service&gt; --as &lt;name&gt;</code></p>`}
           </div>`
         : html`<section class="conn-table" aria-labelledby="conn-count">
