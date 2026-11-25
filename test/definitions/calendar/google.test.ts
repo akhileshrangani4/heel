@@ -96,6 +96,38 @@ ${ALL.replace("rules:\n", "")}`);
     });
   });
 
+  it.each([
+    [
+      "refused, with Google's JSON answer",
+      () => Response.json({ error: { code: 403, message: "Forbidden" } }, { status: 403 }),
+      {
+        status: "upstream_error",
+        upstreamStatus: 403,
+        body: { error: { code: 403, message: "Forbidden" } },
+      },
+    ],
+    [
+      "refused, with a null body when the answer isn't JSON",
+      () => new Response("Bad Request", { status: 400 }),
+      { status: "upstream_error", upstreamStatus: 400, body: null },
+    ],
+    [
+      "unknown on a 408",
+      () => new Response("", { status: 408 }),
+      { status: "upstream_outcome_unknown" },
+    ],
+    [
+      "unknown on a 5xx",
+      () => Response.json({ error: { code: 503 } }, { status: 503 }),
+      { status: "upstream_outcome_unknown" },
+    ],
+  ])("a failed write comes back %s", async (_label, answer, expected) => {
+    const h = setUp();
+    h.calendar.writeAnswer = answer;
+    expect(await h.call("create_event", MEETING)).toEqual(expected);
+    expect(h.calendar.writes).toHaveLength(1);
+  });
+
   it("a missing event is not_available, before any write", async () => {
     const h = setUp();
     expect(await h.call("delete_event", { event_id: "nope" })).toEqual({

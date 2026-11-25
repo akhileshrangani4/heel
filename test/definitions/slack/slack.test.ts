@@ -161,13 +161,17 @@ describe("the Slack definition", () => {
   it("denies a channel that isn't there as not available", async () => {
     const h = setUp(INSIDE_ONLY);
     const result = await h.call("read_channel", { channel: "C0MISSING" });
-    expect(result).toMatchObject({ status: "denied", reason: "not_available" });
+    expect(result).toEqual({ status: "denied", reason: "not_available", rule: null });
   });
 
   it("reports Slack's refusal of a post as an upstream error", async () => {
     const h = setUp(INSIDE_ONLY, fakeSlack({ refuse: "not_in_channel" }));
     const result = await h.call("post_message", { channel: INTERNAL, text: "x" });
-    expect(result).toMatchObject({ status: "upstream_error", upstreamStatus: 400 });
+    expect(result).toEqual({
+      status: "upstream_error",
+      upstreamStatus: 400,
+      body: { error: "not_in_channel" },
+    });
   });
 
   it("treats a scheduled message as persistence, so a post rule doesn't cover it", async () => {
@@ -238,16 +242,17 @@ describe("the Slack definition", () => {
 
   it("leaves the outcome unknown on an error Slack says may follow a partial success", async () => {
     const h = setUp(INSIDE_ONLY, fakeSlack({ refuse: "internal_error" }));
-    expect((await h.call("post_message", { channel: INTERNAL, text: "x" })).status).toBe(
-      "upstream_outcome_unknown",
-    );
+    expect(await h.call("post_message", { channel: INTERNAL, text: "x" })).toEqual({
+      status: "upstream_outcome_unknown",
+    });
   });
 
   it("reports a rate limit as a refusal", async () => {
     const h = setUp(INSIDE_ONLY, fakeSlack({ status: 429 }));
-    expect(await h.call("post_message", { channel: INTERNAL, text: "x" })).toMatchObject({
+    expect(await h.call("post_message", { channel: INTERNAL, text: "x" })).toEqual({
       status: "upstream_error",
       upstreamStatus: 429,
+      body: { error: "ratelimited" },
     });
   });
 

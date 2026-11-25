@@ -253,7 +253,25 @@ describe("gh pr merge", () => {
       argv: ["gh", "pr", "merge", "12", "-R", "acme/web"],
       cwd: h.repo,
     });
-    expect(answer).toMatchObject({ status: 403, body: { reason: "lookup_unavailable" } });
+    expect(answer).toEqual({
+      status: 403,
+      body: { status: "denied", reason: "lookup_unavailable", rule: null },
+    });
+    expect(h.started).toEqual([]);
+  });
+
+  it("I-42: denies a pull request GitHub says isn't there as not_available", async () => {
+    const gh = github({});
+    const h = cliPipeline({ owner: MERGE_WHEN_GREEN, fetch: gh.fetch });
+    const answer = await h.run({
+      argv: ["gh", "pr", "merge", "12", "-R", "acme/other"],
+      cwd: h.repo,
+    });
+    expect(answer).toEqual({
+      status: 403,
+      body: { status: "denied", reason: "not_available", rule: null },
+    });
+    expect(gh.seen).toContain("/repos/acme/other/pulls/12");
     expect(h.started).toEqual([]);
   });
 });

@@ -26,7 +26,13 @@ interface Sent {
 }
 
 function fakeGitHub(
-  options: { checks?: "pass" | "fail"; mergeStatus?: number; files?: { filename: string }[] } = {},
+  options: {
+    checks?: "pass" | "fail";
+    mergeStatus?: number;
+    /** Answers the merge in place of GitHub. */
+    mergeAnswer?: () => Response;
+    files?: { filename: string }[];
+  } = {},
 ) {
   const sent: Sent[] = [];
   const fetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
@@ -88,6 +94,7 @@ function fakeGitHub(
       return Response.json([]);
     }
     if (method === "PUT" && p.endsWith("/merge")) {
+      if (options.mergeAnswer !== undefined) return options.mergeAnswer();
       return Response.json(
         { merged: true, sha: "d".repeat(40) },
         { status: options.mergeStatus ?? 200 },
@@ -207,6 +214,10 @@ describe("the GitHub definition", () => {
     expect(merge?.path).toBe("/repos/acme/web/pulls/12/merge");
     expect(merge?.body).toMatchObject({ sha: HEAD, merge_method: "squash" });
     expect(h.sent.map((s) => s.path)).toContain(`/repos/acme/web/commits/${HEAD}/check-runs`);
+    // The fake answers classic branch protection 404: no protection, not a failed lookup.
+    expect(h.sent.map((s) => s.path)).toContain(
+      "/repos/acme/web/branches/main/protection/required_status_checks",
+    );
   });
 
   it("treats a merge that lands a workflow as persistence", async () => {
@@ -237,13 +248,45 @@ describe("the GitHub definition", () => {
   it("denies a merge on a pull request that isn't there, before rules", async () => {
     const h = setUp(MERGE_GREEN);
     const result = await h.call("merge_pull_request", { repo: "acme/web", number: 404 });
-    expect(result).toMatchObject({ status: "denied", reason: "not_available" });
+    expect(result).toEqual({ status: "denied", reason: "not_available", rule: null });
   });
 
   it("passes GitHub's refusal of a merge through as an upstream error", async () => {
     const h = setUp(MERGE_GREEN, fakeGitHub({ mergeStatus: 409 }));
     const result = await h.call("merge_pull_request", { repo: "acme/web", number: 12 });
-    expect(result).toMatchObject({ status: "upstream_error", upstreamStatus: 409 });
+    expect(result).toEqual({
+      status: "upstream_error",
+      upstreamStatus: 409,
+      body: { merged: true, sha: "d".repeat(40) },
+    });
+  });
+
+  it.each([
+    [
+      "refused, with the text of an answer that isn't JSON",
+      () => new Response("Merge conflict", { status: 405 }),
+      { status: "upstream_error", upstreamStatus: 405, body: "Merge conflict" },
+    ],
+    [
+      "refused on a 408, like any 4xx",
+      () => Response.json({ message: "timeout" }, { status: 408 }),
+      { status: "upstream_error", upstreamStatus: 408, body: { message: "timeout" } },
+    ],
+    [
+      "unknown on a 5xx",
+      () => Response.json({ message: "Server Error" }, { status: 502 }),
+      { status: "upstream_outcome_unknown" },
+    ],
+  ])("a failed merge comes back %s", async (_label, mergeAnswer, expected) => {
+    const h = setUp(MERGE_GREEN, fakeGitHub({ mergeAnswer }));
+    const result = await h.call("merge_pull_request", { repo: "acme/web", number: 12 });
+    expect(result).toEqual(expected);
+  });
+
+  it("leaves a read GitHub answers 404 while it runs unknown", async () => {
+    const h = setUp(MERGE_GREEN);
+    const result = await h.call("get_pull_request", { repo: "acme/web", number: 404 });
+    expect(result).toEqual({ status: "upstream_outcome_unknown" });
   });
 
   it("sets repo on every call, so a rule on one repo doesn't reach another", async () => {

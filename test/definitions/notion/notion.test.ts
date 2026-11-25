@@ -182,9 +182,7 @@ describe("the Notion definition", () => {
         parent_page_id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
         title: "x",
       }),
-    ).toMatchObject({
-      reason: "not_available",
-    });
+    ).toEqual({ status: "denied", reason: "not_available", rule: null });
   });
 
   it("asks before trashing, with in_trash", async () => {
@@ -194,9 +192,10 @@ describe("the Notion definition", () => {
 
   it("reports Notion's refusal as an upstream error", async () => {
     const h = setUp(UNDER_WIKI, fakeNotion({ refuse: 400 }));
-    expect(await h.call("append_paragraphs", { page_id: NOTE, paragraphs: ["x"] })).toMatchObject({
+    expect(await h.call("append_paragraphs", { page_id: NOTE, paragraphs: ["x"] })).toEqual({
       status: "upstream_error",
       upstreamStatus: 400,
+      body: { code: "validation_error" },
     });
   });
 
@@ -218,17 +217,21 @@ describe("the Notion definition", () => {
 
   it("sends nothing when the page moved after heel checked it", async () => {
     const h = setUp(UNDER_WIKI, fakeNotion({ moveAfterRead: true }));
-    expect(await h.call("append_paragraphs", { page_id: NOTE, paragraphs: ["x"] })).toMatchObject({
+    expect(await h.call("append_paragraphs", { page_id: NOTE, paragraphs: ["x"] })).toEqual({
       status: "upstream_error",
       upstreamStatus: 409,
+      body: { code: "moved_after_check" },
     });
     expect(writes(h.sent)).toEqual([]);
   });
 
-  it("leaves a 4xx that isn't Notion's own error unknown", async () => {
-    const h = setUp(UNDER_WIKI, fakeNotion({ refuse: 408, code: "timeout" }));
-    expect((await h.call("append_paragraphs", { page_id: NOTE, paragraphs: ["x"] })).status).toBe(
-      "upstream_outcome_unknown",
-    );
+  it.each([
+    ["a 4xx that isn't Notion's own error", 408, "timeout"],
+    ["a 5xx", 503, "service_unavailable"],
+  ])("leaves %s unknown", async (_label, refuse, code) => {
+    const h = setUp(UNDER_WIKI, fakeNotion({ refuse, code }));
+    expect(await h.call("append_paragraphs", { page_id: NOTE, paragraphs: ["x"] })).toEqual({
+      status: "upstream_outcome_unknown",
+    });
   });
 });
