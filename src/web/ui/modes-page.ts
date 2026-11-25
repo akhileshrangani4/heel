@@ -74,7 +74,7 @@ function segmented(row: ModeRow, tighten: FormTarget, orgEffective: Mode): Html 
       : postForm(
           tighten,
           { owner: row.ownerId },
-          html`<button type="submit" class="seg-item"><span class="visually-hidden">Switch to </span>Enforce</button>`,
+          html`<button type="submit" class="seg-item"><span class="visually-hidden">Switch ${row.label} to </span>Enforce</button>`,
         );
   return html`<span class="seg" aria-label="${row.label}'s mode">${
     current === "Enforce" ? html`${pressed("Enforce")}${other}` : html`${other}${pressed("Watch")}`

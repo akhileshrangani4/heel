@@ -47,4 +47,9 @@ export const RULES_CSS = `
 .timeline-head{display:flex;flex-wrap:wrap;align-items:center;gap:.25rem .6rem;margin:0;font-size:.88rem}
 .timeline-who{margin:.3rem 0 0}
 .timeline-body .fold > summary{border-top:0;padding:.35rem 0;font-size:.88rem;color:var(--muted);justify-content:flex-start}
+/* Touch: at least a 44px hit area around small controls, without moving them. */
+@media (pointer:coarse){
+  .rule-remove,.fold > summary{position:relative}
+  .rule-remove::after,.fold > summary::after{content:"";position:absolute;top:50%;left:50%;width:max(100%,44px);height:max(100%,44px);transform:translate(-50%,-50%)}
+}
 `;
