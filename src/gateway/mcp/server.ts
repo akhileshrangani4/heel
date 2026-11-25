@@ -23,6 +23,7 @@ import { accountModule } from "../../codemode/stubs.ts";
 import { type CodeWorker, DEFAULT_LIMITS } from "../../codemode/worker.ts";
 import { LEARNING_WINDOW_DAYS, type LearningThreshold } from "../../core/learning.ts";
 import type { RuleSet } from "../../core/rules/evaluate.ts";
+import { RUN_ID_META_KEY } from "../../core/run-id.ts";
 import type { Logger } from "../../log.ts";
 import { ProposeRulesInput, pendingProposals, proposeRules } from "../../proposals/rules.ts";
 import {
@@ -186,9 +187,6 @@ export interface McpSurface {
 
 /** What a held call tells the client while it waits. */
 const WAITING_NOTE = "Waiting for approval on heel's approval page.";
-
-/** `_meta` key an agent puts its run id under. */
-export const RUN_ID_META_KEY = "heel/runId";
 
 type ListingAccount = { account: AccountRecord; tools: NonNullable<Definition["tools"]> };
 
