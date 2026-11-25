@@ -10,7 +10,7 @@ export const RULES_CSS = `
 .rules-empty{padding:1.75rem 1rem;border:1px dashed var(--line);border-radius:14px;margin:.5rem 0 1.25rem}
 @media (max-width:36rem){.notice .problems{grid-template-columns:1fr;gap:.1rem}.notice .problem-what{margin-bottom:.35rem}}
 .rules-file{margin:.2rem 0 1rem;font-size:.85rem}
-.rule-list{list-style:none;margin:.5rem 0 1.25rem;padding:0;border:1px solid var(--line);border-radius:14px;background:var(--bg);overflow:hidden;box-shadow:0 1px 2px rgb(0 0 0 / .04)}
+.rule-list{list-style:none;margin:.5rem 0 1.25rem;padding:0;border:1px solid var(--line);border-radius:14px;background:var(--bg);box-shadow:0 1px 2px rgb(0 0 0 / .04)}
 .rule-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:.25rem .9rem;padding:.75rem 1rem}
 .rule-row + .rule-row{border-top:1px solid var(--line)}
 .rule-n{display:inline-grid;place-items:center;width:1.6rem;height:1.6rem;border-radius:999px;background:var(--surface);color:var(--muted);font-size:.78rem;font-weight:600;font-variant-numeric:tabular-nums}
