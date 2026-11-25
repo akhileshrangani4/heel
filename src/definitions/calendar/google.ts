@@ -2,9 +2,9 @@ import type { Tool } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import type { Definition } from "../../gateway/pipeline/ports.ts";
 import type { AccountRecord } from "../../store/directory.ts";
-import type { Vault } from "../../vault/vault.ts";
+import { type ApiDeps, accountToken } from "../api-deps.ts";
 import { Address, unique } from "../mail/compose.ts";
-import { type FetchFn, mailboxSettings } from "../sign-in.ts";
+import { mailboxSettings } from "../sign-in.ts";
 import {
   listedTools,
   type Preparation,
@@ -317,22 +317,12 @@ const TOOLS: Record<string, CalendarTool> = {
 
 export const GOOGLE_CALENDAR_TOOLS: readonly Tool[] = listedTools(TOOLS);
 
-export interface GoogleCalendarDeps {
-  vault: Vault;
-  fetch: FetchFn;
-}
-
 /** Null for an account that has never signed in (no address yet): its calls are denied. */
-export function googleCalendarDefinition(
-  account: AccountRecord,
-  deps: GoogleCalendarDeps,
-): Definition | null {
+export function googleCalendarDefinition(account: AccountRecord, deps: ApiDeps): Definition | null {
   const settings = mailboxSettings(account.settings);
   if (settings === null) return null;
   const box: CalendarBox = {
-    client: new GoogleCalendarClient(deps.fetch, async () =>
-      (await deps.vault.accessToken(account.id)).reveal(),
-    ),
+    client: new GoogleCalendarClient(deps.fetch, () => accountToken(deps, account)),
     address: settings.mailbox,
   };
   return toolTableDefinition({

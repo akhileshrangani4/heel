@@ -8,8 +8,7 @@ import {
 } from "../../gateway/pipeline/ports.ts";
 import { credentialForms } from "../../runner/scrub.ts";
 import type { AccountRecord } from "../../store/directory.ts";
-import type { Vault } from "../../vault/vault.ts";
-import type { FetchFn } from "../sign-in.ts";
+import { type ApiDeps, accountToken } from "../api-deps.ts";
 import { filterResponse } from "./hide-map.ts";
 import {
   HTTP_METHODS,
@@ -214,12 +213,7 @@ async function readResponse(response: Response): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
-export interface HttpDeps {
-  vault: Vault;
-  fetch: FetchFn;
-}
-
-export function httpDefinition(account: AccountRecord, deps: HttpDeps): Definition | null {
+export function httpDefinition(account: AccountRecord, deps: ApiDeps): Definition | null {
   const settings = httpSettings(account.settings);
   if (settings === null) return null;
   const operations = settings.operations as Operation[];
@@ -323,7 +317,7 @@ export function httpDefinition(account: AccountRecord, deps: HttpDeps): Definiti
 
     async execute(call, signal): Promise<HttpResponse> {
       const args = HttpArgsSchema.parse(call.args);
-      const credential = (await deps.vault.accessToken(account.id)).reveal();
+      const credential = await accountToken(deps, account);
       const base = new URL(settings.baseUrl);
       // The path is appended below the base URL's own path, each segment encoded again.
       const basePath = base.pathname.replace(/\/$/, "");

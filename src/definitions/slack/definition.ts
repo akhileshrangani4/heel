@@ -2,8 +2,7 @@ import type { Tool } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import type { Definition } from "../../gateway/pipeline/ports.ts";
 import type { AccountRecord } from "../../store/directory.ts";
-import type { Vault } from "../../vault/vault.ts";
-import type { FetchFn } from "../sign-in.ts";
+import { type ApiDeps, accountToken } from "../api-deps.ts";
 import { listedTools, type ToolRow, toolRow, toolTableDefinition } from "../tool-table.ts";
 import { SlackClient } from "./client.ts";
 
@@ -31,11 +30,6 @@ import { SlackClient } from "./client.ts";
  * conversations.info, conversations.history, conversations.replies,
  * chat.postMessage, chat.update, chat.delete, chat.scheduleMessage.
  */
-
-export interface SlackDeps {
-  vault: Vault;
-  fetch: FetchFn;
-}
 
 interface Box {
   client: SlackClient;
@@ -300,8 +294,8 @@ const TOOLS: Record<string, SlackTool> = {
 
 export const SLACK_TOOLS: readonly Tool[] = listedTools(TOOLS);
 
-export function slackDefinition(account: AccountRecord, deps: SlackDeps): Definition {
-  const token = async () => (await deps.vault.accessToken(account.id)).reveal();
+export function slackDefinition(account: AccountRecord, deps: ApiDeps): Definition {
+  const token = () => accountToken(deps, account);
   return toolTableDefinition({
     tools: TOOLS,
     listed: SLACK_TOOLS,

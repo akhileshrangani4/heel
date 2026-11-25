@@ -3,8 +3,7 @@ import { z } from "zod";
 import type { ProviderFields } from "../../core/call.ts";
 import type { Definition } from "../../gateway/pipeline/ports.ts";
 import type { AccountRecord } from "../../store/directory.ts";
-import type { Vault } from "../../vault/vault.ts";
-import type { FetchFn } from "../sign-in.ts";
+import { type ApiDeps, accountToken } from "../api-deps.ts";
 import {
   listedTools,
   NotFoundError,
@@ -32,11 +31,6 @@ import { LinearClient, refused } from "./client.ts";
  * - heel offers no tool for webhooks, API keys or OAuth apps, which outlive
  *   revoking heel (I-70).
  */
-
-export interface LinearDeps {
-  vault: Vault;
-  fetch: FetchFn;
-}
 
 interface Box {
   client: LinearClient;
@@ -398,8 +392,8 @@ const TOOLS: Record<string, LinearTool> = {
 
 export const LINEAR_TOOLS: readonly Tool[] = listedTools(TOOLS);
 
-export function linearDefinition(account: AccountRecord, deps: LinearDeps): Definition {
-  const token = async () => (await deps.vault.accessToken(account.id)).reveal();
+export function linearDefinition(account: AccountRecord, deps: ApiDeps): Definition {
+  const token = () => accountToken(deps, account);
   return toolTableDefinition({
     tools: TOOLS,
     listed: LINEAR_TOOLS,
