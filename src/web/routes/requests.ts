@@ -4,6 +4,7 @@ import { canonicalHash } from "../../core/canonical.ts";
 import { resolveAll } from "../../definitions/mcp/public-only.ts";
 import { missingSignInSetup } from "../../definitions/sign-in-setup.ts";
 import { compileGrant } from "../../grants/compile.ts";
+import { serviceActions } from "../../requests/actions.ts";
 import {
   approveRequest,
   findRequest,
@@ -37,7 +38,7 @@ import { html } from "../ui/html.ts";
 import { type RequestCard, requestCards, requestPage } from "../ui/requests.ts";
 
 /**
- * Connection requests on the human plane (roadmap 2.5).
+ * Connection requests on the human plane.
  *
  * - `GET /requests/:id` shows what the agent asks for in heel's words, its
  *   own words labelled as its claim, and what the owner's rules would let it
@@ -100,6 +101,8 @@ export function requestCardsFor(deps: HumanPlaneDeps, session: SessionView, now:
     id: row.id,
     agent: nameOf(deps, "agent", row.agentId),
     service: serviceLabel(row.details),
+    provider: row.details.provider,
+    alias: row.details.alias,
     why: row.why,
     createdAt: row.createdAt,
     expiresAt: row.expiresAt,
@@ -167,6 +170,7 @@ export function requestRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
             : { by: nameOf(deps, "user", row.decidedBy), at: row.decidedAt },
         now,
         coverage: coverage(deps.rules.set, nameOf(deps, "user", row.ownerId), agent, details, {
+          actions: serviceActions(details.provider),
           grants: liveGrants(deps.db, deps.orgId, row.agentId, now).flatMap((g) => {
             try {
               return [{ id: g.id, rule: compileGrant(g.match, { id: g.id }).rule }];
@@ -279,7 +283,7 @@ export function requestRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
         400,
       );
     }
-    // A key the service turns down is never stored, and the request keeps waiting (T12).
+    // A key the service turns down is never stored, and the request keeps waiting.
     const checked =
       needsKey(details.provider) && deps.checkKey !== undefined
         ? await deps.checkKey(details.provider, pasted)

@@ -18,10 +18,10 @@ export interface AgentAppDeps {
   now?: () => Date;
   /** The MCP endpoints; without it they answer 501, like any surface not built yet. */
   mcp?: McpSurface;
-  /** The HTTP proxy (D7a); absent, `/http/*` answers that it isn't available. */
+  /** The HTTP proxy; absent, `/http/*` answers that it isn't available. */
   http?: HttpProxyDeps;
   /**
-   * OAuth for connectors (A2): where the agent plane is reachable and which
+   * OAuth for connectors: where the agent plane is reachable and which
    * authorization server issues its tokens. Null or absent: static tokens only.
    */
   oauth?: { agentPublicUrl: URL; authorizationServer: URL } | null;
@@ -30,7 +30,7 @@ export interface AgentAppDeps {
    * and `agent_public_url`'s host (DNS-rebinding protection).
    */
   hosts?: readonly string[];
-  /** The CLI runner's `/run` (D8b); without it, `/run` answers 501. */
+  /** The CLI runner's `/run`; without it, `/run` answers 501. */
   run?: { pipeline: Pipeline; sandbox: boolean; slots?: SandboxSlots };
 }
 
@@ -86,8 +86,8 @@ export function createAgentApp(deps: AgentAppDeps): Hono<AgentPlaneEnv> {
     }),
   );
 
-  // MCP (spec: Endpoints and tools). Bare /mcp is code mode, served only
-  // where the sandbox runs (D6b); without it, it says where the direct tools are.
+  // Bare /mcp is code mode, served only where the sandbox runs; without it,
+  // it says where the direct tools are.
   app.all("/mcp", async (c) => {
     const mcp = deps.mcp;
     if (mcp === undefined) return c.json(NOT_BUILT, 501);
@@ -117,7 +117,7 @@ export function createAgentApp(deps: AgentAppDeps): Hono<AgentPlaneEnv> {
     return mcp.serve(c.req.raw, agent, { kind: "account", alias });
   });
 
-  // Check-back (spec: Pending, joining and checking back): read-only, and only
+  // Check-back: read-only, and only
   // for the agent that made the request. Another agent's id reads as unknown,
   // so ids can't be probed. Re-sending the call is the only way it runs.
   app.get("/approvals/:id", (c) => {
@@ -142,7 +142,7 @@ export function createAgentApp(deps: AgentAppDeps): Hono<AgentPlaneEnv> {
   );
   app.notFound((c) => c.json({ status: "denied", reason: "unknown_endpoint", rule: null }, 404));
   app.onError((error, c) => {
-    // Fail closed (spec: Fail-closed behavior): nothing was sent upstream.
+    // Fail closed: nothing was sent upstream.
     deps.log.error({ err: error, path: c.req.path }, "agent plane request failed");
     return c.json({ status: "denied", reason: "heel error" }, 503);
   });

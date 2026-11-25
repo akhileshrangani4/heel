@@ -1,10 +1,23 @@
 import type { SignInSetup } from "../../definitions/sign-in-setup.ts";
-import type { Coverage } from "../../requests/coverage.ts";
+import type { ActionDecision, ActionOutcome, Coverage } from "../../requests/coverage.ts";
 import type { AgentRequestStatus } from "../../store/schema.ts";
+import {
+  actionBar,
+  approvalShell,
+  cardReason,
+  codeChip,
+  type Dock,
+  pageFold,
+  quote,
+  shorten,
+  technical,
+} from "./approval-shell.ts";
 import { ceremonyButton } from "./ceremony.ts";
 import { formatRelative } from "./format.ts";
-import { type Html, html } from "./html.ts";
+import { type Html, html, trusted } from "./html.ts";
+import { CHEVRON_RIGHT } from "./icons.ts";
 import { badge, type FormTarget, notice, postForm, type Tone, time } from "./layout.ts";
+import { serviceLogo } from "./logos.ts";
 import { btn } from "./shadcn/button.ts";
 
 /** One waiting connection request, as the Approvals list shows it. */
@@ -13,47 +26,49 @@ export interface RequestCard {
   agent: string;
   /** heel's words: "Gmail", "the MCP server at mcp.example.com". */
   service: string;
+  /** For the service's mark. */
+  provider: string;
+  alias: string;
   why: string | null;
   createdAt: Date;
   expiresAt: Date;
 }
 
-const STATUS: Record<AgentRequestStatus, { label: string; tone: Tone | "muted" }> = {
-  pending: { label: "Connection request", tone: "warn" },
-  approved: { label: "Connected", tone: "ok" },
-  rejected: { label: "Rejected", tone: "muted" },
-  superseded: { label: "Replaced", tone: "muted" },
-  expired: { label: "Expired", tone: "muted" },
-};
-
-/** Connection requests waiting for this person, on the Approvals page. */
+/**
+ * Connection requests waiting for this person, on the Approvals page. The
+ * whole row opens the request: its title link stretches over the row
+ * (`.req-card`), and anything else clickable in it sits above that.
+ */
 export function requestCards(cards: readonly RequestCard[], now: Date): Html | "" {
   if (cards.length === 0) return "";
-  return html`<h2 class="section-title">Connection requests</h2>
-    <ul class="req-list" aria-label="Connection requests">
+  return html`<section class="req-section" aria-labelledby="req-connections">
+    <h2 id="req-connections" class="req-section-title">
+      Connection requests <span class="req-section-count">${String(cards.length)}</span>
+    </h2>
+    <ul class="req-group" aria-label="Connection requests">
       ${cards.map(
-        (card) => html`<li class="card req" data-status="pending">
-          <div class="ap-meta">
-            ${badge(STATUS.pending.label, STATUS.pending.tone)}
-            <span class="ap-agent">${card.agent}</span>
-            <span class="muted">${formatRelative(card.createdAt, now)}</span>
-          </div>
-          <h2 class="req-title">
-            <a href="/requests/${encodeURIComponent(card.id)}"
-              >${card.agent} asks you to connect <mark>${card.service}</mark></a
+        (card) => html`<li class="req req-card" data-status="pending">
+          <span class="req-icon">${serviceLogo(card.provider, card.alias)}</span>
+          <span class="req-body">
+            <span class="ap-meta"><span class="muted">${formatRelative(card.createdAt, now)}</span></span>
+            <a class="req-title req-link" href="/requests/${encodeURIComponent(card.id)}"
+              >${shorten(card.agent, 12, 8)} wants to connect <mark>${shorten(card.service, 24, 12)}</mark></a
             >
-          </h2>
-          ${
-            card.why === null
-              ? ""
-              : html`<p class="req-reason"><span class="muted">${card.agent} says:</span> ${card.why}</p>`
-          }
-          <p class="req-foot muted">
-            Expires ${formatRelative(card.expiresAt, now)} · <span class="mono">${card.id}</span>
-          </p>
+            ${card.why === null ? "" : cardReason(card.why)}
+            ${soonFoot(card.expiresAt, now)}
+          </span>
+          <span class="req-go" aria-hidden="true">${trusted(CHEVRON_RIGHT)}</span>
         </li>`,
       )}
-    </ul>`;
+    </ul>
+  </section>`;
+}
+
+/** A card's expiry, only when it's close (under a day). */
+export function soonFoot(expiresAt: Date, now: Date): Html | "" {
+  return expiresAt.getTime() - now.getTime() < 24 * 3_600_000
+    ? html`<span class="req-foot muted">Expires ${formatRelative(expiresAt, now)}</span>`
+    : "";
 }
 
 export interface RequestPageProps {
@@ -89,189 +104,386 @@ export interface RequestPageProps {
   unchecked?: boolean;
   /** For a service that uses a key: what key it takes. The owner pastes it here, never the agent. */
   key: { hint: string } | null;
+  /** Phones: pin the action bar to the bottom, or keep it in the panel. */
+  dock?: Dock;
+  /** Design round: actions grouped by outcome (`groups`) or one list, outcome per row (`list`). */
+  coverageLayout?: "groups" | "list";
 }
 
-function coverageView(props: RequestPageProps): Html {
-  const { rules, mode } = props.coverage;
-  return html`<section class="card">
-    <h2 class="section-title">What ${props.agent} could do with it</h2>
-    ${
-      rules.length === 0
-        ? html`<p>
-            None of your rules, and none of ${props.agent}'s grants, cover
-            <span class="mono">${props.alias}</span>, so every call on it would be denied until you
-            add a rule for it.
-          </p>`
-        : html`<p>
-              These cover <span class="mono">${props.alias}</span> as soon as it's connected, for
-              the calls they match:
-            </p>
-            <dl class="facts">
-              ${rules.map(
-                (r) => html`<dt>${r.rule}</dt>
-                  <dd>
-                    <strong>${r.decision === "allow" ? "runs" : "asks you"}</strong>
-                    <span class="muted"
-                      >· ${r.namesIt ? "names this account" : "names no account, so it covers every one"}</span
-                    >
-                  </dd>`,
-              )}
-            </dl>`
+// ── What the agent could do with it ─────────────────────────────────────────
+
+const OUTCOME: Record<ActionOutcome, { label: string; tone: Tone | "muted" }> = {
+  allow: { label: "Runs on its own", tone: "ok" },
+  ask: { label: "Asks you each time", tone: "warn" },
+  deny: { label: "Never runs", tone: "muted" },
+  depends: { label: "Depends on the call", tone: "info" },
+};
+const ORDER: readonly ActionOutcome[] = ["ask", "allow", "depends", "deny"];
+/** The same outcomes, short, for one badge per row (variant B). */
+const SHORT: Record<ActionOutcome, string> = {
+  allow: "Runs",
+  ask: "Asks you",
+  deny: "Never runs",
+  depends: "Depends",
+};
+
+/** "merge pull request" → "Merge pull request": labels start with a capital, the rest as written. */
+function sentence(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+const runs = (n: number, one: string, many: string) => (n === 1 ? `1 ${one}` : `${n} ${many}`);
+
+/** Pure: the block's one-line answer, computed from what the rules decide for each action. */
+export function coverageSummary(coverage: Coverage): string {
+  const actions = coverage.actions;
+  if (actions.kind === "opaque") {
+    switch (actions.outcome) {
+      case "ask":
+        return "heel can't tell reads from writes here, so every call asks you.";
+      case "allow":
+        return "Every call runs on its own.";
+      case "deny":
+        return "Every call is denied until you add a rule for it.";
+      case "depends":
+        return "heel can't tell reads from writes here. Your rules decide each call by what it contains.";
     }
+  }
+  const all = actions.actions;
+  const of = (o: ActionOutcome) => all.filter((a) => a.outcome === o);
+  const [allow, ask, deny, depends] = [of("allow"), of("ask"), of("deny"), of("depends")];
+  const reads = all.filter((a) => a.read);
+  const parts: string[] = [];
+  if (allow.length === all.length) return "Everything runs on its own.";
+  if (ask.length === all.length) return "Everything asks you first.";
+  if (deny.length === all.length) return "Nothing can run yet: no rule covers it.";
+  if (allow.length > 0) {
+    parts.push(
+      allow.length === reads.length && allow.every((a) => a.read)
+        ? "Reads run on their own."
+        : allow.length === 1
+          ? "1 action runs on its own."
+          : `${String(allow.length)} actions run on their own.`,
+    );
+  }
+  if (ask.length > 0) {
+    parts.push(
+      allow.length > 0 && allow.length + ask.length === all.length
+        ? "Everything else asks you."
+        : `${String(ask.length)} ask you.`,
+    );
+  }
+  if (depends.length > 0) {
+    parts.push(`${String(depends.length)} depend on the call.`);
+  }
+  if (deny.length > 0)
+    parts.push(`${String(deny.length)} never ${deny.length === 1 ? "runs" : "run"}.`);
+  return parts.join(" ");
+}
+
+function actionName(action: ActionDecision): Html {
+  return html`<li class="cov-action" title="${action.description}"${action.risk === null ? "" : html` data-risk`}>
+    <span>${sentence(action.label)}</span>${
+      action.risk === null
+        ? ""
+        : html` <span class="cov-risk" title="Look twice before approving">${sentence(action.risk)}</span>`
+    }
+  </li>`;
+}
+
+/** Variant A: one group per outcome, with a count, risky actions first. */
+function groupsView(actions: readonly ActionDecision[]): Html {
+  return html`<div class="cov-groups">
+    ${ORDER.map((outcome) => {
+      const these = actions
+        .filter((a) => a.outcome === outcome)
+        .sort((a, b) => Number(b.risk !== null) - Number(a.risk !== null));
+      if (these.length === 0) return "";
+      const o = OUTCOME[outcome];
+      return html`<div class="cov-group" data-outcome="${outcome}">
+        <h3 class="cov-group-head">
+          ${badge(o.label, o.tone)} <span class="cov-count">${String(these.length)}</span>
+        </h3>
+        <ul class="cov-names">
+          ${these.map(actionName)}
+        </ul>
+      </div>`;
+    })}
+  </div>`;
+}
+
+/** Variant B: one list, each action with its outcome, asks and risky ones first. */
+function listView(actions: readonly ActionDecision[]): Html {
+  const sorted = [...actions].sort(
+    (a, b) =>
+      ORDER.indexOf(a.outcome) - ORDER.indexOf(b.outcome) ||
+      Number(b.risk !== null) - Number(a.risk !== null),
+  );
+  return html`<ul class="cov-list">
+    ${sorted.map((a) => {
+      const o = OUTCOME[a.outcome];
+      return html`<li class="cov-row" data-outcome="${a.outcome}">
+        <span class="cov-row-name">${sentence(a.label)}${
+          a.risk === null ? "" : html` <span class="cov-risk">${sentence(a.risk)}</span>`
+        }</span>
+        ${badge(SHORT[a.outcome], o.tone)}
+      </li>`;
+    })}
+  </ul>`;
+}
+
+/** The rules that decide, with how many actions each decides: technical, so in Details › Technical. */
+function decidingRules(coverage: Coverage): Html {
+  const a = coverage.actions;
+  const deciding = new Map<string, number>();
+  if (a.kind === "opaque") deciding.set(a.rule ?? "No rule matches, so it is denied", 1);
+  else {
+    for (const d of a.actions) {
+      const key = d.rule ?? "No rule matches, so it is denied";
+      deciding.set(key, (deciding.get(key) ?? 0) + 1);
+    }
+  }
+  return html`<ul class="cov-rules">
+    ${[...deciding].map(
+      ([rule, n]) =>
+        html`<li><span class="mono">${rule}</span>${
+          a.kind === "opaque"
+            ? ""
+            : html` <span class="muted">${runs(n, "action", "actions")}</span>`
+        }</li>`,
+    )}
+    ${coverage.rules
+      .filter((r) => r.rule.startsWith("grant "))
+      .map((r) => html`<li><span class="mono">${r.rule}</span></li>`)}
+  </ul>`;
+}
+
+/** "See what it can do": the actions by outcome, risky ones flagged. One level, no folds inside. */
+/**
+ * The coverage line is itself the fold: "Reads run on their own. Everything
+ * else asks you." opens to the actions by outcome. Screen readers also hear
+ * "See what it can do". An MCP server has no actions to list: just the line.
+ */
+function coverageFold(props: RequestPageProps): Html {
+  const a = props.coverage.actions;
+  const line = coverageSummary(props.coverage);
+  if (a.kind === "opaque") return html`<p class="cov-summary">${line}</p>`;
+  return html`<details class="ap-more cov-more" name="ap-page">
+    <summary><span class="fold-label cov-summary">${line}<span class="visually-hidden"> See what it can do.</span></span></summary>
+    <div class="ap-fold-body">
+      ${props.coverageLayout === "list" ? listView(a.actions) : groupsView(a.actions)}
+      <p class="cov-change"><a href="/rules">Change rules</a></p>
+    </div>
+  </details>`;
+}
+
+// ── The page ────────────────────────────────────────────────────────────────
+
+/** The service as the title names it, with a long MCP host shortened (the full URL is in Details). */
+function serviceTitle(props: RequestPageProps): string {
+  if (props.url === null || !URL.canParse(props.url)) return props.service;
+  return `the MCP server at ${shorten(new URL(props.url).host, 16, 12)}`;
+}
+
+/** "as `alias`", shortened when long; left out when it's just the service's own name. */
+function asAlias(props: RequestPageProps): Html | "" {
+  // A long alias stays out of the title; Details has it whole.
+  if (props.alias === props.provider || props.alias.length > 20) return "";
+  return html` as <code class="ap-short" title="${props.alias}">${shorten(props.alias)}</code>`;
+}
+
+/**
+ * Details: at most four plain rows, then the Technical fold (ids, times, the
+ * deciding rules, tool names). The agent's name only when the title cut it.
+ */
+function detailsFold(props: RequestPageProps): Html {
+  const a = props.coverage.actions;
+  return pageFold(
+    "Details",
+    html`<dl class="facts ap-facts-list">
+        ${
+          shorten(props.agent, 12, 8) === props.agent
+            ? ""
+            : html`<dt>Agent</dt>
+              <dd>${codeChip(props.agent, `agent-${props.id}`)}</dd>`
+        }
+        <dt>Name</dt>
+        <dd>${codeChip(props.alias, `alias-${props.id}`)}</dd>
+        ${
+          props.url === null
+            ? ""
+            : html`<dt>Server</dt>
+              <dd>${codeChip(props.url, `url-${props.id}`)}</dd>`
+        }
+      </dl>
+      ${technical(html`<dl class="facts ap-facts-list">
+        <dt>Request</dt>
+        <dd>${codeChip(props.id, `id-${props.id}`)}</dd>
+        <dt>Asked</dt>
+        <dd>${time(props.createdAt)}</dd>
+        ${
+          props.decision === null
+            ? html`<dt>Expires</dt>
+              <dd>${time(props.expiresAt)}</dd>`
+            : html`<dt>Decided</dt>
+              <dd>By ${props.decision.by}, ${time(props.decision.at)}</dd>`
+        }
+        <dt>Rules</dt>
+        <dd>${decidingRules(props.coverage)}</dd>
+        ${
+          a.kind === "opaque"
+            ? ""
+            : html`<dt>Tools</dt>
+              <dd class="mono">${a.actions.map((d) => d.tool).join(", ")}</dd>`
+        }
+      </dl>`)}`,
+  );
+}
+
+/** One line of what the agent could do, then the page's folds side by side. */
+function coverageView(props: RequestPageProps): Html {
+  return html`<section class="cov" aria-label="What it could do">
+    ${coverageFold(props)}
     ${
-      mode === "watch"
-        ? notice(
-            "warn",
-            html`<p>
-              Your mode is Watch: calls your rules would deny or ask about run anyway. Switch to
-              Enforce on the Modes page before you connect this if that's not what you want.
-            </p>`,
-          )
+      props.coverage.mode === "watch"
+        ? notice("warn", html`<p>Watch mode is on: calls run even where this says ask.</p>`)
         : ""
     }
-    <p class="muted">Change your rules first if that's more than you want.</p>
+    <div class="ap-folds">${detailsFold(props)}</div>
   </section>`;
 }
 
-/** One request: what the agent asks for, what it would let the agent do, and the controls. */
-export function requestPage(props: RequestPageProps): Html {
-  const status = STATUS[props.status];
-  const pending = props.status === "pending" && props.expiresAt > props.now;
-  const outcome =
-    props.outcome === "approved" && props.status === "approved"
-      ? notice(
-          "ok",
-          props.signIn === null
-            ? html`<p>Connected as <span class="mono">${props.alias}</span>.</p>
-                ${
-                  props.unchecked === true
-                    ? html`<p>
-                        heel couldn't check the key with the service, so it connected it as it is.
-                        If calls fail, replace the key on the Connections page.
-                      </p>`
-                    : ""
-                }`
-            : html`<p>
-                Added as <span class="mono">${props.alias}</span>. Sign in now so heel can use it;
-                ${props.agent} never sees what you sign in with.
-              </p>`,
-        )
-      : props.outcome === "rejected" && props.status === "rejected"
-        ? notice("info", html`<p>Rejected. Nothing was connected.</p>`)
-        : "";
-  return html`${outcome}
-    <header class="card ap-head">
-      <div class="ap-meta">
-        <span class="ap-agent">${props.agent}</span>
-        <span class="muted">${formatRelative(props.createdAt, props.now)}</span>
-        ${badge(status.label, status.tone)}
-      </div>
-      <h1 class="ap-title">${props.agent} asks you to connect ${props.service}</h1>
-      <p>
-        As <span class="mono">${props.alias}</span>
-        <span class="muted">(the name ${props.agent} chose; rules and tools will use it)</span>
-      </p>
-      ${
-        props.url === null
-          ? ""
-          : html`<p>
-              Server: <span class="mono">${props.url}</span>
-              <span class="muted">
-                · ${props.oauth ? "you sign in on its own page next" : "no sign-in"}. Check this is
-                a server you trust: heel will send ${props.agent}'s calls to it.
-              </span>
-            </p>`
-      }
-      ${
-        props.why === null
-          ? ""
-          : html`<figure class="reason">
-              <figcaption>${props.agent} says (its own words; heel didn't check them)</figcaption>
-              <blockquote>${props.why}</blockquote>
-            </figure>`
-      }
-    </header>
-    ${pending ? coverageView(props) : ""}
-    ${
-      pending && props.problem !== null
-        ? notice(
-            "error",
-            html`<p><strong>This can't be connected as asked.</strong></p><p>${props.problem}</p>`,
-          )
-        : ""
-    }
-    ${
-      pending && props.setup !== null
+function keyField(props: RequestPageProps): Html | "" {
+  if (props.problem !== null || props.key === null) return "";
+  return html`<fieldset id="request-key" class="ap-key-field">
+    <div class="ap-key-head">
+      <label for="request-key-input">${props.service} key</label>
+      ${pageFold(
+        "Where do I get this key?",
+        html`<p>${props.key.hint}</p>
+          <p>Only heel keeps it. The agent never sees it.</p>`,
+        "ap-hint",
+      )}
+    </div>
+    <input
+      id="request-key-input"
+      name="key"
+      type="password"
+      autocomplete="new-password"
+      data-1p-ignore
+      data-lpignore="true"
+      data-bwignore
+      spellcheck="false"
+      required
+    />
+  </fieldset>`;
+}
+
+function pendingPage(props: RequestPageProps): Html {
+  const helpId = "request-passkey";
+  const trust =
+    props.url === null
+      ? ""
+      : html`<p class="ap-warn" role="note">Only connect servers you trust.</p>`;
+  const problem = props.problem === null ? "" : notice("error", html`<p>${props.problem}</p>`);
+  const setup =
+    props.setup === null
+      ? ""
+      : notice(
+          "warn",
+          html`<p>
+            ${props.setup.label} sign-in isn't set up here. Set
+            <span class="mono">${props.setup.configKey}</span> (<a href="${props.setup.docsUrl}">how</a>).
+          </p>`,
+        );
+  const expiring = props.expiresAt.getTime() - props.now.getTime() < 24 * 3_600_000;
+  return approvalShell({
+    kind: "connection",
+    crumb: "",
+    dock: props.dock ?? "pinned",
+    title: html`${shorten(props.agent, 12, 8)} wants to connect ${serviceTitle(props)}${asAlias(props)}`,
+    quote: quote(props.agent, props.why),
+    status: expiring
+      ? html`<span class="badge" data-tone="warn">Expires ${formatRelative(props.expiresAt, props.now)}</span>`
+      : "",
+    side: html`${trust}${problem}${setup}
+      <section class="ap-decide" aria-label="Decide">
+        ${keyField(props)}
+        ${actionBar({
+          yes:
+            props.problem === null
+              ? ceremonyButton({
+                  callback: { handler: "approveConnection" },
+                  intent: "connect",
+                  label: "Connect it",
+                  tone: "primary",
+                  binding: { requestId: props.id, hash: props.hash },
+                  describedBy: helpId,
+                  ...(props.key === null ? {} : { optionsFrom: "request-key" }),
+                })
+              : "",
+          no: postForm(
+            props.reject,
+            {},
+            html`<button type="submit" class="${btn("outline")}">Reject</button>`,
+          ),
+          helpId,
+          help: "Your passkey confirms it. Nothing is connected or contacted until then.",
+        })}
+      </section>`,
+    main: coverageView(props),
+  });
+}
+
+/** After approving: the page becomes the confirmation (note 11). */
+function connectedPage(props: RequestPageProps): Html {
+  const needsSignIn = props.signIn !== null;
+  const name = html`<code class="ap-short" title="${props.alias}">${shorten(props.alias)}</code>`;
+  // No "Back to Approvals" button: the link back is already at the top.
+  const next = needsSignIn
+    ? html`<div class="ap-next-action">${postForm(
+        props.signIn as FormTarget,
+        { alias: props.alias },
+        html`<button type="submit" class="${btn()}">Sign in to ${props.service}</button>`,
+      )}</div>`
+    : "";
+  return approvalShell({
+    kind: "connection",
+    crumb: "",
+    dock: "inline",
+    title: needsSignIn ? html`${name} is added` : html`${name} is connected`,
+    why: needsSignIn ? "Sign in to finish." : "The agent can use it now.",
+    side: html`${
+      props.unchecked === true
         ? notice(
             "warn",
-            html`<p>
-              Sign-in with ${props.setup.label} isn't set up on this heel, so you won't be able to
-              sign in after approving. Set <span class="mono">${props.setup.configKey}</span>:
-              <a href="${props.setup.docsUrl}">how</a>.
-            </p>`,
+            html`<p>heel couldn't check the key, so it connected it as it is. If calls fail, replace it on Connections.</p>`,
           )
         : ""
     }
-    ${
-      props.decision === null
-        ? ""
-        : html`<p class="muted">${status.label} by ${props.decision.by} ${time(props.decision.at)}</p>`
-    }
-    ${
-      props.status === "approved" && props.signIn !== null
-        ? postForm(
-            props.signIn,
-            { alias: props.alias },
-            html`<button type="submit" class="${btn()}">Sign in to ${props.service}</button>`,
-          )
-        : ""
-    }
-    ${
-      pending
-        ? html`<div class="decide">
-            ${
-              props.problem === null && props.key !== null
-                ? html`<fieldset id="request-key">
-                    <label for="request-key-input"
-                      ><strong>Your ${props.service} key</strong></label
-                    >
-                    <input
-                      id="request-key-input"
-                      name="key"
-                      type="password"
-                      autocomplete="new-password"
-                      data-1p-ignore
-                      data-lpignore="true"
-                      data-bwignore
-                      spellcheck="false"
-                      required
-                    />
-                    <p class="muted">
-                      ${props.key.hint} It goes to heel's vault only: ${props.agent} never sees it,
-                      and only gets the account by its name.
-                    </p>
-                  </fieldset>`
-                : ""
-            }
-            ${
-              props.problem === null
-                ? ceremonyButton({
-                    callback: { handler: "approveConnection" },
-                    intent: "connect",
-                    label: "Connect it",
-                    tone: "primary",
-                    binding: { requestId: props.id, hash: props.hash },
-                    describedBy: "request-passkey",
-                    ...(props.key === null ? {} : { optionsFrom: "request-key" }),
-                  })
-                : ""
-            }
-            ${postForm(props.reject, {}, html`<button type="submit" class="${btn("outline")}">Reject</button>`)}
-            <p id="request-passkey" class="muted">
-              Connecting asks for your passkey. Nothing is connected, and nothing is contacted,
-              until you do. Requests expire ${formatRelative(props.expiresAt, props.now)}.
-            </p>
-          </div>`
-        : ""
-    }`;
+      ${next}`,
+    main: coverageView(props),
+  });
+}
+
+const CLOSED: Record<Exclude<AgentRequestStatus, "pending" | "approved">, [string, string]> = {
+  rejected: ["Rejected", "Nothing was connected."],
+  expired: ["Expired", "Nothing was connected."],
+  superseded: ["Replaced by a newer request", "Nothing was connected."],
+};
+
+/** One request: what the agent asks for, what it would let the agent do, and the controls. */
+export function requestPage(props: RequestPageProps): Html {
+  if (props.status === "approved") return connectedPage(props);
+  const pending = props.status === "pending" && props.expiresAt > props.now;
+  if (pending) return pendingPage(props);
+  const [title, why] = CLOSED[props.status === "pending" ? "expired" : props.status];
+  return approvalShell({
+    kind: "connection",
+    crumb: "",
+    dock: "inline",
+    title: html`${title}`,
+    why,
+    side: html`<div class="ap-folds">${detailsFold(props)}</div>`,
+  });
 }

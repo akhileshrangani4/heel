@@ -124,7 +124,7 @@ describe("approval notifications", () => {
     expect(push.sent).toHaveLength(1);
   });
 
-  it("I-56: say what, where and who, with the agent's reason, and link to the page, never the call's contents", async () => {
+  it("I-56: say what, where and who, with the agent's reason on push only, and link to the page, never the call's contents", async () => {
     const { h, approvalId } = await ownerWithRequest("Tell the vendor the numbers are in");
     const email = fakeSender("email");
     const notifier = notifierFor(h, [email]);
@@ -145,10 +145,12 @@ describe("approval notifications", () => {
       tag: `approval:${approvalId}`,
     });
     if (notice === undefined) throw new Error("a notice was sent");
-    expect(noticeText(notice)).toEqual({
+    expect(noticeText(notice, "words")).toEqual({
       title: "Send an email from gmail-work?",
       body: "inbox-bot: Tell the vendor the numbers are in",
     });
+    // Slack and email only say a reason was given.
+    expect(noticeText(notice).body).toBe("inbox-bot gave a reason. Open heel to read it.");
     // The arguments (the recipient, the subject) appear nowhere in what was sent.
     // (The approval id is random and can itself contain "Q3", so it's taken out first.)
     expect(JSON.stringify([email.sent, noticeText(notice)]).replaceAll(approvalId, "")).not.toMatch(

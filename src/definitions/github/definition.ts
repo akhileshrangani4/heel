@@ -4,13 +4,13 @@ import { type Definition, UpstreamError } from "../../gateway/pipeline/ports.ts"
 import type { AccountRecord } from "../../store/directory.ts";
 import type { Vault } from "../../vault/vault.ts";
 import { githubRest } from "../http/rest.ts";
-import { listedTools, type MailTool, mailDefinition } from "../mail/tool.ts";
 import type { FetchFn } from "../sign-in.ts";
+import { listedTools, type ToolRow, toolRow, toolTableDefinition } from "../tool-table.ts";
 import { GitHubApi } from "./api.ts";
 import { GitHubClient, GitHubNotFoundError, GitHubWriteRefused } from "./client.ts";
 
 /**
- * The GitHub definition (D11; spec: Built-in providers, "GitHub"): heel's
+ * The GitHub definition: heel's
  * own tools on GitHub's REST API, with the account's token.
  *
  * - `repo` is always set, lower-cased, so a rule on `acme/web` meets
@@ -41,8 +41,8 @@ interface Box {
   api: GitHubApi;
 }
 
-type GitHubTool = MailTool<Box>;
-const tool = <S extends z.ZodType, P, R>(t: MailTool<Box, S, P, R>) => t as unknown as GitHubTool;
+type GitHubTool = ToolRow<Box>;
+const tool = toolRow<Box>();
 
 const Repo = z
   .string()
@@ -432,7 +432,6 @@ const TOOLS: Record<string, GitHubTool> = {
   }),
 };
 
-/** `.github/workflows/...`, compared the way GitHub resolves it (case-insensitively). */
 /**
  * A path that becomes automation when it lands: workflows, and the composite
  * actions workflows run. Compared the way GitHub resolves it (ignoring case).
@@ -448,7 +447,7 @@ export function isMergeAction(action: string | undefined): boolean {
 }
 
 /**
- * `github.api` (spec: GitHub, "Actions"): a REST call heel has no mapping
+ * `github.api`: a REST call heel has no mapping
  * for, sent to api.github.com as it is. heel can't tell what it does, so it
  * has no `kind` or `repo`, and it is persistence: only a rule naming
  * `github.api` (or the tool `github_api`) literally lets it through; a broad
@@ -520,10 +519,10 @@ export function githubDefinition(account: AccountRecord, deps: GitHubDeps): Defi
     client: new GitHubClient(deps.fetch, token),
     api: new GitHubApi(token, deps.fetch),
   };
-  return mailDefinition({
+  return toolTableDefinition({
     tools: ALL_TOOLS,
     listed: GITHUB_TOOLS,
-    mailbox: box,
+    box,
     errors: {
       isNotFound: (error) => error instanceof GitHubNotFoundError,
       refusal: (error) =>

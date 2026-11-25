@@ -1,5 +1,6 @@
 import { ceremonyButton, KEY_ICON } from "./ceremony.ts";
-import { type Html, html, trusted } from "./html.ts";
+import { errorPage } from "./error-page.ts";
+import { type Html, html } from "./html.ts";
 import { notice, time } from "./layout.ts";
 import { btn } from "./shadcn/button.ts";
 
@@ -15,26 +16,23 @@ export type EnrollProps =
   | { kind: "waiting"; userName: string; until: Date };
 
 /**
- * The page a one-time enrollment link opens (spec: Q-N2). It registers a
+ * The page a one-time enrollment link opens. It registers a
  * passkey for the person the link was made for. Enrollment never starts
  * from the human plane: only `heel user enroll` on the host makes a link.
  */
 export function enrollPage(props: EnrollProps): Html {
   if (props.kind === "invalid") {
-    return html`<div class="signin">
-      <div class="signin-empty">
-        <span class="signin-empty-icon">${trusted(LINK_OFF_ICON)}</span>
-        <h1>This link can't be used</h1>
-        <p class="muted">
-          It was already used, or more than 15 minutes have passed. Run this on the heel host for a
-          new one.
-        </p>
-      </div>
-      <div class="signin-command">
+    // The same page for an unknown, used or expired link: it never says which.
+    return errorPage({
+      title: html`This link can't be used`,
+      message: html`It was already used, or more than 15 minutes have passed. Run this on the heel
+        host for a new one.`,
+      icon: LINK_OFF_ICON,
+      more: html`<div class="signin-command">
         <code id="enroll-command">heel user enroll &lt;user&gt;</code>
         <button type="button" class="${btn("ghost", "sm")}" data-heel-copy="enroll-command">Copy</button>
-      </div>
-    </div>`;
+      </div>`,
+    });
   }
   if (props.kind === "waiting") {
     return html`<div class="signin">

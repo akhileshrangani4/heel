@@ -3,13 +3,13 @@ import { z } from "zod";
 import { type Definition, UpstreamError } from "../../gateway/pipeline/ports.ts";
 import type { AccountRecord } from "../../store/directory.ts";
 import type { Vault } from "../../vault/vault.ts";
-import { listedTools, type MailTool, mailDefinition } from "../mail/tool.ts";
 import type { FetchFn } from "../sign-in.ts";
+import { listedTools, type ToolRow, toolRow, toolTableDefinition } from "../tool-table.ts";
 import { StripeClient, StripeNotFoundError, StripeRefused } from "./client.ts";
 
 /**
- * The Stripe definition (D12b; spec: "Calendar, Slack, Linear, Notion,
- * Stripe"): heel's own tools on Stripe's API (https://docs.stripe.com/api),
+ * The Stripe definition: heel's own tools on Stripe's API
+ * (https://docs.stripe.com/api),
  * connected with `heel connect stripe --credential-stdin` (a secret or,
  * better, a restricted key).
  *
@@ -43,8 +43,8 @@ interface Box {
   client: StripeClient;
 }
 
-type StripeTool = MailTool<Box>;
-const tool = <S extends z.ZodType, P, R>(t: MailTool<Box, S, P, R>) => t as unknown as StripeTool;
+type StripeTool = ToolRow<Box>;
+const tool = toolRow<Box>();
 
 const id = (prefix: string) =>
   z.string().regex(new RegExp(`^${prefix}_[A-Za-z0-9]{6,64}$`), `expected a ${prefix}_ id`);
@@ -312,10 +312,10 @@ export const STRIPE_TOOLS: readonly Tool[] = listedTools(TOOLS);
 
 export function stripeDefinition(account: AccountRecord, deps: StripeDeps): Definition {
   const token = async () => (await deps.vault.accessToken(account.id)).reveal();
-  return mailDefinition({
+  return toolTableDefinition({
     tools: TOOLS,
     listed: STRIPE_TOOLS,
-    mailbox: { client: new StripeClient(deps.fetch, token) },
+    box: { client: new StripeClient(deps.fetch, token) },
     errors: {
       isNotFound: (error) => error instanceof StripeNotFoundError,
       refusal: (error) =>

@@ -4,8 +4,8 @@ import type { FetchLike } from "@modelcontextprotocol/client";
 import { isPublicAddress } from "../../runner/egress.ts";
 
 /**
- * Keeping heel on the public internet for a server an agent named
- * (roadmap 2.5). An approved connection request must not give the agent
+ * Keeping heel on the public internet for a server an agent named.
+ * An approved connection request must not give the agent
  * heel's place on the network: the server it named, every redirect it
  * answers with, and every OAuth endpoint its metadata names, must be https
  * on a public host name that resolves only to public addresses.

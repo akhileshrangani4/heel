@@ -1,9 +1,10 @@
 import { z } from "zod";
+import { getWithRetry, throwIfWriteFailed } from "../http-retry.ts";
 import { GRAPH_API_BASE } from "../microsoft/oauth.ts";
 import type { FetchFn } from "../sign-in.ts";
 
 /**
- * The Microsoft Graph v1.0 mail calls heel needs (graph-research §2–§9).
+ * The Microsoft Graph v1.0 mail calls heel needs.
  *
  * - Every request asks for immutable ids, so a message keeps its id when it
  *   moves folders, and for text bodies.
@@ -159,7 +160,6 @@ export class OutlookWriteRefused extends Error {
 }
 
 const MAILBOX_PREFIX = `${GRAPH_API_BASE}me/`;
-const RETRYABLE = (status: number) => status === 429 || status >= 500;
 const MAX_FOLDERS = 500;
 
 /** A Graph OData string literal: single quotes doubled. */
@@ -188,12 +188,9 @@ export class OutlookClient {
 
   async #getResponse(url: URL, signal: AbortSignal): Promise<Response> {
     if (!url.toString().startsWith(MAILBOX_PREFIX)) throw new OutlookError("not a mailbox URL");
-    let response: Response | null = null;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      response = await this.#fetch(url, { headers: await this.#headers(), signal });
-      if (!RETRYABLE(response.status)) break;
-    }
-    if (response === null) throw new OutlookError("no response");
+    const response = await getWithRetry(async () =>
+      this.#fetch(url, { headers: await this.#headers(), signal }),
+    );
     if (response.status === 404) throw new OutlookNotFoundError(`${url.pathname} was not found`);
     if (!response.ok) throw new OutlookError(`Graph answered ${response.status}`);
     return response;
@@ -224,12 +221,7 @@ export class OutlookClient {
       ...(body === null ? {} : { body: "json" in body ? JSON.stringify(body.json) : body.mime }),
       signal,
     });
-    if (response.status >= 500 || response.status === 408) {
-      throw new Error(`Graph answered ${response.status}; the write may have happened`);
-    }
-    if (!response.ok) {
-      throw new OutlookWriteRefused(response.status, await response.json().catch(() => null));
-    }
+    await throwIfWriteFailed(response, "Graph", OutlookWriteRefused);
     return response.status === 202 || response.status === 204
       ? null
       : await response.json().catch(() => null);

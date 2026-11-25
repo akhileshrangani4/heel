@@ -251,7 +251,7 @@ describe("connection request notifications", () => {
     ]);
     // What the owner reads names the service, not the alias the agent picked.
     expect(email.sent.map((s) => noticeText(s.notice))).toEqual([
-      { title: "Connect Gmail?", body: "repo-bot: so I can triage your mail" },
+      { title: "Connect Gmail?", body: "repo-bot gave a reason. Open heel to read it." },
     ]);
 
     // A second request, rejected before its notice goes out, sends nothing.

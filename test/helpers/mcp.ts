@@ -10,8 +10,10 @@ import { createMcpSurface, type McpSurface } from "../../src/gateway/mcp/server.
 import type { ApprovalWait } from "../../src/gateway/mcp/wait.ts";
 import { createPipeline } from "../../src/gateway/pipeline/pipeline.ts";
 import type { SandboxSlots } from "../../src/gateway/sandbox-slots.ts";
+import { approveRequest, needsKey } from "../../src/requests/connection.ts";
 import { SqliteApprovalStore } from "../../src/store/approvals.ts";
 import { SqlitePauseStore } from "../../src/store/pauses.ts";
+import { agentRequests } from "../../src/store/schema.ts";
 import { connectAccount } from "../../src/vault/connect.ts";
 import { KEY_BYTES } from "../../src/vault/crypto.ts";
 import { Vault } from "../../src/vault/vault.ts";
@@ -92,6 +94,8 @@ export interface McpHarness {
   request(path: string, init?: RequestInit): Promise<Response>;
   /** The MCP surface, for its background scripts (C6). */
   mcp: McpSurface;
+  /** heel's vault, for connecting accounts the way the owner's page does. */
+  vault: Vault;
 }
 
 export async function mcpHarness(options: {
@@ -202,6 +206,7 @@ export async function mcpHarness(options: {
     notified,
     token,
     mcp,
+    vault,
     async connect(path, connectOptions = {}) {
       const transport = new StreamableHTTPClientTransport(new URL(path, "http://localhost"), {
         fetch: appFetch,
@@ -213,4 +218,42 @@ export async function mcpHarness(options: {
     },
     request: (path, init) => appFetch(new URL(path, "http://localhost"), init),
   };
+}
+
+/**
+ * Connects the agent's waiting request for `alias` as the owner's page does:
+ * approves it and makes the account, with a pasted key for a key service.
+ */
+export function connectRequested(h: McpHarness, alias: string, decidedAt = new Date()): void {
+  const row = h.t.db
+    .select()
+    .from(agentRequests)
+    .all()
+    .find((r) => r.status === "pending" && r.details.alias === alias);
+  if (row === undefined) throw new Error(`no request waits for ${alias}`);
+  const { provider, url, oauth } = row.details;
+  const approved = approveRequest(
+    h.t.db,
+    row,
+    h.t.ownerId,
+    decidedAt,
+    () =>
+      connectAccount(
+        h.t.db,
+        h.vault,
+        {
+          orgId: h.t.orgId,
+          ownerId: h.t.ownerId,
+          provider,
+          alias,
+          ...(url === undefined ? {} : { url }),
+          ...(oauth === undefined ? {} : { oauth }),
+          ...(needsKey(provider)
+            ? { credential: { type: "static" as const, value: "pasted-key" } }
+            : {}),
+        },
+        decidedAt,
+      ).accountId,
+  );
+  if (!approved.ok) throw new Error(approved.problem);
 }

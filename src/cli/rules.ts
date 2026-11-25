@@ -35,9 +35,9 @@ import {
 } from "./common.ts";
 
 /**
- * `heel rules check|test|schema` (spec: Rules, "Loading, testing and
- * reload"). They read the rules files from `$HEEL_HOME` directly, so they
- * work with heel stopped and never touch a provider or the database.
+ * `heel rules check|test|schema`. They read the rules files from `$HEEL_HOME`
+ * directly, so they work with heel stopped and never touch a provider or the
+ * database.
  */
 
 export const RULES_USAGE = `  heel rules check                        validate org-rules.yaml and rules/<user>.yaml
@@ -168,7 +168,6 @@ function formatInvalid(what: string, issues: readonly YamlIssue[]): string {
   return `heel: ${what} (${issues.length} ${plural}):\n${issues.map((issue) => `  ${formatYamlIssue(issue)}\n`).join("")}`;
 }
 
-/** Pure: what `heel rules check` prints for a valid set. */
 /**
  * Pure: names in the rules that match nothing, so the rule never fires.
  * Actions are checked when they use a built-in prefix (`email.`, `github.`,
@@ -263,7 +262,7 @@ function count(n: number, one: string, many = `${one}s`): string {
 export const DRAFTING_API_KEY_ENV = "HEEL_DRAFTING_API_KEY";
 
 /**
- * `heel rules draft "<words>"` (D13b; spec: Teams, "Rule drafting"): asks
+ * `heel rules draft "<words>"`: asks
  * the configured model for a rules file, validates it, and prints it with a
  * diff against the person's current file and, with `--cases`, the cases'
  * results against it. It never writes a file (I-17).

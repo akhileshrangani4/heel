@@ -9,8 +9,8 @@ export const MASTER_KEY_ENV = "HEEL_MASTER_KEY";
 export type MasterKeyProblem = "missing" | "malformed" | "insecure_permissions";
 
 /**
- * The master key could not be loaded. heel then keeps the agent plane down
- * (spec: Fail-closed behavior). The message names the source, never the key.
+ * The master key could not be loaded. heel then keeps the agent plane down.
+ * The message names the source, never the key.
  */
 export class MasterKeyError extends Error {
   readonly problem: MasterKeyProblem;

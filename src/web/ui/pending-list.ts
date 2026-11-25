@@ -1,12 +1,12 @@
 import type { RuleRef } from "../../core/call.ts";
 import type { ApprovalOrigin, ApprovalStatus } from "../../store/schema.ts";
 import { approvalStatusBadge } from "./approval-request.ts";
-import { formatPauseScope, formatRelative } from "./format.ts";
+import { formatRelative, formatShort, middle } from "./format.ts";
 import { type Html, html, trusted } from "./html.ts";
 import { CHEVRON_RIGHT } from "./icons.ts";
-import { notice, type PauseNotice, time } from "./layout.ts";
+import { notice, type PauseNotice } from "./layout.ts";
 import { serviceLogo } from "./logos.ts";
-import { clientLabel, type Headline } from "./summary.ts";
+import type { Headline } from "./summary.ts";
 
 export interface PendingRow {
   id: string;
@@ -38,23 +38,25 @@ export interface PendingListProps {
   load: { ok: true; rows: readonly PendingRow[] } | { ok: false; message: string };
 }
 
-function stateNote(row: PendingRow, now: Date): Html {
-  if (row.pausedBy) {
-    return html`Paused (${formatPauseScope(row.pausedBy.scope, row.pausedBy.target)}): approve
-    after resume`;
-  }
+/** A waiting request's expiry shows only inside this window, when it is worth acting on. */
+export const EXPIRY_SHOWN_WITHIN_MS = 60 * 60_000;
+
+/**
+ * The one line under a row's title, or nothing. Only what the badge and
+ * the section heading don't already say: on hold, about to expire, or
+ * approved and waiting for the agent to try again.
+ */
+function stateNote(row: PendingRow, now: Date): Html | "" {
+  if (row.pausedBy) return html`On hold until you resume`;
   switch (row.status) {
     case "pending":
-      return html`Expires ${formatRelative(row.expiresAt, now)}`;
+      return row.expiresAt.getTime() - now.getTime() <= EXPIRY_SHOWN_WITHIN_MS
+        ? html`<span class="req-soon">Expires in ${formatShort(row.expiresAt.getTime() - now.getTime())}</span>`
+        : "";
     case "approved":
-      return html`Runs when the agent sends it again; unused it expires
-        ${formatRelative(row.expiresAt, now)}`;
-    case "denied":
-      return html`Re-sends return “denied” until ${time(row.expiresAt)}`;
-    case "expired":
-      return html`Expired ${formatRelative(row.expiresAt, now)}`;
-    case "executed":
-      return html`Ran once`;
+      return html`Runs when the agent tries again`;
+    default:
+      return "";
   }
 }
 
@@ -109,7 +111,7 @@ const SECTIONS = [
  * Requests waiting on, or recently decided by, this approver, grouped into
  * what needs you, what was decided, and what expired. Each row leads with
  * heel's own sentence and links to the full approval page; deciding happens
- * only there (spec: The approval page), so the list has no decision
+ * only there, so the list has no decision
  * controls at all (I-56).
  */
 export function pendingList(props: PendingListProps): Html {
@@ -127,10 +129,7 @@ export function pendingList(props: PendingListProps): Html {
     const changes = props.ruleChangesWaiting ?? 0;
     if (changes > 0) {
       return html`${heading}
-        <p class="muted req-count">
-          No calls are waiting for you. ${changes === 1 ? "One thing your agents asked for is" : `${changes} things your agents asked for are`}
-          below.
-        </p>`;
+        <p class="muted req-count">No calls waiting. ${changes === 1 ? "1 other request" : `${changes} other requests`} below.</p>`;
     }
     return html`${heading}
       <div class="req-empty">
@@ -139,21 +138,21 @@ export function pendingList(props: PendingListProps): Html {
         <p class="muted">Nothing is waiting for you. New requests show up here and in your notifications.</p>
       </div>`;
   }
-  const waiting = rows.filter((row) => row.status === "pending").length;
+  // Each section heading carries its own count, so the list needs no count line.
   return html`${heading}
-    <p class="muted req-count">
-      ${rows.length === 1 ? "1 request" : `${rows.length} requests`}${
-        waiting > 0 && waiting < rows.length ? `, ${waiting} waiting for you` : ""
-      }
-    </p>
-    ${SECTIONS.map((section) => {
+    ${SECTIONS.map((section, _i, all) => {
+      // With one section the page title says it; its heading stays for screen readers.
+      const only =
+        all.filter((s) =>
+          rows.some((row) => (s.statuses as readonly ApprovalStatus[]).includes(row.status)),
+        ).length === 1;
       const these = rows.filter((row) =>
         (section.statuses as readonly ApprovalStatus[]).includes(row.status),
       );
       if (these.length === 0) return "";
       const headingId = `req-${section.id}`;
       return html`<section class="req-section" aria-labelledby="${headingId}">
-        <h2 id="${headingId}" class="req-section-title">
+        <h2 id="${headingId}" class="req-section-title${only ? " visually-hidden" : ""}">
           ${section.title} <span class="req-section-count">${String(these.length)}</span>
         </h2>
         <ul class="req-group" aria-label="${section.title}">
@@ -167,31 +166,28 @@ export function pendingList(props: PendingListProps): Html {
 const CHECK_CIRCLE = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>`;
 
 /**
- * One request: the whole row is the link to its page. "Review" shows on
+ * One request: the whole row is the link to its page. It says who, what and
+ * when: heel's sentence (which names the agent), how long ago, and a note
+ * only when one matters (expiring soon, paused, decided). The client, the
+ * agent's reason and the rule wait on the request page. "Review" shows on
  * hover and focus on wide screens; a chevron says the row opens.
  */
 function requestRow(row: PendingRow, now: Date, showStatus: boolean): Html {
   const said = row.headline;
+  const note = stateNote(row, now);
   return html`<li class="req" data-status="${row.status}">
     <a class="req-row" href="${row.href}">
       ${serviceIcon(row)}
       <span class="req-body">
-        <span class="ap-meta">
-          <span class="ap-agent">${row.agent}</span>
-          ${row.client === null ? "" : html`<span class="muted">via ${clientLabel(row.client)}</span>`}
-          <span class="muted">${formatRelative(row.createdAt, now)}</span>
-          ${showStatus ? approvalStatusBadge(row.status) : ""}
-        </span>
         <span class="req-title"
-          >${said.agent} wants to <mark>${said.action}</mark> ${said.preposition}
-          <mark>${said.place}</mark>${said.rest}</span
+          ><span title="${said.agent}">${middle(said.agent)}</span> wants to <mark>${said.action}</mark> ${said.preposition}
+          <mark title="${said.place}">${middle(said.place)}</mark>${said.rest}</span
         >
-        ${
-          row.reason === null
-            ? ""
-            : html`<span class="req-reason"><span class="muted">${row.agent} says:</span> ${row.reason}</span>`
-        }
-        <span class="req-foot muted">${stateNote(row, now)}</span>
+        <span class="ap-meta">
+          <time class="muted" datetime="${row.createdAt.toISOString()}" title="${formatRelative(row.createdAt, now)}">${formatShort(now.getTime() - row.createdAt.getTime())}</time>
+          ${showStatus ? approvalStatusBadge(row.status) : ""}
+          ${note === "" ? "" : html`<span class="req-foot muted">${note}</span>`}
+        </span>
       </span>
       <span class="req-review" aria-hidden="true">Review</span>
       <span class="req-go" aria-hidden="true">${trusted(CHEVRON_RIGHT)}</span>

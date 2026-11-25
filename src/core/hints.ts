@@ -5,7 +5,7 @@
  * Hints are advisory. They never change a verdict: an approval adapter runs
  * after the request is already pending, its output is stored beside it, and
  * the approval page shows it next to the full call. The person still decides
- * (Nov 17 decision: a model may annotate the approval queue but never answers
+ * (a model may annotate the approval queue but never answers
  * for the person).
  *
  * This module holds the Jev adapter's questions and the truth table that
@@ -53,8 +53,6 @@ export function parseHints(value: unknown): ApprovalHints {
   }
   return { status: "ok", hints };
 }
-
-// ── the Jev adapter's questions ─────────────────────────────────────────────
 
 /**
  * A Noul question (the probability that the answer is yes), in TypeSafe's

@@ -5,7 +5,7 @@ import type { LooksLikeModel } from "../core/lookslike/model.ts";
 import { loadLooksLikeModel } from "./load.ts";
 
 /**
- * The `looks_like` judge the hide path uses (D10b): patterns, then the
+ * The `looks_like` judge the hide path uses: patterns, then the
  * committed classifier, under the 200 ms budget. The model loads once; if it
  * can't, every message an entry's `looks_like` covers is `uncertain`, which
  * hides it (I-44).
@@ -30,8 +30,7 @@ export function defaultLooksLikeJudge(onUnavailable: (error: string) => void): L
 }
 
 /**
- * Counts of hidden messages by reason (spec: Fail-closed, "counted in a
- * metric", I-44). `uncertain` is the number to watch: a rising count means
+ * Counts of hidden messages by reason (I-44). `uncertain` is the number to watch: a rising count means
  * the classifier is unsure, slow or missing, and mail is hidden to be safe.
  */
 export class HideCounts {

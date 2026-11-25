@@ -1,11 +1,11 @@
 /**
- * Runs one program under bubblewrap (spec: CLI runner, "Sandbox"). This is
+ * Runs one program under bubblewrap. This is
  * the effectful shell around `planSandbox`: it starts the egress proxy when
  * the spec asks for one, spawns bwrap without a shell, feeds it its options
  * over a pipe, scrubs credentials from the output, enforces the wall-time and
  * output limits, and tears everything down when the program ends.
  *
- * The caller (D8b's `heel run`, D6a's code-mode worker) decides whether the
+ * The caller (`heel run`, the code-mode worker) decides whether the
  * program may run at all; this module only makes sure that, when it runs, it
  * runs contained.
  */
@@ -54,7 +54,6 @@ export type SandboxOutcome =
   | { readonly kind: "exited"; readonly code: number }
   /** heel killed the program for passing a limit. */
   | { readonly kind: "limit"; readonly limit: "time" | "output" }
-  /** The caller aborted the run. */
   | { readonly kind: "aborted" }
   /** The sandbox never started; the program didn't run. `detail` is bwrap's own error. */
   | { readonly kind: "sandbox_error"; readonly detail: string };

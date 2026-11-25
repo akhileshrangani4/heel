@@ -1,7 +1,7 @@
 import type { StubModule } from "./stubs.ts";
 
 /**
- * What code mode needs from the thing that runs Python (D6a). The run loop
+ * What code mode needs from the thing that runs Python. The run loop
  * (`run.ts`) depends only on this, so the same loop drives all three:
  *
  * - `SandboxedCodeWorker` (`sandboxed.ts`): one `heel codemode-worker`
@@ -21,7 +21,7 @@ import type { StubModule } from "./stubs.ts";
  * - `failed`: a type error found before running, an uncaught exception, or a
  *   limit hit. Nothing after it runs.
  * - `parked`: the script was suspended at a call that needs approval and
- *   saved (code mode round 2, C2). `snapshot` is Monty's dump, base64; a new
+ *   saved. `snapshot` is Monty's dump, base64; a new
  *   worker started with it resumes at that same call. Nothing runs here after it.
  */
 export type Step =
@@ -39,13 +39,13 @@ export type Step =
       /** Saves the script, suspended at this call: `parked`, or `failed` when it can't be saved. */
       park(): Promise<Step>;
       /**
-       * Makes this call a future (an `_async` twin, C4): the script carries on,
+       * Makes this call a future (an `_async` twin): the script carries on,
        * and the call is answered later through an `await` step.
        */
       future(): Promise<Step>;
     }
   | {
-      /** Every task is waiting on futures; `pending` are their calls' ids (C4). */
+      /** Every task is waiting on futures; `pending` are their calls' ids. */
       kind: "await";
       pending: number[];
       resolve(results: readonly FutureResult[]): Promise<Step>;
@@ -59,7 +59,7 @@ export type FutureResult =
   | { callId: number; value: unknown }
   | { callId: number; errorType: "PermissionError" | "RuntimeError"; message: string };
 
-/** The largest saved script heel keeps, before base64 (code mode round 2, C2). */
+/** The largest saved script heel keeps, before base64. */
 export const MAX_SNAPSHOT_BYTES = 4 * 1024 * 1024;
 
 export interface ScriptLimits {
@@ -73,7 +73,7 @@ export interface ScriptLimits {
   maxStdout: number;
   /**
    * Everything one segment may take, waiting in heel included; a sandbox's
-   * own wall limit follows it. Background scripts set it (C6); unset, the
+   * own wall limit follows it. Background scripts set it; unset, the
    * sandbox uses its own backstop.
    */
   maxWallMs?: number;

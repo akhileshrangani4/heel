@@ -32,11 +32,45 @@ describe("pages at phone width", () => {
     }
   });
 
-  it("wraps the navigation, scrolls preformatted text, and keeps the decision bar in the page, never over it", () => {
+  it("wraps the navigation, scrolls preformatted text, and pins the decision bar without covering the page", () => {
     expect(STYLESHEET).toContain(".site nav ul{display:flex;flex-wrap:wrap;");
     expect(STYLESHEET).not.toMatch(/\.site nav\{[^}]*overflow-x/);
     expect(STYLESHEET).toContain("pre{overflow-x:auto;max-width:100%}");
-    expect(STYLESHEET).not.toMatch(/\.ap-decide\{[^}]*position:(sticky|fixed)/);
+    // Phones: the shared bar is pinned in the tab bar's place, and the page keeps room for it.
+    expect(STYLESHEET).toMatch(
+      /body\.app:has\(\.ap\[data-dock="pinned"\] \.ap-bar\[data-dock\]\)\{padding-bottom:calc\(6\.5rem/,
+    );
+    // Only wide screens let the call page's decision stick to the bottom of the window.
+    expect(STYLESHEET).toContain(
+      '@media (min-width:56rem){.ap[data-kind="call"] .ap-decide{position:sticky',
+    );
+    expect(STYLESHEET.match(/\.ap-decide\{[^}]*position:/g)).toHaveLength(1);
+  });
+});
+
+describe("the installed app on a phone", () => {
+  it("lets the page reach the screen edges and keeps the tab bar clear of the home indicator and corners", async () => {
+    const h = humanPlaneHarness();
+    const admin = await h.signIn(await h.enroll());
+    const page = await (await h.fetch("/activity", { as: admin })).text();
+    // Without viewport-fit=cover every env(safe-area-inset-*) is 0 in the installed app.
+    expect(page).toContain('content="width=device-width, initial-scale=1, viewport-fit=cover"');
+    expect(page).toMatch(/<meta name="theme-color" media="\(prefers-color-scheme: light\)"/);
+    expect(STYLESHEET).toContain("--safe-b:env(safe-area-inset-bottom,0px)");
+    // The fixed tab bar pads by the bottom inset, and its sides clear the rounded corners.
+    expect(STYLESHEET).toMatch(
+      /\.site nav\{position:fixed;[^}]*padding:[^;}]*max\(\.75rem,var\(--safe-r\)\) calc\(\.4rem \+ var\(--safe-b\)\)/,
+    );
+    expect(STYLESHEET).toMatch(/body\.app\{padding-bottom:calc\([^)]*var\(--safe-b\)\)/);
+    expect(STYLESHEET).toMatch(
+      /#heel-ceremony-status:not\(:empty\)\{bottom:calc\([^)]*var\(--safe-b\)\)/,
+    );
+    expect(STYLESHEET).toMatch(/\.act-filter-panel\{position:fixed;[^}]*var\(--safe-b\)/);
+    // A pinned approval bar takes the tab bar's place, with the same insets.
+    expect(STYLESHEET).toMatch(
+      /\.ap\[data-dock="pinned"\] \.ap-bar\[data-dock\]\{position:fixed;[^}]*padding:\.75rem max\(\.75rem,var\(--safe-r\)\) calc\(\.75rem \+ var\(--safe-b\)\) max\(\.75rem,var\(--safe-l\)\)/,
+    );
+    expect(STYLESHEET).not.toContain("--heel-safe-");
   });
 });
 

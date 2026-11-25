@@ -1,8 +1,8 @@
 /**
- * What a request does, in plain words, for the approval page (spec: The
- * approval page). Pure: everything comes from the stored call heel will run,
- * never from what the agent said about it, so the sentence can't be talked
- * into saying something the call doesn't do.
+ * What a request does, in plain words, for the approval page. Pure:
+ * everything comes from the stored call heel will run, never from what the
+ * agent said about it, so the sentence can't be talked into saying something
+ * the call doesn't do.
  *
  * Folding a list never hides an outlier: recipients are grouped by domain,
  * every domain is named, and the full addresses stay on the page (I-57).
@@ -18,7 +18,7 @@ export interface EmailPreview {
   /** Shown as text. An HTML body is shown as its source, never rendered. */
   body: string;
   bodyFormat: "text" | "html";
-  /** Listed by name, type and size, never inlined (Q-N4). */
+  /** Listed by name, type and size, never inlined. */
   attachments: readonly { name: string; type: string; size: number }[];
   /** A forward's original message, as heel read it, when the call forwards one. */
   forwarded?: { text: string; attachments: readonly string[] } | undefined;
@@ -137,6 +137,17 @@ export function emailPreviewFrom(action: string | null, args: unknown): EmailPre
   };
 }
 
+/**
+ * The email view for the request page: a send, or a draft the call saves
+ * (`email.draft` with a full message: create_draft, update_draft). A draft
+ * reads as the email it holds; the page says it isn't sent. The list keeps
+ * `emailPreviewFrom`, so its sentences don't change.
+ */
+export function mailPreviewFrom(action: string | null, args: unknown): EmailPreview | null {
+  if (action === "email.draft") return emailPreviewFrom("email.send", args);
+  return emailPreviewFrom(action, args);
+}
+
 /** The merge view of a GitHub merge, read from the normalized arguments. */
 export function mergePreviewFrom(action: string | null, args: unknown): MergePreview | null {
   if ((action !== "github.merge" && action !== "github.workflow.merge") || !isRecord(args)) {
@@ -191,7 +202,7 @@ export const ACTION_PHRASES: Readonly<Record<string, string>> = {
 };
 
 /** `create_issue` → `create issue`; `pr merge` stays as it is. */
-function toolPhrase(tool: string): string {
+export function toolPhrase(tool: string): string {
   return tool.replace(/[_-]+/g, " ").trim();
 }
 
@@ -273,29 +284,89 @@ export interface ArgumentLine {
   value: string;
   /** Long or structured values are shown as a block rather than inline. */
   block: boolean;
+  /** null, "", [] or {}: the page names these on one line instead of a row each. */
+  empty?: true;
 }
 
-/** Top-level arguments as name and value, for tools without a dedicated view. */
+/**
+ * Who or what a call reaches, then what it says, then everything else by
+ * name. The definitions don't rank their fields yet; until they do, these
+ * common names put the target and the content first for most tools.
+ */
+const TARGET_FIELDS = [
+  "to",
+  "recipient",
+  "recipients",
+  "channel",
+  "repo",
+  "number",
+  "team",
+  "customer",
+  "payment_intent",
+  "amount",
+  "title",
+  "subject",
+  "name",
+  "path",
+  "url",
+];
+const CONTENT_FIELDS = ["text", "body", "message", "description", "content", "comment"];
+
+function fieldRank(name: string): number {
+  const target = TARGET_FIELDS.indexOf(name);
+  if (target >= 0) return target;
+  const content = CONTENT_FIELDS.indexOf(name);
+  if (content >= 0) return 100 + content;
+  return 200;
+}
+
+function isEmpty(value: unknown): boolean {
+  if (value === null || value === "") return true;
+  if (Array.isArray(value)) return value.length === 0;
+  return isRecord(value) && Object.keys(value).length === 0;
+}
+
+/**
+ * Top-level arguments as name and value, for tools without a dedicated view:
+ * the target first, then the content, then the rest by name. Empty values
+ * are marked so the page can list them on one line. Full values; nothing is
+ * shortened (I-57).
+ */
 export function argumentLines(args: unknown): ArgumentLine[] {
   if (!isRecord(args)) {
     return [{ name: "value", value: JSON.stringify(args, null, 2) ?? "null", block: true }];
   }
   return Object.keys(args)
-    .sort()
-    .map((name) => {
+    .sort((a, b) => fieldRank(a) - fieldRank(b) || (a < b ? -1 : a > b ? 1 : 0))
+    .map((name): ArgumentLine => {
       const value = args[name];
-      if (typeof value === "string") {
-        return { name, value, block: value.length > 80 || value.includes("\n") };
-      }
-      if (typeof value === "number" || typeof value === "boolean" || value === null) {
-        return { name, value: String(value), block: false };
-      }
-      const list = strings(value);
-      if (list !== null && list.every((v) => v.length <= 80)) {
-        return { name, value: list.length === 0 ? "none" : list.join(", "), block: false };
-      }
-      return { name, value: JSON.stringify(value, null, 2) ?? "", block: true };
+      const line = lineFor(name, value);
+      return isEmpty(value) ? { ...line, empty: true } : line;
     });
+}
+
+function lineFor(name: string, value: unknown): ArgumentLine {
+  if (typeof value === "string") {
+    return { name, value, block: value.length > 80 || value.includes("\n") };
+  }
+  if (typeof value === "number" || typeof value === "boolean" || value === null) {
+    return { name, value: String(value), block: false };
+  }
+  const list = strings(value);
+  if (list !== null && list.every((v) => v.length <= 80)) {
+    return { name, value: list.length === 0 ? "none" : list.join(", "), block: false };
+  }
+  return { name, value: JSON.stringify(value, null, 2) ?? "", block: true };
+}
+
+/**
+ * A value cut in the middle to fit a headline: `michael.ma…@gmail.com`. Only
+ * for the one-line title; the full value is always in the content below it
+ * and in the full arguments (I-57).
+ */
+export function middle(value: string, head = 12, tail = 8): string {
+  if (value.length <= head + tail + 1) return value;
+  return `${value.slice(0, head)}…${value.slice(value.length - tail)}`;
 }
 
 /**
@@ -320,7 +391,7 @@ export function clientLabel(name: string): string {
   return KNOWN[name] ?? name;
 }
 
-/** An HTTP proxy request, as the approver reads it (spec: HTTP proxy). */
+/** An HTTP proxy request, as the approver reads it. */
 export interface HttpPreview {
   method: string;
   path: string;

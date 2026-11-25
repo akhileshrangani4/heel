@@ -44,7 +44,7 @@ describe("proposed rules on the approval page", () => {
   it("the owner sees them on Approvals and adds them with a passkey", async () => {
     const { h, file, id } = setUp();
     const owner = await h.signIn(await h.enroll());
-    expect(await (await h.fetch("/approvals", { as: owner })).text()).toContain("proposes");
+    expect(await (await h.fetch("/approvals", { as: owner })).text()).toContain("wants to add");
     const page = await (await h.fetch(`/proposals/${id}`, { as: owner })).text();
     expect(page).toContain("so I can summarise your inbox");
     // What the rule does, in words, from the rule itself (roadmap 2.3).
@@ -156,7 +156,7 @@ describe("proposed rules on the approval page", () => {
     h.addUser("sam", "admin");
     const sam = await h.signIn(await h.enroll("sam"));
     expect((await h.fetch(`/proposals/${id}`, { as: sam })).status).toBe(404);
-    expect(await (await h.fetch("/approvals", { as: sam })).text()).not.toContain("proposes");
+    expect(await (await h.fetch("/approvals", { as: sam })).text()).not.toContain("wants to add");
     const added = await h.ceremony(
       sam,
       { url: "/proposals/challenge", body: { proposalId: id } },
@@ -205,7 +205,6 @@ describe("proposed hide entries on the approval page", () => {
     const listed = await (await h.fetch("/approvals", { as: owner })).text();
     expect(listed).toContain("a hide entry");
     const page = await (await h.fetch(`/proposals/${proposed.proposalId}`, { as: owner })).text();
-    expect(page).toContain("Hide from agents");
     expect(page).toContain("login_code");
     expect(page).toContain("Hiding only takes email away from your agents");
     expect(page).toContain("Add to the hide list");
@@ -241,7 +240,7 @@ describe("proposed workdirs on the approval page", () => {
     expect(listed).toContain("a workdir");
     expect(listed).toContain("for its heel run");
     const page = await (await h.fetch(`/proposals/${proposed.proposalId}`, { as: owner })).text();
-    expect(page).toContain("Workdirs for heel run");
+    expect(page).toContain("wants to add <mark>a workdir</mark>");
     expect(page).toContain("may run commands with heel run in");
     expect(page).toContain(project);
     expect(page).toContain("to run your test suite");

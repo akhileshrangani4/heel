@@ -3,8 +3,7 @@ import { MAX_MESSAGE_BYTES, MessageTooLargeError } from "./sandbox-transport.ts"
 
 /**
  * A fetch for a remote MCP server that won't read more than `maxBytes` of
- * one message (red-team round 3: remote servers had no limit, while local
- * ones stop at MAX_MESSAGE_BYTES). A JSON reply is one message. An event
+ * one message, as local ones stop at MAX_MESSAGE_BYTES. A JSON reply is one message. An event
  * stream stays open for many messages, so the limit applies to each event
  * (the bytes since the last blank line), not to the stream's lifetime.
  *

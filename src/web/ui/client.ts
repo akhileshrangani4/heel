@@ -11,6 +11,8 @@
  * the challenge it issued, never out of what this script sends.
  */
 
+import { MENU_RESET_SCRIPT } from "./approval-request.ts";
+
 /** Safe inside a `<script>`: JSON with `<` escaped, so no value can close the tag. */
 function scriptLiteral(value: unknown): string {
   return JSON.stringify(value).replace(/</g, "\\u003c");
@@ -80,9 +82,16 @@ export function clientScript(csrfToken: string | null): string {
     return json;
   };
 
-  // The three steps every ceremony shares.
+  // The three steps every ceremony shares. Resolves to the button's next state:
+  // "success", "error" or "cancelled" (CEREMONY_SCRIPT draws it).
   const run = async ({ status, start, sign, finish, extra }) => {
     const say = (text) => { if (status) status.textContent = text; };
+    // navigator.credentials is what every ceremony calls. Without it (an old
+    // browser, or a page outside a secure context) passkeys can't work.
+    if (!navigator.credentials || typeof navigator.credentials.get !== "function") {
+      say("This browser can't use passkeys. Open heel in an up-to-date Safari, Chrome, Edge or Firefox. Nothing changed.");
+      return "error";
+    }
     try {
       say("Getting a passkey challenge…");
       const issued = await post(start.url, start.body);
@@ -92,10 +101,23 @@ export function clientScript(csrfToken: string | null): string {
       const result = await post(finish, { challengeId: issued.challengeId, response: signed, ...(extra || {}) });
       say(result.message || "Done.");
       if (result.next) window.location.assign(result.next);
+      return "success";
     } catch (error) {
       const cancelled = error && (error.name === "NotAllowedError" || error.name === "AbortError");
-      say(cancelled ? "The passkey check was cancelled. Nothing changed." : String(error.message || error) + " Nothing changed.");
+      say(cancelled ? "Cancelled. Nothing changed." : String(error.message || error) + " Nothing changed.");
+      return cancelled ? "cancelled" : "error";
     }
+  };
+  // A sign-in challenge is burnt by any answer, right or wrong. After a
+  // failed try the page fetches a fresh one, as a reload would, so the
+  // button works again: an app on the Home Screen has no reload button.
+  const freshSignInChallenge = async () => {
+    try {
+      const page = await (await fetch(window.location.href, { headers: { accept: "text/html" } })).text();
+      const id = /data-challenge-id="([^"]+)"/.exec(page);
+      const button = document.querySelector("button[data-heel-handler=signIn]");
+      if (id && button) button.dataset.challengeId = id[1];
+    } catch {}
   };
   const getAssertion = async (options) =>
     assertionJson(await navigator.credentials.get({ publicKey: requestOptions(options) }));
@@ -186,6 +208,8 @@ export function clientScript(csrfToken: string | null): string {
     }
   }
 
+  ${MENU_RESET_SCRIPT}
+
   window.heelCeremony = {
     signIn: ({ binding, status }) =>
       run({
@@ -193,6 +217,9 @@ export function clientScript(csrfToken: string | null): string {
         start: { url: "/sign-in/options", body: { challengeId: binding.challengeId } },
         sign: getAssertion,
         finish: "/sign-in",
+      }).then(async (outcome) => {
+        if (outcome !== "success") await freshSignInChallenge();
+        return outcome;
       }),
     enroll: ({ binding, status }) =>
       run({
@@ -293,7 +320,7 @@ export function clientScript(csrfToken: string | null): string {
       if (field && !(options && options.key && options.key.trim())) {
         if (status) status.textContent = "Paste the key first. Nothing changed.";
         field.focus();
-        return;
+        return "error";
       }
       return run({
         status,

@@ -2,8 +2,8 @@ import { parseHostPort } from "../../runner/egress.ts";
 import { SANDBOX_CA_PATH, SANDBOX_RUN } from "../../runner/plan.ts";
 
 /**
- * What heel gives `npm` in the sandbox when its account has credential hosts
- * (spec: CLI runner, "Credential delivery"). npm reads its token from a
+ * What heel gives `npm` in the sandbox when its account has credential hosts.
+ * npm reads its token from a
  * config file, not the environment, so heel writes one: for each credential
  * host, `//<host>[:port]/:_authToken=<placeholder>`. npm then sends
  * `Authorization: Bearer <placeholder>` to that host (npm-registry-fetch, for

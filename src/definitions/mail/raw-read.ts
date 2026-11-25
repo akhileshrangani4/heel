@@ -1,9 +1,8 @@
 import { draftEnvelope, rawHeaders } from "./mime.ts";
 
 /**
- * A raw RFC 5322 message an agent sends over Gmail's REST path (D7b; spec:
- * HTTP proxy, "Built-in providers": "MIME that can't be parsed is denied"),
- * read into the fields heel's own `send` tool takes. heel then composes and
+ * A raw RFC 5322 message an agent sends over Gmail's REST path, read into
+ * the fields heel's own `send` tool takes. heel then composes and
  * sends its own bytes from those fields, so what is checked is what is sent
  * (the same rule as every other send).
  *

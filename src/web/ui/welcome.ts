@@ -8,7 +8,7 @@ const CHECK_CIRCLE = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
 const ADD_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M8 12h8"/><path d="M12 8v8"/></svg>`;
 
 /**
- * Where a new passkey lands (roadmap 2.7): signed in, with one tap to get
+ * Where a new passkey lands: signed in, with one tap to get
  * approval notifications on this device. On an iPhone a browser tab can't
  * get them, so it says to add heel to the Home Screen first.
  */

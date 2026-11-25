@@ -28,7 +28,7 @@ import type { SessionView } from "../sessions.ts";
 import { newTokenPage } from "../ui/manage-agents.ts";
 
 /**
- * Agents from the web app (roadmap 2.9), as `heel agent` does them on the
+ * Agents from the web app, as `heel agent` does them on the
  * host. What gives power asks for a passkey: adding an agent, a new token,
  * a new workdir. What only takes power away is a plain form: revoking an
  * agent, removing a workdir. Members manage their own agents; admins anyone's.

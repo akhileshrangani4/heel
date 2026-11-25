@@ -15,7 +15,6 @@ export interface AccountRecord {
   settings: Record<string, unknown>;
 }
 
-/** The columns an `AccountRecord` reads. */
 const ACCOUNT_RECORD = {
   id: accounts.id,
   orgId: accounts.orgId,

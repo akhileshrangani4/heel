@@ -1,7 +1,7 @@
 /**
- * The bubblewrap command line for one sandboxed process (spec: CLI runner,
- * "Sandbox"), built by a pure function so every mount, namespace and
- * environment variable is table-testable without bwrap.
+ * The bubblewrap command line for one sandboxed process, built by a pure
+ * function so every mount, namespace and environment variable is table-testable
+ * without bwrap.
  *
  * Inside the sandbox the program sees:
  * - `/usr` (and the host's `/bin`, `/lib*` links into it), the CA bundle,
@@ -21,7 +21,6 @@ import { EgressConfigError, isAllowlisted, parseEgressAllow, parseHostPort } fro
 import { type CredentialAuth, PLACEHOLDER_PREFIX } from "./intercept.ts";
 import type { SeccompArch } from "./seccomp.ts";
 
-/** Defaults from the spec's CLI runner limits. */
 export const DEFAULT_LIMITS: SandboxLimits = {
   wallTimeMs: 10 * 60 * 1000,
   memoryBytes: 1024 * 1024 * 1024,
@@ -33,11 +32,11 @@ export const DEFAULT_LIMITS: SandboxLimits = {
 export const MAX_WALL_TIME_MS = 2_147_483_647;
 
 export interface SandboxLimits {
-  /** Killed after this long (spec: 10 minutes). */
+  /** Killed after this long. */
   readonly wallTimeMs: number;
-  /** RLIMIT_DATA: heap and anonymous mappings (spec: 1 GB). */
+  /** RLIMIT_DATA: heap and anonymous mappings. */
   readonly memoryBytes: number;
-  /** RLIMIT_NPROC inside the sandbox's user namespace (spec: 256 pids). */
+  /** RLIMIT_NPROC inside the sandbox's user namespace. */
   readonly maxProcesses: number;
   /** Killed once stdout or stderr passes this many bytes. */
   readonly maxOutputBytes: number;
@@ -61,10 +60,9 @@ export type SandboxNetwork =
     };
 
 /**
- * How the egress proxy adds a credential the sandbox never holds (spec: CLI
- * runner, "Credential delivery"). The program is given `placeholder` where it
- * expects the credential; for requests to `hosts`, heel swaps it for the real
- * one in the auth position only.
+ * How the egress proxy adds a credential the sandbox never holds. The program
+ * is given `placeholder` where it expects the credential; for requests to
+ * `hosts`, heel swaps it for the real one in the auth position only.
  */
 export interface CredentialInjection {
   /** `host[:port]` entries, each also in `allow`. */
@@ -101,7 +99,7 @@ export interface SandboxSpec {
    * Whether the sandbox gets a `/proc` (default true). A program holding a
    * credential in its environment can read it back from
    * `/proc/self/environ`, and so can any file argument that names it or a
-   * symlink to it, so `heel run` turns it off (D8b).
+   * symlink to it, so `heel run` turns it off.
    */
   readonly proc?: boolean;
 }
@@ -580,7 +578,6 @@ function isMountableReadOnly(path: string): boolean {
   return !isUnder(SANDBOX_TMPFS, path);
 }
 
-/** `path` is `root` or below it. */
 export function isUnder(path: string, root: string): boolean {
   return path === root || path.startsWith(root === "/" ? "/" : `${root}/`);
 }

@@ -32,7 +32,7 @@ import { clientScript } from "../ui/client.ts";
 import { type RulesPreview, rulesEditorPage } from "../ui/rules-editor.ts";
 
 /**
- * Your rules file in the web app (roadmap 2.9), words first: each rule as a
+ * Your rules file in the web app, words first: each rule as a
  * sentence, a decision changed from a menu, a rule or hide entry removed,
  * and, behind a fold, the YAML itself. Any change is previewed (in words and
  * as a diff, with the file's checks) before a passkey saves it. The passkey

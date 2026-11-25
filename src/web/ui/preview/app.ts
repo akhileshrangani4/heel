@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { Hono } from "hono";
 import { html, toHtmlString, trusted } from "../html.ts";
 import type { Theme } from "../layout.ts";
@@ -109,10 +110,22 @@ function index(): string {
 export function createPreviewApp(): Hono {
   const app = new Hono();
   app.get("/", (c) => c.html(index()));
+  // The favicon, so the harness can show the waiting dot drawn over it.
+  app.get("/icon-180.png", (c) =>
+    c.body(
+      new Uint8Array(
+        readFileSync(new URL("../../../../assets/logo/heel-icon-180.png", import.meta.url)),
+      ),
+      200,
+      { "content-type": "image/png" },
+    ),
+  );
   app.get("/:component/:state", (c) => {
     const story = findStory(c.req.param("component"), c.req.param("state"));
     if (!story) return c.text("no such story", 404);
-    return c.html(toHtmlString(renderStory(story, parseTheme(c.req.query("theme")))));
+    const banner = c.req.query("banner");
+    const mode = banner === "everywhere" || banner === "elsewhere" ? banner : undefined;
+    return c.html(toHtmlString(renderStory(story, parseTheme(c.req.query("theme")), mode)));
   });
   return app;
 }

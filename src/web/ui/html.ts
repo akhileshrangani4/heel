@@ -35,7 +35,7 @@ export function trusted(markup: string): Html {
 
 /** A boolean attribute such as `disabled`: present or absent, never `="false"`. */
 export function flag(
-  name: "disabled" | "checked" | "selected" | "open" | "required",
+  name: "disabled" | "checked" | "selected" | "open" | "required" | "data-dock",
   on: boolean,
 ): Html | "" {
   return on ? trusted(` ${name}`) : "";

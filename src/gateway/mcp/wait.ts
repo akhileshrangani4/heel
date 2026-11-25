@@ -1,11 +1,9 @@
 /**
- * Holding a call open until its person decides (roadmap 2.12).
+ * Holding a call open until its person decides.
  *
- * A call that needs approval used to answer `pending` at once, and the agent
- * had to be told to check again after the passkey tap. Now heel keeps the
- * request open, checking the decision every `pollMs`, and answers as soon as
- * it's made. A call no one decides within the window answers `pending` as
- * before, so a slow decision never leaves the agent hanging.
+ * heel keeps the request open, checking the decision every `pollMs`, and
+ * answers as soon as it's made. A call no one decides within the window
+ * answers `pending`, so a slow decision never leaves the agent hanging.
  *
  * While it waits, heel sends a notification every `beatMs`: a progress
  * notification when the client asked for progress, otherwise a log line.
@@ -17,7 +15,6 @@
 export interface ApprovalWait {
   /** How long to hold a call for this client (its `clientInfo.name`); 0 doesn't hold. */
   windowMs: (clientName: string | null) => number;
-  /** How often to look at the decision. */
   pollMs: number;
   /** How often to tell the client heel is still waiting. */
   beatMs: number;
@@ -42,7 +39,7 @@ export const DEFAULT_APPROVAL_WAIT: ApprovalWait = {
   beatMs: 20_000,
 };
 
-/** Doesn't hold: answers at once, as heel did before 2.12. */
+/** Doesn't hold: answers at once. */
 export const NO_APPROVAL_WAIT: ApprovalWait = { windowMs: () => 0, pollMs: 1_000, beatMs: 20_000 };
 
 /** Tells the client heel is still waiting. */
@@ -82,4 +79,45 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
     const timer = setTimeout(done, ms);
     signal.addEventListener("abort", done, { once: true });
   });
+}
+
+/**
+ * What `heel_accounts` with `wait: true` says about its wait, ahead of the
+ * lists. The setup prompt has the agent call it again until nothing waits,
+ * so an answer with nothing new must not read as the owner's decision: one
+ * that did read that way had an agent report the wait as returning at once.
+ * A call heel couldn't hold at all says to pause first, or the agent loops.
+ */
+export type AccountsWait =
+  | { outcome: "changed"; message: string }
+  | { outcome: "nothing_changed"; waitedSeconds: number; message: string }
+  | { outcome: "nothing_waiting"; message: string };
+
+const CALL_AGAIN = 'call heel_accounts with {"wait": true} again';
+
+export const ACCOUNTS_CHANGED: AccountsWait = {
+  outcome: "changed",
+  message: `Something changed while heel waited: accounts and waiting show where things stand now. If anything still waits, ${CALL_AGAIN}.`,
+};
+
+export const NOTHING_WAITING: AccountsWait = {
+  outcome: "nothing_waiting",
+  message: "Nothing you asked for is waiting for your owner, so heel answered at once.",
+};
+
+/** Pure: the answer for a wait that ended with nothing changed; `waitedMs` null when heel couldn't hold it. */
+export function nothingChanged(waitedMs: number | null): AccountsWait {
+  if (waitedMs === null) {
+    return {
+      outcome: "nothing_changed",
+      waitedSeconds: 0,
+      message: `heel couldn't hold this call open, and nothing has changed: your owner hasn't decided yet. Wait a minute, then ${CALL_AGAIN}.`,
+    };
+  }
+  const seconds = Math.round(waitedMs / 1000);
+  return {
+    outcome: "nothing_changed",
+    waitedSeconds: seconds,
+    message: `Nothing changed in the ${seconds} second${seconds === 1 ? "" : "s"} heel waited: your owner hasn't decided yet, so this isn't their answer. To keep waiting, ${CALL_AGAIN}.`,
+  };
 }

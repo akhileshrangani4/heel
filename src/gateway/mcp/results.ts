@@ -3,7 +3,7 @@ import type { RuleRef } from "../../core/call.ts";
 import type { PipelineResult } from "../pipeline/ports.ts";
 
 /**
- * What an agent gets back from a tool call (spec: Result shapes). Pure.
+ * What an agent gets back from a tool call. Pure.
  *
  * An allowed call returns the upstream's own result. Every other outcome is
  * an `isError: true` tool result, so the model reads it and can correct
@@ -50,7 +50,7 @@ function hiddenCount(data: unknown): number {
 /**
  * A built-in tool's data as a tool result: the object as `structuredContent`
  * and as JSON text, plus one line saying how many items heel hid, when it
- * hid any (spec: Hiding, "Dropped, with one count").
+ * hid any.
  */
 export function nativeResult(data: unknown): CallToolResult {
   const content: CallToolResult["content"] = [{ type: "text", text: JSON.stringify(data) }];
@@ -115,7 +115,7 @@ export function decisionFor(
   }
 }
 
-/** An identical call used this call's approval while it waited (2.12): it ran there, not here. */
+/** An identical call used this call's approval while it waited: it ran there, not here. */
 export function usedDecision(approvalId: string, call: CallLabel): Decision {
   return {
     status: "used",

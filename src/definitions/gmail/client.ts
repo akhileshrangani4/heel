@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { type FetchFn, GMAIL_API_BASE } from "../google/oauth.ts";
+import { getWithRetry, throwIfWriteFailed } from "../http-retry.ts";
 
 /**
- * The few Gmail API reads heel needs (Gmail API v1 reference, rev 20261106;
- * research §2.1). Every method takes the call's signal. GETs are retried
+ * The few Gmail API reads heel needs (Gmail API v1 reference, rev 20261106).
+ * Every method takes the call's signal. GETs are retried
  * once on 429 and 5xx; heel never retries a POST, since a send that timed
  * out may have gone.
  *
@@ -147,8 +148,6 @@ export class GmailError extends Error {
   }
 }
 
-const RETRYABLE = (status: number) => status === 429 || status >= 500;
-
 /** Gmail refused a write. The write did not happen, so the call's outcome is known. */
 export class GmailWriteRefused extends Error {
   override readonly name = "GmailWriteRefused";
@@ -179,15 +178,12 @@ export class GmailClient {
   ): Promise<T> {
     const url = new URL(path, GMAIL_API_BASE);
     for (const [key, value] of query) url.searchParams.append(key, value);
-    let response: Response | null = null;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      response = await this.#fetch(url, {
+    const response = await getWithRetry(async () =>
+      this.#fetch(url, {
         headers: { authorization: `Bearer ${await this.#token()}`, accept: "application/json" },
         signal,
-      });
-      if (!RETRYABLE(response.status)) break;
-    }
-    if (response === null) throw new GmailError(0, "no response");
+      }),
+    );
     if (response.status === 404) throw new GmailNotFoundError(`${path} was not found`);
     if (!response.ok) throw new GmailError(response.status, `Gmail answered ${response.status}`);
     const parsed = schema.safeParse(await response.json());
@@ -218,13 +214,7 @@ export class GmailClient {
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       signal,
     });
-    // A 5xx or a timeout doesn't prove nothing happened: the outcome is unknown.
-    if (response.status >= 500 || response.status === 408) {
-      throw new Error(`Gmail answered ${response.status}; the write may have happened`);
-    }
-    if (!response.ok) {
-      throw new GmailWriteRefused(response.status, await response.json().catch(() => null));
-    }
+    await throwIfWriteFailed(response, "Gmail", GmailWriteRefused);
     if (schema === null) return null;
     const parsed = schema.safeParse(await response.json());
     if (!parsed.success)

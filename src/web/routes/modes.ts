@@ -20,7 +20,7 @@ import { clientScript } from "../ui/client.ts";
 import { type ModeRow, type ModesOutcome, modesPage } from "../ui/modes-page.ts";
 
 /**
- * Switching rollout modes (A3), for admins only, on the human plane only.
+ * Switching rollout modes, for admins only, on the human plane only.
  *
  * - `GET /modes` lists the org default and each person's mode.
  * - `POST /modes/enforce` tightens a row to enforce: a plain form, like

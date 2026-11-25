@@ -40,7 +40,7 @@ export const AdminRequestSchema = z.discriminatedUnion("method", [
   z.strictObject({
     /**
      * `heel agent workdir <name> <dir>...` (or `--clear`): the directories
-     * `heel run` may work in (D8b). Replaces the list; an empty one clears it.
+     * `heel run` may work in. Replaces the list; an empty one clears it.
      */
     method: z.literal("agent.workdirs"),
     params: z.strictObject({
@@ -71,11 +71,10 @@ export const AdminRequestSchema = z.discriminatedUnion("method", [
       provider: z.string().min(1),
       alias: z.string().min(1).max(64),
       owner: z.string().min(1).optional(),
-      /** Optional now; OAuth connect flows arrive with the provider definitions. */
       credential: StaticCredentialSchema.optional(),
       /** For an MCP passthrough (`provider: "mcp"`): the upstream server's URL. */
       url: z.string().min(1).max(2_048).optional(),
-      /** For an HTTP account (`provider: "http"`, D7a): its base URL, auth and OpenAPI file. */
+      /** For an HTTP account (`provider: "http"`): its base URL, auth and OpenAPI file. */
       http: z
         .strictObject({
           baseUrl: z.string().min(1).max(2_048),
@@ -83,7 +82,7 @@ export const AdminRequestSchema = z.discriminatedUnion("method", [
           openapi: z.string().max(5_000_000),
         })
         .optional(),
-      /** For a CLI account (`provider: "cli"`, D8b). */
+      /** For a CLI account (`provider: "cli"`). */
       cli: z
         .strictObject({
           command: z.string().min(1).max(64),
@@ -148,7 +147,7 @@ export const AdminRequestSchema = z.discriminatedUnion("method", [
     params: z.strictObject({ alias: z.string().min(1).max(64) }),
   }),
   z.strictObject({
-    /** `heel account share|unshare` (D13b): who besides its owner may use an account. */
+    /** `heel account share|unshare`: who besides its owner may use an account. */
     method: z.enum(["account.share", "account.unshare"]),
     params: z.strictObject({
       alias: z.string().min(1).max(64),
@@ -157,7 +156,7 @@ export const AdminRequestSchema = z.discriminatedUnion("method", [
     }),
   }),
   z.strictObject({
-    /** `heel account approvers` (D13b): who decides an account's asks, for all calls or one repo. */
+    /** `heel account approvers`: who decides an account's asks, for all calls or one repo. */
     method: z.literal("account.approvers"),
     params: z.strictObject({
       alias: z.string().min(1).max(64),
@@ -174,12 +173,12 @@ export const AdminRequestSchema = z.discriminatedUnion("method", [
     params: z.strictObject({ alias: z.string().min(1).max(64) }),
   }),
   z.strictObject({
-    /** `heel user add` (2.9): a new member by name, on an install without a sign-in provider. */
+    /** `heel user add`: a new member by name, on an install without a sign-in provider. */
     method: z.literal("user.add"),
     params: z.strictObject({ name: z.string().min(1).max(64) }),
   }),
   z.strictObject({
-    /** `heel user enroll`: a one-time passkey enrollment link (bootstrap and recovery, Q-N2). */
+    /** `heel user enroll`: a one-time passkey enrollment link (bootstrap and recovery). */
     method: z.literal("user.enroll"),
     params: z.strictObject({ name: z.string().min(1).max(128) }),
   }),
@@ -195,7 +194,7 @@ export const AdminRequestSchema = z.discriminatedUnion("method", [
     /**
      * `heel pause`. Pausing only stops calls, so the admin socket may do it.
      * There is deliberately no `resume` method: resuming needs a fresh
-     * passkey assertion on the approval page (Q-N5).
+     * passkey assertion on the approval page.
      */
     method: z.literal("pause"),
     params: z.discriminatedUnion("scope", [
@@ -212,7 +211,7 @@ export const AdminRequestSchema = z.discriminatedUnion("method", [
   z.strictObject({ method: z.literal("approvals.list") }),
   /** `heel tui` and `heel status`: rule proposals and connection requests waiting for their owners, newest first. */
   z.strictObject({ method: z.literal("proposals.list") }),
-  /** `heel status`: background code-mode scripts running or waiting for approval (C6). */
+  /** `heel status`: background code-mode scripts running or waiting for approval. */
   z.strictObject({ method: z.literal("scripts.list") }),
   z.strictObject({
     /** `heel tui`: the newest audit rows, or the ones after `afterId` for a live tail. */

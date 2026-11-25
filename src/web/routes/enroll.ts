@@ -17,12 +17,12 @@ import { enrollPage } from "../ui/enroll.ts";
 import { welcomePage } from "../ui/welcome.ts";
 
 /**
- * One-time enrollment links (spec: Q-N2). `heel user enroll <user>` on the
+ * One-time enrollment links. `heel user enroll <user>` on the
  * host prints `/enroll/<token>`; the token is the only thing that lets this
  * page register a passkey, it works once, and it lasts 15 minutes. No
  * session is needed. Making the passkey proves the person holds it, so heel
  * signs them in and shows the welcome page, where they turn on notifications
- * for this device (roadmap 2.7). With team sign-in (OIDC) they sign in there.
+ * for this device. With team sign-in (OIDC) they sign in there.
  *
  * - `GET /enroll/:token` shows the page.
  * - `POST /enroll/:token/options` returns WebAuthn creation options.
@@ -41,18 +41,23 @@ export function enrollRoutes(deps: HumanPlaneDeps): Hono {
 
   app.get("/enroll/:token", (c) => {
     const enrollment = findEnrollment(deps.db, c.req.param("token"), deps.now());
-    return renderPage(c, {
-      title: "Enroll a passkey",
-      viewer: null,
-      body: enrollPage(
-        enrollment === null
-          ? { kind: "invalid" }
-          : enrollment.waitingUntil !== null
-            ? { kind: "waiting", userName: enrollment.userName, until: enrollment.waitingUntil }
-            : { kind: "open", token: c.req.param("token"), userName: enrollment.userName },
-      ),
-      script: clientScript(null),
-    });
+    return renderPage(
+      c,
+      {
+        title: "Enroll a passkey",
+        viewer: null,
+        body: enrollPage(
+          enrollment === null
+            ? { kind: "invalid" }
+            : enrollment.waitingUntil !== null
+              ? { kind: "waiting", userName: enrollment.userName, until: enrollment.waitingUntil }
+              : { kind: "open", token: c.req.param("token"), userName: enrollment.userName },
+        ),
+        script: clientScript(null),
+      },
+      // Unknown, used or expired all answer the same 404: no hint a link ever existed.
+      enrollment === null ? 404 : 200,
+    );
   });
 
   app.post("/enroll/:token/options", async (c) => {
@@ -90,7 +95,7 @@ export function enrollRoutes(deps: HumanPlaneDeps): Hono {
     return c.json({ ok: true, next: "/welcome" });
   });
 
-  // Right after enrolling (2.7): turn on notifications for this device, then go to Approvals.
+  // Right after enrolling: turn on notifications for this device, then go to Approvals.
   const signedIn = new Hono<SignedInEnv>();
   signedIn.get("/welcome", requireSession(deps), (c) => {
     const session = c.get("session");

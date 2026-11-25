@@ -6,7 +6,7 @@ import type { RuleFacts } from "./rules/facts.ts";
 import { RUN_RETENTION_MS } from "./run-id.ts";
 
 /**
- * Count math (spec: Counts and state checks, "Item counts"). Pure: the store
+ * Count math. Pure: the store
  * reads the window's events, and these functions decide which of them a
  * rule's count condition sums.
  */

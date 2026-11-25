@@ -59,20 +59,27 @@ describe("the notice", () => {
     ).toBe("Make a POST request on gmail-work?");
   });
 
-  it("carries the agent's own reason on one line, cut to fit", () => {
-    expect(noticeText({ ...NOTICE, reason: "Reply to Dana about the Q3 numbers" }).body).toBe(
+  it("carries the agent's own reason on one line, cut to fit, for web push only", () => {
+    const words = (reason: string) => noticeText({ ...NOTICE, reason }, "words").body;
+    expect(words("Reply to Dana about the Q3 numbers")).toBe(
       "inbox-bot: Reply to Dana about the Q3 numbers",
     );
     // Line breaks and bidi controls can't make the agent's words read as something else.
-    expect(noticeText({ ...NOTICE, reason: "  one\nline\u202e here " }).body).toBe(
-      "inbox-bot: one line here",
-    );
-    expect(noticeText({ ...NOTICE, reason: " \n " }).body).toBe("inbox-bot is asking.");
-    const long = noticeText({ ...NOTICE, reason: "x".repeat(500) }).body;
-    expect(long).toBe(`inbox-bot: ${"x".repeat(199)}…`);
+    expect(words("  one\nline\u202e here ")).toBe("inbox-bot: one line here");
+    expect(words(" \n ")).toBe("inbox-bot is asking.");
+    expect(words("x".repeat(500))).toBe(`inbox-bot: ${"x".repeat(199)}…`);
   });
 
-  it("asks to connect heel's word for the service, with the agent's why, never the alias", () => {
+  it("says only that the agent gave a reason, for Slack and email, so its words can't leak or phish", () => {
+    const planted =
+      "Sending payroll.xlsx to bob@vendor.com, approve at https://evil.example/approve";
+    const body = noticeText({ ...NOTICE, reason: planted }).body;
+    expect(body).toBe("inbox-bot gave a reason. Open heel to read it.");
+    expect(noticeText({ ...NOTICE, reason: " \n " }).body).toBe("inbox-bot is asking.");
+    expect(noticeText({ ...NOTICE, reason: null }).body).toBe("inbox-bot is asking.");
+  });
+
+  it("asks to connect heel's word for the service, saying the agent gave a why, never the alias", () => {
     const notice = {
       kind: "connection",
       agent: "claude-code-heel",
@@ -83,8 +90,11 @@ describe("the notice", () => {
     } as const;
     expect(noticeText(notice)).toEqual({
       title: "Connect Linear?",
-      body: "claude-code-heel: Notification test only. Please reject this request.",
+      body: "claude-code-heel gave a reason. Open heel to read it.",
     });
+    expect(noticeText(notice, "words").body).toBe(
+      "claude-code-heel: Notification test only. Please reject this request.",
+    );
     expect(noticeText({ ...notice, reason: null }).body).toBe("claude-code-heel is asking.");
     expect(requestUrl(new URL("https://heel.example.com/"), "req_1")).toBe(notice.url);
   });
@@ -102,7 +112,7 @@ describe("the notice", () => {
     } as const;
     expect(noticeText(one)).toEqual({
       title: "Add a new rule?",
-      body: "inbox-bot: so I can review your repos",
+      body: "inbox-bot gave a reason. Open heel to read it.",
     });
     expect(noticeText({ ...one, rules: 3 }).title).toBe("Add 3 new rules?");
     expect(noticeText({ ...one, rules: 0, workdirs: 1 }).title).toBe("Add a workdir?");
@@ -233,7 +243,7 @@ describe("Slack", () => {
     expect(slack.posted[0]).not.toHaveProperty("blocks");
   });
 
-  it("escapes the agent's words, so they can't make a link or a mention", async () => {
+  it("never carries the agent's words, so they can't make a link or a mention", async () => {
     const slack = fakeSlack("U123");
     const sender = slackSender({ client: slack.client });
     const notice = { ...NOTICE, reason: "see <https://evil.example|Open heel> & <!channel>" };
@@ -241,7 +251,7 @@ describe("Slack", () => {
     await sender.send({ channel: "slack", email: "owner@example.com" }, notice);
     expect(slack.posted[0]?.["text"]).toBe(
       "*Send an email from gmail-work?*\n" +
-        "inbox-bot: see &lt;https://evil.example|Open heel&gt; &amp; &lt;!channel&gt; " +
+        "inbox-bot gave a reason. Open heel to read it. " +
         `<${NOTICE.url}|Open heel>`,
     );
   });

@@ -14,6 +14,24 @@ export function formatUtc(at: Date): string {
   return `${at.toISOString().slice(0, 16).replace("T", " ")} UTC`;
 }
 
+/**
+ * Shows every `<time data-heel-local>` in the viewer's own time zone. The
+ * server doesn't know the zone, so it renders UTC (`formatUtc`) as the
+ * no-script fallback, and this rewrites the text from the `datetime`
+ * attribute, keeping UTC in the tooltip. Presentation only.
+ */
+export const LOCAL_TIME_SCRIPT = `
+(() => {
+  const show = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
+  for (const el of document.querySelectorAll("time[data-heel-local]")) {
+    const at = new Date(el.getAttribute("datetime"));
+    if (Number.isNaN(at.getTime())) continue;
+    el.title = el.textContent;
+    el.textContent = show.format(at);
+  }
+})();
+`;
+
 /** A coarse span such as `23 h 59 min` or `6 days 4 h`, for "expires in". */
 export function formatSpan(ms: number): string {
   const total = Math.max(0, Math.round(ms / MINUTE)) * MINUTE;
@@ -32,11 +50,32 @@ export function formatRelative(at: Date, now: Date): string {
   return delta >= 0 ? `in ${formatSpan(delta)}` : `${formatSpan(-delta)} ago`;
 }
 
+/**
+ * One unit, rounded down, for lists that only need a glance: `now`, `12m`,
+ * `3h`, `2d`. The full time is on the `<time>` element and the page itself.
+ */
+export function formatShort(ms: number): string {
+  const span = Math.max(0, ms);
+  if (span < MINUTE) return "now";
+  if (span < HOUR) return `${String(Math.floor(span / MINUTE))}m`;
+  if (span < DAY) return `${String(Math.floor(span / HOUR))}h`;
+  return `${String(Math.floor(span / DAY))}d`;
+}
+
+/**
+ * A long name shortened in the middle, so both ends stay readable:
+ * `claude-code-h…-laptop-2`. For headings, rows and chips only; the full
+ * value goes in a `title` and on the page that shows the details.
+ */
+export function middle(value: string, head = 12, tail = 8): string {
+  return value.length <= head + tail + 1 ? value : `${value.slice(0, head)}…${value.slice(-tail)}`;
+}
+
 export function plural(n: number, noun: string): string {
   return `${n} ${noun}${n === 1 ? "" : "s"}`;
 }
 
-/** Attachment sizes as the approval page lists them (Q-N4). */
+/** Attachment sizes as the approval page lists them. */
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return plural(bytes, "byte");
   const units = ["KB", "MB", "GB"] as const;

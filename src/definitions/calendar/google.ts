@@ -4,8 +4,14 @@ import { type Definition, UpstreamError } from "../../gateway/pipeline/ports.ts"
 import type { AccountRecord } from "../../store/directory.ts";
 import type { Vault } from "../../vault/vault.ts";
 import { Address, unique } from "../mail/compose.ts";
-import { listedTools, type MailTool, mailDefinition, type Preparation } from "../mail/tool.ts";
 import { type FetchFn, mailboxSettings } from "../sign-in.ts";
+import {
+  listedTools,
+  type Preparation,
+  type ToolRow,
+  toolRow,
+  toolTableDefinition,
+} from "../tool-table.ts";
 import {
   type CalendarEvent,
   CalendarNotFoundError,
@@ -14,9 +20,8 @@ import {
 } from "./google-client.ts";
 
 /**
- * The Google Calendar definition (D12a; spec: "Calendar (Google and
- * Outlook)"). Actions: `calendar.read`, `calendar.event.create`,
- * `calendar.event.update`, `calendar.event.delete`.
+ * The Google Calendar definition. Actions: `calendar.read`,
+ * `calendar.event.create`, `calendar.event.update`, `calendar.event.delete`.
  *
  * - `recipients` are the attendees, because invites and updates send email.
  *   For an update, it is everyone on the event before or after the change,
@@ -35,9 +40,8 @@ interface CalendarBox {
   address: string;
 }
 
-type CalendarTool = MailTool<CalendarBox>;
-const calendarTool = <S extends z.ZodType, P, R>(tool: MailTool<CalendarBox, S, P, R>) =>
-  tool as unknown as CalendarTool;
+type CalendarTool = ToolRow<CalendarBox>;
+const calendarTool = toolRow<CalendarBox>();
 
 const CalendarId = z
   .string()
@@ -336,10 +340,10 @@ export function googleCalendarDefinition(
     ),
     address: settings.mailbox,
   };
-  return mailDefinition({
+  return toolTableDefinition({
     tools: TOOLS,
     listed: GOOGLE_CALENDAR_TOOLS,
-    mailbox: box,
+    box,
     errors: {
       isNotFound: (error) => error instanceof CalendarNotFoundError,
       refusal: (error) =>

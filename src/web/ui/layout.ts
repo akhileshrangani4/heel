@@ -1,10 +1,11 @@
 import type { PauseScope } from "../../core/call.ts";
 import { CEREMONY_SCRIPT } from "./ceremony.ts";
-import { formatPauseScope, formatUtc } from "./format.ts";
+import { formatPauseScope, formatUtc, LOCAL_TIME_SCRIPT } from "./format.ts";
 import { type Child, type Html, html, trusted } from "./html.ts";
 import { LOGO_SVG } from "./logo.ts";
 import { SELECT_SCRIPT } from "./select.ts";
 import { STYLESHEET } from "./theme.ts";
+import { type BannerMode, documentTitle, liveScript, liveStamp, waitingBanner } from "./waiting.ts";
 
 /** The signed-in person, shown in the header. Sign-in screens have none. */
 export interface Viewer {
@@ -14,7 +15,7 @@ export interface Viewer {
   csrfToken: string;
 }
 
-/** A pause that covers what the page shows (spec: Pause). */
+/** A pause that covers what the page shows. */
 export interface PauseNotice {
   scope: PauseScope;
   /** The agent, account or provider paused; null for a global pause. */
@@ -77,7 +78,29 @@ export interface PageProps {
    * or section tabs, the content centred and narrow, nothing else to click.
    */
   focus?: boolean;
+  /**
+   * Preview only: stands in for the device's safe-area insets, in px, so the
+   * harness can show an installed app on a phone with a home indicator.
+   * Real pages leave it out and get `env(safe-area-inset-*)`.
+   */
+  safeArea?: { top: number; right: number; bottom: number; left: number };
+  /** The opaque version of what waits, from requireSession; the live script compares it. */
+  waitingVersion?: string;
+  /** Where the waiting banner shows; defaults to `DEFAULT_BANNER_MODE`. */
+  bannerMode?: BannerMode;
+  /** Preview only: show the banner as if the count changed while the page was open. */
+  bannerForced?: boolean;
+  /** Preview only: the fallback freshness line's state. */
+  liveState?: "live" | "stale" | "offline";
+  /** Preview only: false, as the harness has no stream. */
+  liveStream?: boolean;
 }
+
+/** Variant B: Home and Approvals list what waits, so the banner shows on every other page. */
+export const DEFAULT_BANNER_MODE: BannerMode = "elsewhere";
+
+/** Sections whose pages list what waits, and reload when it changes. */
+const LIVE_SECTIONS: readonly string[] = ["home", "approvals", "connections"];
 
 /**
  * Where a plain form posts. Used only for actions that can stop or tighten
@@ -136,7 +159,7 @@ export function scrollRegion(label: string, content: Html): Html {
 
 /** `<time>` with a machine-readable instant and a UTC label. */
 export function time(at: Date): Html {
-  return html`<time datetime="${at.toISOString()}">${formatUtc(at)}</time>`;
+  return html`<time datetime="${at.toISOString()}" data-heel-local>${formatUtc(at)}</time>`;
 }
 
 /** lucide's circle-pause. */
@@ -147,8 +170,8 @@ export function pauseBanner(pause: PauseNotice): Html {
   return html`<div class="pause-alert" role="status">
     <span class="pause-alert-icon">${trusted(PAUSE_ICON)}</span>
     <span class="pause-alert-text"
-      ><strong>Paused: ${formatPauseScope(pause.scope, pause.target)}</strong>, since
-      ${time(pause.since)}. Calls in scope return “paused” and reach no upstream.</span
+      ><strong>On hold: ${formatPauseScope(pause.scope, pause.target)}</strong>. Nothing runs until you
+      resume.</span
     >
     <a class="pause-alert-action" href="/pause">Resume</a>
   </div>`;
@@ -197,9 +220,10 @@ function header(viewer: Viewer, current: NavId | undefined, waiting: number): Ht
   const links = SECTIONS.map((entry) => {
     const first = NAV.find((item) => item.section === entry.id);
     const here = entry.id === section;
+    // Always there on Approvals, hidden at zero, so the live script can show it.
     const count =
-      entry.id === "approvals" && waiting > 0
-        ? html` <span class="nav-count"><span class="visually-hidden">, </span>${String(waiting)}<span class="visually-hidden"> waiting</span></span>`
+      entry.id === "approvals"
+        ? html` <span class="nav-count" data-heel-count${waiting > 0 ? "" : trusted(" hidden")}><span class="visually-hidden">, </span><span data-heel-count-n>${String(waiting)}</span><span class="visually-hidden"> waiting</span></span>`
         : "";
     return html`<li${UNDER_MORE.includes(entry.id) ? trusted(' class="nav-wide"') : ""}>
       <a href="${first?.href ?? "/"}"${here ? trusted(' aria-current="page"') : ""}>${navIcon(entry.id)}<span class="nav-label">${entry.label}</span>${count}</a>
@@ -301,30 +325,64 @@ export function page(props: PageProps): Html {
   const theme = props.theme ?? "auto";
   // Sign-in screens never reveal pause state to someone who isn't signed in.
   const pause = props.viewer !== null ? (props.pause ?? null) : null;
+  // The waiting signals (title count, favicon dot, banner, live updates) are for a signed-in owner's own pages.
+  const signals = props.viewer !== null && props.focus !== true;
+  const waiting = props.waiting ?? 0;
+  const section = NAV.find((item) => item.id === props.current)?.section;
+  // Pages that list what waits reload themselves when it changes.
+  const live = section !== undefined && LIVE_SECTIONS.includes(section);
+  const bannerMode = props.bannerMode ?? DEFAULT_BANNER_MODE;
+  const bannerShown =
+    bannerMode === "everywhere" ||
+    !(section === "home" || section === "approvals") ||
+    props.bannerForced === true;
+  const inset = props.safeArea;
+  const insetStyle =
+    inset === undefined
+      ? ""
+      : html` style="--safe-t:${String(inset.top)}px;--safe-r:${String(inset.right)}px;--safe-b:${String(inset.bottom)}px;--safe-l:${String(inset.left)}px"`;
   return html`<!doctype html>
-<html lang="en"${theme === "auto" ? "" : html` data-theme="${theme}"`}>
+<html lang="en"${theme === "auto" ? "" : html` data-theme="${theme}"`}${insetStyle}>
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
-    <meta name="theme-color" content="#16181D" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f6f6f4" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f0f10" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icon-180.png" />
     <link rel="apple-touch-icon" href="/icon-180.png" />
-    <title>${props.title} · heel</title>
+    <title>${documentTitle(props.title, signals ? waiting : 0)}</title>
     <style>${trusted(STYLESHEET)}</style>
   </head>
   <body${props.viewer ? html` class="${props.focus ? "focus" : "app"}"` : ""}>
     <a class="skip" href="#main">Skip to content</a>
-    ${props.viewer && !props.focus ? header(props.viewer, props.current, props.waiting ?? 0) : ""}
+    ${props.viewer && !props.focus ? header(props.viewer, props.current, waiting) : ""}
     <main id="main" tabindex="-1">
       ${pause ? pauseBanner(pause) : ""}
+      ${signals && bannerShown ? waitingBanner(waiting) : ""}
       ${props.viewer && !props.focus ? sectionTabs(props.current) : ""}
+      ${signals && live && props.liveState !== undefined && props.liveState !== "live" ? liveStamp(props.liveState) : ""}
       <p id="heel-ceremony-status" role="status" aria-live="polite"></p>
       ${props.viewer ? props.body : authShell(props.body)}
     </main>
     <script>${trusted(CEREMONY_SCRIPT)}</script>
     <script>${trusted(SELECT_SCRIPT)}</script>
+    <script>${trusted(LOCAL_TIME_SCRIPT)}</script>
+    ${
+      signals
+        ? html`<script>${trusted(
+            liveScript({
+              waiting,
+              version: props.waitingVersion ?? null,
+              live,
+              bannerOnChangeOnly: !bannerShown,
+              ...(props.liveStream === false ? { stream: false } : {}),
+            }),
+          )}</script>`
+        : ""
+    }
     ${props.script ? html`<script>${trusted(props.script)}</script>` : ""}
   </body>
 </html>`;

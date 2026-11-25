@@ -44,9 +44,12 @@ heel 0.2.0 is running.
       http://localhost:7301/proposals/rpr_…
     my-agent asks owner to connect Gmail as gmail-work
       http://localhost:7301/requests/req_…
+  Code mode: ready
 ```
 
 `heel tui` lists the same under **Requests**; Enter opens the page, where you decide with your passkey.
+
+As it starts, heel runs a one-line script to check that code mode works. If it doesn't, the first line says `code mode can't run`, **Code mode** gives the reason, and every `run_code` call fails until you fix it. `heel logs` has the rest.
 
 ## heel tui
 

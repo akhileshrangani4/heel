@@ -5,7 +5,7 @@ import { newId } from "../store/ids.ts";
 import { type AgentTokenKind, agents, agentTokens, users } from "../store/schema.ts";
 
 /**
- * Per-agent bearer tokens (spec: MCP and code mode, "Agent authentication").
+ * Per-agent bearer tokens.
  * A token is shown once when issued; heel keeps only its SHA-256 (I-03).
  * The `heel_` prefix lets secret scanners recognise a leaked token.
  */
@@ -36,7 +36,7 @@ export type BearerParse =
 /**
  * Pure: reads an `Authorization` header value. Only `Bearer <heel token>` is
  * accepted; anything else, including a provider token, is malformed, so it
- * can never be mistaken for a credential to pass upstream (MCP §0 fact 2).
+ * can never be mistaken for a credential to pass upstream.
  */
 export function parseBearer(header: string | undefined): BearerParse {
   if (header === undefined || header.trim() === "") return { kind: "missing" };
@@ -147,7 +147,6 @@ export function issueAgentToken(
   return token;
 }
 
-/** Revokes every live token of an agent inside `tx`. */
 export function revokeAgentTokens(tx: HeelTx, agentId: string, now: Date): void {
   tx.update(agentTokens)
     .set({ revokedAt: now })
@@ -159,7 +158,7 @@ export function revokeAgentTokens(tx: HeelTx, agentId: string, now: Date): void 
  * Whether an agent a request authenticated earlier may still act: its token,
  * the agent and its owner unrevoked, the token unexpired. Code mode checks
  * it before each call of a script, since a script, a background one above
- * all (C6), can outlive the request that started it.
+ * all, can outlive the request that started it.
  */
 export function agentStillLive(
   db: HeelDb,
