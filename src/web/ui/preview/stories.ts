@@ -6,6 +6,7 @@ import { connectPage } from "../connect.ts";
 import { type ConnectionRow, connectionsPage } from "../connections.ts";
 import { addDeviceControl } from "../devices.ts";
 import { enrollPage } from "../enroll.ts";
+import { errorPage } from "../error-page.ts";
 import { type GrantView, grantsPage } from "../grants-page.ts";
 import {
   type DayCount,
@@ -145,6 +146,7 @@ export const PAGES = [
   { id: "rule-proposal", name: "Rule change" },
   { id: "approval-task", name: "Approval: part of a longer task" },
   { id: "approvals-inbox", name: "Approvals with requests and rule changes" },
+  { id: "error", name: "Error pages" },
 ] as const;
 export type ComponentId = (typeof COMPONENTS)[number]["id"] | (typeof PAGES)[number]["id"];
 
@@ -1428,6 +1430,25 @@ export const PAGE_STORIES: readonly Story[] = [
     undefined,
     () => enrollPage({ kind: "invalid" }),
     null,
+  ),
+
+  // Error pages (signed out or not, they show the same page)
+  ...(
+    [
+      ["not-found", "Page not found", "Not found. The address may be mistyped or out of date."],
+      [
+        "stale-form",
+        "This form is out of date",
+        "Refused: this form is stale. Go back, reload the page and try again.",
+      ],
+      [
+        "server-error",
+        "Something went wrong",
+        "Something went wrong in heel. Nothing was decided.",
+      ],
+    ] as const
+  ).map(([state, title, message]) =>
+    pageStory("error", state, title, title, undefined, () => errorPage({ title, message }), null),
   ),
 
   // Connect an app (OAuth consent)

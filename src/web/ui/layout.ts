@@ -1,6 +1,5 @@
 import type { PauseScope } from "../../core/call.ts";
 import { CEREMONY_SCRIPT } from "./ceremony.ts";
-import { DIALOG_SCRIPT } from "./dialog.ts";
 import { formatPauseScope, formatUtc, LOCAL_TIME_SCRIPT } from "./format.ts";
 import { type Child, type Html, html, trusted } from "./html.ts";
 import { LOGO_SVG } from "./logo.ts";
@@ -371,7 +370,6 @@ export function page(props: PageProps): Html {
     <script>${trusted(CEREMONY_SCRIPT)}</script>
     <script>${trusted(SELECT_SCRIPT)}</script>
     <script>${trusted(LOCAL_TIME_SCRIPT)}</script>
-    <script>${trusted(DIALOG_SCRIPT)}</script>
     ${
       signals
         ? html`<script>${trusted(
