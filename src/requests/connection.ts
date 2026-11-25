@@ -6,7 +6,7 @@ import { newId } from "../store/ids.ts";
 import { agentRequests, agents, type ConnectionRequestDetails, users } from "../store/schema.ts";
 
 /**
- * Connection requests (roadmap 2.5): an agent asks its owner to connect an
+ * Connection requests: an agent asks its owner to connect an
  * account, and the owner does it, with a passkey, on heel's page.
  *
  * - The agent can ask only for what needs no secret from it: a built-in
@@ -32,7 +32,7 @@ const MAX_WHY_CHARS = 200;
 
 /** Built-in services people sign in to on heel's page. */
 export const SIGN_IN_SERVICES = ["gmail", "google-calendar", "outlook"] as const;
-/** Built-in services that use a key the owner pastes on heel's page (2.5, part 2). */
+/** Built-in services that use a key the owner pastes on heel's page. */
 export const KEY_SERVICES = ["github", "slack", "linear", "notion", "stripe"] as const;
 /** What an agent may ask for: no secret ever passes through the agent. */
 export const REQUESTABLE_SERVICES = [...SIGN_IN_SERVICES, ...KEY_SERVICES] as const;

@@ -14,9 +14,8 @@ import {
 } from "./google-client.ts";
 
 /**
- * The Google Calendar definition (D12a; spec: "Calendar (Google and
- * Outlook)"). Actions: `calendar.read`, `calendar.event.create`,
- * `calendar.event.update`, `calendar.event.delete`.
+ * The Google Calendar definition. Actions: `calendar.read`,
+ * `calendar.event.create`, `calendar.event.update`, `calendar.event.delete`.
  *
  * - `recipients` are the attendees, because invites and updates send email.
  *   For an update, it is everyone on the event before or after the change,

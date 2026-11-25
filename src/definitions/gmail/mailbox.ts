@@ -24,7 +24,7 @@ export class Mailbox {
     return this.#labels;
   }
 
-  /** The addresses this mailbox may send as, normalized (research §2.1, `sendAs.list`). */
+  /** The addresses this mailbox may send as, normalized (`sendAs.list`). */
   sendAs(signal: AbortSignal): Promise<Set<string>> {
     this.#sendAs ??= this.client
       .listSendAs(signal)

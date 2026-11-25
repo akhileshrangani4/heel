@@ -14,8 +14,8 @@ import {
 } from "./schema.ts";
 
 /**
- * The notification outbox, push subscriptions and people's email addresses
- * (spec: Notifications). The notifier (src/notify) reads and writes these;
+ * The notification outbox, push subscriptions and people's email addresses.
+ * The notifier (src/notify) reads and writes these;
  * nothing here sends anything.
  */
 
@@ -99,7 +99,7 @@ export function enqueueApprovalNotifications(
 }
 
 /**
- * Queues deliveries for a new rule proposal (roadmap 2.1) to the one person
+ * Queues deliveries for a new rule proposal to the one person
  * who can add it: the proposing agent's owner. Returns how many were queued.
  */
 export function enqueueProposalNotifications(
@@ -118,7 +118,7 @@ export function enqueueProposalNotifications(
 }
 
 /**
- * Queues deliveries for a new agent request (a connection, roadmap 2.5) to
+ * Queues deliveries for a new agent request (a connection) to
  * the one person who can approve it: the requesting agent's owner.
  */
 export function enqueueRequestNotifications(
@@ -189,8 +189,6 @@ export function deliveriesFor(db: HeelQuery, approvalId: string): DeliveryRow[] 
     .all();
 }
 
-// ── push subscriptions ──────────────────────────────────────────────────────
-
 export function pushSubscriptionsOf(db: HeelQuery, userId: string): PushSubscriptionRow[] {
   return db.select().from(pushSubscriptions).where(eq(pushSubscriptions.userId, userId)).all();
 }
@@ -260,8 +258,6 @@ export function removePushSubscription(db: HeelQuery, endpoint: string, userId?:
       : and(eq(pushSubscriptions.endpoint, endpoint), eq(pushSubscriptions.userId, userId));
   return db.delete(pushSubscriptions).where(where).run().changes === 1;
 }
-
-// ── people's addresses ──────────────────────────────────────────────────────
 
 /** Sets or clears where email and Slack notifications reach a person. False when no such user. */
 export function setUserEmail(

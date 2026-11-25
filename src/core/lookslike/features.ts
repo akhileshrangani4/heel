@@ -1,6 +1,5 @@
 /**
- * Features for the `looks_like` linear classifier (spec: Hiding, `looks_like`
- * step 2): hashed word and character n-grams over the subject, the sender's
+ * Features for the `looks_like` linear classifier: hashed word and character n-grams over the subject, the sender's
  * local part, the body prefix and the body's URLs.
  *
  * Tokens whose exact value means nothing (a code, a number, a long token) are
@@ -13,7 +12,7 @@ import type { PreparedMessage } from "./text.ts";
 /** Bump on any change to extraction or hashing: weights from another version are refused. */
 export const FEATURE_VERSION = 1;
 
-// Caps bound the work per message whatever the input (spec: 200 ms budget).
+// Caps bound the work per message whatever the input (the 200 ms budget).
 const MAX_WORDS_PER_FIELD = 600;
 const MAX_URLS = 16;
 const CHAR_GRAM = 4;

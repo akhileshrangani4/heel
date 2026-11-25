@@ -16,7 +16,7 @@ import { TAILWIND_CSS } from "./styles/tailwind.ts";
 
 /**
  * Light: a warm off-white page with white cards, near-black ink, and status
- * colours on soft tints (roadmap 1.11). `bg` is a card's background; `page`
+ * colours on soft tints. `bg` is a card's background; `page`
  * is behind the cards. `line` is a quiet divider; `border` outlines inputs
  * and must stay visible (3:1).
  */

@@ -19,7 +19,7 @@ import { html } from "../ui/html.ts";
 import { pushControl } from "../ui/push-control.ts";
 
 /**
- * Passkeys on more devices (spec: Q-N2), from the human plane:
+ * Passkeys on more devices, from the human plane:
  *
  * - `GET /devices`: Settings, Devices. Notifications on this device, how many
  *   of the person's devices get them, and adding a passkey on another device.

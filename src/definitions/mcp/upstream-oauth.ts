@@ -16,8 +16,8 @@ import { publicOnlyFetch } from "./public-only.ts";
 import { type HttpUpstream, upstreamSettings } from "./settings.ts";
 
 /**
- * heel as the OAuth client of a remote MCP server that wants sign-in (D5c,
- * spec: Upstream MCP servers). The SDK does the protocol (discovery, dynamic
+ * heel as the OAuth client of a remote MCP server that wants sign-in. The
+ * SDK does the protocol (discovery, dynamic
  * registration, PKCE, refresh); this provider decides where its state lives:
  *
  * - what the server registered heel as: the account's settings (public);
@@ -210,7 +210,7 @@ export class UpstreamOAuthProvider implements OAuthClientProvider {
 /**
  * The fetch a sign-in uses. For a server an agent asked for, every URL the
  * server's metadata names (its authorization server, its registration and
- * token endpoints) is held to public https hosts too (roadmap 2.5).
+ * token endpoints) is held to public https hosts too.
  */
 function signInFetch(
   deps: { fetch?: FetchLike; resolveHost?: (host: string) => Promise<readonly string[]> },

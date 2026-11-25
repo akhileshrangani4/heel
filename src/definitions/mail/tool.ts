@@ -32,7 +32,7 @@ import { returnsSchema } from "./returns-schema.ts";
 
 export interface Prepared<P> {
   args: P;
-  /** Absent for a read: reads have no action (spec: Email, "—, read"). */
+  /** Absent for a read: reads have no action. */
   action?: string;
   recipients?: string[];
   targets?: string[];
@@ -40,11 +40,11 @@ export interface Prepared<P> {
   items?: number;
   /** The tool leaves something behind that outlives revoking heel (I-70). */
   persistence?: boolean;
-  /** The calendar a calendar tool touches (spec: Calendar). */
+  /** The calendar a calendar tool touches. */
   calendar?: string;
-  /** `owner/name` for a GitHub tool, lower-cased (D11). */
+  /** `owner/name` for a GitHub tool, lower-cased. */
   repo?: string;
-  /** Provider fields rules can name (D12b). */
+  /** Provider fields rules can name. */
   fields?: ProviderFields;
 }
 
@@ -56,8 +56,7 @@ export interface MailTool<M, S extends z.ZodType = z.ZodType, P = unknown, R = u
    * The shape of what `show` gives the agent, keys only:
    * `{"issues": [{"number", "title", ...}]}`. It's listed after the
    * description, so code mode's stubs and MCP clients know a result's shape
-   * before the first call (roadmap T14: an agent guessed a list and lost two
-   * scripts finding out it's a dict).
+   * before the first call.
    */
   returns: string;
   args: S;
@@ -72,7 +71,7 @@ export interface MailTool<M, S extends z.ZodType = z.ZodType, P = unknown, R = u
   show(mailbox: M, result: R, hiding: Hiding, signal: AbortSignal): Promise<unknown>;
 }
 
-/** `outputSchema` for a tool whose `returns` describes an object (C5); nothing otherwise. */
+/** `outputSchema` for a tool whose `returns` describes an object; nothing otherwise. */
 function outputSchemaOf(returns: string): { outputSchema?: Tool["outputSchema"] } {
   const schema = returnsSchema(returns);
   return schema === null ? {} : { outputSchema: schema as Tool["outputSchema"] };

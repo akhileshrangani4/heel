@@ -2,7 +2,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 
 /**
- * The loopback redirects for heel's built-in Google client (roadmap 1.14).
+ * The loopback redirects for heel's built-in Google client.
  * A desktop OAuth client can only send people back to
  * `http://127.0.0.1:<port>`, so each sign-in gets a short-lived listener on
  * heel's host, on a random port.

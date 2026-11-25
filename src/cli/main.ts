@@ -382,7 +382,6 @@ async function stopCommand(args: string[], io: CliIo): Promise<number> {
   }
 }
 
-/** `heel restart`: stop, then start in the background. */
 async function restartCommand(args: string[], io: CliIo): Promise<number> {
   const { values } = parseOrUsage(() =>
     parseArgs({
@@ -814,7 +813,7 @@ async function connectCommand(args: string[], io: CliIo): Promise<number> {
  * `heel account list`, `heel account remove <alias>`,
  * `heel account set <alias> --credential-stdin` (a new key, settings kept),
  * `heel account set <alias> --credential-host <host>...
- * [--credential-auth <auth>]`, and sharing (D13b):
+ * [--credential-auth <auth>]`, and sharing:
  * `heel account share|unshare <alias> --user <name> | --group <group>`,
  * `heel account approvers <alias> [--repo <owner/name>] [--user <name>]... [--group <group>]...`
  * (no principals clears that scope), `heel account sharing <alias>`.
@@ -1072,8 +1071,8 @@ export function pauseParams(values: {
 }
 
 /**
- * `heel pause`. One command, no passkey: pausing can only stop calls
- * (Q-N5). There is no `heel resume`; resuming needs a passkey on the page.
+ * `heel pause`. One command, no passkey: pausing can only stop calls.
+ * There is no `heel resume`; resuming needs a passkey on the page.
  */
 async function pauseCommand(args: string[], io: CliIo): Promise<number> {
   const { values, positionals } = parseOrUsage(() =>
@@ -1324,7 +1323,7 @@ async function initCommand(args: string[], io: CliIo): Promise<number> {
   ) {
     throw new UsageError("--hostname and --agent-hostname go with --approve-from cloudflare");
   }
-  // Where the owner approves from (2.7): asked in a terminal, this computer under --yes.
+  // Where the owner approves from: asked in a terminal, this computer under --yes.
   const approveFrom =
     flag ?? (values.yes === true ? "this-computer" : await chooseApproveFrom(io.stderr));
   const steps = initHome(home);
@@ -1631,8 +1630,8 @@ async function dispatch(argv: string[], io: CliIo): Promise<number> {
     case "audit":
       return auditCommand(rest, io);
     case "codemode-worker": {
-      // Internal: heel starts this itself, under bubblewrap, for one script
-      // (D6b). It never returns; it exits when the script ends.
+      // Internal: heel starts this itself, under bubblewrap, for one script.
+      // It never returns; it exits when the script ends.
       const { codemodeWorkerMain } = await import("../codemode/worker-main.ts");
       await codemodeWorkerMain();
       return new Promise<number>(() => {});

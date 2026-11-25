@@ -23,7 +23,7 @@ export function broadestScope(scopes: readonly PauseScope[]): PauseScope | null 
 }
 
 /**
- * Pause state in SQLite (spec: Pause). A row means "paused"; resume deletes
+ * Pause state in SQLite. A row means "paused"; resume deletes
  * it, so state survives a restart (I-04). The pipeline asks inside its
  * decision transaction, before the rules and again when an approved call
  * re-runs (I-60).

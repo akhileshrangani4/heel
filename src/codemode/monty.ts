@@ -14,8 +14,7 @@ import { plainValue } from "./values.ts";
 import { type CodeWorker, MAX_SNAPSHOT_BYTES, type ScriptLimits, type Step } from "./worker.ts";
 
 /**
- * A `CodeWorker` on `@pydantic/monty` 1.6.0 (pinned; behavior confirmed in
- * the D6 spike):
+ * A `CodeWorker` on `@pydantic/monty` 1.6.0 (pinned):
  *
  * - Host calls arrive as `FunctionSnapshot`s named `module.fn`. Imports also
  *   suspend as OS calls and are answered from the stubs; every other OS call

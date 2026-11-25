@@ -7,7 +7,7 @@ import { badge, notice, scrollRegion, time } from "./layout.ts";
 import { btn } from "./shadcn/button.ts";
 
 /**
- * The People page (roadmap 2.9): who uses this heel, a passkey link for each,
+ * The People page: who uses this heel, a passkey link for each,
  * and where their notifications go. Admins see everyone; others see
  * themselves.
  */

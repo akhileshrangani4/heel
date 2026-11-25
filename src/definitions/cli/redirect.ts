@@ -1,13 +1,13 @@
 /**
  * Options that point a CLI at another endpoint, identity or trust root, or
- * make it log its traffic (spec: CLI runner, "Denied: redirect or debug").
+ * make it log its traffic.
  * heel delivers one credential for one account; any of these would spend it
  * somewhere else, swap it for one the agent supplies, or print it.
  *
  * Flags come from the command line and are refused. Environment variables
  * never come from the agent at all: `heel run` sends only argv and cwd, and
- * the runner sets the variables below itself. They're listed here so D8b
- * builds the environment from one place and a test can assert none leaks in.
+ * the runner sets the variables below itself. They're listed here so the
+ * runner builds the environment from one place and a test can assert none leaks in.
  */
 import type { ParsedArgs } from "./cobra.ts";
 import type { KnownCli } from "./credential-print.ts";
@@ -16,7 +16,7 @@ import type { KnownCli } from "./credential-print.ts";
 export const GH_REDIRECT_FLAGS: readonly string[] = ["hostname"];
 
 /**
- * Set by heel for gh and never inherited: the spec's `GH_HOST`, `GH_REPO`,
+ * Set by heel for gh and never inherited: `GH_HOST`, `GH_REPO`,
  * `GH_DEBUG` and `GH_CONFIG_DIR`, the token variables, and the ones that name
  * a program for gh to run (from `gh help environment`, gh 2.99).
  */
@@ -36,7 +36,7 @@ export const GH_RESERVED_ENV: readonly string[] = [
 ];
 
 /**
- * kubectl: the spec's list (`--server`, `--kubeconfig`, `--kuberc`,
+ * kubectl: the redirect and debug flags (`--server`, `--kubeconfig`, `--kuberc`,
  * `--context`, `--cluster`, `--user`, `--token`, `--as*`, `--username`,
  * `--password`, `--insecure-skip-tls-verify`, `-v/--v`), plus the flags that
  * swap the TLS trust root or client identity for files in the agent's

@@ -10,7 +10,7 @@ import type { PendingSignIn, UpstreamSignIns } from "./mcp/upstream-oauth.ts";
 
 /**
  * Signing a built-in mail account in from the Connections page: Gmail with
- * Google (D9a-1), Outlook with Microsoft (D9b). Each provider supplies the
+ * Google, Outlook with Microsoft. Each provider supplies the
  * three steps that differ; the flow around them is the same.
  *
  * - The sign-in state is bound to the person who started it and works once.

@@ -4,12 +4,11 @@ import { type ConfidentialClient, exchangeCode, oauthRefresher } from "../oauth-
 import { type FetchFn, grantedScopes, type ProviderSignIn, SignInError } from "../sign-in.ts";
 
 /**
- * Signing in to Microsoft for an Outlook account (D9b). heel is a
+ * Signing in to Microsoft for an Outlook account. heel is a
  * confidential web app registered by the operator (`providers.microsoft`
  * in heel.yaml), using delegated permissions.
  *
- * Facts from the Microsoft identity platform docs (research: graph-research
- * §1):
+ * Facts from the Microsoft identity platform docs:
  * - Endpoints are `login.microsoftonline.com/<tenant>/oauth2/v2.0/…`, where
  *   tenant is `common`, `organizations`, `consumers` or a tenant id.
  * - PKCE is recommended for confidential clients too.
@@ -21,7 +20,7 @@ import { type FetchFn, grantedScopes, type ProviderSignIn, SignInError } from ".
  *
  * Scopes (Graph permissions reference, all delegated, no admin consent):
  * `Mail.ReadWrite` (read, drafts, move, delete), `Mail.Send`,
- * `MailboxSettings.ReadWrite` (inbox rules), `Calendars.ReadWrite` (D12a)
+ * `MailboxSettings.ReadWrite` (inbox rules), `Calendars.ReadWrite`
  * and `User.Read` (the address).
  */
 

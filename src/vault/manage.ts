@@ -76,7 +76,7 @@ export function removeAccount(db: HeelDb, orgId: string, alias: string, now: Dat
       .returning({ id: approvals.id })
       .all();
 
-    // Standing approvals carry the account (D13b), or point at an approval on it.
+    // Standing approvals carry the account, or point at an approval on it.
     const onAccount = tx
       .select({ id: approvals.id })
       .from(approvals)

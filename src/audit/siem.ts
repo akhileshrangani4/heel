@@ -7,7 +7,7 @@ import { loadSecret } from "../vault/secret-file.ts";
 import { auditJsonLine } from "./jsonl.ts";
 
 /**
- * The optional SIEM sink (spec: Teams, "Audit"): batched HTTPS POSTs of JSON
+ * The optional SIEM sink: batched HTTPS POSTs of JSON
  * Lines, retried with backoff. It only ever reads the audit log, on its own
  * timer, so an outage changes no decision and drops no row: the durable
  * cursor advances only after the sink acknowledges a batch. Delivery is
@@ -20,7 +20,6 @@ export const SIEM_TOKEN_ENV = "HEEL_SIEM_TOKEN";
 /** The longest wait between retries, however long the outage lasts. */
 export const SIEM_MAX_BACKOFF_MS = 5 * 60_000;
 
-/** Admin alerts the sink raises (spec: Fail-closed behavior, "The SIEM sink is down"). */
 export type SiemAlert = Extract<AdminAlert, { kind: "siem_backlog" | "siem_backlog_cleared" }>;
 
 export type DeliveryOutcome =

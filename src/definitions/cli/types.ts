@@ -5,13 +5,13 @@ import type { ParseFailureReason } from "./cobra.ts";
 export type CliArgv = readonly [command: string, ...args: string[]];
 
 /**
- * Why heel won't run a command whatever the rules say. D8b checks these
+ * Why heel won't run a command whatever the rules say. heel checks these
  * before rules, so a broad `allow` can't reach them (I-31).
  */
 export type CliRefusal =
   /** heel can't tell what the command does: an unknown flag, command, plugin or alias. */
   | { readonly kind: "unparseable"; readonly reason: ParseFailureReason; readonly detail: string }
-  /** The command prints a credential (spec: "Hard denies: print credentials"). */
+  /** The command prints a credential. */
   | { readonly kind: "prints_credentials"; readonly form: string }
   /** The command would talk to another endpoint or as another identity, or log credentials. */
   | { readonly kind: "redirects_endpoint"; readonly option: string }

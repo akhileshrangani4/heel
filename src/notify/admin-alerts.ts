@@ -1,7 +1,7 @@
 import type { Logger } from "../log.ts";
 
 /**
- * Alerts for the install's admins (spec: Fail-closed behavior). For now
+ * Alerts for the install's admins. For now
  * `heel serve` writes them to the log; approval notifications (notifier.ts)
  * don't carry them yet.
  */
@@ -28,7 +28,6 @@ export interface AdminAlerts {
   raise(alert: AdminAlert): void;
 }
 
-/** Admin alerts as log lines. */
 export function logAdminAlerts(log: Logger): AdminAlerts {
   return {
     raise: (alert) => {

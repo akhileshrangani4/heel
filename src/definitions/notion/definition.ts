@@ -8,8 +8,7 @@ import type { FetchFn } from "../sign-in.ts";
 import { NotionClient, NotionNotFoundError, NotionRefused } from "./client.ts";
 
 /**
- * The Notion definition (D12b; spec: "Calendar, Slack, Linear, Notion,
- * Stripe"): heel's own tools on Notion's REST API
+ * The Notion definition: heel's own tools on Notion's REST API
  * (https://developers.notion.com/reference), connected with
  * `heel connect notion --credential-stdin` (an integration token).
  *

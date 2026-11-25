@@ -9,7 +9,7 @@ import {
 import { type FieldValue, MISSING } from "./facts.ts";
 
 /**
- * The operators (spec: Rules, "How a match is decided"), compiled once at
+ * The operators, compiled once at
  * load and applied to one field value per call. Pure.
  *
  * | Check         | single value               | list                        | empty list |
@@ -52,8 +52,7 @@ export interface Condition<F> {
  * `unparseable`: a value the check needs to read as an address isn't one.
  * `unreadable`: the field's value exists but heel can't read it (an HTTP body
  * in a content type it doesn't parse). Either way the rule can't be decided,
- * so the evaluator denies (spec: addresses that fail to parse make the call a
- * deny).
+ * so the evaluator denies.
  */
 export type Outcome = boolean | "unparseable" | "unreadable";
 

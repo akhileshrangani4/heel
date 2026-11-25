@@ -5,7 +5,7 @@ import { isMap, isScalar, parseDocument } from "yaml";
 import type { ExecFn } from "./common.ts";
 
 /**
- * Where the owner approves from (roadmap 2.7), set up by `heel init
+ * Where the owner approves from, set up by `heel init
  * --approve-from`. A passkey only works on the address it was made on, so the
  * address is settled here, before any passkey exists, and must stay put.
  *

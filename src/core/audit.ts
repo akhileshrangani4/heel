@@ -46,7 +46,7 @@ export type AuditEvent =
       /** Null for the default deny and for hard denies that ignore rules. */
       rule: RuleRef | null;
       reason: string;
-      /** Set when the call re-sends a request a person denied (Q-A5). */
+      /** Set when the call re-sends a request a person denied. */
       approvalId?: string;
       /** Set when a decision adapter denied the call, not the rules. */
       adapter?: string;

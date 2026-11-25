@@ -7,9 +7,8 @@ import { agents, agentTokens, users } from "../store/schema.ts";
 import { issueAgentToken, revokeAgentTokens } from "./agent-tokens.ts";
 
 /**
- * Agent lifecycle behind `heel agent add|rotate|revoke|list` (spec: MCP and
- * code mode, "Agent authentication"). Every change takes effect on the next
- * call, because authentication reads the store on every request.
+ * Agent lifecycle behind `heel agent add|rotate|revoke|list`. Every change
+ * takes effect on the next call, because authentication reads the store on every request.
  */
 
 /** Agent names appear in rules (`agent: inbox-bot`) and audit rows. */
@@ -77,7 +76,7 @@ function requireLiveAgent(tx: HeelDb | HeelTx, orgId: string, name: string) {
   return agent;
 }
 
-/** How long a new agent token lasts unless the operator says otherwise (roadmap 1.6). */
+/** How long a new agent token lasts unless the operator says otherwise. */
 export const DEFAULT_TOKEN_DAYS = 90;
 /** heel warns this long before a token expires. */
 export const TOKEN_WARNING_DAYS = 14;
@@ -127,7 +126,6 @@ export function addAgent(
   });
 }
 
-/** Replaces every token of a live agent with one new token. */
 export function rotateAgentToken(
   db: HeelDb,
   orgId: string,
@@ -200,7 +198,7 @@ function listAgentRows(db: HeelDb, orgId: string) {
 }
 
 /**
- * Sets the directories an agent's `heel run` may use (D8b). An empty list
+ * Sets the directories an agent's `heel run` may use. An empty list
  * means the agent can't run commands at all. Each root:
  *
  * - must exist, and is stored resolved (symlinks followed), so a later swap
@@ -333,7 +331,7 @@ export function workRootsByName(
   return { name, workRoots: requireLiveAgent(db, orgId, name).workRoots };
 }
 
-/** An agent's work roots (D8b); empty for an unknown agent. */
+/** An agent's work roots; empty for an unknown agent. */
 export function workRootsOf(db: HeelDb, agentId: string): string[] {
   const row = db
     .select({ workRoots: agents.workRoots })

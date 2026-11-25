@@ -12,7 +12,7 @@ import { btn } from "./shadcn/button.ts";
 import { actionPhrase } from "./summary.ts";
 
 /**
- * The observability pages (A5): what agents did, as heel decided it. Every
+ * The observability pages: what agents did, as heel decided it. Every
  * row here is an audit row; nothing is shown that the audit log doesn't
  * hold, and a person sees only their own agents' rows unless they're an
  * admin.
@@ -272,7 +272,7 @@ export function activityPage(props: {
     agent?: string | undefined;
     account?: string | undefined;
     kind?: string | undefined;
-    /** One code-mode script's calls (C3). */
+    /** One code-mode script's calls. */
     script?: string | undefined;
   };
   nextBefore: number | null;
@@ -280,7 +280,7 @@ export function activityPage(props: {
   paged?: boolean;
   hidden: Readonly<Record<string, number>> | null;
   suggestions: readonly Suggestion[];
-  /** Rules suggested from what the viewer decided (2.10), as cards. */
+  /** Rules suggested from what the viewer decided, as cards. */
   learned?: Html | "";
   /** An admin: they may download the whole audit log. */
   canExport?: boolean;
@@ -412,7 +412,7 @@ function tokenCell(expiry: Date | "never" | null | undefined, now: Date): Html {
 export function agentsPage(props: {
   agents: readonly AgentActivity[];
   sinceHours: number;
-  /** Managing agents here (2.9): who may, their workdirs, and what just happened. */
+  /** Managing agents here: who may, their workdirs, and what just happened. */
   manage?: {
     csrfToken: string;
     viewerId: string;
@@ -423,7 +423,7 @@ export function agentsPage(props: {
   /** Each agent's static token expiry: a date, "never", or null without one. */
   tokens?: ReadonlyMap<string, Date | "never" | null>;
   now?: Date;
-  /** Background scripts running or parked (C6), each with the form that stops it. */
+  /** Background scripts running or parked, each with the form that stops it. */
   scripts?: readonly {
     id: string;
     agentName: string;

@@ -29,7 +29,7 @@ import { suggestionCards } from "../ui/suggestions.ts";
 import { suggestionsOf } from "./suggestions.ts";
 
 /**
- * Observability on the human plane (A5).
+ * Observability on the human plane.
  *
  * - `GET /agents`: the agent inventory, with the last day's decisions.
  * - `GET /activity`: the event explorer, newest first, filtered by agent,
@@ -61,7 +61,7 @@ function isKind(value: string | undefined): value is AuditKind {
   return value !== undefined && (AUDIT_KINDS as readonly string[]).includes(value);
 }
 
-/** What an agent change from the web app did, for the notice on Agents (2.9). */
+/** What an agent change from the web app did, for the notice on Agents. */
 function doneMessage(query: Record<string, string>): string | null {
   if ("revoked" in query) return "Revoked. Its tokens stopped working, and its scripts stopped.";
   if ("workdir-added" in query) return "Folder added. Its heel run can work there now.";
@@ -139,7 +139,7 @@ export function activityRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     });
   });
 
-  // Stopping a background script only takes something away: a plain form, no passkey (C6).
+  // Stopping a background script only takes something away: a plain form, no passkey.
   app.post("/agents/scripts/:id/stop", signedIn, requireCsrfField(), (c) => {
     const session = c.get("session");
     const id = c.req.param("id");
@@ -198,8 +198,8 @@ export function activityRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
   });
 
   /**
-   * The whole audit log as JSON Lines, as `heel audit export` writes it
-   * (spec: Teams, "Audit"): admins only, since it's everyone's. Optional
+   * The whole audit log as JSON Lines, as `heel audit export` writes it:
+   * admins only, since it's everyone's. Optional
    * `since` and `until` are days, both included. Paged from one snapshot, so
    * rows written meanwhile don't shift it.
    */

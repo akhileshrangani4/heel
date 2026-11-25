@@ -17,7 +17,6 @@ import type { ChallengeBinding } from "./challenges.ts";
  * Pure: these functions only translate between decisions and bindings.
  */
 
-/** A person's decision on one approval request. */
 export interface Decision {
   approvalId: string;
   /** The call hash the person saw on the page. */

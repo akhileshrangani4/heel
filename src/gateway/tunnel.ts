@@ -2,7 +2,7 @@ import { spawn as nodeSpawn } from "node:child_process";
 import type { Logger } from "../log.ts";
 
 /**
- * The Cloudflare tunnel heel runs alongside itself (roadmap 2.7): `cloudflared
+ * The Cloudflare tunnel heel runs alongside itself: `cloudflared
  * tunnel --config <file> run`, restarted with a growing delay whenever it
  * stops or fails to start, until heel stops. cloudflared's errors and warnings
  * go to heel's log as warnings, the rest at debug.

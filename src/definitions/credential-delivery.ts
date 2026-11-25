@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 /**
- * How a sandboxed program's credential reaches it (spec: CLI runner,
- * "Credential delivery"), for local MCP servers and for CLIs other than `gh`:
+ * How a sandboxed program's credential reaches it, for local MCP servers and
+ * for CLIs other than `gh`:
  *
  * - `proxy`: the account names credential hosts. The program gets an inert
  *   placeholder, and heel's egress proxy adds the credential on the wire.

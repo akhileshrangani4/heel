@@ -37,7 +37,7 @@ import { html } from "../ui/html.ts";
 import { type RequestCard, requestCards, requestPage } from "../ui/requests.ts";
 
 /**
- * Connection requests on the human plane (roadmap 2.5).
+ * Connection requests on the human plane.
  *
  * - `GET /requests/:id` shows what the agent asks for in heel's words, its
  *   own words labelled as its claim, and what the owner's rules would let it
@@ -279,7 +279,7 @@ export function requestRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
         400,
       );
     }
-    // A key the service turns down is never stored, and the request keeps waiting (T12).
+    // A key the service turns down is never stored, and the request keeps waiting.
     const checked =
       needsKey(details.provider) && deps.checkKey !== undefined
         ? await deps.checkKey(details.provider, pasted)

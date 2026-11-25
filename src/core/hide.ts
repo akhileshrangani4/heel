@@ -4,7 +4,7 @@ import type { FieldValue } from "./rules/facts.ts";
 import { allOf, evalCondition, type Outcome } from "./rules/match.ts";
 
 /**
- * Whether one message is hidden from agents (spec: Hiding). Pure: the
+ * Whether one message is hidden from agents. Pure: the
  * `looks_like` judge is passed in, so this module never loads a model or
  * reads a clock.
  *
@@ -80,7 +80,7 @@ function looksLikeOutcome(
   judge: LooksLikeJudge,
 ): { outcome: Outcome; uncertain: boolean } {
   if (entry.looksLike.length === 0) return { outcome: true, uncertain: false };
-  // Unreadable mail hides before any judge sees it (spec: `looks_like` step 3).
+  // Unreadable mail hides before any judge sees it.
   if (candidate.body === undefined || candidate.body.unreadable !== undefined) {
     return { outcome: true, uncertain: true };
   }

@@ -7,7 +7,7 @@ import { factsOf } from "./rules/facts.ts";
 import { RulesFile } from "./rules/schema.ts";
 
 /**
- * Learning from what you approve (roadmap 2.10). heel groups the requests a
+ * Learning from what you approve. heel groups the requests a
  * person decided in the last 30 days and, where they keep making the same
  * decision, drafts a rule that would make it for them. A suggestion is only
  * a draft: it becomes a proposal the person reads and adds with a passkey.
@@ -413,7 +413,7 @@ function recipientDomains(call: Call): string[] {
   return [...domains].sort();
 }
 
-/** One kind of request an agent made, and how its owner decided it (2.10's `heel_history`). */
+/** One kind of request an agent made, and how its owner decided it (`heel_history`). */
 export interface HistoryGroup {
   account: string;
   action?: string;

@@ -5,7 +5,7 @@ import { notice, postForm, time } from "./layout.ts";
 import { btn } from "./shadcn/button.ts";
 
 /**
- * Managing agents from the web app (roadmap 2.9): adding one, a new token, a
+ * Managing agents from the web app: adding one, a new token, a
  * revoke, workdirs. Adding and giving power ask for a passkey; taking it away
  * is a plain button.
  */

@@ -68,7 +68,7 @@ import {
  * data plus a render function over fixture props.
  */
 
-/** The six states every component must render in (D4a acceptance criteria). */
+/** The six states every component must render in. */
 export const REQUIRED_STATES = [
   "pending",
   "approved",
@@ -263,7 +263,6 @@ const passkey = (
 });
 
 export const STORIES: readonly Story[] = [
-  // ApprovalRequest
   approval("pending", "Waiting for a decision", { ok: true, request: PENDING_REQUEST }),
   approval("approved", "Approved, waiting for the agent to re-send", {
     ok: true,
@@ -298,7 +297,6 @@ export const STORIES: readonly Story[] = [
     ADMIN,
   ),
 
-  // PendingList
   pending("pending", "Requests waiting", { ok: true, rows: PENDING_ROWS }),
   pending("approved", "Approved and executed requests", { ok: true, rows: APPROVED_ROWS }),
   pending("denied", "A denied request", { ok: true, rows: DENIED_ROWS }),
@@ -307,7 +305,6 @@ export const STORIES: readonly Story[] = [
   pending("error", "The list couldn't be loaded", { ok: false, message: LOAD_ERROR }),
   { ...pending("pending", "", { ok: true, rows: [] }), state: "empty", label: "Nothing waiting" },
 
-  // PauseControl
   pauseStory("pending", "Nothing paused: pause is one tap", {
     outcome: { kind: "none" },
     load: pauseLoad([]),
@@ -338,7 +335,6 @@ export const STORIES: readonly Story[] = [
     load: { ok: false, message: LOAD_ERROR },
   }),
 
-  // StandingApprovalList
   standingStory("pending", "None granted yet", { ok: true, rows: [] }),
   standingStory("approved", "Active standing approvals", { ok: true, rows: ACTIVE_STANDING }),
   standingStory("denied", "Revoked", { ok: true, rows: REVOKED_STANDING }),
@@ -350,8 +346,6 @@ export const STORIES: readonly Story[] = [
     AGENT_PAUSE,
   ),
   standingStory("error", "Couldn't be loaded", { ok: false, message: LOAD_ERROR }),
-
-  // RulesPage
 
   // Sign-in (OIDC)
   oidc("pending", "Waiting to sign in", { kind: "none" }),
@@ -382,8 +376,6 @@ export const STORIES: readonly Story[] = [
   }),
   passkey("not-enrolled", "First run: no passkey enrolled", { kind: "none" }, false),
 ];
-
-// ── Pages ───────────────────────────────────────────────────────────────────
 
 const DAY = 86_400_000;
 const ago = (ms: number) => new Date(NOW.getTime() - ms);
@@ -811,7 +803,6 @@ const rulesEditor = (
   );
 
 export const PAGE_STORIES: readonly Story[] = [
-  // Home
   pageStory("home", "fresh", "Fresh install: 1 of 4 set up, no calls yet", "Home", "home", () =>
     homePage({
       ...HOME_BASE,
@@ -843,7 +834,6 @@ export const PAGE_STORIES: readonly Story[] = [
       }),
   ),
 
-  // Activity
   activity("busy", "Today, yesterday and older, every kind of decision", ACTIVITY_ROWS),
   activity("filtered-empty", "A filter with no matches", [], {
     agent: "agt_ci",
@@ -851,7 +841,6 @@ export const PAGE_STORIES: readonly Story[] = [
   }),
   activity("empty", "No calls yet", []),
 
-  // Agents
   agents("busy", "Agents incl. a revoked one and an expiring token", AGENTS),
   agents("scripts", "Background scripts running and waiting", AGENTS, {
     scripts: [
@@ -877,7 +866,6 @@ export const PAGE_STORIES: readonly Story[] = [
   }),
   agents("empty", "No agents yet", []),
 
-  // Connections
   connections("mixed", "Ready, needs sign-in, set up first, needs a new key", CONNECTIONS),
   connections("connected", "Just signed in", CONNECTIONS.slice(0, 1), {
     kind: "connected",
@@ -885,12 +873,10 @@ export const PAGE_STORIES: readonly Story[] = [
   }),
   connections("empty", "Nothing connected yet", []),
 
-  // Devices
   devices("none", "No device gets notifications", 0, null),
   devices("several", "Three devices get notifications", 3, null),
   devices("turned-off", "Just turned off on every device", 0, 3),
 
-  // Grants
   grants("busy", "Live, expired and revoked grants", [
     grant("grt_1", "inbox-bot", "Send the Q3 numbers to the vendor", "live", 20),
     grant("grt_2", "ci-bot", "Merge the release PR", "expired", -2),
@@ -904,7 +890,6 @@ export const PAGE_STORIES: readonly Story[] = [
   ),
   grants("empty", "No grants", []),
 
-  // People
   pageStory("people", "admin", "An admin sees everyone", "People", "people", () =>
     peoplePage({
       people: PEOPLE,
@@ -940,7 +925,6 @@ export const PAGE_STORIES: readonly Story[] = [
     }),
   ),
 
-  // Modes
   pageStory("modes", "mixed", "Org enforces, one person watches", "Modes", "modes", () =>
     modesPage({
       rows: MODES,
@@ -958,7 +942,6 @@ export const PAGE_STORIES: readonly Story[] = [
     }),
   ),
 
-  // Rules
   rulesEditor("loaded", "Rules load: three rules and a hide entry", {}),
   rulesEditor("problems", "The file has problems: last good rules still decide", {
     file: rulesFile(BROKEN_RULES_TEXT),
@@ -974,7 +957,6 @@ export const PAGE_STORIES: readonly Story[] = [
     saved: "pending",
   }),
   rulesEditor("unavailable", "heel can't edit rules files from here", { file: null }),
-  // Rule history
   history("busy", "Changes from a proposal, the web and outside heel", [
     {
       id: "rc_1",
@@ -1012,7 +994,6 @@ export const PAGE_STORIES: readonly Story[] = [
   ]),
   history("empty", "No changes yet", []),
 
-  // Welcome
   pageStory("welcome", "new", "Right after enrolling a passkey", "Welcome", "home", () =>
     welcomePage({ vapidPublicKey: "BPreviewVapidKey", devices: 0 }),
   ),

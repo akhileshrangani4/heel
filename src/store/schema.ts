@@ -22,7 +22,7 @@ import { MODES, type Mode } from "../core/modes.ts";
 import type { ApprovalScript } from "../gateway/pipeline/ports.ts";
 
 /**
- * heel's SQLite schema (spec: Architecture; Teams, "Data model"). Every row
+ * heel's SQLite schema. Every row
  * carries `org_id`, and every agent and account carries `owner_id`: v1 has one
  * org per install, but the schema never assumes it.
  *
@@ -31,8 +31,6 @@ import type { ApprovalScript } from "../gateway/pipeline/ports.ts";
  */
 
 const createdAt = () => integer("created_at", { mode: "timestamp_ms" }).notNull();
-
-// ── identity ────────────────────────────────────────────────────────────────
 
 export const orgs = sqliteTable("orgs", {
   id: text("id").primaryKey(),
@@ -51,12 +49,12 @@ export const users = sqliteTable(
       .notNull()
       .references(() => orgs.id),
     name: text("name").notNull(),
-    /** The IdP subject when OIDC is configured (D13); null on single-user installs. */
+    /** The IdP subject when OIDC is configured; null on single-user installs. */
     oidcSubject: text("oidc_subject"),
     role: text("role", { enum: USER_ROLES }).notNull(),
     /** Where email and Slack notifications reach this person; null until set. */
     email: text("email"),
-    /** IdP groups as of the person's last OIDC sign-in (D13b); empty on single-user installs. */
+    /** IdP groups as of the person's last OIDC sign-in; empty on single-user installs. */
     groups: text("groups", { mode: "json" }).$type<string[]>().notNull().default([]),
     /** When `groups` was last read from the IdP; groups older than a session's maximum don't count. */
     groupsSyncedAt: integer("groups_synced_at", { mode: "timestamp_ms" }),
@@ -80,11 +78,11 @@ export const agents = sqliteTable(
       .notNull()
       .references(() => users.id),
     name: text("name").notNull(),
-    /** Set for an agent created by connecting an OAuth client (A2); reused when it connects again. */
+    /** Set for an agent created by connecting an OAuth client; reused when it connects again. */
     oauthClientId: text("oauth_client_id"),
     /**
-     * Absolute directories `heel run` may use as its working directory (D8b;
-     * spec: CLI runner, "Same host"). Empty: the agent can't run commands.
+     * Absolute directories `heel run` may use as its working directory.
+     * Empty: the agent can't run commands.
      */
     workRoots: text("work_roots", { mode: "json" }).$type<string[]>().notNull().default([]),
     createdAt: createdAt(),
@@ -195,11 +193,8 @@ export const vaultKeys = sqliteTable("vault_keys", {
   createdAt: createdAt(),
 });
 
-// ── counts ──────────────────────────────────────────────────────────────────
-
 /**
- * One row per call heel let run, written in the decision transaction (spec:
- * Counts and state checks). Kept 7 days; never refunded.
+ * One row per call heel let run, written in the decision transaction. Kept 7 days; never refunded.
  */
 export const countEvents = sqliteTable(
   "count_events",
@@ -224,12 +219,10 @@ export const countEvents = sqliteTable(
   ],
 );
 
-// ── approvals ───────────────────────────────────────────────────────────────
-
 export const APPROVAL_STATUSES = ["pending", "approved", "denied", "expired", "executed"] as const;
 export type ApprovalStatus = (typeof APPROVAL_STATUSES)[number];
 
-/** Which rule layer asked: org asks go to admins and never stand (Q-A7). */
+/** Which rule layer asked: org asks go to admins and never stand. */
 export const APPROVAL_ORIGINS = ["org", "owner"] as const;
 export type ApprovalOrigin = (typeof APPROVAL_ORIGINS)[number];
 
@@ -264,8 +257,8 @@ export const approvals = sqliteTable(
      */
     reason: text("reason"),
     /**
-     * The code-mode script the call came from, with the calls it made before
-     * (C3), as the agent wrote it; like `reason`, set when the request opens
+     * The code-mode script the call came from, with the calls it made before,
+     * as the agent wrote it; like `reason`, set when the request opens
      * and never part of `call` or `callHash`. Null outside code mode.
      */
     script: text("script", { mode: "json" }).$type<ApprovalScript>(),
@@ -290,7 +283,7 @@ export const STANDING_SCOPES = ["exact_call", "rule", "run"] as const;
 export type StandingScope = (typeof STANDING_SCOPES)[number];
 
 /**
- * Standing approvals live here, never in YAML (spec: Standing approvals).
+ * Standing approvals live here, never in YAML.
  * Each is bound to its parent rule's content hash and lapses when it changes.
  */
 export const standingApprovals = sqliteTable(
@@ -303,17 +296,16 @@ export const standingApprovals = sqliteTable(
     agentId: text("agent_id")
       .notNull()
       .references(() => agents.id),
-    /** The approval it was granted from. */
     approvalId: text("approval_id")
       .notNull()
       .references(() => approvals.id),
     scope: text("scope", { enum: STANDING_SCOPES }).notNull(),
     /** Set for `exact_call`: the account, tool and arguments it covers. */
     callHash: text("call_hash"),
-    /** Set for `run` (A4): the agent's run id it covers. */
+    /** Set for `run`: the agent's run id it covers. */
     runId: text("run_id"),
     /**
-     * The account and GitHub repo of the approved call (D13b). A standing
+     * The account and GitHub repo of the approved call. A standing
      * approval covers calls on that account and repo only: its approver
      * decides for them, and maybe for nothing else. Null on rows from before
      * sharing, when the owner decided every call.
@@ -334,7 +326,7 @@ export const standingApprovals = sqliteTable(
 );
 
 /**
- * Intent grants (A4b): narrow allows a person signed with a passkey for one
+ * Intent grants: narrow allows a person signed with a passkey for one
  * agent and one stated task, enforced like a rule above the owner's own.
  */
 export const grants = sqliteTable(
@@ -362,8 +354,6 @@ export const grants = sqliteTable(
   (t) => [index("grants_agent").on(t.agentId)],
 );
 
-// ── pause ───────────────────────────────────────────────────────────────────
-
 /**
  * Active pauses. A row means "paused" and resume deletes it. `target` is the
  * agent id, account alias or provider, and "" for the global scope.
@@ -387,10 +377,8 @@ export const pauses = sqliteTable(
   ],
 );
 
-// ── rollout modes ───────────────────────────────────────────────────────────
-
 /**
- * Rollout modes set on the human plane (A3): one row for the org's default
+ * Rollout modes set on the human plane: one row for the org's default
  * (`owner_id` empty) and one per owner who has their own. With no row the
  * mode is `enforce`, or `shadow` under `heel serve --watch`. The strictest
  * row that applies wins.
@@ -430,11 +418,9 @@ export const modeChanges = sqliteTable(
   (t) => [index("mode_changes_org_at").on(t.orgId, t.changedAt)],
 );
 
-// ── passkeys and sessions ───────────────────────────────────────────────────
-
 /**
- * Enrolled WebAuthn credentials (spec: The approval page). Enrollment runs
- * only from a one-time link printed over the admin socket (Q-N2).
+ * Enrolled WebAuthn credentials. Enrollment runs only from a one-time link
+ * printed over the admin socket.
  */
 export const passkeys = sqliteTable(
   "passkeys",
@@ -509,7 +495,7 @@ export const webauthnChallenges = sqliteTable(
   ],
 );
 
-/** One-time enrollment links from `heel user enroll` (Q-N2); valid 15 minutes. */
+/** One-time enrollment links from `heel user enroll`; valid 15 minutes. */
 export const enrollments = sqliteTable(
   "enrollments",
   {
@@ -539,7 +525,7 @@ export const SESSION_METHODS = ["passkey", "oidc"] as const;
 export type SessionMethod = (typeof SESSION_METHODS)[number];
 
 /**
- * Human-plane sessions, at most 12 h (spec: Teams). A session lets a person
+ * Human-plane sessions, at most 12 h. A session lets a person
  * see requests, pause and revoke; it never decides anything on its own.
  */
 export const sessions = sqliteTable(
@@ -568,8 +554,7 @@ export const PRINCIPAL_KINDS = ["user", "group"] as const;
 export type PrincipalKind = (typeof PRINCIPAL_KINDS)[number];
 
 /**
- * Who besides its owner may use an account (D13b; spec: Teams, "Who may use
- * an account"): an agent may call an account only if the agent's owner may.
+ * Who besides its owner may use an account: an agent may call an account only if the agent's owner may.
  */
 export const accountShares = sqliteTable(
   "account_shares",
@@ -590,7 +575,7 @@ export const accountShares = sqliteTable(
 );
 
 /**
- * Who decides an account's asks (D13b; spec: Teams, "Approvers"). With none,
+ * Who decides an account's asks. With none,
  * the owner does. `repo` narrows an approver to one GitHub repo.
  */
 export const accountApprovers = sqliteTable(
@@ -616,7 +601,7 @@ export const accountApprovers = sqliteTable(
 );
 
 /**
- * OIDC sign-ins in progress (D13b): what heel must check when the person
+ * OIDC sign-ins in progress: what heel must check when the person
  * comes back from the IdP. Keyed by the hash of a random cookie set on the
  * browser that started the sign-in, so a callback only completes in that
  * browser (no login CSRF), and used once.
@@ -631,8 +616,6 @@ export const oidcSignIns = sqliteTable("oidc_sign_ins", {
   next: text("next").notNull(),
   expiresAt: integer("expires_at", { mode: "timestamp_ms" }).notNull(),
 });
-
-// ── OAuth for cloud connectors (A2) ─────────────────────────────────────────
 
 /**
  * Clients registered through dynamic client registration (RFC 7591): Claude,
@@ -670,9 +653,7 @@ export const oauthCodes = sqliteTable("oauth_codes", {
   usedAt: integer("used_at", { mode: "timestamp_ms" }),
 });
 
-// ── notifications ───────────────────────────────────────────────────────────
-
-/** Web push subscriptions from the installable approval page (spec: Notifications). */
+/** Web push subscriptions from the installable approval page. */
 export const pushSubscriptions = sqliteTable(
   "push_subscriptions",
   {
@@ -697,8 +678,7 @@ export const DELIVERY_STATUSES = ["pending", "sent", "failed", "dropped"] as con
 export type DeliveryStatus = (typeof DELIVERY_STATUSES)[number];
 
 /**
- * The notification outbox (spec: Fail-closed, "The notification channel
- * fails"). A new approval request gets one row per approver and channel;
+ * The notification outbox. A new approval request gets one row per approver and channel;
  * the notifier sends due rows and retries with backoff. A failed delivery
  * never changes the request: it stays pending and listed on the page.
  *
@@ -716,9 +696,9 @@ export const notificationDeliveries = sqliteTable(
       .references(() => orgs.id),
     /** The request this tells someone about; exactly one of this and `proposalId` is set. */
     approvalId: text("approval_id").references(() => approvals.id),
-    /** The rule proposal this tells its owner about (roadmap 2.1). */
+    /** The rule proposal this tells its owner about. */
     proposalId: text("proposal_id").references(() => ruleProposals.id),
-    /** The agent's request (a connection) this tells its owner about (roadmap 2.5). */
+    /** The agent's request (a connection) this tells its owner about. */
     requestId: text("request_id").references(() => agentRequests.id),
     userId: text("user_id")
       .notNull()
@@ -757,8 +737,6 @@ export const notificationDeliveries = sqliteTable(
     check("notification_deliveries_status", sql`"status" IN (${sqlList(DELIVERY_STATUSES)})`),
   ],
 );
-
-// ── audit ───────────────────────────────────────────────────────────────────
 
 /** SQL list literal for an `IN (…)` check, from a const list of plain identifiers. */
 function sqlList(values: readonly string[]) {
@@ -799,7 +777,7 @@ export const auditLog = sqliteTable(
     approverId: text("approver_id"),
     pauseScope: text("pause_scope").$type<PauseScope>(),
     reason: text("reason"),
-    /** For a would-* row, the rollout mode that let the call run (A3). Empty means enforce. */
+    /** For a would-* row, the rollout mode that let the call run. Empty means enforce. */
     mode: text("mode").$type<Mode>(),
     adapter: text("adapter"),
   },
@@ -808,7 +786,7 @@ export const auditLog = sqliteTable(
     index("audit_log_agent_at").on(t.agentId, t.at),
     index("audit_log_approval").on(t.approvalId),
     index("audit_log_script").on(t.scriptId),
-    // Rule suggestions read a person's own decisions (2.10).
+    // Rule suggestions read a person's own decisions.
     index("audit_log_approver_at").on(t.approverId, t.at),
     check("audit_log_kind", sql`"kind" IN (${sqlList(AUDIT_KINDS)})`),
     check(
@@ -836,10 +814,8 @@ export const auditLog = sqliteTable(
   ],
 );
 
-// ── audit delivery ──────────────────────────────────────────────────────────
-
 /**
- * How far the SIEM sink has delivered (spec: Teams, "Audit"). One row per
+ * How far the SIEM sink has delivered. One row per
  * org and sink URL; it advances only after the sink acknowledged a batch,
  * so a crash or outage re-sends rather than drops. Pointing heel at a new
  * URL starts a new cursor at the beginning of the log.
@@ -857,8 +833,6 @@ export const siemCursors = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.orgId, t.sink] })],
 );
-
-// ── approval hints ──────────────────────────────────────────────────────────
 
 export const HINT_STATUSES = ["ok", "unavailable"] as const;
 
@@ -891,8 +865,7 @@ export const approvalHints = sqliteTable(
  * How a person left the approval page's collapsible sections for one kind of
  * request (an action such as `email.send`, or `provider:tool`), so the next
  * request of that kind opens the same way on any device. Presentation only:
- * it never hides a recipient domain or changes a decision (spec: The
- * approval page).
+ * it never hides a recipient domain or changes a decision.
  */
 export const foldPreferences = sqliteTable(
   "fold_preferences",
@@ -919,15 +892,15 @@ export const RULE_PROPOSAL_STATUSES = [
 ] as const;
 export type RuleProposalStatus = (typeof RULE_PROPOSAL_STATUSES)[number];
 
-/** Who drafted a proposal: its agent (2.1), or heel from the owner's own decisions (2.10). */
+/** Who drafted a proposal: its agent, or heel from the owner's own decisions. */
 export const RULE_PROPOSAL_ORIGINS = ["agent", "heel"] as const;
 export type RuleProposalOrigin = (typeof RULE_PROPOSAL_ORIGINS)[number];
 
 /**
- * Rules an agent proposed for its owner's file (roadmap 2.1). An agent can
+ * Rules an agent proposed for its owner's file. An agent can
  * only add rules, and only to its owner's file; the owner applies them with a
  * passkey. Rows are never edited after they're decided, so they are also the
- * history of who proposed which rules and who applied them (2.4).
+ * history of who proposed which rules and who applied them.
  */
 export const ruleProposals = sqliteTable(
   "rule_proposals",
@@ -952,7 +925,7 @@ export const ruleProposals = sqliteTable(
     /** The agent's own words on why, shown as its claim; for heel's own, the evidence. */
     reason: text("reason"),
     /**
-     * `heel` when heel drafted it from the owner's decisions (2.10): `agentId`
+     * `heel` when heel drafted it from the owner's decisions: `agentId`
      * is then the agent the decisions were about, not one that asked.
      */
     origin: text("origin", { enum: RULE_PROPOSAL_ORIGINS }).notNull().default("agent"),
@@ -973,7 +946,7 @@ export const RULE_CHANGE_SOURCES = ["proposal", "outside", "web"] as const;
 export type RuleChangeSource = (typeof RULE_CHANGE_SOURCES)[number];
 
 /**
- * Every change to a rules file (roadmap 2.4): one added from a proposal, with
+ * Every change to a rules file: one added from a proposal, with
  * who proposed it and who added it, or one made outside heel (an editor, git,
  * a script), noticed when heel reloads. Never edited; the history of the file.
  */
@@ -991,7 +964,7 @@ export const ruleChanges = sqliteTable(
     at: integer("at", { mode: "timestamp_ms" }).notNull(),
     source: text("source", { enum: RULE_CHANGE_SOURCES }).notNull(),
     proposalId: text("proposal_id").references(() => ruleProposals.id),
-    /** Who added the proposal, or made the change in the web app (2.9); null for one made outside heel. */
+    /** Who added the proposal, or made the change in the web app; null for one made outside heel. */
     decidedBy: text("decided_by").references(() => users.id),
     /** The change as a line diff, capped. */
     diff: text("diff").notNull(),
@@ -1002,14 +975,14 @@ export const ruleChanges = sqliteTable(
   ],
 );
 
-/** What heel last saw in each rules file, to tell when it changed outside heel (2.4). */
+/** What heel last saw in each rules file, to tell when it changed outside heel. */
 export const ruleFileSnapshots = sqliteTable("rule_file_snapshots", {
   file: text("file").primaryKey(),
   text: text("text").notNull(),
   seenAt: integer("seen_at", { mode: "timestamp_ms" }).notNull(),
 });
 
-/** Suggested rules a person dismissed (2.10), by suggestion key, so heel doesn't offer them again. */
+/** Suggested rules a person dismissed, by suggestion key, so heel doesn't offer them again. */
 export const learningDismissals = sqliteTable(
   "learning_dismissals",
   {
@@ -1022,13 +995,13 @@ export const learningDismissals = sqliteTable(
   (t) => [primaryKey({ columns: [t.userId, t.key] })],
 );
 
-/** One rule an agent proposed, with its one-line why (roadmap 2.2). */
+/** One rule an agent proposed, with its one-line why. */
 export interface ProposedRule {
   rule: Record<string, unknown>;
   why: string | null;
   /**
-   * The hash of the owner rule it goes right before, for heel's suggestions
-   * (2.10): the rule that asked. Absent: first in the file, as agents' go.
+   * The hash of the owner rule it goes right before, for heel's suggestions:
+   * the rule that asked. Absent: first in the file, as agents' go.
    */
   before?: string;
 }
@@ -1057,7 +1030,7 @@ export const AGENT_REQUEST_STATUSES = [
 ] as const;
 export type AgentRequestStatus = (typeof AGENT_REQUEST_STATUSES)[number];
 
-/** What a connection request asks for (roadmap 2.5); never a credential. */
+/** What a connection request asks for; never a credential. */
 export interface ConnectionRequestDetails {
   /** A built-in sign-in service, or `mcp` for a remote MCP server. */
   provider: string;
@@ -1115,8 +1088,7 @@ export interface ParkedCall {
 }
 
 /**
- * A code-mode script parked at a call that asked for approval (code mode
- * round 2, C2). The agent resumes it with `run_code({ resume })` once the
+ * A code-mode script parked at a call that asked for approval. The agent resumes it with `run_code({ resume })` once the
  * approval is decided; the parked call then runs through the pipeline again,
  * so the approval, not this row, decides it. The snapshot is Monty's dump of
  * the suspended script, which holds whatever it already read, so it is sealed
@@ -1165,7 +1137,7 @@ export const BACKGROUND_SCRIPT_STATUSES = [
 export type BackgroundScriptStatus = (typeof BACKGROUND_SCRIPT_STATUSES)[number];
 
 /**
- * A code-mode script run in the background (code mode round 2, C6): started
+ * A code-mode script run in the background: started
  * by `run_code({ background: true })`, run by heel without a request held
  * open, followed with `heel_status({ script_id })`. The id is the script's
  * own (`scr_`). An agent has at most one running or parked at a time. What

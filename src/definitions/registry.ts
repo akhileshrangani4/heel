@@ -26,19 +26,13 @@ export function definitionRegistry(deps: {
   outlook?: OutlookDeps | null;
   /** The same for Google Calendar. */
   googleCalendar?: GoogleCalendarDeps | null;
-  /** Notion (D12b). */
   notion?: NotionDeps | null;
-  /** Stripe (D12b). */
   stripe?: StripeDeps | null;
-  /** Linear (D12b). */
   linear?: LinearDeps | null;
-  /** Slack (D12b). */
   slack?: SlackDeps | null;
-  /** HTTP accounts (D7a). */
   http?: HttpDeps | null;
-  /** GitHub (D11). */
   github?: GitHubDeps | null;
-  /** CLI accounts (D8b); absent or null denies every `heel run`. */
+  /** Absent or null denies every `heel run`. */
   cli?: CliDeps | null;
 }): DefinitionRegistry {
   return {
