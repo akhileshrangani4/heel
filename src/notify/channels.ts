@@ -44,7 +44,7 @@ const PUSH_TTL_SECONDS = 24 * 60 * 60;
 
 /**
  * Web push to an installed approval page (VAPID). The payload is the
- * notice's title, body and link, which the service worker shows; push
+ * notice's title, body, link and tag, which the service worker shows; push
  * services only see it encrypted.
  */
 export function webPushSender(options: {
@@ -63,7 +63,11 @@ export function webPushSender(options: {
     channel: "web_push",
     async send(target, notice) {
       if (target.channel !== "web_push") throw new Error("web push needs a subscription");
-      const payload = JSON.stringify({ ...noticeText(notice), url: notice.url });
+      const payload = JSON.stringify({
+        ...noticeText(notice, "words"),
+        url: notice.url,
+        tag: notice.tag,
+      });
       try {
         await options.send(target.subscription, payload, sendOptions);
         return { kind: "sent" };
@@ -104,6 +108,14 @@ export function emailSender(options: { transport: Transporter; from: string }): 
 export type SlackApi = Pick<WebClient, "users" | "chat">;
 
 /**
+ * Slack's three control characters, escaped, so the agent's words can't
+ * become a link or a mention in heel's message.
+ */
+function slackText(text: string): string {
+  return text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+/**
  * A Slack direct message from heel's bot, found by the person's email. The
  * message is text with a link and no buttons: nothing in Slack can decide.
  */
@@ -119,7 +131,7 @@ export function slackSender(options: { client: SlackApi }): ChannelSender {
         if (userId === undefined) return { kind: "gone", reason: "users_not_found" };
         await options.client.chat.postMessage({
           channel: userId,
-          text: `*${text.title}*\n${text.body} <${notice.url}|Open heel>`,
+          text: `*${slackText(text.title)}*\n${slackText(text.body)} <${notice.url}|Open heel>`,
           unfurl_links: false,
           unfurl_media: false,
         });

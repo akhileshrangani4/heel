@@ -2,53 +2,71 @@
  * What a notification says, and how often heel retries one.
  * Pure.
  *
- * A notification only tells someone that a request is waiting and where to
- * decide it (I-56). It names the agent, the action and
- * the account, and links to the approval page. It never carries the call's
- * arguments or any message content, because Slack and email would re-expose
- * data heel hides from agents. It never carries an approve action either:
- * replying to it changes nothing.
+ * A notification tells someone what is waiting for them and links to where
+ * they decide it (I-56). The title is the ask in plain words, first, so a
+ * lock screen that cuts it short still shows what it is: "Connect Linear?",
+ * "Send an email from gmail-work?". The body says who asked.
+ *
+ * It never carries the call's arguments, the proposed rules or any message
+ * content, because Slack and email would re-expose data heel hides from
+ * agents. The agent's reason is free text the agent wrote: it can describe
+ * the call or carry a link dressed up as heel's. So Slack and email only say
+ * that a reason was given, and only web push, which shows on the owner's own
+ * devices with no links, carries its words. A notification never carries an
+ * approve action either: replying to it changes nothing.
  */
 
 import { describeProposal } from "../proposals/describe.ts";
+import { ACTION_PHRASES, actionPhrase } from "../web/ui/summary.ts";
 
-export interface ApprovalNotice {
-  kind: "approval";
+interface NoticeBase {
+  /** The agent's name. */
   agent: string;
-  /** The normalized action, e.g. `email.send`, or the raw tool name when there is none. */
-  what: string;
-  account: string;
-  /** The approval page for this request. */
+  /** The agent's own one-line reason, as it gave it, or null. */
+  reason: string | null;
+  /** The page to decide on. */
   url: string;
+  /**
+   * Which earlier notification this one replaces on a device (web push's
+   * `tag`): one per thing the owner decides, so a retry or a replacement
+   * shows once instead of stacking.
+   */
+  tag: string;
+}
+
+export interface ApprovalNotice extends NoticeBase {
+  kind: "approval";
+  /** The normalized action, e.g. `email.send`, or null when there is none. */
+  action: string | null;
+  /** The call's tool, for an action heel has no words for. */
+  tool: string;
+  /** The HTTP method of a call to an API heel only knows by its paths; null otherwise. */
+  method: string | null;
+  account: string;
 }
 
 /**
  * A rule proposal waiting for its owner. Like a request, it
- * names only the agent and how many rules, never the rules themselves: they
- * are the agent's words, and the page is where the owner reads them.
+ * says how many rules, never the rules themselves: they are the agent's
+ * words, and the page is where the owner reads them.
  */
-export interface ProposalNotice {
+export interface ProposalNotice extends NoticeBase {
   kind: "proposal";
-  agent: string;
   rules: number;
   /** Hide entries proposed beside the rules. */
   hide: number;
   /** `heel run` directories the agent asks for. */
   workdirs: number;
-  /** The proposal's page. */
-  url: string;
 }
 
 /**
- * An agent asking for a connection. Names the agent and heel's
- * own name for the service; the alias and the agent's why stay on the page.
+ * An agent asking for a connection. Names heel's own name for
+ * the service; the alias stays on the page.
  */
-export interface ConnectionNotice {
+export interface ConnectionNotice extends NoticeBase {
   kind: "connection";
-  agent: string;
   /** heel's words for the service: "Gmail", "the MCP server at mcp.example.com". */
   service: string;
-  url: string;
 }
 
 export type Notice = ApprovalNotice | ProposalNotice | ConnectionNotice;
@@ -58,23 +76,59 @@ export interface NoticeText {
   body: string;
 }
 
-export function noticeText(notice: Notice): NoticeText {
-  if (notice.kind === "connection") {
-    return {
-      title: `${notice.agent} wants to connect ${notice.service}`,
-      body: "Open heel to decide.",
-    };
+/** How much of the agent's reason a notification carries; the page has all of it. */
+const REASON_CHARS = 200;
+
+/**
+ * What a notification says. `reason` is whether the agent's own words go in
+ * (`"words"`, web push only) or just that it gave some (`"hint"`, the default,
+ * for Slack and email).
+ */
+export function noticeText(notice: Notice, reason: "words" | "hint" = "hint"): NoticeText {
+  return { title: titleOf(notice), body: bodyOf(notice, reason) };
+}
+
+/** The ask, as a question the owner answers on the page. */
+function titleOf(notice: Notice): string {
+  switch (notice.kind) {
+    case "connection":
+      return `Connect ${notice.service}?`;
+    case "proposal": {
+      const what = describeProposal(notice.rules, notice.hide, notice.workdirs);
+      return `Add ${what === "" ? "new rules" : what}?`;
+    }
+    case "approval": {
+      const worded = notice.action !== null && ACTION_PHRASES[notice.action] !== undefined;
+      // An API call heel has no words for: its tool is the path, an argument, so only the method.
+      const what =
+        !worded && notice.method !== null
+          ? `make a ${notice.method} request`
+          : actionPhrase(notice.action, notice.tool);
+      const where = notice.action === "email.send" ? "from" : "on";
+      return `${what.charAt(0).toUpperCase()}${what.slice(1)} ${where} ${notice.account}?`;
+    }
   }
-  if (notice.kind === "proposal") {
-    return {
-      title: `${notice.agent} wants to add ${describeProposal(notice.rules, notice.hide, notice.workdirs)}`,
-      body: "Open heel to decide.",
-    };
-  }
-  return {
-    title: `${notice.agent} is asking to ${notice.what}`,
-    body: `On ${notice.account}. Open heel to see the full call and decide.`,
-  };
+}
+
+/** Who asked, and why: in its own words for web push, or that it said why. */
+function bodyOf(notice: Notice, show: "words" | "hint"): string {
+  const reason = oneLine(notice.reason);
+  if (reason === null) return `${notice.agent} is asking.`;
+  return show === "words"
+    ? `${notice.agent}: ${reason}`
+    : `${notice.agent} gave a reason. Open heel to read it.`;
+}
+
+/** The agent's text on one line, without control or bidi characters, cut to fit. */
+function oneLine(text: string | null): string | null {
+  if (text === null) return null;
+  const flat = text
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what this removes.
+    .replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (flat === "") return null;
+  return flat.length <= REASON_CHARS ? flat : `${flat.slice(0, REASON_CHARS - 1).trimEnd()}…`;
 }
 
 /** The approval page link for a request, under the human plane's public URL. */

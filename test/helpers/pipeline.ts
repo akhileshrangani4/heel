@@ -326,6 +326,8 @@ export interface CallInput {
   args?: unknown;
   runId?: unknown;
   surface?: CallRequest["surface"];
+  /** The agent's own reason (`heel_reason`). */
+  reason?: string;
 }
 
 /** The fake clock the pipeline reads; tests move it explicitly. */
@@ -456,6 +458,7 @@ export function pipelineHarness(options: HarnessOptions = {}): PipelineHarness {
         // Only an omitted `args` defaults; an explicit null reaches the pipeline as sent.
         args: "args" in input ? input.args : {},
         ...(input.runId !== undefined && { runId: input.runId }),
+        ...(input.reason !== undefined && { reason: input.reason }),
       }),
     setRules: (files) => {
       rules.set = compileRules(files);

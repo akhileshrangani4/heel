@@ -3,15 +3,26 @@ import { describe, expect, it } from "vitest";
 import { createAdminHandler } from "../../src/admin/handlers.ts";
 import { type ApprovalItem, type ProposalItem, withProposals } from "../../src/cli/tui.ts";
 import { addAgent } from "../../src/gateway/agents.ts";
-import type { ChannelSender, DeliveryTarget } from "../../src/notify/channels.ts";
-import type { Notice } from "../../src/notify/message.ts";
+import {
+  type ChannelSender,
+  type DeliveryTarget,
+  webPushSender,
+} from "../../src/notify/channels.ts";
+import { type Notice, noticeText } from "../../src/notify/message.ts";
 import { Notifier } from "../../src/notify/notifier.ts";
 import { findProposal, proposeRules, rejectProposal } from "../../src/proposals/rules.ts";
 import { findRequest, rejectRequest, requestConnection } from "../../src/requests/connection.ts";
 import { LOCAL_OWNER_NAME } from "../../src/store/install.ts";
 import { savePushSubscription, setUserEmail } from "../../src/store/notifications.ts";
-import { agents, type NotifyChannel, notificationDeliveries } from "../../src/store/schema.ts";
+import {
+  agentRequests,
+  agents,
+  type NotifyChannel,
+  notificationDeliveries,
+} from "../../src/store/schema.ts";
 import { captureLogger } from "../helpers/log.ts";
+import { mcpHarness } from "../helpers/mcp.ts";
+import { oneRule } from "../helpers/pipeline.ts";
 import { testStore } from "../helpers/store.ts";
 
 /**
@@ -22,6 +33,7 @@ import { testStore } from "../helpers/store.ts";
 
 const PUBLIC_URL = new URL("https://heel.example.com");
 const PHONE = "https://push.example.com/send/phone-1";
+const TABLET = "https://push.example.com/send/tablet-1";
 const NOW = new Date("2026-11-19T12:00:00Z");
 
 /** A rule object as an agent sends it; `then` is the rules file's own key. */
@@ -82,12 +94,12 @@ function setUp() {
       .from(notificationDeliveries)
       .where(eq(notificationDeliveries.proposalId, proposalId))
       .all();
-  return { t, propose, notifierWith, deliveries };
+  return { t, agentId, propose, notifierWith, deliveries };
 }
 
 describe("rule proposal notifications", () => {
-  it("reach the owner on every channel with how many rules, never the rules or the why", async () => {
-    const { propose, notifierWith, deliveries } = setUp();
+  it("reach the owner on every channel with how many rules and the agent's reason, never the rules or their whys", async () => {
+    const { agentId, propose, notifierWith, deliveries } = setUp();
     const push = fakeSender("web_push");
     const email = fakeSender("email");
     const notifier = notifierWith([push.sender, email.sender]);
@@ -104,10 +116,13 @@ describe("rule proposal notifications", () => {
         rules: 2,
         hide: 0,
         workdirs: 0,
+        reason: "so I can review your repos",
         url: `https://heel.example.com/proposals/${id}`,
+        // The agent's next proposal replaces this one, so it shares the tag.
+        tag: `proposal:${agentId}`,
       },
     ]);
-    expect(JSON.stringify([push.sent, email.sent])).not.toMatch(/secret-looking|review your/);
+    expect(JSON.stringify([push.sent, email.sent])).not.toMatch(/secret-looking|read-repos/);
     expect(deliveries(id).map((d) => [d.status, d.approvalId])).toEqual([
       ["sent", null],
       ["sent", null],
@@ -209,14 +224,14 @@ describe("pending proposals in heel status and heel tui", () => {
 });
 
 describe("connection request notifications", () => {
-  it("reach the agent's owner, and stop once the request is decided", async () => {
+  it("reach the agent's owner with the agent's why, and stop once the request is decided", async () => {
     const { t, notifierWith } = setUp();
     const agent = t.db.select().from(agents).get();
     if (agent === undefined) throw new Error("the agent exists");
     const asked = requestConnection(
       t.db,
       { orgId: t.orgId, ownerId: t.ownerId, agentId: agent.id },
-      { service: "gmail", alias: "inbox-new", why: "secret-looking why text" },
+      { service: "gmail", alias: "inbox-new", why: "so I can triage your mail" },
       NOW,
     );
     if (!asked.ok) throw new Error(asked.problem);
@@ -229,10 +244,15 @@ describe("connection request notifications", () => {
         kind: "connection",
         agent: "repo-bot",
         service: "Gmail",
+        reason: "so I can triage your mail",
         url: `https://heel.example.com/requests/${asked.requestId}`,
+        tag: `connection:${agent.id}:inbox-new`,
       },
     ]);
-    expect(JSON.stringify(email.sent)).not.toMatch(/secret-looking|inbox-new/);
+    // What the owner reads names the service, not the alias the agent picked.
+    expect(email.sent.map((s) => noticeText(s.notice))).toEqual([
+      { title: "Connect Gmail?", body: "repo-bot gave a reason. Open heel to read it." },
+    ]);
 
     // A second request, rejected before its notice goes out, sends nothing.
     const second = requestConnection(
@@ -248,5 +268,155 @@ describe("connection request notifications", () => {
     notifier.agentRequested(second.requestId);
     await notifier.drain();
     expect(email.sent).toHaveLength(1);
+  });
+});
+
+describe("one connection request, one notification", () => {
+  it("queues exactly one delivery per channel and target, and sends each once", async () => {
+    const { t, agentId, notifierWith } = setUp();
+    savePushSubscription(t.db, {
+      orgId: t.orgId,
+      userId: t.ownerId,
+      endpoint: TABLET,
+      p256dh: "p256dh-key-2",
+      auth: "auth-secret-2",
+      now: NOW,
+    });
+    const asked = requestConnection(
+      t.db,
+      { orgId: t.orgId, ownerId: t.ownerId, agentId },
+      { service: "linear", alias: "notify-test", why: "Notification test only." },
+      NOW,
+    );
+    if (!asked.ok) throw new Error(asked.problem);
+    const push = fakeSender("web_push");
+    const email = fakeSender("email");
+    const slack = fakeSender("slack");
+    const notifier = notifierWith([push.sender, email.sender, slack.sender]);
+
+    // Told twice, and drained again and again: nothing goes out a second time.
+    notifier.agentRequested(asked.requestId);
+    notifier.agentRequested(asked.requestId);
+    await Promise.all([notifier.drain(), notifier.drain()]);
+    await notifier.drain();
+
+    const rows = t.db
+      .select()
+      .from(notificationDeliveries)
+      .where(eq(notificationDeliveries.requestId, asked.requestId))
+      .all();
+    expect(rows.map((d) => [d.channel, d.target, d.status, d.attempts]).sort()).toEqual(
+      [
+        ["email", "owner@example.com", "sent", 0],
+        ["slack", "owner@example.com", "sent", 0],
+        ["web_push", PHONE, "sent", 0],
+        ["web_push", TABLET, "sent", 0],
+      ].sort(),
+    );
+    const endpoint = (target: DeliveryTarget) =>
+      target.channel === "web_push" ? target.subscription.endpoint : target.email;
+    expect(push.sent.map((s) => endpoint(s.target)).sort()).toEqual([PHONE, TABLET].sort());
+    expect(email.sent).toHaveLength(1);
+    expect(slack.sent).toHaveLength(1);
+  });
+
+  it("gives a request that replaces a waiting one the same tag, so a device shows it once", async () => {
+    const { t, agentId, notifierWith } = setUp();
+    const push = fakeSender("web_push");
+    const notifier = notifierWith([push.sender]);
+    const who = { orgId: t.orgId, ownerId: t.ownerId, agentId };
+    const ask = (alias: string) => {
+      const asked = requestConnection(t.db, who, { service: "linear", alias }, NOW);
+      if (!asked.ok) throw new Error(asked.problem);
+      notifier.agentRequested(asked.requestId);
+      return asked.requestId;
+    };
+
+    const first = ask("notify-test");
+    await notifier.drain();
+    // The agent asks again for the same name: the first request is replaced.
+    const again = ask("notify-test");
+    await notifier.drain();
+    const other = ask("linear-work");
+    await notifier.drain();
+
+    expect(findRequest(t.db, t.orgId, first)?.status).toBe("superseded");
+    const [a, b, c] = push.sent.map((s) => s.notice);
+    expect(a?.url).not.toBe(b?.url);
+    expect(a?.tag).toBe(b?.tag);
+    expect(c?.tag).not.toBe(a?.tag);
+    expect(b?.url).toContain(again);
+    expect(c?.url).toContain(other);
+  });
+
+  it("ends with a web push delivery marked sent, from the agent's heel_request_connection", async () => {
+    const pushes: { payload: unknown }[] = [];
+    let notifier: Notifier | null = null;
+    const h = await mcpHarness({
+      owner: oneRule("{ action: email.send }", "ask"),
+      onAgentRequest: (requestId) => notifier?.agentRequested(requestId),
+    });
+    const log = captureLogger();
+    notifier = new Notifier({
+      db: h.t.db,
+      orgId: h.t.orgId,
+      log: log.logger,
+      publicUrl: PUBLIC_URL,
+      // The real web push sender; only the push service is a fake.
+      senders: [
+        webPushSender({
+          keys: { publicKey: "pub", privateKey: "priv" },
+          subject: "mailto:ops@example.com",
+          send: async (_subscription, payload) => {
+            pushes.push({ payload: JSON.parse(String(payload)) });
+            return { statusCode: 201, body: "", headers: {} };
+          },
+        }),
+      ],
+    });
+    savePushSubscription(h.t.db, {
+      orgId: h.t.orgId,
+      userId: h.t.ownerId,
+      endpoint: PHONE,
+      p256dh: "p256dh-key",
+      auth: "auth-secret",
+      now: new Date(),
+    });
+
+    const client = await h.connect("/mcp/notes");
+    const result = await client.callTool({
+      name: "heel_request_connection",
+      arguments: {
+        service: "linear",
+        alias: "notify-test",
+        why: "Notification test only. Please reject this request.",
+      },
+    });
+    expect(result.structuredContent).toMatchObject({ status: "requested" });
+    await notifier.drain();
+
+    const [request] = h.t.db.select().from(agentRequests).all();
+    if (request === undefined) throw new Error("the request is stored");
+    expect(
+      h.t.db
+        .select()
+        .from(notificationDeliveries)
+        .where(eq(notificationDeliveries.requestId, request.id))
+        .all(),
+    ).toMatchObject([
+      { channel: "web_push", target: PHONE, status: "sent", attempts: 0, lastError: null },
+    ]);
+    expect(pushes).toEqual([
+      {
+        payload: {
+          title: "Connect Linear?",
+          body: "inbox-bot: Notification test only. Please reject this request.",
+          url: `https://heel.example.com/requests/${request.id}`,
+          tag: `connection:${request.agentId}:notify-test`,
+        },
+      },
+    ]);
+    expect(log.output()).toContain('"msg":"notification sent"');
+    expect(log.output()).toContain(request.id);
   });
 });
