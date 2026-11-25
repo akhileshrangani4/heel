@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 // Written by hand, unlike /changelog: update an item's state (and this date)
 // in the same PR as the roadmap work it describes. The site deploys on
 // release, so it shows what that release ships.
-const UPDATED = 'november 20, 2026';
+const UPDATED = 'november 25, 2026';
 
 type Status = 'done' | 'now' | 'next' | 'later';
 
@@ -173,9 +173,9 @@ const PHASES: Phase[] = [
     name: 'launch',
     summary: 'show the whole thing working, end to end.',
     items: [
-      ['a walkthrough video', 'from install to an agent that sets heel up, with you approving each step.'],
+      ['a walkthrough video', 'from install to an agent that sets heel up, with you approving each step.', 'started'],
       ['the email demo', 'an agent that reads and drafts your mail, but asks before anything is sent.'],
-      ['how heel was built', 'a write-up of the research, the decisions and what we learned.'],
+      ['how heel was built', 'a write-up of the research, the decisions and what we learned.', 'started'],
       [
         'a heel skill',
         'npx skills add akhileshrangani4/heel teaches any agent that supports skills how to set heel up and work through it, tested against agents without it. listed on skills.sh, and one click to copy on the home page.',
