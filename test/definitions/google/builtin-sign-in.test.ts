@@ -116,7 +116,7 @@ describe("Gmail with heel's built-in Google client", () => {
     const { h } = setUp();
     const owner = await h.signIn(await h.enroll());
     const { text } = await start(h, owner);
-    expect(text).toContain("heel runs on another machine");
+    expect(text).toContain("That's expected.");
     expect(text).toContain('id="paste-finish"');
     expect(text).not.toContain("On the computer heel runs on");
     const local = String(

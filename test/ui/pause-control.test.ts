@@ -37,7 +37,6 @@ describe("PauseControl", () => {
       expect(form.querySelector("button[type=submit]")).not.toBeNull();
       expect(form.querySelector("[data-heel-ceremony]")).toBeNull();
     }
-    expect(text(doc)).toContain("Pausing is instant.");
   });
 
   it("I-56: resume only starts the passkey ceremony through the onResume prop, and says so", () => {
@@ -98,7 +97,7 @@ describe("PauseControl", () => {
     [
       { kind: "resumed", scope: "account", target: "gmail-work" },
       "status",
-      "Resumed account gmail-work after your passkey check",
+      "Resumed account gmail-work",
     ],
     [
       { kind: "resume-refused", scope: "agent", target: "inbox-bot", reason: "nope" },
@@ -108,7 +107,7 @@ describe("PauseControl", () => {
     [
       { kind: "challenge-expired", scope: "global", target: null },
       "status",
-      "took too long and expired",
+      "The passkey check expired",
     ],
   ] as const)("shows the outcome %#", (outcome, role, words) => {
     const doc = render({ outcome });

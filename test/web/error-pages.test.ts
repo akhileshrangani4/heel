@@ -76,7 +76,7 @@ describe("error pages", () => {
     const get = await h.fetch("/activity", { headers: { ...PAGE, cookie } });
     expect(get.headers.get("location")).toBe("/sign-in?next=%2Factivity&expired");
     const signIn = await (await h.fetch(get.headers.get("location") ?? "")).text();
-    expect(signIn).toContain("Your session ended. Sign in again to continue.");
+    expect(signIn).toContain("Your session ended.");
 
     // A script's request still gets a 401 it can read.
     const script = await h.fetch("/approvals/folds", {

@@ -93,7 +93,7 @@ describe("PendingList", () => {
   });
 
   it("shows an empty state and a load-error alert", () => {
-    expect(text(render({ ok: true, rows: [] }))).toContain("Nothing is waiting for you");
+    expect(text(render({ ok: true, rows: [] }))).toContain("You're all caught up");
     const failed = render({ ok: false, message: "db down" });
     expect(text(failed.querySelector("[role=alert]"))).toContain("db down");
   });

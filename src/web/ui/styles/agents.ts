@@ -6,13 +6,6 @@ export const AGENTS_CSS = `
 .page-head > .btn{flex:none;margin-top:.35rem}
 .agents-section{margin:1.5rem 0}
 .agents-section h2{margin:0 0 .25rem}
-.how-fold{margin:.25rem 0 1rem;font-size:.88rem}
-.how-fold > summary{display:inline-flex;align-items:center;gap:.25rem;color:var(--muted);width:fit-content;list-style:none}
-.how-fold > summary::-webkit-details-marker{display:none}
-.how-fold > summary:hover{color:var(--text)}
-.how-fold .chev{width:.95rem;height:.95rem;transition:transform .15s}
-.how-fold[open] > summary .chev{transform:rotate(180deg)}
-.how-fold > p{margin:.4rem 0 0;max-width:46rem}
 .dialog-form{margin:.5rem 0 0}
 .dialog-status{margin:.25rem 0 0;padding:.55rem .7rem;border-radius:8px;background:var(--surface);color:var(--text);font-size:.85rem;overflow-wrap:anywhere}
 .dialog-form.stack-form,.ui-dialog .grant-form{grid-template-columns:1fr}
@@ -62,7 +55,7 @@ table.rows-table td{vertical-align:middle}
 }
 /* Touch: at least a 44px hit area around small controls, without moving them. */
 @media (pointer:coarse){
-  .row-manage > summary,.how-fold > summary,.cell-actions .btn,.agent-name{position:relative}
-  .row-manage > summary::after,.how-fold > summary::after,.cell-actions .btn::after,.agent-name::after{content:"";position:absolute;top:50%;left:50%;width:max(100%,44px);height:max(100%,44px);transform:translate(-50%,-50%)}
+  .row-manage > summary,.cell-actions .btn,.agent-name{position:relative}
+  .row-manage > summary::after,.cell-actions .btn::after,.agent-name::after{content:"";position:absolute;top:50%;left:50%;width:max(100%,44px);height:max(100%,44px);transform:translate(-50%,-50%)}
 }
 `;

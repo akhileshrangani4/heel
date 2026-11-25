@@ -20,10 +20,6 @@ export function suggestionCards(
   if (suggestions.length === 0) return "";
   return html`<section class="suggested" aria-label="Suggested rules">
     <h2 class="section-title">Suggested rules</h2>
-    <p class="muted">
-      From requests you decided in the last 30 days. Reviewing one opens it as a rule change you
-      add with your passkey; nothing changes until you do.
-    </p>
     <ul class="req-list">
       ${suggestions.map(
         (s) => html`<li class="card req">

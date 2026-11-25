@@ -17,7 +17,6 @@ export function welcomePage(props: { vapidPublicKey: string; devices: number }):
     <div class="welcome-head">
       <span class="req-empty-icon">${trusted(CHECK_CIRCLE)}</span>
       <h1>Your passkey is ready</h1>
-      <p class="muted">You're signed in. Every approve, deny and resume asks for this passkey.</p>
     </div>
     <section aria-labelledby="iphone-heading" class="settings-card">
       <div class="settings-row">
@@ -25,9 +24,8 @@ export function welcomePage(props: { vapidPublicKey: string; devices: number }):
         <div class="settings-row-text">
           <h2 id="iphone-heading" class="settings-row-title">Add heel to your Home Screen</h2>
           <p class="muted">
-            iPhone and iPad only. Safari only shows notifications for a page on your Home Screen. Tap
-            the Share button, choose <strong>Add to Home Screen</strong>, open heel from there, and
-            sign in. Then turn on notifications below.
+            iPhone and iPad only. Tap the Share button, choose <strong>Add to Home Screen</strong>,
+            open heel from there, and sign in.
           </p>
         </div>
       </div>

@@ -54,7 +54,7 @@ describe("proposed rules on the approval page", () => {
     // A crafted link can't make a pending proposal look added or rejected.
     for (const crafted of ["applied", "rejected"]) {
       const shown = await (await h.fetch(`/proposals/${id}?${crafted}`, { as: owner })).text();
-      expect(shown).not.toContain("heel is using them now");
+      expect(shown).not.toContain("Added a new rule");
       expect(shown).not.toContain("rules weren't added");
     }
     const added = await h.ceremony(
@@ -75,7 +75,7 @@ describe("proposed rules on the approval page", () => {
     expect(readFileSync(file, "utf8")).toContain("read-mail");
     expect(findProposal(h.t.db, h.t.orgId, id)?.status).toBe("applied");
     expect(await (await h.fetch(`/proposals/${id}?applied`, { as: owner })).text()).toContain(
-      "heel is using them now",
+      "Added a new rule",
     );
   });
 
@@ -262,7 +262,7 @@ describe("proposed workdirs on the approval page", () => {
     const done = await (
       await h.fetch(`/proposals/${proposed.proposalId}?applied`, { as: owner })
     ).text();
-    expect(done).toContain("heel run can work there now");
+    expect(done).toContain("Added a workdir");
   });
 
   it("shows the folder heel would store, when the agent's path is a symlink to another one", async () => {

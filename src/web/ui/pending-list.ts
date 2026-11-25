@@ -120,8 +120,7 @@ export function pendingList(props: PendingListProps): Html {
     return html`${heading}
       ${notice(
         "error",
-        html`<p><strong>Requests couldn't be loaded.</strong> ${props.load.message}</p>
-          <p>Nothing was decided. Pending requests keep their ids and expiry.</p>`,
+        html`<p><strong>Requests couldn't be loaded.</strong> ${props.load.message}</p>`,
       )}`;
   }
   const rows = props.load.rows;
@@ -135,7 +134,6 @@ export function pendingList(props: PendingListProps): Html {
       <div class="req-empty">
         <span class="req-empty-icon">${trusted(CHECK_CIRCLE)}</span>
         <p class="req-empty-title">You're all caught up</p>
-        <p class="muted">Nothing is waiting for you. New requests show up here and in your notifications.</p>
       </div>`;
   }
   // Each section heading carries its own count, so the list needs no count line.

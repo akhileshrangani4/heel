@@ -21,12 +21,8 @@ export function pushControl(props: {
     <div class="settings-row">
       <div class="settings-row-text">
         <h2 id="push-heading" class="settings-row-title">Notifications on this device</h2>
-        <p class="muted" id="push-help">
-          Get a notification here when an agent's call needs you. It names the agent, the action and
-          the account, never the call's contents.
-        </p>
       </div>
-      <button type="button" class="ui-switch" role="switch" aria-checked="false" aria-label="Turn on notifications" aria-describedby="push-help" id="heel-push" data-key="${props.vapidPublicKey}">${switchFace(false, "Off")}</button>
+      <button type="button" class="ui-switch" role="switch" aria-checked="false" aria-label="Turn on notifications" id="heel-push" data-key="${props.vapidPublicKey}">${switchFace(false, "Off")}</button>
     </div>
     <p id="heel-push-status" class="muted settings-row-status" role="status" aria-live="polite"></p>
     ${
@@ -44,7 +40,7 @@ export function pushControl(props: {
             <span class="muted">${
               devices.count === 0
                 ? "No device gets notifications yet."
-                : `${devices.count === 1 ? "1 device gets" : `${devices.count} devices get`} notifications for you. If you don't recognize that many, turn them all off and turn this one back on.`
+                : `${devices.count === 1 ? "1 device gets" : `${devices.count} devices get`} notifications.`
             }</span>
             ${
               devices.count === 0

@@ -452,12 +452,12 @@ function connectedPage(props: RequestPageProps): Html {
     crumb: "",
     dock: "inline",
     title: needsSignIn ? html`${name} is added` : html`${name} is connected`,
-    why: needsSignIn ? "Sign in to finish." : "The agent can use it now.",
+    ...(needsSignIn ? { why: "Sign in to finish." } : {}),
     side: html`${
       props.unchecked === true
         ? notice(
             "warn",
-            html`<p>heel couldn't check the key, so it connected it as it is. If calls fail, replace it on Connections.</p>`,
+            html`<p>heel couldn't check the key. If calls fail, replace it on Connections.</p>`,
           )
         : ""
     }
@@ -466,10 +466,10 @@ function connectedPage(props: RequestPageProps): Html {
   });
 }
 
-const CLOSED: Record<Exclude<AgentRequestStatus, "pending" | "approved">, [string, string]> = {
-  rejected: ["Rejected", "Nothing was connected."],
-  expired: ["Expired", "Nothing was connected."],
-  superseded: ["Replaced by a newer request", "Nothing was connected."],
+const CLOSED: Record<Exclude<AgentRequestStatus, "pending" | "approved">, string> = {
+  rejected: "Rejected",
+  expired: "Expired",
+  superseded: "Replaced by a newer request",
 };
 
 /** One request: what the agent asks for, what it would let the agent do, and the controls. */
@@ -477,13 +477,12 @@ export function requestPage(props: RequestPageProps): Html {
   if (props.status === "approved") return connectedPage(props);
   const pending = props.status === "pending" && props.expiresAt > props.now;
   if (pending) return pendingPage(props);
-  const [title, why] = CLOSED[props.status === "pending" ? "expired" : props.status];
+  const title = CLOSED[props.status === "pending" ? "expired" : props.status];
   return approvalShell({
     kind: "connection",
     crumb: "",
     dock: "inline",
     title: html`${title}`,
-    why,
     side: html`<div class="ap-folds">${detailsFold(props)}</div>`,
   });
 }

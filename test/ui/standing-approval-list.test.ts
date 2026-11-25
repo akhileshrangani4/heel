@@ -47,9 +47,7 @@ describe("StandingApprovalList", () => {
   });
 
   it("marks active rows under a pause", () => {
-    expect(text(render({ ok: true, rows: PAUSED_STANDING }))).toContain(
-      "Paused: calls in scope return “paused” anyway",
-    );
+    expect(text(render({ ok: true, rows: PAUSED_STANDING }))).toContain("On hold until you resume");
   });
 
   it("shows an empty state and a load-error alert", () => {

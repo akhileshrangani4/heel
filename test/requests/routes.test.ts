@@ -286,7 +286,7 @@ describe("services that use a pasted key (2.5, part 2)", () => {
     const next = ((await done.json()) as { next: string }).next;
     expect(next).toContain("unchecked");
     const after = await (await h.fetch(next, { as: owner })).text();
-    expect(after).toContain("so it connected it as it is");
+    expect(after).toContain("heel couldn't check the key.");
   });
 
   it("won't connect without a key, and the request keeps waiting", async () => {

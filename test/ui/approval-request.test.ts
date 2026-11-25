@@ -443,7 +443,7 @@ describe("ApprovalRequest", () => {
     expect(button(doc, "approve-once")).not.toBeNull();
     expect(button(doc, "approve-standing")).toBeNull();
     expect(doc.querySelector(".ap-menu")).toBeNull();
-    expect(text(doc)).toContain("Org asks never stand");
+    expect(text(doc)).toContain("only an org admin can approve it, once");
   });
 
   it("I-61: while paused, approving is disabled and deny stays available", () => {

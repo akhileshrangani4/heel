@@ -28,7 +28,6 @@ function emailForm(person: PersonView, key: string): Html {
       <label for="email-${key}-address">Notifications go to</label>
       <input id="email-${key}-address" name="email" type="email" maxlength="320" autocomplete="off" value="${person.email ?? ""}" placeholder="name@example.com" />
     </div>
-    <p class="muted">Email, and Slack where heel has a Slack token. Empty means none.</p>
     ${ceremonyButton({
       callback: { handler: "managePeople" },
       intent: "manage-people",
@@ -47,8 +46,8 @@ function linkButton(person: PersonView, key: string): Html {
     <input type="hidden" name="name" value="${person.name}" />
     <p class="muted">${
       recovery
-        ? "They have a passkey already, so this is a recovery link: it works a day from now, and their Approvals page shows it with a way to cancel."
-        : "A one-time link that sets up their passkey. Send it to them only; it works for 15 minutes."
+        ? "They have a passkey already, so this is a recovery link: it works a day from now."
+        : "Send it to them only; it works for 15 minutes."
     }</p>
     ${ceremonyButton({
       callback: { handler: "managePeople" },
@@ -105,11 +104,6 @@ export function peoplePage(props: {
   return html`<div class="set-head">
       <div>
         <h1>People</h1>
-        <p class="muted">${
-          props.admin
-            ? "Everyone who uses this heel. Each person has their own agents, accounts and rules, and sees only their own."
-            : "You, as heel knows you."
-        }</p>
       </div>
       ${canAdd ? dialogTrigger({ dialogId: "add-person-dialog", label: "+ Add person", className: btn("default", "sm") }) : ""}
     </div>
@@ -119,8 +113,7 @@ export function peoplePage(props: {
         ? dialog({
             id: "add-person-dialog",
             title: "Add a person",
-            description:
-              "Lower-case, like a username. They get their own rules file and nothing of yours. Next you get a link that sets up their passkey.",
+            description: "Lower-case, like a username.",
             body: html`<div id="add-person" class="stack-form">
               <input type="hidden" name="op" value="add" />
               <div class="row">
@@ -138,7 +131,7 @@ export function peoplePage(props: {
             </div>`,
           })
         : props.admin
-          ? html`<p class="muted">People join by signing in with your sign-in provider; then they show up here.</p>`
+          ? html`<p class="muted">People join by signing in with your sign-in provider.</p>`
           : ""
     }
     ${scrollRegion(
@@ -164,8 +157,8 @@ export function personLinkPage(link: PeopleLink | null): Html {
     return html`<h1>Passkey link</h1>
       ${notice(
         "info",
-        html`<p>This link was already shown, or more than 10 minutes have passed. heel doesn't keep it.
-          Make another from <a href="/people">People</a>.</p>`,
+        html`<p>This link was already shown, or more than 10 minutes have passed. Make another from
+          <a href="/people">People</a>.</p>`,
       )}`;
   }
   return html`<h1>${link.name}'s passkey link</h1>
@@ -179,7 +172,7 @@ export function personLinkPage(link: PeopleLink | null): Html {
     <p class="muted">${
       link.activeFrom === null
         ? html`It works once, until ${time(new Date(link.expiresAt))}.`
-        : html`A recovery link: it works from ${time(new Date(link.activeFrom))} until ${time(new Date(link.expiresAt))}. Until then, their Approvals page shows it with a way to cancel.`
+        : html`A recovery link: it works from ${time(new Date(link.activeFrom))} until ${time(new Date(link.expiresAt))}.`
     }</p>
     <p><a class="${btn()}" href="/people">Done</a></p>`;
 }

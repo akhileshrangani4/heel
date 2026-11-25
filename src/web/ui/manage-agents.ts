@@ -77,7 +77,7 @@ export function agentControls(props: {
         binding: { op: "rotate", name: props.name },
         optionsFrom: `rotate-${key}`,
       })}
-      <p class="muted">The old token stops working at once, and its running scripts stop.</p>
+      <p class="muted">The old token stops working at once.</p>
     </form>`
         : ""
     }
@@ -132,8 +132,8 @@ export function newTokenPage(
     return html`<h1>New agent token</h1>
       ${notice(
         "info",
-        html`<p>This token was already shown, or more than 5 minutes have passed. heel doesn't keep it.
-          Give the agent another from <a href="/agents">Agents</a>.</p>`,
+        html`<p>This token was already shown, or more than 5 minutes have passed. Give the agent
+          another from <a href="/agents">Agents</a>.</p>`,
       )}`;
   }
   const command =
@@ -144,7 +144,7 @@ export function newTokenPage(
     ${notice(
       "warn",
       html`<p><strong>Copy it now: heel shows it only this once.</strong> Anyone with it can act as
-        ${view.name} through heel, within your rules.</p>`,
+        ${view.name}.</p>`,
     )}
     <p><label for="new-token">Token</label></p>
     <input id="new-token" class="mono" readonly value="${view.token}" onclick="this.select()" />
@@ -212,10 +212,6 @@ export function agentsPage(props: {
       ? ""
       : html`<section aria-labelledby="scripts-heading" class="agents-section">
           <h2 id="scripts-heading">Running scripts</h2>
-          <p class="muted">
-            Code-mode scripts your agents run in the background. Every call in them is still checked
-            by your rules. Stopping one needs no passkey.
-          </p>
           ${scrollRegion(
             "Running scripts",
             html`<table class="data rows-table">
@@ -241,7 +237,6 @@ export function agentsPage(props: {
   return html`<div class="page-head">
       <div>
         <h1>Agents</h1>
-        <p class="muted">Every agent you may see, and what it did in the last ${String(props.sinceHours)} hours.</p>
       </div>
       ${props.manage === undefined ? "" : dialogTrigger({ dialogId: "add-agent-dialog", label: html`<span aria-hidden="true">+</span> Add agent`, className: btn("default", "sm") })}
     </div>
@@ -251,12 +246,10 @@ export function agentsPage(props: {
         : dialog({
             id: "add-agent-dialog",
             title: "Add an agent",
-            description:
-              "Its token is shown once, on the next page. Copy it into the agent's MCP settings.",
             body: addAgentForm(),
           })
     }
-    ${props.stopped === true ? notice("info", html`<p>Stopped. The script won't carry on.</p>`) : ""}
+    ${props.stopped === true ? notice("info", html`<p>Stopped.</p>`) : ""}
     ${props.manage?.done === null || props.manage?.done === undefined ? "" : notice("ok", html`<p>${props.manage.done}</p>`)}
     ${
       expiring.length === 0
@@ -265,8 +258,7 @@ export function agentsPage(props: {
             "warn",
             html`<p>
               ${expiring.length === 1 ? "One agent's token expires" : `${String(expiring.length)} agents' tokens expire`}
-              soon: ${expiring.map((a) => a.name).join(", ")}. Give it a new one with
-              <code>heel agent rotate &lt;agent&gt;</code>, or from its ⋯ menu, and update the agent's configuration.
+              soon: ${expiring.map((a) => a.name).join(", ")}.
             </p>`,
           )
     }
@@ -276,7 +268,7 @@ export function agentsPage(props: {
         ? html`<div class="req-empty">
             <span class="req-empty-icon agents-empty-icon">${trusted(BOT_ICON)}</span>
             <p class="req-empty-title">No agents yet</p>
-            <p class="muted">${props.manage === undefined ? "" : "Add one with Add agent, or "}from the command line: <code>heel agent add &lt;name&gt;</code></p>
+            ${props.manage === undefined ? html`<p class="muted">From the command line: <code>heel agent add &lt;name&gt;</code></p>` : ""}
           </div>`
         : scrollRegion(
             "Agents",

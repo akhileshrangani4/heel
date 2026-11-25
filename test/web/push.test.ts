@@ -171,7 +171,7 @@ describe("device subscriptions", () => {
     const owner = await h.signIn(await h.enroll());
     await h.fetch("/push/subscribe", { as: owner, ...postJson(SUBSCRIPTION) });
     const page = await (await h.fetch("/devices", { as: owner })).text();
-    expect(page).toContain("1 device gets notifications for you.");
+    expect(page).toContain("1 device gets notifications.");
     expect(page).toContain('action="/push/unsubscribe-all"');
 
     const csrf = page.match(/name="csrf" value="([^"]+)"/)?.[1] ?? "";

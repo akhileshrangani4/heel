@@ -75,7 +75,7 @@ describe("the Grants page", () => {
     expect(revoked.status).toBe(303);
     expect(liveGrants(h.t.db, h.t.orgId, h.agent.agentId, h.clock.now)).toEqual([]);
     // The notice names the grant, and shows only because it really was revoked.
-    const notice = "Revoked. It applies from the agent's next call.";
+    const notice = "<p>Revoked.</p>";
     const after = revoked.headers.get("location") ?? "";
     expect(await (await h.fetch(after, { as: owner })).text()).toContain(notice);
     // A crafted link can't make the page claim a grant or a revoke.
@@ -86,7 +86,7 @@ describe("the Grants page", () => {
     ]) {
       const page = await (await h.fetch(crafted, { as: owner })).text();
       expect(page).not.toContain(notice);
-      expect(page).not.toContain("Granted. The agent can do");
+      expect(page).not.toContain("<p>Granted.</p>");
     }
     expect((await h.call({ args: SEND })).status).toBe("pending");
   });

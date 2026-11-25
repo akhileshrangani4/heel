@@ -40,9 +40,9 @@ function signInNotice(n: SignInNotice): Html | "" {
     case "signed-out":
       return notice("ok", html`<p>You're signed out.</p>`);
     case "enrolled":
-      return notice("ok", html`<p>Your passkey is enrolled. Sign in with it.</p>`);
+      return notice("ok", html`<p>Your passkey is enrolled.</p>`);
     case "session-expired":
-      return notice("info", html`<p>Your session ended. Sign in again to continue.</p>`);
+      return notice("info", html`<p>Your session ended.</p>`);
     case "error":
       // Shown in the status line above the button instead (signInStatus).
       return "";
@@ -73,7 +73,6 @@ export function oidcSignIn(props: OidcSignInProps): Html {
   return html`<div class="signin">
     <h1>Sign in</h1>
     ${signInNotice(props.notice)}
-    <p>Use your organization account.</p>
     ${signInStatus(props.notice)}
     <div class="actions">
       <a class="${btn()}" href="${props.startHref}">${trusted(LOG_IN_ICON)}Sign in with ${props.providerName}</a>
@@ -89,10 +88,7 @@ export function passkeySignIn(props: PasskeySignInProps): Html {
       <div class="signin-empty">
         <span class="signin-empty-icon">${trusted(KEY_ICON)}</span>
         <h1>No passkey yet</h1>
-        <p class="muted">
-          Enrollment starts on the heel host, never from this page. Run this there and open the
-          one-time link it prints within 15 minutes.
-        </p>
+        <p class="muted">Run this on the heel host and open the link it prints.</p>
       </div>
       <div class="signin-command">
         <code id="enroll-command">heel user enroll &lt;user&gt;</code>
@@ -103,7 +99,6 @@ export function passkeySignIn(props: PasskeySignInProps): Html {
   return html`<div class="signin">
     <h1>Sign in</h1>
     ${signInNotice(props.notice)}
-    <p id="passkey-help">This install is single-user. Sign in with the passkey you enrolled.</p>
     ${signInStatus(props.notice)}
     <div class="actions">
       ${ceremonyButton({
@@ -112,7 +107,6 @@ export function passkeySignIn(props: PasskeySignInProps): Html {
         label: "Sign in with a passkey",
         tone: "primary",
         binding: { challengeId: props.challengeId },
-        describedBy: "passkey-help",
         statusId: "signin-status",
         icon: KEY_ICON,
       })}

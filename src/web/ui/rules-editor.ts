@@ -136,7 +136,6 @@ function previewPanel(preview: RulesPreview, current: RulesFileView): Html {
   if (preview.unchanged) {
     return html`<section class="card preview" aria-labelledby="preview-heading">
       <h2 id="preview-heading">Nothing would change</h2>
-      <p>${preview.edit.kind === "decision" ? "That rule already decides that." : "That's what your rules file already says."}</p>
       <p><a class="${btn("outline")}" href="/rules">Back</a></p>
     </section>`;
   }
@@ -171,7 +170,7 @@ function previewPanel(preview: RulesPreview, current: RulesFileView): Html {
       preview.problems === null && !preview.trusted
         ? notice(
             "warn",
-            html`<p>This change came from a link, not from your Rules page, so it can't be saved from here. If you want it, make it from <a href="/rules">your rules</a>.</p>`,
+            html`<p>This change came from a link, so it can't be saved from here. Make it from <a href="/rules">your rules</a>.</p>`,
           )
         : preview.problems === null
           ? html`<div id="rules-save" class="form">
@@ -230,21 +229,21 @@ export function rulesEditorPage(props: {
       <div class="req-empty">
         <span class="req-empty-icon rules-empty-icon">${trusted(FILE_LOCK_ICON)}</span>
         <p class="req-empty-title">heel can't edit rules files from here</p>
-        <p class="muted">This heel reads its rules from files it doesn't manage. Change them where they live, and <code>heel rules check</code> on heel's machine says whether they load.</p>
+        <p class="muted">Change them where they live, and <code>heel rules check</code> says whether they load.</p>
       </div>`;
   }
   const { view } = props.file;
   return html`${heading}
-    <p class="rules-lede">Read from the top: the first rule that matches decides; anything else is refused.</p>
+    <p class="rules-lede">The first rule that matches decides; anything else is refused.</p>
     <p class="rules-file muted">
       <span class="mono">${props.file.display}</span> · <a href="/rules/history">Rule history</a>
     </p>
-    ${props.saved === "live" ? notice("ok", html`<p>Saved. heel is using your rules now.</p>`) : ""}
+    ${props.saved === "live" ? notice("ok", html`<p>Saved.</p>`) : ""}
     ${
       props.saved === "pending"
         ? notice(
             "warn",
-            html`<p>Saved, but heel isn't using it yet: another rules file has a problem, so heel keeps the last set that loaded. <code>heel rules check</code> on heel's machine says which.</p>`,
+            html`<p>Saved, but heel isn't using it yet: another rules file has a problem. <code>heel rules check</code> says which.</p>`,
           )
         : ""
     }
@@ -252,7 +251,7 @@ export function rulesEditorPage(props: {
     ${props.preview === null ? "" : previewPanel(props.preview, view)}
     ${
       view.problems === null
-        ? notice("ok", html`<p>Your rules load, with no problems.</p>`)
+        ? ""
         : notice(
             "error",
             html`<p><strong>Your rules file has problems.</strong> Until they're fixed, heel keeps using the last version that loaded.</p>${problemsList(view.problems)}`,
@@ -263,7 +262,6 @@ export function rulesEditorPage(props: {
       view.rules.length === 0
         ? html`<div class="req-empty rules-empty">
             <p class="req-empty-title">No rules yet</p>
-            <p class="muted">Every call is refused until a rule allows it. Agents can propose rules, and heel suggests some from what you approve.</p>
           </div>`
         : html`<ol class="rule-list" aria-label="Your rules, in order">${view.rules.map((r) => ruleRow(r, props.csrfToken))}</ol>`
     }
@@ -285,7 +283,7 @@ export function rulesEditorPage(props: {
     }
     <details class="rules-yaml fold">
       <summary>Edit the file directly (YAML)${trusted(CHEVRON_DOWN)}</summary>
-      <p class="muted">For anything the menus above don't do. heel checks it and shows what it means before you save. <a href="https://useheel.dev/docs/rules-reference" target="_blank" rel="noopener">Every key</a>.</p>
+      <p class="muted">heel checks it before you save. <a href="https://useheel.dev/docs/rules-reference" target="_blank" rel="noopener">Every key</a>.</p>
       <form method="post" action="/rules/check">
         <input type="hidden" name="csrf" value="${props.csrfToken}" />
         <label for="rules-yaml-text" class="visually-hidden">Your rules file (YAML)</label>
