@@ -21,11 +21,14 @@ import { accountNotes } from "../account-notes.ts";
 import {
   type HumanPlaneDeps,
   jsonBody,
+  passkeyChallenge,
+  passkeyFailed,
   requireCsrfField,
   requireCsrfHeader,
   requireSession,
   type SignedInEnv,
   stringField,
+  verifiedBinding,
 } from "../http.ts";
 import type { SessionView } from "../sessions.ts";
 import { typedName } from "../typed-name.ts";
@@ -272,34 +275,19 @@ export function manageAccountRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     const session = c.get("session");
     const intent = intentOf(session, await jsonBody(c));
     if ("problem" in intent) return c.json({ ok: false, message: intent.problem }, 400);
-    const issued = await deps.passkeys.assertionOptions({
-      orgId: deps.orgId,
-      purpose: "account",
-      userId: session.userId,
-      binding: intent.binding,
-      now: deps.now(),
-    });
-    if (!issued.ok) return c.json({ ok: false, message: "You have no passkey enrolled." }, 400);
-    return c.json(issued);
+    return passkeyChallenge(c, deps, "account", intent.binding);
   });
 
   app.post("/connections/manage/confirm", signedIn, requireCsrfHeader(), async (c) => {
     const session = c.get("session");
     const body = await jsonBody(c);
-    const verified = await deps.passkeys.verifyAssertion({
-      orgId: deps.orgId,
-      purpose: "account",
-      userId: session.userId,
-      challengeId: stringField(body, "challengeId") ?? "",
-      response: body?.["response"],
-      now: deps.now(),
-    });
-    if (!verified.ok) return c.json({ ok: false, message: "The passkey check didn't pass." }, 401);
+    const binding = await verifiedBinding(c, deps, "account");
+    if (binding === null) return passkeyFailed(c);
     // What to do comes from the signed challenge; the one thing read from this body is a key.
-    const { op, service, alias, url, oauth, account } = verified.binding;
+    const { op, service, alias, url, oauth, account } = binding;
     if (op === "share" || op === "approvers") {
       try {
-        const done = applySharing(session, verified.binding);
+        const done = applySharing(session, binding);
         if (!done.ok) return c.json({ ok: false, message: done.message }, 409);
         deps.log.warn(
           { account: done.alias, op, by: session.userId },

@@ -15,7 +15,8 @@ import type { HeelDb } from "../store/db.ts";
 import type { OidcClient } from "../teams/oidc.ts";
 import type { KeyCheck } from "../vault/key-check.ts";
 import type { Vault } from "../vault/vault.ts";
-import type { Passkeys } from "./passkeys.ts";
+import type { ChallengeBinding } from "./challenges.ts";
+import type { AssertionSubject, Passkeys } from "./passkeys.ts";
 import {
   csrfMatches,
   readSession,
@@ -326,4 +327,55 @@ export async function jsonBody(c: Context): Promise<Record<string, unknown> | nu
 export function stringField(body: Record<string, unknown> | null, key: string): string | undefined {
   const value = body?.[key];
   return typeof value === "string" ? value : undefined;
+}
+
+/** What a signed-in person confirms with a passkey; sign-in has its own routes. */
+type ConfirmPurpose = Exclude<AssertionSubject["purpose"], "sign_in">;
+
+/**
+ * Answers a passkey challenge bound to `binding` for the signed-in person:
+ * the options their page signs, or 400 when they have no passkey.
+ */
+export async function passkeyChallenge(
+  c: Context<SignedInEnv>,
+  deps: HumanPlaneDeps,
+  purpose: ConfirmPurpose,
+  binding: ChallengeBinding,
+): Promise<Response> {
+  const issued = await deps.passkeys.assertionOptions({
+    orgId: deps.orgId,
+    purpose,
+    userId: c.get("session").userId,
+    binding,
+    now: deps.now(),
+  });
+  if (!issued.ok) return c.json({ ok: false, message: "You have no passkey enrolled." }, 400);
+  return c.json(issued);
+}
+
+/**
+ * Checks the signed answer in the JSON body against a `passkeyChallenge` of
+ * the same purpose. Returns what the person signed, or null, which the route
+ * answers with `passkeyFailed`.
+ */
+export async function verifiedBinding(
+  c: Context<SignedInEnv>,
+  deps: HumanPlaneDeps,
+  purpose: ConfirmPurpose,
+  now?: Date,
+): Promise<ChallengeBinding | null> {
+  const body = await jsonBody(c);
+  const verified = await deps.passkeys.verifyAssertion({
+    orgId: deps.orgId,
+    purpose,
+    userId: c.get("session").userId,
+    challengeId: stringField(body, "challengeId") ?? "",
+    response: body?.["response"],
+    now: now ?? deps.now(),
+  });
+  return verified.ok ? verified.binding : null;
+}
+
+export function passkeyFailed(c: Context): Response {
+  return c.json({ ok: false, message: "The passkey check didn't pass." }, 401);
 }

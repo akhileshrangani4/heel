@@ -24,12 +24,15 @@ import { ConnectError, connectAccount } from "../../vault/connect.ts";
 import {
   type HumanPlaneDeps,
   jsonBody,
+  passkeyChallenge,
+  passkeyFailed,
   renderPage,
   requireCsrfField,
   requireCsrfHeader,
   requireSession,
   type SignedInEnv,
   stringField,
+  verifiedBinding,
   viewerOf,
 } from "../http.ts";
 import type { SessionView } from "../sessions.ts";
@@ -236,31 +239,16 @@ export function requestRoutes(deps: HumanPlaneDeps): Hono<SignedInEnv> {
     }
     const problem = problemOf(deps, row);
     if (problem !== null) return c.json({ ok: false, message: problem }, 409);
-    const issued = await deps.passkeys.assertionOptions({
-      orgId: deps.orgId,
-      purpose: "connection",
-      userId: session.userId,
-      binding: { request: row.id, hash },
-      now: deps.now(),
-    });
-    if (!issued.ok) return c.json({ ok: false, message: "You have no passkey enrolled." }, 400);
-    return c.json(issued);
+    return passkeyChallenge(c, deps, "connection", { request: row.id, hash });
   });
 
   app.post("/requests/confirm", signedIn, requireCsrfHeader(), async (c) => {
     const session = c.get("session");
     const body = await jsonBody(c);
-    const verified = await deps.passkeys.verifyAssertion({
-      orgId: deps.orgId,
-      purpose: "connection",
-      userId: session.userId,
-      challengeId: stringField(body, "challengeId") ?? "",
-      response: body?.["response"],
-      now: deps.now(),
-    });
-    if (!verified.ok) return c.json({ ok: false, message: "The passkey check didn't pass." }, 401);
+    const binding = await verifiedBinding(c, deps, "connection");
+    if (binding === null) return passkeyFailed(c);
     // What to connect comes from the signed challenge and the stored request, never this body.
-    const { request, hash } = verified.binding;
+    const { request, hash } = binding;
     const now = deps.now();
     const row = typeof request === "string" ? ownRequest(deps, session, request) : null;
     if (
