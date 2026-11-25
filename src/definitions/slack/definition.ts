@@ -1,11 +1,11 @@
 import type { Tool } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import { type Definition, UpstreamError } from "../../gateway/pipeline/ports.ts";
+import type { Definition } from "../../gateway/pipeline/ports.ts";
 import type { AccountRecord } from "../../store/directory.ts";
 import type { Vault } from "../../vault/vault.ts";
 import type { FetchFn } from "../sign-in.ts";
 import { listedTools, type ToolRow, toolRow, toolTableDefinition } from "../tool-table.ts";
-import { SlackClient, SlackNotFoundError, SlackRefused } from "./client.ts";
+import { SlackClient } from "./client.ts";
 
 /**
  * The Slack definition: heel's own tools on the Slack Web API with the
@@ -306,14 +306,6 @@ export function slackDefinition(account: AccountRecord, deps: SlackDeps): Defini
     tools: TOOLS,
     listed: SLACK_TOOLS,
     box: { client: new SlackClient(deps.fetch, token) },
-    errors: {
-      isNotFound: (error) => error instanceof SlackNotFoundError,
-      // Only errors Slack raises before acting are refusals; the client leaves the rest unknown.
-      refusal: (error) =>
-        error instanceof SlackRefused
-          ? new UpstreamError(error.status, { error: error.error })
-          : null,
-    },
     stateCheck: async () => "fail",
   });
 }

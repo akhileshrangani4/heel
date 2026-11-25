@@ -7,7 +7,8 @@ import type { FetchFn } from "../sign-in.ts";
  * plainly is an error, so the lookup is unavailable and the call is denied.
  */
 
-import { GITHUB_API, GitHubNotFoundError } from "./client.ts";
+import { NotFoundError } from "../tool-table.ts";
+import { GITHUB_API } from "./client.ts";
 
 export class GitHubLookupError extends Error {
   override readonly name = "GitHubLookupError";
@@ -48,7 +49,7 @@ export class GitHubApi {
       redirect: "error",
       signal,
     });
-    if (response.status === 404) throw new GitHubNotFoundError(`${path} not found`);
+    if (response.status === 404) throw new NotFoundError(`${path} not found`);
     if (!response.ok) throw new GitHubLookupError(`GitHub answered ${response.status} for ${path}`);
     return response.json();
   }
@@ -141,8 +142,7 @@ export class GitHubApi {
         contexts.push(...classic.contexts.filter((c): c is string => typeof c === "string"));
       }
     } catch (error) {
-      if (!(error instanceof GitHubNotFoundError) && !/answered 403/.test(String(error)))
-        throw error;
+      if (!(error instanceof NotFoundError) && !/answered 403/.test(String(error))) throw error;
     }
     return [...new Set(contexts)];
   }

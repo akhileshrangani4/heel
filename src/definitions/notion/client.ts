@@ -1,5 +1,6 @@
-import { CredentialRejectedError } from "../../gateway/pipeline/ports.ts";
+import { CredentialRejectedError, UpstreamError } from "../../gateway/pipeline/ports.ts";
 import type { FetchFn } from "../sign-in.ts";
+import { NotFoundError } from "../tool-table.ts";
 
 /**
  * Notion's REST API with the account's integration token
@@ -7,7 +8,7 @@ import type { FetchFn } from "../sign-in.ts";
  * was written against, `Notion-Version: 2026-03-11`.
  *
  * Error answers (https://developers.notion.com/reference/status-codes): a 404
- * `object_not_found` on a read is `NotionNotFoundError`; on a write, a 4xx
+ * `object_not_found` on a read is `NotFoundError`; on a write, a 4xx
  * (validation, conflict, rate limit, restricted) is a refusal, nothing
  * changed. A 5xx, or no answer, leaves a write's outcome unknown; heel never
  * retries one.
@@ -15,22 +16,6 @@ import type { FetchFn } from "../sign-in.ts";
 
 export const NOTION_API = "https://api.notion.com";
 export const NOTION_VERSION = "2026-03-11";
-
-export class NotionNotFoundError extends Error {
-  override readonly name = "NotionNotFoundError";
-}
-
-export class NotionRefused extends Error {
-  override readonly name = "NotionRefused";
-  readonly status: number;
-  readonly code: string;
-
-  constructor(status: number, code: string) {
-    super(`Notion refused the change (${status} ${code})`);
-    this.status = status;
-    this.code = code;
-  }
-}
 
 /** Error codes Notion raises before changing anything (https://developers.notion.com/reference/status-codes). */
 const REFUSED = new Set([
@@ -90,11 +75,11 @@ export class NotionClient {
     // A bad token: Notion turned it down before doing anything.
     if (response.status === 401) throw new CredentialRejectedError("Notion");
     if (method === "GET" || path === "/v1/search") {
-      if (response.status === 404) throw new NotionNotFoundError(`${path}: ${code}`);
+      if (response.status === 404) throw new NotFoundError(`${path}: ${code}`);
       throw new Error(`Notion answered ${response.status} ${code} for ${path}`);
     }
     // Only Notion's own error codes mean it refused before acting; anything else (a proxy's 408) is unknown.
-    if (REFUSED.has(code)) throw new NotionRefused(response.status, code);
+    if (REFUSED.has(code)) throw new UpstreamError(response.status, { code });
     throw new Error(`Notion answered ${response.status} for a write; the outcome is unknown`);
   }
 }

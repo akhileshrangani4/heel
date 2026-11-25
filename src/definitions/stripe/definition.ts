@@ -1,11 +1,17 @@
 import type { Tool } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import { type Definition, UpstreamError } from "../../gateway/pipeline/ports.ts";
+import type { Definition } from "../../gateway/pipeline/ports.ts";
 import type { AccountRecord } from "../../store/directory.ts";
 import type { Vault } from "../../vault/vault.ts";
 import type { FetchFn } from "../sign-in.ts";
-import { listedTools, type ToolRow, toolRow, toolTableDefinition } from "../tool-table.ts";
-import { StripeClient, StripeNotFoundError, StripeRefused } from "./client.ts";
+import {
+  listedTools,
+  NotFoundError,
+  type ToolRow,
+  toolRow,
+  toolTableDefinition,
+} from "../tool-table.ts";
+import { StripeClient } from "./client.ts";
 
 /**
  * The Stripe definition: heel's own tools on Stripe's API
@@ -66,7 +72,7 @@ const customerOf = (v: unknown) =>
 
 async function customerExists(box: Box, customer: string, signal: AbortSignal) {
   const c = await box.client.request("GET", `/v1/customers/${customer}`, {}, signal);
-  if (c["id"] !== customer || c["deleted"] === true) throw new StripeNotFoundError(customer);
+  if (c["id"] !== customer || c["deleted"] === true) throw new NotFoundError(customer);
 }
 
 const shownPayment = (p: Record<string, unknown>) => ({
@@ -316,13 +322,6 @@ export function stripeDefinition(account: AccountRecord, deps: StripeDeps): Defi
     tools: TOOLS,
     listed: STRIPE_TOOLS,
     box: { client: new StripeClient(deps.fetch, token) },
-    errors: {
-      isNotFound: (error) => error instanceof StripeNotFoundError,
-      refusal: (error) =>
-        error instanceof StripeRefused
-          ? new UpstreamError(error.status, { code: error.code })
-          : null,
-    },
     stateCheck: async () => "fail",
   });
 }

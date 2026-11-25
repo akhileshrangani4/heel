@@ -28,9 +28,9 @@ import type { AccountRecord } from "../../store/directory.ts";
 import type { Vault } from "../../vault/vault.ts";
 import { CredentialDeliveryRefused, deliveryRefusedMessage } from "../credential-delivery.ts";
 import { GitHubApi } from "../github/api.ts";
-import { GitHubNotFoundError } from "../github/client.ts";
 import { isMergeAction, isWorkflowPath } from "../github/definition.ts";
 import type { FetchFn } from "../sign-in.ts";
+import { NotFoundError } from "../tool-table.ts";
 import { GH_MERGE_BYPASS_FLAGS } from "./gh-actions.ts";
 import { normalizeCliArgv } from "./index.ts";
 import { NPM_ENV, NPMRC_FILE, npmUserConfig } from "./npm.ts";
@@ -198,7 +198,7 @@ export function cliDefinition(account: AccountRecord, deps: CliDeps): Definition
     } catch (error) {
       return {
         ok: false,
-        reason: error instanceof GitHubNotFoundError ? "not_available" : "lookup_unavailable",
+        reason: error instanceof NotFoundError ? "not_available" : "lookup_unavailable",
       };
     }
     const given = normalized.cli.flags["match-head-commit"];

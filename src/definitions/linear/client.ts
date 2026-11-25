@@ -1,5 +1,6 @@
-import { CredentialRejectedError } from "../../gateway/pipeline/ports.ts";
+import { CredentialRejectedError, UpstreamError } from "../../gateway/pipeline/ports.ts";
 import type { FetchFn } from "../sign-in.ts";
+import { NotFoundError } from "../tool-table.ts";
 
 /**
  * Linear's GraphQL API with the account's credential
@@ -8,26 +9,17 @@ import type { FetchFn } from "../sign-in.ts";
  * `Authorization: Bearer <token>`.
  *
  * GraphQL answers errors with HTTP 200 and an `errors` list. On a read that
- * names something missing (`Entity not found`) it is `LinearNotFoundError`;
- * on a mutation with no data, Linear rejected it before acting, which is
- * `LinearRefused`. Anything else, a non-200 or no answer, leaves a write's
- * outcome unknown; heel never retries one.
+ * names something missing (`Entity not found`) it is `NotFoundError`;
+ * on a mutation with no data, Linear rejected it before acting (`refused`).
+ * Anything else, a non-200 or no answer, leaves a write's outcome unknown;
+ * heel never retries one.
  */
 
 export const LINEAR_API = "https://api.linear.app/graphql";
 
-export class LinearNotFoundError extends Error {
-  override readonly name = "LinearNotFoundError";
-}
-
-export class LinearRefused extends Error {
-  override readonly name = "LinearRefused";
-  readonly messages: string[];
-
-  constructor(messages: string[]) {
-    super(`Linear refused the change: ${messages.join("; ")}`);
-    this.messages = messages;
-  }
+/** Linear turned a change down before acting. GraphQL has no status of its own, so it's a 400. */
+export function refused(messages: string[]): UpstreamError {
+  return new UpstreamError(400, { errors: messages });
 }
 
 export class LinearClient {
@@ -66,7 +58,7 @@ export class LinearClient {
     if (response.status !== 200) {
       // Rate limited: Linear rejects before running anything
       // (https://linear.app/developers/rate-limiting).
-      if (write && response.status === 429) throw new LinearRefused(["rate limited"]);
+      if (write && response.status === 429) throw refused(["rate limited"]);
       throw new Error(`Linear answered ${response.status}`);
     }
     const body = (await response.json()) as {
@@ -79,10 +71,10 @@ export class LinearClient {
     const data = body.data ?? null;
     if (errors.length === 0 && data !== null) return data;
     if (!write && errors.some((m) => /not found/i.test(m)))
-      throw new LinearNotFoundError(errors.join("; "));
+      throw new NotFoundError(errors.join("; "));
     // A mutation whose result is null throughout was rejected; any data alongside errors leaves it unknown.
     if (write && (data === null || Object.values(data).every((v) => v === null))) {
-      throw new LinearRefused(errors);
+      throw refused(errors);
     }
     throw new Error(`Linear answered with errors: ${errors.join("; ")}`);
   }

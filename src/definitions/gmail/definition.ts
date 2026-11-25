@@ -1,10 +1,10 @@
 import type { Tool } from "@modelcontextprotocol/server";
-import { type Definition, UpstreamError } from "../../gateway/pipeline/ports.ts";
+import type { Definition } from "../../gateway/pipeline/ports.ts";
 import type { AccountRecord } from "../../store/directory.ts";
 import type { Vault } from "../../vault/vault.ts";
 import type { FetchFn } from "../google/oauth.ts";
 import { listedTools, toolTableDefinition } from "../tool-table.ts";
-import { GmailClient, GmailNotFoundError, GmailWriteRefused } from "./client.ts";
+import { GmailClient } from "./client.ts";
 import { Mailbox } from "./mailbox.ts";
 import { ORGANIZE_TOOLS } from "./organize.ts";
 import { READ_TOOLS } from "./reads.ts";
@@ -37,11 +37,6 @@ export function gmailDefinition(account: AccountRecord, deps: GmailDeps): Defini
     tools: TOOLS,
     listed: GMAIL_TOOLS,
     box: mailbox,
-    errors: {
-      isNotFound: (error) => error instanceof GmailNotFoundError,
-      refusal: (error) =>
-        error instanceof GmailWriteRefused ? new UpstreamError(error.status, error.body) : null,
-    },
     stateCheck: async (check, box, call, signal) =>
       check === "all_in_thread" ? allInThread(box, call, signal) : "fail",
   });

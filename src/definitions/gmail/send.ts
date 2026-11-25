@@ -15,7 +15,8 @@ import {
   unique,
 } from "../mail/compose.ts";
 import { draftEnvelope, strictAddressList } from "../mail/mime.ts";
-import { GmailError, type GmailMessage, GmailNotFoundError } from "./client.ts";
+import { NotFoundError } from "../tool-table.ts";
+import { GmailError, type GmailMessage } from "./client.ts";
 import type { Mailbox } from "./mailbox.ts";
 import { header, type MessageContent, messageContent } from "./messages.ts";
 import { GmailId, type GmailTool, gmailTool, type Preparation } from "./tool.ts";
@@ -60,7 +61,7 @@ async function beforeSending<T>(read: () => Promise<T>): Promise<T> {
   try {
     return await read();
   } catch (error) {
-    if (error instanceof GmailNotFoundError) throw notSent("the message is gone", 404);
+    if (error instanceof NotFoundError) throw notSent("the message is gone", 404);
     if (error instanceof GmailError) throw notSent("Gmail couldn't be read", 502);
     throw error;
   }

@@ -1,11 +1,11 @@
 import type { Tool } from "@modelcontextprotocol/server";
-import { type Definition, UpstreamError } from "../../gateway/pipeline/ports.ts";
+import type { Definition } from "../../gateway/pipeline/ports.ts";
 import type { AccountRecord } from "../../store/directory.ts";
 import type { Vault } from "../../vault/vault.ts";
 import { type FetchFn, mailboxSettings } from "../sign-in.ts";
 import { listedTools, toolTableDefinition } from "../tool-table.ts";
 import { CALENDAR_TOOLS } from "./calendar.ts";
-import { OutlookClient, OutlookNotFoundError, OutlookWriteRefused } from "./client.ts";
+import { OutlookClient } from "./client.ts";
 import { OutlookMailbox } from "./messages.ts";
 import { ORGANIZE_TOOLS } from "./organize.ts";
 import { READ_TOOLS } from "./reads.ts";
@@ -48,11 +48,6 @@ export function outlookDefinition(account: AccountRecord, deps: OutlookDeps): De
     tools: TOOLS,
     listed: OUTLOOK_TOOLS,
     box: mailbox,
-    errors: {
-      isNotFound: (error) => error instanceof OutlookNotFoundError,
-      refusal: (error) =>
-        error instanceof OutlookWriteRefused ? new UpstreamError(error.status, error.body) : null,
-    },
     stateCheck: async (check, box, call, signal) =>
       check === "all_in_thread" ? allInThread(box, call, signal) : "fail",
   });

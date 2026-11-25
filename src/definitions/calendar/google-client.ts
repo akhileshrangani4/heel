@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { CALENDAR_API_BASE, type FetchFn } from "../google/oauth.ts";
 import { getWithRetry, throwIfWriteFailed } from "../http-retry.ts";
+import { NotFoundError } from "../tool-table.ts";
 
 /**
  * The Google Calendar API v3 calls heel needs. GETs retry once on 429 and
@@ -69,24 +70,8 @@ const CalendarListSchema = z.object({
     .default([]),
 });
 
-export class CalendarNotFoundError extends Error {
-  override readonly name = "CalendarNotFoundError";
-}
-
 export class CalendarError extends Error {
   override readonly name = "CalendarError";
-}
-
-/** Google refused a write: it didn't happen. */
-export class CalendarWriteRefused extends Error {
-  override readonly name = "CalendarWriteRefused";
-  readonly status: number;
-  readonly body: unknown;
-  constructor(status: number, body: unknown) {
-    super(`Google Calendar refused the write (${status})`);
-    this.status = status;
-    this.body = body;
-  }
 }
 
 /** Who a write notifies (`sendUpdates`): everyone, or nobody. */
@@ -118,7 +103,7 @@ export class GoogleCalendarClient {
     );
     // 410: the event was deleted.
     if (response.status === 404 || response.status === 410) {
-      throw new CalendarNotFoundError(`${url.pathname} was not found`);
+      throw new NotFoundError(`${url.pathname} was not found`);
     }
     if (!response.ok) throw new CalendarError(`Google Calendar answered ${response.status}`);
     const parsed = schema.safeParse(await response.json());
@@ -137,7 +122,7 @@ export class GoogleCalendarClient {
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       signal,
     });
-    await throwIfWriteFailed(response, "Google Calendar", CalendarWriteRefused);
+    await throwIfWriteFailed(response, "Google Calendar");
     return response.status === 204 ? null : await response.json().catch(() => null);
   }
 

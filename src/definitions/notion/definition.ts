@@ -5,7 +5,7 @@ import type { AccountRecord } from "../../store/directory.ts";
 import type { Vault } from "../../vault/vault.ts";
 import type { FetchFn } from "../sign-in.ts";
 import { listedTools, type ToolRow, toolRow, toolTableDefinition } from "../tool-table.ts";
-import { NotionClient, NotionNotFoundError, NotionRefused } from "./client.ts";
+import { NotionClient } from "./client.ts";
 
 /**
  * The Notion definition: heel's own tools on Notion's REST API
@@ -102,7 +102,7 @@ async function parentOf(
 /** The page's parent again, just before a write; nothing is sent if it moved. */
 async function unmoved(box: Box, pageId: string, parent: string, signal: AbortSignal) {
   const now = await pageWithParent(box, pageId, signal);
-  if (now.parent !== parent) throw new NotionRefused(409, "moved_after_check");
+  if (now.parent !== parent) throw new UpstreamError(409, { code: "moved_after_check" });
 }
 
 async function pageWithParent(box: Box, pageId: string, signal: AbortSignal) {
@@ -278,13 +278,6 @@ export function notionDefinition(account: AccountRecord, deps: NotionDeps): Defi
     tools: TOOLS,
     listed: NOTION_TOOLS,
     box: { client: new NotionClient(deps.fetch, token) },
-    errors: {
-      isNotFound: (error) => error instanceof NotionNotFoundError,
-      refusal: (error) =>
-        error instanceof NotionRefused
-          ? new UpstreamError(error.status, { code: error.code })
-          : null,
-    },
     stateCheck: async () => "fail",
   });
 }

@@ -14,8 +14,8 @@ import {
   unique,
 } from "../mail/compose.ts";
 import { draftEnvelope } from "../mail/mime.ts";
-import type { Preparation } from "../tool-table.ts";
-import { OutlookError, type OutlookMessage, OutlookNotFoundError } from "./client.ts";
+import { NotFoundError, type Preparation } from "../tool-table.ts";
+import { OutlookError, type OutlookMessage } from "./client.ts";
 import { messageBody, type OutlookMailbox, plainRecipients } from "./messages.ts";
 import { OutlookId, type OutlookTool, outlookTool } from "./tool.ts";
 
@@ -56,7 +56,7 @@ async function beforeSending<T>(read: () => Promise<T>): Promise<T> {
   try {
     return await read();
   } catch (error) {
-    if (error instanceof OutlookNotFoundError) throw notSent("the message is gone", 404);
+    if (error instanceof NotFoundError) throw notSent("the message is gone", 404);
     if (error instanceof OutlookError) throw notSent("Outlook couldn't be read", 502);
     throw error;
   }

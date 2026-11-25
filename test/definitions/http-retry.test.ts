@@ -1,30 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
   CalendarError,
-  CalendarNotFoundError,
-  CalendarWriteRefused,
   GoogleCalendarClient,
 } from "../../src/definitions/calendar/google-client.ts";
-import {
-  GmailClient,
-  GmailError,
-  GmailNotFoundError,
-  GmailWriteRefused,
-} from "../../src/definitions/gmail/client.ts";
-import {
-  OutlookClient,
-  OutlookError,
-  OutlookNotFoundError,
-  OutlookWriteRefused,
-} from "../../src/definitions/outlook/client.ts";
+import { GmailClient, GmailError } from "../../src/definitions/gmail/client.ts";
+import { OutlookClient, OutlookError } from "../../src/definitions/outlook/client.ts";
 import type { FetchFn } from "../../src/definitions/sign-in.ts";
+import { NotFoundError } from "../../src/definitions/tool-table.ts";
+import { UpstreamError } from "../../src/gateway/pipeline/ports.ts";
 
 /**
  * How the Gmail, Outlook and Google Calendar clients treat an upstream's
  * status. A GET is sent at most twice: again only after a 429 or a 5xx, and
  * the second answer is the one that counts. A write is sent once. A 5xx or a
  * 408 on a write leaves the outcome unknown (a plain Error); any other
- * non-2xx is the provider's WriteRefused, which heel reports as "nothing
+ * non-2xx is an UpstreamError, which heel reports as "nothing
  * happened". Which of the two a write gets decides what the approver and the
  * audit log see, so each provider is pinned here.
  */
@@ -68,9 +58,7 @@ interface Provider {
   readResult: unknown;
   /** A write that resolves on a 204. */
   write: (u: Upstream) => Promise<unknown>;
-  NotFound: ErrorClass;
   Failed: ErrorClass;
-  Refused: ErrorClass;
 }
 
 const PROVIDERS: Provider[] = [
@@ -81,9 +69,7 @@ const PROVIDERS: Provider[] = [
     okBody: { labels: [{ id: "INBOX", name: "INBOX" }] },
     readResult: [{ id: "INBOX", name: "INBOX" }],
     write: (u) => new GmailClient(u.fetch, u.token).trashMessage("m1", signal),
-    NotFound: GmailNotFoundError,
     Failed: GmailError,
-    Refused: GmailWriteRefused,
   },
   {
     name: "Outlook",
@@ -92,9 +78,7 @@ const PROVIDERS: Provider[] = [
     okBody: { value: [{ id: "r1", displayName: "Rule" }] },
     readResult: [{ id: "r1", displayName: "Rule" }],
     write: (u) => new OutlookClient(u.fetch, u.token).deleteMessage("m1", signal),
-    NotFound: OutlookNotFoundError,
     Failed: OutlookError,
-    Refused: OutlookWriteRefused,
   },
   {
     name: "Google Calendar",
@@ -104,9 +88,7 @@ const PROVIDERS: Provider[] = [
     readResult: [{ id: "primary" }],
     write: (u) =>
       new GoogleCalendarClient(u.fetch, u.token).deleteEvent("primary", "e1", "none", signal),
-    NotFound: CalendarNotFoundError,
     Failed: CalendarError,
-    Refused: CalendarWriteRefused,
   },
 ];
 
@@ -143,7 +125,7 @@ describe.each(PROVIDERS)("$name", (p) => {
 
     it("is decided by the second answer after a retry", async () => {
       const u = upstream([500, 404]);
-      expect(await failure(p.read(u))).toBeInstanceOf(p.NotFound);
+      expect(await failure(p.read(u))).toBeInstanceOf(NotFoundError);
       expect(u.requests).toHaveLength(2);
     });
 
@@ -151,13 +133,13 @@ describe.each(PROVIDERS)("$name", (p) => {
       const u = upstream([status, ok(p.okBody)]);
       const error = await failure(p.read(u));
       expect(error).toBeInstanceOf(p.Failed);
-      expect(error).not.toBeInstanceOf(p.NotFound);
+      expect(error).not.toBeInstanceOf(NotFoundError);
       expect(u.requests).toHaveLength(1);
     });
 
     it("is NotFound on a 404, sent once", async () => {
       const u = upstream([404, ok(p.okBody)]);
-      expect(await failure(p.read(u))).toBeInstanceOf(p.NotFound);
+      expect(await failure(p.read(u))).toBeInstanceOf(NotFoundError);
       expect(u.requests).toHaveLength(1);
     });
 
@@ -180,7 +162,7 @@ describe.each(PROVIDERS)("$name", (p) => {
       async (status) => {
         const u = upstream([status, 204]);
         const error = await failure(p.write(u));
-        expect(error).not.toBeInstanceOf(p.Refused);
+        expect(error).not.toBeInstanceOf(UpstreamError);
         expect(error.constructor).toBe(Error);
         expect(error.message).toBe(`${p.service} answered ${status}; the write may have happened`);
         expect(u.requests).toHaveLength(1);
@@ -192,7 +174,7 @@ describe.each(PROVIDERS)("$name", (p) => {
       async (status) => {
         const u = upstream([status, 204]);
         const error = await failure(p.write(u));
-        expect(error).toBeInstanceOf(p.Refused);
+        expect(error).toBeInstanceOf(UpstreamError);
         expect(error).toMatchObject({ status, body: { status } });
         expect(u.requests).toHaveLength(1);
       },
@@ -201,7 +183,7 @@ describe.each(PROVIDERS)("$name", (p) => {
     it("answered with any other non-2xx, such as a 304, is refused", async () => {
       const u = upstream([304]);
       const error = await failure(p.write(u));
-      expect(error).toBeInstanceOf(p.Refused);
+      expect(error).toBeInstanceOf(UpstreamError);
       expect(error).toMatchObject({ status: 304, body: null });
     });
 
@@ -224,19 +206,19 @@ describe("where the providers differ", () => {
     const deleted = await failure(
       new GoogleCalendarClient(calendar.fetch, calendar.token).getEvent("primary", "e1", signal),
     );
-    expect(deleted).toBeInstanceOf(CalendarNotFoundError);
+    expect(deleted).toBeInstanceOf(NotFoundError);
 
     const gmail = upstream([410]);
     const gmailError = await failure(new GmailClient(gmail.fetch, gmail.token).listLabels(signal));
     expect(gmailError).toBeInstanceOf(GmailError);
-    expect(gmailError).not.toBeInstanceOf(GmailNotFoundError);
+    expect(gmailError).not.toBeInstanceOf(NotFoundError);
 
     const outlook = upstream([410]);
     const outlookError = await failure(
       new OutlookClient(outlook.fetch, outlook.token).listRules(signal),
     );
     expect(outlookError).toBeInstanceOf(OutlookError);
-    expect(outlookError).not.toBeInstanceOf(OutlookNotFoundError);
+    expect(outlookError).not.toBeInstanceOf(NotFoundError);
   });
 
   it("GmailError carries the status of the answer that decided the GET", async () => {
