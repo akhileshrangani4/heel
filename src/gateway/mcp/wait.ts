@@ -45,6 +45,15 @@ export const NO_APPROVAL_WAIT: ApprovalWait = { windowMs: () => 0, pollMs: 1_000
 /** Tells the client heel is still waiting. */
 export type Beat = () => Promise<void>;
 
+/** What a held call needs from its request: the client going away, and a way to say it's still waiting. */
+export interface Held {
+  agentId: string;
+  signal: AbortSignal;
+  beat: Beat;
+  /** When the call stops waiting (epoch ms). */
+  until: number;
+}
+
 /**
  * Resolves true once `decided()` is true, false when the window ends or the
  * client goes away first. `decided` is checked before the first sleep, so a
