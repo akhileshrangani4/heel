@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.14](https://github.com/akhileshrangani4/heel/compare/v0.2.13...v0.2.14) (2026-11-25)
+
+
+### Bug Fixes
+
+* **web:** cut the explanations and repeated lines from every page ([#276](https://github.com/akhileshrangani4/heel/issues/276)) ([e1e8ae5](https://github.com/akhileshrangani4/heel/commit/e1e8ae5be3ace7232d82491bfacbfe31d68291db))
+* **web:** the Approve once menu toggle joins its button instead of floating beside it ([#275](https://github.com/akhileshrangani4/heel/issues/275)) ([a9161ff](https://github.com/akhileshrangani4/heel/commit/a9161ff613c03485df6a001ee84b41aa0618a141))
+
 ## [0.2.13](https://github.com/akhileshrangani4/heel/compare/v0.2.12...v0.2.13) (2026-11-25)
 
 
